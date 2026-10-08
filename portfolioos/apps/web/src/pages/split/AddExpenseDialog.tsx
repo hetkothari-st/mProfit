@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { splitErrorMessage } from './errors';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
-import { formatSplitMoney } from '@/lib/splitFormat';
+import { formatSplitMoney, memberName } from '@/lib/splitFormat';
 import { todayLocal } from '@/lib/localDate';
 import { cn } from '@/lib/cn';
 import { checkForm, emptyForm, formFromExpense, toPayload, type ExpenseFormState } from './expenseForm';
@@ -47,7 +47,6 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
     { setServerError(null); setForm((f) => ({ ...f, [k]: { ...f[k], [id]: v } })); };
 
   const check = checkForm(form, members, group.baseCurrency);
-  const nameOf = (id: string) => (members.find((m) => m.id === id)?.isMe ? 'You' : members.find((m) => m.id === id)?.displayName ?? '');
   const previewOf = (id: string) => check.preview.find((p) => p.memberId === id)?.amount ?? null;
 
   const save = useMutation({
@@ -97,7 +96,8 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
           {form.currency !== group.baseCurrency && (
             <div className="space-y-1.5">
               <Label htmlFor="exp-fx">{`1 ${form.currency} in ${group.baseCurrency}`}</Label>
-              <Input id="exp-fx" inputMode="decimal" value={form.fxRate} onChange={(e) => set('fxRate', e.target.value)} placeholder="83.10" />
+              <Input id="exp-fx" inputMode="decimal" value={form.fxRate} onChange={(e) => set('fxRate', e.target.value)} />
+              <p className="text-xs text-muted-foreground">Leave blank to use the latest rate</p>
             </div>
           )}
           <div className="space-y-1.5">
@@ -118,14 +118,14 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
                     {`${group.members.find((m) => m.id === form.singlePayerId)?.displayName ?? 'Former member'} (left the group)`}
                   </option>
                 )}
-                {members.map((m) => <option key={m.id} value={m.id}>{m.isMe ? 'You' : m.displayName}</option>)}
+                {members.map((m) => <option key={m.id} value={m.id}>{memberName(members, m.id)}</option>)}
                 <option value="__multi">Multiple people</option>
               </Select>
             </div>
             {form.payerMode === 'multiple' && members.map((m) => (
               <div key={m.id} className="flex items-center gap-2">
-                <Label htmlFor={`paid-${m.id}`} className="flex-1 text-sm font-normal">{nameOf(m.id)}</Label>
-                <Input id={`paid-${m.id}`} aria-label={`Paid by ${nameOf(m.id)}`} inputMode="decimal" className="w-32"
+                <Label htmlFor={`paid-${m.id}`} className="flex-1 text-sm font-normal">{memberName(members, m.id)}</Label>
+                <Input id={`paid-${m.id}`} aria-label={`Paid by ${memberName(members, m.id)}`} inputMode="decimal" className="w-32"
                   value={form.payerAmounts[m.id] ?? ''} onChange={(e) => setIn('payerAmounts', m.id, e.target.value)} />
               </div>
             ))}
@@ -136,7 +136,13 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
             <div role="tablist" className="grid grid-cols-4 gap-1 rounded-md bg-muted p-1">
               {MODES.map((m) => (
                 <button key={m.value} type="button" role="tab" aria-selected={form.splitMode === m.value}
-                  onClick={() => set('splitMode', m.value)}
+                  onClick={() => {
+                    setServerError(null);
+                    setForm((f) => ({
+                      ...f, splitMode: m.value,
+                      values: Object.fromEntries(members.map((x) => [x.id, m.value === 'SHARES' ? '1' : ''])),
+                    }));
+                  }}
                   className={cn('rounded px-2 py-1.5 text-xs font-medium', form.splitMode === m.value ? 'bg-background shadow-sm' : 'text-muted-foreground')}>
                   {m.label}
                 </button>
@@ -144,7 +150,7 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
             </div>
             <ul className="space-y-1.5">
               {members.map((m) => {
-                const label = nameOf(m.id);
+                const label = memberName(members, m.id);
                 const preview = previewOf(m.id);
                 return (
                   <li key={m.id} className="flex items-center gap-2">

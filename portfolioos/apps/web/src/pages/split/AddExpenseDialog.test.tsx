@@ -46,13 +46,38 @@ describe('AddExpenseDialog', () => {
     expect((screen.getByRole('button', { name: 'Save expense' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('foreign currency asks for a rate', async () => {
+  it('foreign currency: blank rate is allowed and sent as null', async () => {
+    api.createExpense.mockResolvedValue({});
     renderWithProviders(<AddExpenseDialog open onOpenChange={() => {}} group={group} />);
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Snorkel' } });
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '20' } });
     fireEvent.change(screen.getByLabelText('Currency'), { target: { value: 'USD' } });
-    expect(screen.getByLabelText('1 USD in INR')).toBeTruthy();
-    expect(screen.getByRole('alert').textContent).toContain('Enter the USD → INR exchange rate');
+    const fx = screen.getByLabelText('1 USD in INR') as HTMLInputElement;
+    expect(fx.placeholder).toBe('');
+    expect(screen.getByText('Leave blank to use the latest rate')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
+    await waitFor(() => expect(api.createExpense).toHaveBeenCalledWith(expect.objectContaining({ currency: 'USD', fxRate: null })));
+  });
+
+  it('foreign currency: a junk rate is rejected', async () => {
+    renderWithProviders(<AddExpenseDialog open onOpenChange={() => {}} group={group} />);
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Snorkel' } });
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText('Currency'), { target: { value: 'USD' } });
+    fireEvent.change(screen.getByLabelText('1 USD in INR'), { target: { value: 'abc' } });
+    expect(screen.getByRole('alert').textContent).toContain('Enter a valid exchange rate or leave it blank');
+  });
+
+  it('switching split mode clears typed values; Shares seeds 1 each', async () => {
+    renderWithProviders(<AddExpenseDialog open onOpenChange={() => {}} group={group} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Exact' }));
+    fireEvent.change(screen.getByLabelText('Exact amount for You'), { target: { value: '60' } });
+    fireEvent.click(screen.getByRole('tab', { name: 'Percent' }));
+    expect((screen.getByLabelText('Percent for You') as HTMLInputElement).value).toBe('');
+    fireEvent.click(screen.getByRole('tab', { name: 'Shares' }));
+    expect((screen.getByLabelText('Shares for You') as HTMLInputElement).value).toBe('1');
+    expect((screen.getByLabelText('Shares for Bob') as HTMLInputElement).value).toBe('1');
   });
 
   it('server error stays in the dialog', async () => {

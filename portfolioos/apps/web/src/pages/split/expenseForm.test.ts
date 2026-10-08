@@ -55,9 +55,13 @@ describe('expenseForm', () => {
     expect(checkForm(f, M, 'INR')).toMatchObject({ ok: false, error: 'Paid amounts add up to ₹90.00, not ₹100.00' });
   });
 
-  it('foreign currency needs a rate', () => {
-    const f = { ...base(), currency: 'USD', fxRate: '' };
-    expect(checkForm(f, M, 'INR')).toMatchObject({ ok: false, error: 'Enter the USD → INR exchange rate' });
+  it('blank rate allowed; invalid rate rejected', () => {
+    const blank = { ...base(), currency: 'USD', fxRate: '' };
+    expect(checkForm(blank, M, 'INR').ok).toBe(true);
+    expect(toPayload(blank, M, 'INR').fxRate).toBeNull();
+    expect(checkForm({ ...blank, fxRate: 'abc' }, M, 'INR')).toMatchObject({ ok: false, error: 'Enter a valid exchange rate or leave it blank' });
+    expect(checkForm({ ...blank, fxRate: '0' }, M, 'INR').ok).toBe(false);
+    expect(checkForm({ ...blank, fxRate: '83.1' }, M, 'INR').ok).toBe(true);
   });
 
   it('bad amount and missing description', () => {

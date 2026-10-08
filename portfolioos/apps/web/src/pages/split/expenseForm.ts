@@ -25,7 +25,7 @@ export interface ExpenseFormState {
 export interface ShareLine { memberId: string; amount: string | null }
 export interface FormCheck { ok: boolean; error: string | null; remaining: string | null; preview: ShareLine[] }
 
-const MONEY = /^\d+(\.\d{1,2})?$/;
+export const MONEY = /^\d+(\.\d{1,2})?$/;
 const NUM = /^\d+(\.\d+)?$/;
 const ZERO = new Decimal(0);
 const PAISA = new Decimal('0.01');
@@ -154,8 +154,9 @@ export function checkForm(f: ExpenseFormState, members: SplitMemberDto[], baseCu
   if (!MONEY.test(amountRaw) || new Decimal(amountRaw).lte(0)) return fail('Enter an amount above 0 with at most 2 decimals');
   const total = new Decimal(amountRaw);
   if (f.currency !== baseCurrency) {
+    // Blank is fine: the server looks up the latest rate.
     const rate = cleanAmount(f.fxRate);
-    if (!NUM.test(rate) || new Decimal(rate).lte(0)) return fail(`Enter the ${f.currency} → ${baseCurrency} exchange rate`);
+    if (rate !== '' && (!NUM.test(rate) || new Decimal(rate).lte(0))) return fail('Enter a valid exchange rate or leave it blank');
   }
 
   // Payers
@@ -223,7 +224,7 @@ export function toPayload(f: ExpenseFormState, members: SplitMemberDto[], baseCu
     date: f.date,
     amount,
     currency: f.currency,
-    fxRate: f.currency === baseCurrency ? null : cleanAmount(f.fxRate),
+    fxRate: f.currency === baseCurrency ? null : (cleanAmount(f.fxRate) || null),
     splitMode: f.splitMode,
     payers,
     shares,
