@@ -62,4 +62,21 @@ describe('SplitHomePage', () => {
       name: 'Flat', type: 'HOME', baseCurrency: 'INR', simplifyDebts: true, myDisplayName: 'Alice Rao', contactIds: ['c2'],
     }));
   });
+
+  it('does not show zero totals when balances fail to load', async () => {
+    seed();
+    api.friends.mockRejectedValue(new Error('x'));
+    renderWithProviders(<SplitHomePage />, { route: '/split', path: '/split' });
+    expect(await screen.findByText(/Couldn't load balances\./)).toBeTruthy();
+    expect(screen.getByTestId('split-owed-total').textContent).toBe('—');
+    expect(screen.getByTestId('split-owe-total').textContent).toBe('—');
+  });
+
+  it('shows an error when groups fail to load', async () => {
+    seed();
+    api.listGroups.mockRejectedValue(new Error('x'));
+    renderWithProviders(<SplitHomePage />, { route: '/split', path: '/split' });
+    expect(await screen.findByText(/Couldn't load groups\./)).toBeTruthy();
+    expect(screen.queryByText('No groups yet')).toBeNull();
+  });
 });

@@ -61,16 +61,26 @@ export function SplitHomePage() {
       <div className="grid grid-cols-2 gap-3">
         <Card><CardContent className="p-4">
           <p className="text-xs text-muted-foreground">You are owed</p>
-          <p data-testid="split-owed-total" className="text-xl font-semibold tabular-nums mt-1">{formatSplitMoney(owed, currency)}</p>
+          <p data-testid="split-owed-total" className="text-xl font-semibold tabular-nums mt-1">{friends.isSuccess ? formatSplitMoney(owed, currency) : '—'}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <p className="text-xs text-muted-foreground">You owe</p>
-          <p data-testid="split-owe-total" className="text-xl font-semibold tabular-nums mt-1">{formatSplitMoney(owe, currency)}</p>
+          <p data-testid="split-owe-total" className="text-xl font-semibold tabular-nums mt-1">{friends.isSuccess ? formatSplitMoney(owe, currency) : '—'}</p>
         </CardContent></Card>
       </div>
+      {friends.isError && (
+        <p role="alert" className="text-sm text-muted-foreground">
+          Couldn't load balances. <Button variant="link" size="sm" className="px-1" onClick={() => void friends.refetch()}>Retry</Button>
+        </p>
+      )}
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Groups</h2>
+        {groups.isError && (
+          <p role="alert" className="text-sm text-muted-foreground">
+            Couldn't load groups. <Button variant="link" size="sm" className="px-1" onClick={() => void groups.refetch()}>Retry</Button>
+          </p>
+        )}
         {groups.isSuccess && groups.data.length === 0 && (
           <Card><CardContent className="p-6 text-center space-y-2">
             <UsersRound className="h-6 w-6 mx-auto text-muted-foreground" />
@@ -116,6 +126,7 @@ export function SplitHomePage() {
               <p className="text-xs text-muted-foreground">{formatDateTimeIST(a.createdAt)}</p>
             </Link>
           ))}
+          {activity.isError && <p role="alert" className="px-4 py-3 text-sm text-muted-foreground">Couldn't load activity.</p>}
           {activity.isSuccess && activity.data.length === 0 && <p className="px-4 py-3 text-sm text-muted-foreground">Nothing yet.</p>}
         </CardContent></Card>
       </section>

@@ -88,7 +88,8 @@ export function NewGroupDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             </div>
             <fieldset className="space-y-1.5">
               <legend className="text-sm font-medium">People</legend>
-              {(contacts.data ?? []).length === 0 && <p className="text-sm text-muted-foreground">No people yet — add someone to split with.</p>}
+              {contacts.isLoading && <p className="text-sm text-muted-foreground">Loading people…</p>}
+              {contacts.isSuccess && contacts.data.length === 0 && <p className="text-sm text-muted-foreground">No people yet — add someone to split with.</p>}
               <div className="max-h-48 overflow-y-auto space-y-1">
                 {(contacts.data ?? []).map((c) => (
                   <label key={c.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60">
