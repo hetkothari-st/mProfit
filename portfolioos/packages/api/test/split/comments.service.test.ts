@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { seedContact, cleanupSplit } from '../helpers/splitFixtures.js';
 import { createGroup } from '../../src/services/split/groups.service.js';
-import { createExpense } from '../../src/services/split/expenses.service.js';
+import { createExpense, deleteExpense } from '../../src/services/split/expenses.service.js';
 import { listComments, addComment, deleteComment } from '../../src/services/split/comments.service.js';
 
 describe('split comments', () => {
@@ -38,5 +38,15 @@ describe('split comments', () => {
   it('outsider gets 404', async () => {
     await expect(eve.runAs(() => listComments(eve.userId, expenseId))).rejects.toThrow(/not found/i);
     await expect(eve.runAs(() => addComment(eve.userId, expenseId, 'hi'))).rejects.toThrow(/not found/i);
+  });
+
+  it('deleted expense: no new comments, listing still works', async () => {
+    const g = await alice.runAs(() => createGroup(alice.userId, { name: 'Del', myDisplayName: 'Alice' }));
+    const me = g.members.find((m) => m.isMe)!.id;
+    const ex = await alice.runAs(() => createExpense(alice.userId, { groupId: g.id, description: 'X', date: '2026-10-01', amount: '10', currency: 'INR', splitMode: 'EQUAL', payers: [{ memberId: me, amount: '10' }], shares: [{ memberId: me }] }));
+    await alice.runAs(() => addComment(alice.userId, ex.id, 'before'));
+    await alice.runAs(() => deleteExpense(alice.userId, ex.id));
+    await expect(alice.runAs(() => addComment(alice.userId, ex.id, 'after'))).rejects.toThrow(/Restore the expense first/);
+    expect(await alice.runAs(() => listComments(alice.userId, ex.id))).toHaveLength(1);
   });
 });

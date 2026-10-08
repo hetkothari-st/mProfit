@@ -19,6 +19,8 @@ export async function listLabels(userId: string, groupId: string): Promise<Split
   let rows = await prisma.splitLabel.findMany({ where: { groupId }, orderBy: { id: 'asc' } });
   if (rows.length === 0) {
     await runInTransaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'split-labels:' + groupId}))`;
+      if ((await tx.splitLabel.count({ where: { groupId } })) > 0) return;
       for (const d of DEFAULT_LABELS) await tx.splitLabel.create({ data: { groupId, name: d.name, color: d.color } });
     });
     rows = await prisma.splitLabel.findMany({ where: { groupId } });
@@ -46,9 +48,10 @@ export async function deleteLabel(userId: string, labelId: string): Promise<void
 }
 
 export async function setExpenseLabels(userId: string, expenseId: string, labelIds: string[]): Promise<string[]> {
-  const e = await prisma.splitExpense.findUnique({ where: { id: expenseId }, select: { id: true, groupId: true, description: true } });
+  const e = await prisma.splitExpense.findUnique({ where: { id: expenseId }, select: { id: true, groupId: true, description: true, deletedAt: true } });
   if (!e) throw new NotFoundError('Expense not found');
   await requireMember(userId, e.groupId);
+  if (e.deletedAt) throw new BadRequestError('Restore the expense first');
   const unique = [...new Set(labelIds)];
   if (unique.length > 10) throw new BadRequestError('At most 10 labels');
   const found = await prisma.splitLabel.findMany({ where: { id: { in: unique } }, select: { id: true, groupId: true } });

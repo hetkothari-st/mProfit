@@ -2,7 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { seedContact, cleanupSplit } from '../helpers/splitFixtures.js';
 import { createGroup } from '../../src/services/split/groups.service.js';
-import { createExpense, getExpense } from '../../src/services/split/expenses.service.js';
+import { createExpense, getExpense, deleteExpense } from '../../src/services/split/expenses.service.js';
+import { runAsSystem } from '../../src/lib/requestContext.js';
+import { prisma } from '../../src/lib/prisma.js';
 import { listLabels, createLabel, deleteLabel, setExpenseLabels } from '../../src/services/split/labels.service.js';
 
 describe('split labels', () => {
@@ -51,5 +53,19 @@ describe('split labels', () => {
     await alice.runAs(() => setExpenseLabels(alice.userId, expenseId, [l.id]));
     await alice.runAs(() => deleteLabel(alice.userId, l.id));
     expect((await alice.runAs(() => getExpense(alice.userId, expenseId))).labelIds).toEqual([]);
+  });
+
+  it('concurrent first listLabels seeds exactly once', async () => {
+    const g = await alice.runAs(() => createGroup(alice.userId, { name: 'Race', myDisplayName: 'Alice' }));
+    await Promise.all([alice.runAs(() => listLabels(alice.userId, g.id)), alice.runAs(() => listLabels(alice.userId, g.id))]);
+    expect(await runAsSystem(() => prisma.splitLabel.count({ where: { groupId: g.id } }))).toBe(7);
+  });
+
+  it('rejects labelling a deleted expense', async () => {
+    const g = await alice.runAs(() => createGroup(alice.userId, { name: 'Del', myDisplayName: 'Alice' }));
+    const me = g.members.find((m) => m.isMe)!.id;
+    const ex = await alice.runAs(() => createExpense(alice.userId, { groupId: g.id, description: 'X', date: '2026-10-01', amount: '10', currency: 'INR', splitMode: 'EQUAL', payers: [{ memberId: me, amount: '10' }], shares: [{ memberId: me }] }));
+    await alice.runAs(() => deleteExpense(alice.userId, ex.id));
+    await expect(alice.runAs(() => setExpenseLabels(alice.userId, ex.id, []))).rejects.toThrow(/Restore the expense first/);
   });
 });

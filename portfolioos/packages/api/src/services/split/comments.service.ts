@@ -9,7 +9,7 @@ import { requireMember } from './groups.service.js';
 import { writeActivity } from './activity.js';
 
 async function loadExpense(userId: string, expenseId: string) {
-  const e = await prisma.splitExpense.findUnique({ where: { id: expenseId }, select: { id: true, groupId: true, description: true } });
+  const e = await prisma.splitExpense.findUnique({ where: { id: expenseId }, select: { id: true, groupId: true, description: true, deletedAt: true } });
   if (!e) throw new NotFoundError('Expense not found');
   await requireMember(userId, e.groupId);
   return e;
@@ -34,6 +34,7 @@ export async function listComments(userId: string, expenseId: string): Promise<S
 
 export async function addComment(userId: string, expenseId: string, body: string): Promise<SplitCommentDto> {
   const e = await loadExpense(userId, expenseId);
+  if (e.deletedAt) throw new BadRequestError('Restore the expense first');
   const text = body.trim();
   if (!text) throw new BadRequestError('Write a comment first');
   if (text.length > 1000) throw new BadRequestError('Comments can be at most 1000 characters');
