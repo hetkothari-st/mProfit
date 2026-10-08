@@ -36,3 +36,7 @@ splitRouter.delete('/settlements/:id', asyncHandler(c.deleteSettlementHandler));
 
 splitRouter.get('/friends', asyncHandler(c.friendsHandler));
 splitRouter.get('/activity', asyncHandler(c.activityHandler));
+
+splitRouter.get('/settings', asyncHandler(c.getSettingsHandler));
+splitRouter.put('/settings', asyncHandler(c.updateSettingsHandler));
+splitRouter.get('/groups/:id/upi-link', asyncHandler(c.upiLinkHandler));

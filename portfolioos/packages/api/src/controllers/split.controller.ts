@@ -10,6 +10,7 @@ import {
   createExpense, deleteExpense, getExpense, listExpenses, restoreExpense, updateExpense,
 } from '../services/split/expenses.service.js';
 import { createSettlement, deleteSettlement, listSettlements, updateSettlement } from '../services/split/settlements.service.js';
+import { getSettings, updateSettings, upiLink } from '../services/split/settings.service.js';
 import { groupBalances, listActivity, listFriends } from '../services/split/ledger.service.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
@@ -106,3 +107,19 @@ function activityOpts(req: Request) {
 }
 export const groupActivityHandler = async (req: Request, res: Response) => ok(res, await listActivity(uid(req), { groupId: p(req, 'id'), ...activityOpts(req) }));
 export const activityHandler = async (req: Request, res: Response) => ok(res, await listActivity(uid(req), activityOpts(req)));
+
+const settingsPatch = z.object({
+  upiId: z.string().max(320).nullable().optional(),
+  homeCurrency: z.string().regex(/^[A-Za-z]{3}$/).optional(),
+  defaultPortfolioId: z.string().max(64).nullable().optional(),
+  emailOnActivity: z.boolean().optional(),
+  weeklyDigest: z.boolean().optional(),
+});
+export const getSettingsHandler = async (req: Request, res: Response) => ok(res, await getSettings(uid(req)));
+export const updateSettingsHandler = async (req: Request, res: Response) => ok(res, await updateSettings(uid(req), parse(settingsPatch, req.body)));
+export const upiLinkHandler = async (req: Request, res: Response) => {
+  const to = typeof req.query['to'] === 'string' ? req.query['to'] : '';
+  const amount = typeof req.query['amount'] === 'string' ? req.query['amount'] : undefined;
+  if (!to) throw new BadRequestError('to is required');
+  ok(res, await upiLink(uid(req), p(req, 'id'), to, amount));
+};
