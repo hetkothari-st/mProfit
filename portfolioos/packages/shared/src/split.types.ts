@@ -16,6 +16,7 @@ export interface SplitExpenseDto {
   amount: Money; currency: string; fxRate: string; baseAmount: Money;
   splitMode: SplitModeDto; createdById: string; createdAt: string; sourceType: string;
   deletedAt: string | null; payers: SplitPayerDto[]; shares: SplitShareDto[];
+  labelIds: string[]; hasReceipt: boolean;
 }
 export interface SplitSettlementDto { id: string; groupId: string; fromMemberId: string; toMemberId: string; amount: Money; currency: string; fxRate: string; baseAmount: Money; method: SplitSettleMethodDto; date: string; createdById: string; createdAt: string; deletedAt: string | null }
 export interface SplitTransferDto { fromMemberId: string; toMemberId: string; amount: Money }
@@ -23,3 +24,9 @@ export interface SplitBalancesDto { groupId: string; baseCurrency: string; nets:
 export interface SplitFriendDto { key: string; displayName: string; userId: string | null; contactId: string | null; currency: string; net: Money; approx: boolean; groups: Array<{ groupId: string; groupName: string; net: Money; currency: string }> }
 export interface SplitContactDto { id: string; name: string; email: string | null; phone: string | null; upiId: string | null; linkedUserId: string | null }
 export interface SplitActivityDto { id: string; groupId: string; groupName: string; actorUserId: string; actorName: string; kind: string; payload: unknown; createdAt: string }
+
+export interface SplitLabelDto { id: string; groupId: string; name: string; color: string }
+export interface SplitCommentDto { id: string; expenseId: string; authorUserId: string; authorName: string; body: string; createdAt: string; mine: boolean }
+export interface SplitSettingsDto { upiId: string | null; homeCurrency: string; defaultPortfolioId: string | null; emailOnActivity: boolean; weeklyDigest: boolean }
+export interface SplitUpiLinkDto { uri: string; payeeName: string; payeeVpa: string; amount: Money; note: string }
+export interface SplitShareLinkDto { expenseId: string; enabled: boolean; portfolioId: string | null; cashFlowId: string | null; myShare: Money; currency: string }

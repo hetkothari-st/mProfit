@@ -222,6 +222,7 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'SplitDetection',
   'SplitShareLink',
   'SplitSettings',
+  'SplitReminder',
 ]);
 
 /**

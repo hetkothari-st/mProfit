@@ -28,7 +28,7 @@ export interface ExpenseInput {
   shares: Array<{ memberId: string; value?: string }>;
 }
 
-const INCLUDE = { payers: true, shares: true } as const;
+const INCLUDE = { payers: true, shares: true, labels: { select: { labelId: true } } } as const;
 type Row = Prisma.SplitExpenseGetPayload<{ include: typeof INCLUDE }>;
 
 function toDto(e: Row): SplitExpenseDto {
@@ -47,6 +47,8 @@ function toDto(e: Row): SplitExpenseDto {
     createdAt: e.createdAt.toISOString(),
     sourceType: e.sourceType,
     deletedAt: e.deletedAt?.toISOString() ?? null,
+    labelIds: e.labels.map((l) => l.labelId).sort(),
+    hasReceipt: !!e.receiptBlobId,
     payers: [...e.payers].sort(byId).map((p) => ({ memberId: p.memberId, amount: serializeMoney(p.amount.toString()), baseAmount: serializeMoney(p.baseAmount.toString()) })),
     shares: [...e.shares].sort(byId).map((s) => ({ memberId: s.memberId, amount: serializeMoney(s.amount.toString()), baseAmount: serializeMoney(s.baseAmount.toString()), rawInput: s.rawInput?.toString() ?? null })),
   };

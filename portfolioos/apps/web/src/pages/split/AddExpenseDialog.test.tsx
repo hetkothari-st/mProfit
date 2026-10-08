@@ -94,7 +94,7 @@ describe('AddExpenseDialog', () => {
   const expenseOf = (over: Partial<SplitExpenseDto>): SplitExpenseDto => ({
     id: 'e1', groupId: 'g1', description: 'Old', date: '2026-08-01', amount: serializeMoney('100'), currency: 'INR',
     fxRate: '1', baseAmount: serializeMoney('100'), splitMode: 'EQUAL', createdById: 'u1', createdAt: '2026-08-01T00:00:00Z',
-    sourceType: 'MANUAL', deletedAt: null,
+    sourceType: 'MANUAL', deletedAt: null, labelIds: [], hasReceipt: false,
     payers: [{ memberId: 'a', amount: serializeMoney('100'), baseAmount: serializeMoney('100') }],
     shares: [{ memberId: 'a', amount: serializeMoney('50'), baseAmount: serializeMoney('50'), rawInput: null },
       { memberId: 'b', amount: serializeMoney('50'), baseAmount: serializeMoney('50'), rawInput: null }],

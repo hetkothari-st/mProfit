@@ -309,4 +309,16 @@ describe('invariant: Split RLS', () => {
     });
     expect(await runAsSystem(() => prisma.splitExpense.findUniqueOrThrow({ where: { id: expenseId } }))).toMatchObject({ groupId });
   });
+  it('SplitReminder rows are sender-only', async () => {
+    const r = await alice.runAs(() => prisma.splitReminder.create({
+      data: { userId: alice.userId, groupId, memberId: bobMemberId, sentOn: new Date('2026-10-08') },
+    }));
+    await bob.runAs(async () => {
+      expect(await prisma.splitReminder.findUnique({ where: { id: r.id } })).toBeNull();
+    });
+    await expect(eve.runAs(() => prisma.splitReminder.create({
+      data: { userId: alice.userId, groupId, memberId: bobMemberId, sentOn: new Date('2026-10-09') },
+    }))).rejects.toThrow();
+    await runAsSystem(() => prisma.splitReminder.delete({ where: { id: r.id } }));
+  });
 });

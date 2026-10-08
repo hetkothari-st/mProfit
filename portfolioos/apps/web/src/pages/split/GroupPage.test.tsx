@@ -27,7 +27,7 @@ const GROUP = {
 function seed() {
   api.getGroup.mockResolvedValue(GROUP);
   api.listExpenses.mockResolvedValue([
-    { id: 'e1', groupId: 'g1', description: 'Hotel', date: '2026-10-01', amount: '300.0000', currency: 'INR', fxRate: '1', baseAmount: '300.0000', splitMode: 'EQUAL', createdById: 'u1', createdAt: '2026-10-01T00:00:00Z', sourceType: 'MANUAL', deletedAt: null,
+    { id: 'e1', groupId: 'g1', description: 'Hotel', date: '2026-10-01', amount: '300.0000', currency: 'INR', fxRate: '1', baseAmount: '300.0000', splitMode: 'EQUAL', createdById: 'u1', createdAt: '2026-10-01T00:00:00Z', sourceType: 'MANUAL', deletedAt: null, labelIds: [], hasReceipt: false,
       payers: [{ memberId: 'a', amount: '300.0000', baseAmount: '300.0000' }],
       shares: ['a', 'b', 'c'].map((m) => ({ memberId: m, amount: '100.0000', baseAmount: '100.0000', rawInput: null })) },
   ]);
