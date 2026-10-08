@@ -79,4 +79,51 @@ describe('SplitHomePage', () => {
     expect(await screen.findByText(/Couldn't load groups\./)).toBeTruthy();
     expect(screen.queryByText('No groups yet')).toBeNull();
   });
+
+  const ARCHIVED = { id: 'g7', name: 'Old flat', type: 'HOME', baseCurrency: 'INR', simplifyDebts: true, archivedAt: '2026-09-01T00:00:00Z', members: [], myNet: '0.0000' };
+
+  it('reaches archived groups through a toggle', async () => {
+    seed();
+    api.listGroups.mockImplementation((includeArchived?: boolean) => Promise.resolve(includeArchived
+      ? [...[{ id: 'g1', name: 'Goa trip', type: 'TRIP', baseCurrency: 'INR', simplifyDebts: true, archivedAt: null, members: [], myNet: '200.0000' }], ARCHIVED]
+      : [{ id: 'g1', name: 'Goa trip', type: 'TRIP', baseCurrency: 'INR', simplifyDebts: true, archivedAt: null, members: [], myNet: '200.0000' }]));
+    renderWithProviders(<SplitHomePage />, { route: '/split', path: '/split' });
+    const toggle = await screen.findByRole('button', { name: 'Show archived (1)' });
+    expect(screen.queryByText('Old flat')).toBeNull();
+    fireEvent.click(toggle);
+    expect(await screen.findByText('Old flat')).toBeTruthy();
+    expect(screen.getByText('Archived')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Hide archived' })).toBeTruthy();
+  });
+
+  it('hides the archived toggle when nothing is archived', async () => {
+    seed();
+    renderWithProviders(<SplitHomePage />, { route: '/split', path: '/split' });
+    await screen.findByText('Goa trip');
+    await waitFor(() => expect(api.listGroups).toHaveBeenCalledWith(true));
+    expect(screen.queryByRole('button', { name: /Show archived/ })).toBeNull();
+  });
+
+  it('group rows count active members only', async () => {
+    seed();
+    api.listGroups.mockResolvedValue([{ id: 'g1', name: 'Goa trip', type: 'TRIP', baseCurrency: 'INR', simplifyDebts: true, archivedAt: null, myNet: '0.0000',
+      members: [{ id: 'a', leftAt: null }, { id: 'b', leftAt: null }, { id: 'c', leftAt: '2026-09-01T00:00:00Z' }] }]);
+    renderWithProviders(<SplitHomePage />, { route: '/split', path: '/split' });
+    expect(await screen.findByText('2 people · INR')).toBeTruthy();
+  });
+
+  it('totals are marked approximate when any friend balance is', async () => {
+    seed();
+    renderWithProviders(<SplitHomePage />, { route: '/split', path: '/split' });
+    await screen.findByText('Bob');
+    expect(screen.getByTestId('split-owe-total').textContent).toBe('≈ ₹130.00');
+    expect(screen.getByTestId('split-owed-total').textContent).toBe('≈ ₹70.00');
+  });
+
+  it('home feed words a payment with its amount', async () => {
+    seed();
+    api.activity.mockResolvedValue([{ id: 'x2', groupId: 'g1', groupName: 'Goa trip', actorUserId: 'u2', actorName: 'Bob', kind: 'SETTLED', payload: { from: 'b', to: 'a', amount: '100.00', currency: 'INR' }, createdAt: '2026-10-08T10:00:00Z' }]);
+    renderWithProviders(<SplitHomePage />, { route: '/split', path: '/split' });
+    expect(await screen.findByText(/Bob recorded a payment of ₹100\.00/)).toBeTruthy();
+  });
 });

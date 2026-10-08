@@ -6,11 +6,12 @@ import { GroupPage } from './GroupPage';
 
 const api = vi.hoisted(() => ({
   getGroup: vi.fn(), listExpenses: vi.fn(), balances: vi.fn(), activity: vi.fn(), listContacts: vi.fn(),
-  createSettlement: vi.fn(), updateGroup: vi.fn(), addMember: vi.fn(), removeMember: vi.fn(), listSettlements: vi.fn(),
+  createSettlement: vi.fn(), deleteSettlement: vi.fn(), updateGroup: vi.fn(), addMember: vi.fn(), removeMember: vi.fn(), listSettlements: vi.fn(),
 }));
 vi.mock('@/api/split.api', async (orig) => ({ ...(await orig<typeof import('@/api/split.api')>()), splitApi: api }));
 const toastError = vi.hoisted(() => vi.fn());
-vi.mock('react-hot-toast', () => ({ default: { success: vi.fn(), error: toastError } }));
+const toastSuccess = vi.hoisted(() => vi.fn());
+vi.mock('react-hot-toast', () => ({ default: { success: toastSuccess, error: toastError } }));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -78,6 +79,7 @@ describe('GroupPage', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Remove Bob' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(toastError).toHaveBeenCalledWith('Settle this member to zero first'));
   });
 
@@ -135,5 +137,102 @@ describe('GroupPage', () => {
     expect(heads).toHaveLength(2);
     expect(heads[0]).toContain('2 Oct');
     expect(heads[1]).toContain('1 Oct');
+  });
+
+  const SETTLEMENT = { id: 's1', groupId: 'g1', fromMemberId: 'b', toMemberId: 'a', amount: '100.0000', currency: 'INR', fxRate: '1', baseAmount: '100.0000', method: 'CASH', date: '2026-10-02', createdById: 'u2', createdAt: '2026-10-02T00:00:00Z', deletedAt: null };
+
+  it('shows recorded payments in the expenses list', async () => {
+    seed();
+    api.listSettlements.mockResolvedValue([SETTLEMENT]);
+    renderPage();
+    expect(await screen.findByText('Bob paid You ₹100.00')).toBeTruthy();
+    expect(screen.getByText('Payment')).toBeTruthy();
+    expect(screen.getByText('Hotel')).toBeTruthy();
+  });
+
+  it('deleting a payment asks first, then deletes', async () => {
+    seed();
+    api.listSettlements.mockResolvedValue([SETTLEMENT]);
+    api.deleteSettlement.mockResolvedValue(undefined);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete payment' }));
+    expect(api.deleteSettlement).not.toHaveBeenCalled();
+    expect(await screen.findByText('Delete this payment? Balances will change back.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(api.deleteSettlement).toHaveBeenCalledWith('s1'));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+  });
+
+  it('cancelling the payment delete does nothing', async () => {
+    seed();
+    api.listSettlements.mockResolvedValue([SETTLEMENT]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete payment' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(api.deleteSettlement).not.toHaveBeenCalled();
+  });
+
+  it('activity words a recorded payment with names and amount', async () => {
+    seed();
+    api.activity.mockResolvedValue([{ id: 'x', groupId: 'g1', groupName: 'Goa trip', actorUserId: 'u2', actorName: 'Bob', kind: 'SETTLED',
+      payload: { from: 'b', to: 'a', amount: '100.00', currency: 'INR' }, createdAt: '2026-10-08T10:00:00Z' }]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
+    expect(await screen.findByText('Bob recorded Bob paying you ₹100.00')).toBeTruthy();
+  });
+
+  it('removing a member asks first and only then removes', async () => {
+    seed();
+    api.removeMember.mockResolvedValue(undefined);
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Bob' }));
+    expect(await screen.findByText('Remove Bob from the group?')).toBeTruthy();
+    expect(api.removeMember).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(api.removeMember).toHaveBeenCalledWith('g1', 'b'));
+  });
+
+  it('leaving uses the leave copy', async () => {
+    seed();
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove yourself' }));
+    expect(await screen.findByText(/Leave this group\? You'll lose access to its history/)).toBeTruthy();
+    expect(api.removeMember).not.toHaveBeenCalled();
+  });
+
+  it('archiving with unsettled balances asks first', async () => {
+    seed();
+    api.updateGroup.mockResolvedValue({});
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    await screen.findByRole('button', { name: 'Remove Bob' });
+    await waitFor(() => expect(api.balances).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole('button', { name: 'Archive group' }));
+    expect(await screen.findByText('This group still has unsettled balances. Archive anyway?')).toBeTruthy();
+    expect(api.updateGroup).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    await waitFor(() => expect(api.updateGroup).toHaveBeenCalledWith('g1', { archived: true }));
+  });
+
+  it('archiving a settled group needs no confirmation', async () => {
+    seed();
+    api.balances.mockResolvedValue({ groupId: 'g1', baseCurrency: 'INR', simplified: true,
+      nets: [{ memberId: 'a', net: '0.0000' }, { memberId: 'b', net: '0.0000' }, { memberId: 'c', net: '0.0000' }], transfers: [] });
+    api.updateGroup.mockResolvedValue({});
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    await waitFor(() => expect(api.balances).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole('button', { name: 'Archive group' }));
+    await waitFor(() => expect(api.updateGroup).toHaveBeenCalledWith('g1', { archived: true }));
+  });
+
+  it('settings no longer promise linking', async () => {
+    seed();
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    await screen.findByText('Chetan');
+    expect(screen.queryByText(/not on the app yet/)).toBeNull();
   });
 });

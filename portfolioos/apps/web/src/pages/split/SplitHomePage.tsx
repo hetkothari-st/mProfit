@@ -3,17 +3,20 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, UserPlus, UsersRound } from 'lucide-react';
 import { Decimal, toDecimal, formatDateTimeIST } from '@everypaisa/shared';
-import type { SplitActivityDto } from '@everypaisa/shared';
+import type { SplitActivityDto, SplitGroupDto, SplitMemberDto } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
-import { formatSplitMoney } from '@/lib/splitFormat';
+import { formatSplitMoney, memberName } from '@/lib/splitFormat';
 import { BalancePill } from './BalancePill';
 import { NewGroupDialog } from './NewGroupDialog';
 import { ContactDialog } from './ContactDialog';
 
-export function activityText(a: SplitActivityDto): string {
+const str = (v: unknown): v is string => typeof v === 'string' && v !== '';
+
+/** `members` lets a payment name who paid whom; the home feed has none and falls back to the amount. */
+export function activityText(a: SplitActivityDto, members?: SplitMemberDto[]): string {
   const p = (a.payload ?? {}) as Record<string, unknown>;
   const desc = typeof p.description === 'string' ? `“${p.description}”` : 'an expense';
   switch (a.kind) {
@@ -21,7 +24,15 @@ export function activityText(a: SplitActivityDto): string {
     case 'EXPENSE_EDITED': return `${a.actorName} edited ${desc}`;
     case 'EXPENSE_DELETED': return `${a.actorName} deleted ${desc}`;
     case 'EXPENSE_RESTORED': return `${a.actorName} restored ${desc}`;
-    case 'SETTLED': return `${a.actorName} recorded a payment`;
+    case 'SETTLED': {
+      if (!str(p.amount) || !str(p.currency)) return `${a.actorName} recorded a payment`;
+      const money = formatSplitMoney(p.amount, p.currency);
+      if (members && str(p.from) && str(p.to)) {
+        const who = (id: string) => memberName(members, id).replace(/^You$/, 'you');
+        return `${a.actorName} recorded ${who(p.from)} paying ${who(p.to)} ${money}`;
+      }
+      return `${a.actorName} recorded a payment of ${money}`;
+    }
     case 'SETTLEMENT_EDITED': return `${a.actorName} edited a payment`;
     case 'SETTLEMENT_DELETED': return `${a.actorName} deleted a payment`;
     case 'GROUP_CREATED': return `${a.actorName} created the group`;
@@ -32,20 +43,41 @@ export function activityText(a: SplitActivityDto): string {
   }
 }
 
+function GroupRow({ g }: { g: SplitGroupDto }) {
+  return (
+    <Link to={`/split/groups/${g.id}`} className="block">
+      <Card className="hover:bg-muted/40 transition-colors"><CardContent className="p-4 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-medium truncate">
+            {g.name}
+            {g.archivedAt && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">Archived</span>}
+          </p>
+          <p className="text-xs text-muted-foreground">{g.members.filter((m) => !m.leftAt).length} people · {g.baseCurrency}</p>
+        </div>
+        <BalancePill net={g.myNet} currency={g.baseCurrency} phrases={{ owed: 'you are owed', owe: 'you owe' }} />
+      </CardContent></Card>
+    </Link>
+  );
+}
+
 export function SplitHomePage() {
   const [newGroup, setNewGroup] = useState(false);
   const [newPerson, setNewPerson] = useState(false);
   const friends = useQuery({ queryKey: SPLIT_KEYS.friends, queryFn: splitApi.friends });
   const groups = useQuery({ queryKey: SPLIT_KEYS.groups, queryFn: () => splitApi.listGroups() });
+  const allGroups = useQuery({ queryKey: [...SPLIT_KEYS.groups, 'archived'], queryFn: () => splitApi.listGroups(true) });
+  const [showArchived, setShowArchived] = useState(false);
+  const archived = (allGroups.data ?? []).filter((g) => g.archivedAt);
   const activity = useQuery({ queryKey: SPLIT_KEYS.activity(), queryFn: () => splitApi.activity() });
 
   const list = friends.data ?? [];
   const owed = list.reduce((a, f) => (toDecimal(f.net).gt(0) ? a.plus(toDecimal(f.net)) : a), new Decimal(0));
   const owe = list.reduce((a, f) => (toDecimal(f.net).lt(0) ? a.plus(toDecimal(f.net).abs()) : a), new Decimal(0));
   const currency = list[0]?.currency ?? 'INR';
+  const approx = list.some((f) => f.approx) ? '≈ ' : '';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
       <PageHeader
         eyebrow="Tools"
         title="Split Expenses"
@@ -61,11 +93,11 @@ export function SplitHomePage() {
       <div className="grid grid-cols-2 gap-3">
         <Card><CardContent className="p-4">
           <p className="text-xs text-muted-foreground">You are owed</p>
-          <p data-testid="split-owed-total" className="text-xl font-semibold tabular-nums mt-1">{friends.isSuccess ? formatSplitMoney(owed, currency) : '—'}</p>
+          <p data-testid="split-owed-total" className="text-xl font-semibold tabular-nums mt-1">{friends.isSuccess ? `${approx}${formatSplitMoney(owed, currency)}` : '—'}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <p className="text-xs text-muted-foreground">You owe</p>
-          <p data-testid="split-owe-total" className="text-xl font-semibold tabular-nums mt-1">{friends.isSuccess ? formatSplitMoney(owe, currency) : '—'}</p>
+          <p data-testid="split-owe-total" className="text-xl font-semibold tabular-nums mt-1">{friends.isSuccess ? `${approx}${formatSplitMoney(owe, currency)}` : '—'}</p>
         </CardContent></Card>
       </div>
       {friends.isError && (
@@ -90,18 +122,14 @@ export function SplitHomePage() {
           </CardContent></Card>
         )}
         <div className="grid gap-2 sm:grid-cols-2">
-          {(groups.data ?? []).map((g) => (
-            <Link key={g.id} to={`/split/groups/${g.id}`} className="block">
-              <Card className="hover:bg-muted/40 transition-colors"><CardContent className="p-4 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{g.name}</p>
-                  <p className="text-xs text-muted-foreground">{g.members.length} people · {g.baseCurrency}</p>
-                </div>
-                <BalancePill net={g.myNet} currency={g.baseCurrency} phrases={{ owed: 'you are owed', owe: 'you owe' }} />
-              </CardContent></Card>
-            </Link>
-          ))}
+          {(groups.data ?? []).map((g) => <GroupRow key={g.id} g={g} />)}
+          {showArchived && archived.map((g) => <GroupRow key={g.id} g={g} />)}
         </div>
+        {archived.length > 0 && (
+          <Button variant="link" size="sm" className="px-0" onClick={() => setShowArchived((v) => !v)}>
+            {showArchived ? 'Hide archived' : `Show archived (${archived.length})`}
+          </Button>
+        )}
       </section>
 
       <section className="space-y-2">

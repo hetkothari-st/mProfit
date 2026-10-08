@@ -3,9 +3,9 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Plus, HandCoins } from 'lucide-react';
+import { ArrowLeft, Plus, HandCoins, Trash2 } from 'lucide-react';
 import { Decimal, toDecimal, formatDateIST, formatDateTimeIST } from '@everypaisa/shared';
-import type { SplitExpenseDto, SplitGroupDto } from '@everypaisa/shared';
+import type { SplitExpenseDto, SplitGroupDto, SplitSettlementDto } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,6 +20,8 @@ import { BalancePill } from './BalancePill';
 import { AddExpenseDialog } from './AddExpenseDialog';
 import { SettleUpDialog } from './SettleUpDialog';
 import { ContactDialog } from './ContactDialog';
+import { ConfirmDialog } from './ConfirmDialog';
+import { LoadError } from './LoadError';
 import { isNotFound } from './queryErrors';
 import { activityText } from './SplitHomePage';
 
@@ -32,44 +34,48 @@ function myLine(e: SplitExpenseDto, myId: string | undefined, currency: string):
   return diff.gt(0) ? `you lent ${formatSplitMoney(diff, currency)}` : `you borrowed ${formatSplitMoney(diff.abs(), currency)}`;
 }
 
-function LoadError({ text, onRetry }: { text: string; onRetry: () => void }) {
-  return (
-    <p className="text-sm text-muted-foreground py-6 text-center">
-      {text} <Button variant="link" size="sm" onClick={onRetry}>Retry</Button>
-    </p>
-  );
-}
+type DayItem = { kind: 'expense'; e: SplitExpenseDto } | { kind: 'payment'; s: SplitSettlementDto };
+const dayOf = (iso: string) => iso.slice(0, 10);
 
-function ExpensesTab({ group, expenses, status, onRetry }: {
-  group: SplitGroupDto; expenses: SplitExpenseDto[]; status: 'pending' | 'error' | 'success'; onRetry: () => void;
+function ExpensesTab({ group, expenses, settlements, status, onRetry, onDeletePayment }: {
+  group: SplitGroupDto; expenses: SplitExpenseDto[]; settlements: SplitSettlementDto[];
+  status: 'pending' | 'error' | 'success'; onRetry: () => void; onDeletePayment: (s: SplitSettlementDto) => void;
 }) {
   const me = group.members.find((m) => m.isMe);
   if (status === 'pending') return <p className="text-sm text-muted-foreground py-6 text-center">Loading…</p>;
   if (status === 'error') return <LoadError text="Couldn't load expenses." onRetry={onRetry} />;
-  if (expenses.length === 0) return <p className="text-sm text-muted-foreground py-6 text-center">No expenses yet.</p>;
-  // Consecutive grouping: the API returns expenses ordered by date desc.
-  const days: { date: string; items: SplitExpenseDto[] }[] = [];
-  for (const e of expenses) {
-    const last = days[days.length - 1];
-    if (last && last.date === e.date) last.items.push(e);
-    else days.push({ date: e.date, items: [e] });
-  }
+  const payments = settlements.filter((s) => !s.deletedAt);
+  if (expenses.length === 0 && payments.length === 0) return <p className="text-sm text-muted-foreground py-6 text-center">No expenses yet.</p>;
+  // Group by day, newest first. The API returns each list ordered by date desc; expenses lead within a day.
+  const byDay = new Map<string, DayItem[]>();
+  const push = (date: string, item: DayItem) => { byDay.set(date, [...(byDay.get(date) ?? []), item]); };
+  for (const e of expenses) push(dayOf(e.date), { kind: 'expense', e });
+  for (const s of payments) push(dayOf(s.date), { kind: 'payment', s });
+  const days = [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0));
   return (
     <div className="space-y-3">
-      {days.map((d) => (
-        <section key={d.date}>
-          <h3 data-testid="expense-day" className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{formatDateIST(`${d.date}T00:00:00+05:30`)}</h3>
+      {days.map(([date, items]) => (
+        <section key={date}>
+          <h3 data-testid="expense-day" className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{formatDateIST(`${date}T00:00:00+05:30`)}</h3>
           <Card><CardContent className="p-0 divide-y">
-            {d.items.map((e) => (
-              <Link key={e.id} to={`/split/expenses/${e.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40">
+            {items.map((it) => it.kind === 'expense' ? (
+              <Link key={it.e.id} to={`/split/expenses/${it.e.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40">
                 <div className="min-w-0">
-                  <p className="font-medium truncate">{e.description}</p>
+                  <p className="font-medium truncate">{it.e.description}</p>
                   <p className="text-xs text-muted-foreground">
-                    {e.payers.length === 1 ? `${memberName(group.members, e.payers[0]!.memberId)} paid` : `${e.payers.length} people paid`} {formatSplitMoney(e.amount, e.currency)}
+                    {it.e.payers.length === 1 ? `${memberName(group.members, it.e.payers[0]!.memberId)} paid` : `${it.e.payers.length} people paid`} {formatSplitMoney(it.e.amount, it.e.currency)}
                   </p>
                 </div>
-                <span className="text-sm text-muted-foreground whitespace-nowrap">{myLine(e, me?.id, group.baseCurrency)}</span>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">{myLine(it.e, me?.id, group.baseCurrency)}</span>
               </Link>
+            ) : (
+              <div key={it.s.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0 flex items-center gap-2">
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">Payment</span>
+                  <p className="text-sm truncate">{`${memberName(group.members, it.s.fromMemberId)} paid ${memberName(group.members, it.s.toMemberId)} ${formatSplitMoney(it.s.baseAmount, group.baseCurrency)}`}</p>
+                </div>
+                <Button variant="ghost" size="sm" aria-label="Delete payment" onClick={() => onDeletePayment(it.s)}><Trash2 className="h-4 w-4" /></Button>
+              </div>
             ))}
           </CardContent></Card>
         </section>
@@ -78,10 +84,12 @@ function ExpensesTab({ group, expenses, status, onRetry }: {
   );
 }
 
-function SettingsTab({ group }: { group: SplitGroupDto }) {
+function SettingsTab({ group, nets }: { group: SplitGroupDto; nets: Array<{ net: string }> | undefined }) {
   const qc = useQueryClient();
   const [name, setName] = useState(group.name);
   const [addPerson, setAddPerson] = useState(false);
+  const [removing, setRemoving] = useState<SplitGroupDto['members'][number] | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState(false);
   const contacts = useQuery({ queryKey: SPLIT_KEYS.contacts, queryFn: splitApi.listContacts });
   const refresh = () => void qc.invalidateQueries({ queryKey: SPLIT_KEYS.all });
   const onErr = (fallback: string) => (err: unknown) => toast.error(splitErrorMessage(err, fallback));
@@ -115,8 +123,8 @@ function SettingsTab({ group }: { group: SplitGroupDto }) {
       <Card><CardContent className="p-0 divide-y">
         {group.members.filter((m) => !m.leftAt).map((m) => (
           <div key={m.id} className="flex items-center justify-between px-4 py-3">
-            <span className="text-sm">{m.isMe ? `${m.displayName} (you)` : m.displayName}{!m.userId && <span className="text-xs text-muted-foreground"> · not on the app yet</span>}</span>
-            {!direct && <Button variant="ghost" size="sm" aria-label={`Remove ${m.isMe ? 'yourself' : m.displayName}`} onClick={() => remove.mutate(m.id)}>Remove</Button>}
+            <span className="text-sm">{m.isMe ? `${m.displayName} (you)` : m.displayName}</span>
+            {!direct && <Button variant="ghost" size="sm" aria-label={`Remove ${m.isMe ? 'yourself' : m.displayName}`} onClick={() => setRemoving(m)}>Remove</Button>}
           </div>
         ))}
       </CardContent></Card>
@@ -127,12 +135,32 @@ function SettingsTab({ group }: { group: SplitGroupDto }) {
             {addable.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </Select>
           <Button variant="link" size="sm" onClick={() => setAddPerson(true)}>+ New person</Button>
-          <Button variant="outline" size="sm" className="ml-auto" onClick={() => update.mutate({ archived: !group.archivedAt })}>
+          <Button variant="outline" size="sm" className="ml-auto" onClick={() => {
+            const unsettled = (nets ?? []).some((n) => !toDecimal(n.net).isZero());
+            if (!group.archivedAt && unsettled) setConfirmArchive(true);
+            else update.mutate({ archived: !group.archivedAt });
+          }}>
             {group.archivedAt ? 'Unarchive group' : 'Archive group'}
           </Button>
         </div>
       )}
       <ContactDialog open={addPerson} onOpenChange={setAddPerson} onSaved={(c) => add.mutate(c.id)} />
+      <ConfirmDialog
+        open={removing !== null} onOpenChange={(o) => !o && setRemoving(null)}
+        title={removing?.isMe ? 'Leave group' : 'Remove member'}
+        description={removing?.isMe
+          ? "Leave this group? You'll lose access to its history unless someone adds you back."
+          : `Remove ${removing?.displayName ?? ''} from the group?`}
+        confirmLabel={removing?.isMe ? 'Leave' : 'Remove'} destructive
+        onConfirm={() => removing && remove.mutate(removing.id)}
+      />
+      <ConfirmDialog
+        open={confirmArchive} onOpenChange={setConfirmArchive}
+        title="Archive this group"
+        description="This group still has unsettled balances. Archive anyway?"
+        confirmLabel="Archive" destructive
+        onConfirm={() => update.mutate({ archived: true })}
+      />
     </div>
   );
 }
@@ -145,6 +173,14 @@ export function GroupPage() {
     retry: (count, err) => !isNotFound(err) && count < 2 });
   const expenses = useQuery({ queryKey: SPLIT_KEYS.expenses(id), queryFn: () => splitApi.listExpenses(id) });
   const balances = useQuery({ queryKey: SPLIT_KEYS.balances(id), queryFn: () => splitApi.balances(id) });
+  const settlements = useQuery({ queryKey: SPLIT_KEYS.settlements(id), queryFn: () => splitApi.listSettlements(id) });
+  const [deletingPayment, setDeletingPayment] = useState<SplitSettlementDto | null>(null);
+  const qc = useQueryClient();
+  const deletePayment = useMutation({
+    mutationFn: (sid: string) => splitApi.deleteSettlement(sid),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: SPLIT_KEYS.all }); toast.success('Payment deleted'); },
+    onError: (err) => toast.error(splitErrorMessage(err, 'Could not delete the payment')),
+  });
   const activity = useQuery({ queryKey: SPLIT_KEYS.activity(id), queryFn: () => splitApi.activity(id) });
 
   if (group.isError) {
@@ -156,7 +192,7 @@ export function GroupPage() {
   const g = group.data;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-24">
       <Link to="/split" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Split Expenses</Link>
       <PageHeader
         eyebrow="Split Expenses"
@@ -181,7 +217,7 @@ export function GroupPage() {
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
-        <TabsContent value="expenses" className="pt-3"><ExpensesTab group={g} expenses={expenses.data ?? []} status={expenses.status} onRetry={() => void expenses.refetch()} /></TabsContent>
+        <TabsContent value="expenses" className="pt-3"><ExpensesTab group={g} expenses={expenses.data ?? []} settlements={settlements.data ?? []} status={expenses.status} onRetry={() => void expenses.refetch()} onDeletePayment={setDeletingPayment} /></TabsContent>
         <TabsContent value="balances" className="pt-3 space-y-3">
           {balances.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
           {balances.isError && <LoadError text="Couldn't load balances." onRetry={() => void balances.refetch()} />}
@@ -211,15 +247,21 @@ export function GroupPage() {
           <Card><CardContent className="p-0 divide-y">
             {(activity.data ?? []).map((a) => (
               <div key={a.id} className="px-4 py-3">
-                <p className="text-sm">{activityText(a)}</p>
+                <p className="text-sm">{activityText(a, g.members)}</p>
                 <p className="text-xs text-muted-foreground">{formatDateTimeIST(a.createdAt)}</p>
               </div>
             ))}
           </CardContent></Card>
         </TabsContent>
-        <TabsContent value="settings" className="pt-3"><SettingsTab group={g} /></TabsContent>
+        <TabsContent value="settings" className="pt-3"><SettingsTab group={g} nets={balances.data?.nets} /></TabsContent>
       </Tabs>
 
+      <ConfirmDialog
+        open={deletingPayment !== null} onOpenChange={(o) => !o && setDeletingPayment(null)}
+        title="Delete payment" description="Delete this payment? Balances will change back."
+        confirmLabel="Delete" destructive
+        onConfirm={() => deletingPayment && deletePayment.mutate(deletingPayment.id)}
+      />
       <AddExpenseDialog open={adding} onOpenChange={setAdding} group={g} />
       <SettleUpDialog open={settle !== null} onOpenChange={(o) => !o && setSettle(null)} group={g} {...(settle ?? {})} />
     </div>

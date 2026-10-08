@@ -54,7 +54,7 @@ export function ContactDialog({ open, onOpenChange, onSaved }: { open: boolean; 
             <Label htmlFor="contact-phone">Phone (optional)</Label>
             <Input id="contact-phone" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
-          <p className="text-xs text-muted-foreground">If they sign up later with this email or phone, they’ll see your shared groups.</p>
+          <p className="text-xs text-muted-foreground">Optional — used later to invite them.</p>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
