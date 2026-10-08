@@ -6,7 +6,7 @@ import { GroupPage } from './GroupPage';
 
 const api = vi.hoisted(() => ({
   getGroup: vi.fn(), listExpenses: vi.fn(), balances: vi.fn(), activity: vi.fn(), listContacts: vi.fn(),
-  createSettlement: vi.fn(), remind: vi.fn(), listLabels: vi.fn(), upiLink: vi.fn(), inviteContact: vi.fn(), deleteSettlement: vi.fn(), updateGroup: vi.fn(), addMember: vi.fn(), removeMember: vi.fn(), listSettlements: vi.fn(),
+  createSettlement: vi.fn(), remind: vi.fn(), listLabels: vi.fn(), upiLink: vi.fn(), inviteContact: vi.fn(), deleteSettlement: vi.fn(), updateGroup: vi.fn(), addMember: vi.fn(), removeMember: vi.fn(), listSettlements: vi.fn(), requestLink: vi.fn(),
 }));
 vi.mock('@/api/split.api', async (orig) => ({ ...(await orig<typeof import('@/api/split.api')>()), splitApi: api }));
 const toastError = vi.hoisted(() => vi.fn());
@@ -249,6 +249,55 @@ describe('GroupPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remind' }));
     await waitFor(() => expect(api.remind).toHaveBeenCalledWith('g1', 'c'));
     expect(toastSuccess).toHaveBeenCalledWith('Reminder sent');
+  });
+
+  const OWED = () => {
+    seed();
+    api.balances.mockResolvedValue({ groupId: 'g1', baseCurrency: 'INR', simplified: true,
+      nets: [{ memberId: 'a', net: '50.0000' }, { memberId: 'c', net: '-50.0000' }],
+      transfers: [{ fromMemberId: 'c', toMemberId: 'a', amount: '50.0000' }] });
+  };
+  const URI = 'upi://pay?pa=alice%40oksbi&pn=Alice&am=50.00&cu=INR&tn=x';
+
+  it('share pay link: uses the share sheet with the uri in the text', async () => {
+    OWED();
+    api.requestLink.mockResolvedValue({ uri: URI, payeeName: 'Alice', payeeVpa: 'alice@oksbi', amount: '50.0000', note: 'x' });
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { value: share, configurable: true });
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Balances' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Share pay link' }));
+    await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+    expect(api.requestLink).toHaveBeenCalledWith('g1', 'c', '50.00');
+    const arg = share.mock.calls[0]![0] as { text: string; title: string; url?: string };
+    expect(arg.text).toContain(URI);
+    expect(arg.text).toContain('Chetan');
+    expect(arg.url).toBeUndefined();
+    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+  });
+
+  it('share pay link: copies when there is no share sheet', async () => {
+    OWED();
+    api.requestLink.mockResolvedValue({ uri: URI, payeeName: 'Alice', payeeVpa: 'alice@oksbi', amount: '50.0000', note: 'x' });
+    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Balances' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Share pay link' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(URI));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Pay link copied — paste it in WhatsApp or SMS'));
+  });
+
+  it('share pay link: no UPI ID points to Split settings', async () => {
+    OWED();
+    api.requestLink.mockRejectedValue({ isAxiosError: true, message: 'x', response: { status: 400, data: { error: 'SPLIT_NO_UPI: add your UPI ID in Split settings first' } } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Balances' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Share pay link' }));
+    const link = await screen.findByRole('link', { name: 'Open Split settings' });
+    expect(link.getAttribute('href')).toBe('/split/settings');
+    expect(screen.getByText(/Add your UPI ID in Split settings first/)).toBeTruthy();
   });
 
   it('remind: 409 reads as already reminded', async () => {

@@ -8,6 +8,7 @@ import type { SplitGroupDto } from '@everypaisa/shared';
 import { buttonVariants, Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { splitErrorMessage } from './errors';
+import { copyText } from './clipboard';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 import { todayLocal } from '@/lib/localDate';
 import { formatSplitMoney, memberName } from '@/lib/splitFormat';
@@ -83,6 +84,7 @@ export function PayNowDialog({ open, onOpenChange, group, toMemberId, amount }: 
               <p className="text-sm text-muted-foreground break-all">{link.data.payeeVpa}</p>
             </div>
             <a href={link.data.uri} onClick={() => setAsked(true)} className={`${buttonVariants({ variant: 'default' })} w-full`}>Open UPI app</a>
+            <Button variant="outline" className="w-full" onClick={() => void copyText(link.data.uri).then((ok) => (ok ? toast.success('Pay link copied') : toast.error("Couldn't copy — long-press the QR or use Open UPI app")))}>Copy pay link</Button>
             {qr && (
               <div className="flex flex-col items-center gap-1">
                 <img src={qr} alt="UPI QR code" width={220} height={220} className="rounded bg-white" />

@@ -99,6 +99,11 @@ export const splitApi = {
     if (amount) q.set('amount', amount);
     return get<SplitUpiLinkDto>(`${BASE}/groups/${groupId}/upi-link?${q.toString()}`);
   },
+  requestLink: (groupId: string, fromMemberId: string, amount?: string) => {
+    const q = new URLSearchParams({ from: fromMemberId });
+    if (amount) q.set('amount', amount);
+    return get<SplitUpiLinkDto>(`${BASE}/groups/${groupId}/request-link?${q.toString()}`);
+  },
 
   listLabels: (groupId: string) => get<SplitLabelDto[]>(`${BASE}/groups/${groupId}/labels`),
   createLabel: (groupId: string, i: { name: string; color: string }) =>

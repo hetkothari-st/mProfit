@@ -9,7 +9,8 @@ const api = vi.hoisted(() => ({ upiLink: vi.fn(), createSettlement: vi.fn() }));
 vi.mock('@/api/split.api', async (orig) => ({ ...(await orig<typeof import('@/api/split.api')>()), splitApi: api }));
 vi.mock('qrcode', () => ({ default: { toDataURL: vi.fn().mockResolvedValue('data:image/png;base64,QR') } }));
 const toastSuccess = vi.hoisted(() => vi.fn());
-vi.mock('react-hot-toast', () => ({ default: { success: toastSuccess, error: vi.fn() } }));
+const toastError = vi.hoisted(() => vi.fn());
+vi.mock('react-hot-toast', () => ({ default: { success: toastSuccess, error: toastError } }));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -55,5 +56,23 @@ describe('PayNowDialog', () => {
     renderWithProviders(<PayNowDialog open onOpenChange={() => {}} group={group} toMemberId="b" amount="100" />);
     expect(await screen.findByText("Ravi hasn't added a UPI ID")).toBeTruthy();
     expect(screen.getByText('Ask them to add a UPI ID in Split settings')).toBeTruthy();
+  });
+
+  it('copies the pay link', async () => {
+    api.upiLink.mockResolvedValue(LINK);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderWithProviders(<PayNowDialog open onOpenChange={() => {}} group={group} toMemberId="b" amount="100.0000" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy pay link' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(URI));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Pay link copied'));
+  });
+
+  it('says so when copying is not possible', async () => {
+    api.upiLink.mockResolvedValue(LINK);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) }, configurable: true });
+    renderWithProviders(<PayNowDialog open onOpenChange={() => {}} group={group} toMemberId="b" amount="100.0000" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy pay link' }));
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Couldn't copy — long-press the QR or use Open UPI app"));
   });
 });

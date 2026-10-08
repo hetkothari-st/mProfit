@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { splitErrorMessage } from './errors';
+import { copyText } from './clipboard';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 import { formatSplitMoney, memberName, transferLabel } from '@/lib/splitFormat';
 import { BalancePill } from './BalancePill';
@@ -250,6 +251,30 @@ export function GroupPage() {
     onSuccess: (r) => (r.sent ? toast.success('Reminder sent') : toast.error("Reminder saved but email couldn't be sent right now")),
     onError: (err) => toast.error(axios.isAxiosError(err) && err.response?.status === 409 ? 'Already reminded today' : splitErrorMessage(err, 'Could not send the reminder')),
   });
+  const [shareError, setShareError] = useState<string | null>(null);
+  const share = useMutation({
+    mutationFn: async (t: { fromMemberId: string; amount: string }) => {
+      const link = await splitApi.requestLink(id, t.fromMemberId, toDecimal(t.amount).toFixed(2));
+      return { link, ...t };
+    },
+    onSuccess: async ({ link, fromMemberId, amount }) => {
+      setShareError(null);
+      const g0 = group.data;
+      const text = `${g0 ? memberName(g0.members, fromMemberId) : 'Hi'}, pay ${formatSplitMoney(amount, 'INR')} for ${g0?.name ?? 'our group'}: ${link.uri}`;
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        try {
+          await navigator.share({ title: 'Pay me back', text });
+        } catch (err) {
+          // Cancelling the share sheet is not an error; anything else is shown.
+          if ((err as { name?: string }).name !== 'AbortError') toast.error("Couldn't open the share sheet");
+        }
+        return;
+      }
+      if (await copyText(link.uri)) toast.success('Pay link copied — paste it in WhatsApp or SMS');
+      else toast.error("Couldn't copy the pay link — use Settle up instead");
+    },
+    onError: (err) => setShareError(splitErrorMessage(err, 'Could not create the pay link')),
+  });
   const activity = useQuery({ queryKey: SPLIT_KEYS.activity(id), queryFn: () => splitApi.activity(id) });
 
   if (group.isError) {
@@ -308,7 +333,12 @@ export function GroupPage() {
                 <span className="text-sm">{transferLabel(g.members, t, g.baseCurrency)}</span>
                 <span className="flex items-center gap-1.5">
                   {t.toMemberId === me?.id && (
-                    <Button size="sm" variant="outline" disabled={remind.isPending} onClick={() => remind.mutate(t.fromMemberId)}>Remind</Button>
+                    <>
+                      <Button size="sm" variant="outline" disabled={remind.isPending} onClick={() => remind.mutate(t.fromMemberId)}>Remind</Button>
+                      {g.baseCurrency === 'INR' && (
+                        <Button size="sm" variant="outline" disabled={share.isPending} onClick={() => share.mutate({ fromMemberId: t.fromMemberId, amount: t.amount })}>Share pay link</Button>
+                      )}
+                    </>
                   )}
                   {t.fromMemberId === me?.id && g.baseCurrency === 'INR' && (
                     <Button size="sm" onClick={() => setPay({ to: t.toMemberId, amount: t.amount })}>Pay</Button>
@@ -318,6 +348,11 @@ export function GroupPage() {
               </div>
             ))}
           </CardContent></Card>
+          {shareError && (
+            <p role="alert" className="text-sm text-destructive">
+              {shareError}{/UPI ID/i.test(shareError) && <> <Link className="underline" to="/split/settings">Open Split settings</Link></>}
+            </p>
+          )}
           </>}
         </TabsContent>
         <TabsContent value="activity" className="pt-3">
