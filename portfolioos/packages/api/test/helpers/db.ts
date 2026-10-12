@@ -73,6 +73,9 @@ export async function createTestScope(label: string): Promise<TestScope> {
         await prisma.holdingProjection.deleteMany({ where: { portfolioId: portfolio.id } });
         await prisma.holding.deleteMany({ where: { portfolioId: portfolio.id } });
         await prisma.transaction.deleteMany({ where: { portfolioId: portfolio.id } });
+        // Will versions before wills: WillVersion.willId is ON DELETE RESTRICT.
+        await prisma.willVersion.deleteMany({ where: { userId: user.id } });
+        await prisma.will.deleteMany({ where: { userId: user.id } });
         await prisma.portfolio.delete({ where: { id: portfolio.id } }).catch(() => {});
         // Not swallowed. A user that will not delete means this scope left
         // rows behind, and the next run inherits them — the failure that

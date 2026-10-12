@@ -161,3 +161,14 @@ describe('Will tables', () => {
     // The user row is gone, so victim.cleanup() would fail; nothing else to remove.
   });
 });
+
+describe('test scope cleanup', () => {
+  it('removes a will that has a version (the version restricts the will)', async () => {
+    const s = await createTestScope('will-cleanup');
+    const w = await insertWill(s.userId, 'GENERATED', 1);
+    await insertVersion(s.userId, w.id);
+    await s.cleanup();
+    const left = await runAsSystem(() => prisma.will.count({ where: { userId: s.userId } }));
+    expect(left).toBe(0);
+  });
+});
