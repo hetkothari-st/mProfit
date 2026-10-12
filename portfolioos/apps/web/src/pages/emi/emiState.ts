@@ -1,5 +1,5 @@
 import {
-  Decimal, EmiError, cleanNumber, compareLoanOffers, formatINR, loanFromWire, maxLoanFor, summariseLoan, taxFromWire,
+  Decimal, EMI_LIMITS, EmiError, cleanNumber, compareLoanOffers, formatINR, loanFromWire, maxLoanFor, summariseLoan, taxFromWire,
   tenureForEmi, validateLoanWire, validateTaxWire,
   type EmiMode, type FieldError, type LoanInputWire, type LoanSummary, type OfferComparison,
   type TaxInputWire, type TaxLoanKind, type TaxRegime,
@@ -31,6 +31,18 @@ export interface CalcState {
 }
 /** `formatINR` takes number | string; money stays Decimal until this display boundary. */
 export const money = (d: Decimal): string => formatINR(d.toFixed(2));
+/** Whole rupees for dense on-screen tables; exports keep paise. */
+export const moneyWhole = (d: Decimal): string => formatINR(d.toFixed(0), { fractionDigits: 0 });
+/** Chart axis ticks: "₹45K", "₹12.5L", "₹1.2Cr". Takes chart coordinates (already numbers). */
+export const compactInr = (v: number): string => formatINR(String(v), { compact: true, fractionDigits: 1 }).replace(' ', '');
+/** "2500000" -> "25,00,000" for text fields fed by a slider. */
+export const groupedWhole = (digits: string): string => formatINR(digits, { showSymbol: false, fractionDigits: 0 });
+
+/** Exact label from the spec: let-out excess interest is shown but never valued as tax saved. */
+export const CARRIED_FORWARD_LABEL = 'Excess interest (carried forward, not valued)';
+
+/** Plain non-negative decimal as typed (after cleaning); '.5' and '5.' allowed, like the shared validator. */
+export const NUMBER_TEXT = /^(\d+\.?\d*|\.\d+)$/;
 
 export interface OfferState { label: string; principal: string; ratePct: string; tenure: string; tenureUnit: 'Y' | 'M'; feeKind: 'PCT' | 'AMOUNT'; feeValue: string; otherCharges: string }
 export interface CompareState { offers: OfferState[] }
@@ -63,7 +75,7 @@ function months(value: string, unit: 'Y' | 'M'): number {
   return unit === 'Y' ? Number(c) * 12 : Number(c);
 }
 const intOrNaN = (s: string) => (/^\d+$/.test(s.trim()) ? Number(s.trim()) : Number.NaN);
-const positive = (s: string) => /^\d+(\.\d+)?$/.test(cleanNumber(s)) && new Decimal(cleanNumber(s)).gt(0);
+const positive = (s: string) => NUMBER_TEXT.test(cleanNumber(s)) && new Decimal(cleanNumber(s)).gt(0);
 
 export type CalcOutcome =
   | { ok: true; principal: Decimal; tenureMonths: number; summary: LoanSummary; wire: LoanInputWire; taxWire?: TaxInputWire }
@@ -76,14 +88,14 @@ export function computeCalc(s: CalcState): CalcOutcome {
 
   if (s.mode !== 'EMI' && !positive(s.emi)) return { ok: false, errors: [{ field: 'emi', message: 'Enter an EMI above 0' }] };
   if (s.mode === 'MAX_LOAN') {
-    const rateOk = /^\d+(\.\d+)?$/.test(cleanNumber(s.ratePct));
+    const rateOk = NUMBER_TEXT.test(cleanNumber(s.ratePct));
     if (rateOk && Number.isInteger(tenureMonths) && tenureMonths >= 1) {
       principal = maxLoanFor(new Decimal(cleanNumber(s.emi)), new Decimal(cleanNumber(s.ratePct)), tenureMonths).toString();
     }
   }
   if (s.mode === 'TENURE') {
     emiOverride = cleanNumber(s.emi);
-    if (positive(s.principal) && /^\d+(\.\d+)?$/.test(cleanNumber(s.ratePct))) {
+    if (positive(s.principal) && NUMBER_TEXT.test(cleanNumber(s.ratePct))) {
       try {
         tenureMonths = tenureForEmi(new Decimal(cleanNumber(s.principal)), new Decimal(emiOverride), new Decimal(cleanNumber(s.ratePct)));
       } catch (err) {
@@ -107,7 +119,14 @@ export function computeCalc(s: CalcState): CalcOutcome {
     ? { regime: s.regime, loanKind: s.loanKind, slabPct: s.slabPct, remaining80C: s.remaining80C }
     : undefined;
 
-  const errors = [...validateLoanWire(wire), ...(taxWire ? validateTaxWire(taxWire) : [])];
+  let errors = [...validateLoanWire(wire), ...(taxWire ? validateTaxWire(taxWire) : [])];
+  // Derived fields are not on screen in these modes; their errors belong to the EMI the user typed.
+  if (s.mode === 'MAX_LOAN') {
+    const overLimit = NUMBER_TEXT.test(principal) && new Decimal(principal).gt(EMI_LIMITS.maxPrincipal);
+    const message = overLimit ? 'This EMI gives a loan above the Rs. 100 crore limit' : 'This EMI is too small to give a loan';
+    errors = errors.map((e) => (e.field === 'principal' ? { field: 'emi', message } : e));
+  }
+  if (s.mode === 'TENURE' && errors.some((e) => e.field === 'emi')) errors = errors.filter((e) => e.field !== 'tenureMonths');
   if (errors.length > 0) return { ok: false, errors };
   try {
     const input = loanFromWire(wire);
@@ -133,5 +152,10 @@ export function computeCompare(c: CompareState, firstEmiDate: string, tax?: TaxI
   });
   const taxInput = tax && validateTaxWire(tax).length === 0 ? taxFromWire(tax) : undefined;
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, result: compareLoanOffers(wires.map((w, i) => ({ label: c.offers[i]!.label || `Offer ${i + 1}`, input: loanFromWire(w), tax: taxInput }))) };
+  try {
+    return { ok: true, result: compareLoanOffers(wires.map((w, i) => ({ label: c.offers[i]!.label || `Offer ${i + 1}`, input: loanFromWire(w), tax: taxInput }))) };
+  } catch (err) {
+    if (err instanceof EmiError) return { ok: false, errors: [{ field: err.field ?? 'principal', message: err.message }] };
+    throw err;
+  }
 }

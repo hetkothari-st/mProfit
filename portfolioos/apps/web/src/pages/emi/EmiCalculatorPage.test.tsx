@@ -30,6 +30,11 @@ describe('EmiCalculatorPage', () => {
     expect(await screen.findByTestId('emi-value')).toBeTruthy();
   });
 
+  it('shows the Tools eyebrow', () => {
+    renderWithProviders(<EmiCalculatorPage />, { route: '/emi', path: '/emi' });
+    expect(screen.getByText('Tools')).toBeTruthy();
+  });
+
   it('switches to the compare tab', async () => {
     renderWithProviders(<EmiCalculatorPage />, { route: '/emi', path: '/emi' });
     fireEvent.mouseDown(screen.getByRole('tab', { name: /compare/i }));

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { TaxInputWire } from '@everypaisa/shared';
 import { Download, FileSpreadsheet, Link2 } from 'lucide-react';
@@ -17,16 +17,17 @@ import { decodeEmiUrl, encodeEmiUrl, type EmiTab } from './emiUrl';
 export function EmiCalculatorPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const initial = useRef(decodeEmiUrl(location.search));
-  const [tab, setTab] = useState<EmiTab>(initial.current.tab);
-  const [calc, setCalc] = useState<CalcState>(initial.current.calc ?? defaultCalcState());
-  const [compare, setCompare] = useState<CompareState>(initial.current.compare ?? defaultCompareState());
+  // Decoded once on mount; later address-bar updates come from this page's own state.
+  const [initial] = useState(() => decodeEmiUrl(location.search));
+  const [tab, setTab] = useState<EmiTab>(initial.tab);
+  const [calc, setCalc] = useState<CalcState>(() => initial.calc ?? defaultCalcState());
+  const [compare, setCompare] = useState<CompareState>(() => initial.compare ?? defaultCompareState());
   const [outcome, setOutcome] = useState<CalcOutcome | null>(null);
   const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null);
 
   useEffect(() => {
-    if (initial.current.error) toast.error(initial.current.error);
-  }, []);
+    if (initial.error) toast.error(initial.error);
+  }, [initial]);
 
   // Keep the address bar shareable without adding history entries per keystroke.
   useEffect(() => {
@@ -63,6 +64,7 @@ export function EmiCalculatorPage() {
   return (
     <div className="space-y-4 pb-24">
       <PageHeader
+        eyebrow="Tools"
         title="EMI Calculator"
         description="Plan a loan: EMI, prepayments, rate changes, fees, tax benefit and offers side by side."
         actions={

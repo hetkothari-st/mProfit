@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeCalc, computeCompare, defaultCalcState, defaultCompareState } from './emiState';
+import { Decimal } from '@everypaisa/shared';
+import { compactInr, computeCalc, computeCompare, defaultCalcState, defaultCompareState, groupedWhole, moneyWhole } from './emiState';
 
 const fixedToday = new Date(2026, 9, 12); // 12 Oct 2026, local
 
@@ -77,5 +78,35 @@ describe('computeCompare', () => {
     if (!o.ok) throw new Error('expected ok');
     expect(o.result.cheapestPostTax).not.toBeNull();
     expect(o.result.offers.every((x) => x.postTaxCost !== undefined)).toBe(true);
+  });
+});
+
+describe('display helpers', () => {
+  it('compactInr: K below a lakh, L for lakhs, Cr for crores', () => {
+    expect(compactInr(45000)).toBe('₹45K');
+    expect(compactInr(1250000)).toBe('₹12.5L');
+    expect(compactInr(12000000)).toBe('₹1.2Cr');
+    expect(compactInr(0)).toBe('₹0');
+  });
+  it('moneyWhole drops paise; groupedWhole groups slider values the Indian way', () => {
+    expect(moneyWhole(new Decimal('1234567.89'))).toBe('₹12,34,568');
+    expect(groupedWhole('2500000')).toBe('25,00,000');
+  });
+});
+
+describe('computeCalc - derived-field errors', () => {
+  const s = { ...defaultCalcState(fixedToday), principal: '10,00,000', ratePct: '8.5', tenure: '20', tenureUnit: 'Y' as const };
+  it('MAX_LOAN: a loan above the limit is reported on the EMI field', () => {
+    const o = computeCalc({ ...s, mode: 'MAX_LOAN', emi: '50,00,00,000' });
+    expect(o.ok).toBe(false);
+    if (!o.ok) expect(o.errors).toEqual([{ field: 'emi', message: 'This EMI gives a loan above the Rs. 100 crore limit' }]);
+  });
+  it('TENURE: an EMI that takes over 40 years is an emi error, with no duplicate tenure error', () => {
+    const o = computeCalc({ ...s, mode: 'TENURE', emi: '7,200' });
+    expect(o.ok).toBe(false);
+    if (!o.ok) expect(o.errors).toEqual([{ field: 'emi', message: 'This EMI takes longer than 40 years to repay' }]);
+  });
+  it('accepts a rate typed as .5 style', () => {
+    expect(computeCalc({ ...s, ratePct: '8.' }).ok).toBe(true);
   });
 });

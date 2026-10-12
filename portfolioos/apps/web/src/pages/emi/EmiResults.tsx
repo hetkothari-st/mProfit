@@ -1,6 +1,6 @@
 import { Area, AreaChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatDateOnly, formatINR, type EmiWarning } from '@everypaisa/shared';
-import { money } from './emiState';
+import { compactInr, money } from './emiState';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { CalcMode, CalcOutcome } from './emiState';
 
@@ -17,13 +17,21 @@ const WARNING_TEXT: Record<EmiWarning, string> = {
   NEGATIVE_AMORTISATION_AVOIDED: 'After a rate rise the old EMI would not cover the interest, so the EMI was raised.',
   PREPAYMENT_AFTER_CLOSE: 'Some prepayments fall after the loan is already repaid and were ignored.',
   RATE_CHANGE_AFTER_CLOSE: 'Some rate changes fall after the loan is already repaid and were ignored.',
+  TENURE_CAPPED: 'The rate rise would stretch the loan past 40 years, so the EMI was raised to finish by then.',
 };
 
-function Tile({ label, value, testId, strong }: { label: string; value: string; testId?: string; strong?: boolean }) {
+function Tile({ label, value, testId, strong, sub }: { label: string; value: string; testId?: string; strong?: boolean; sub?: string }) {
   return (
     <div className="min-w-0 rounded-lg border p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div data-testid={testId} className={strong ? 'whitespace-nowrap text-xl font-semibold tabular-nums' : 'whitespace-nowrap text-base font-medium tabular-nums'}>{value}</div>
+      <div
+        data-testid={testId}
+        title={value}
+        className={`overflow-hidden text-ellipsis whitespace-nowrap tabular-nums ${strong ? 'text-lg font-semibold sm:text-xl xl:text-2xl' : 'text-base font-medium'}`}
+      >
+        {value}
+      </div>
+      {sub && <div className="text-xs text-muted-foreground tabular-nums">{sub}</div>}
     </div>
   );
 }
@@ -54,7 +62,7 @@ export function EmiResults({ outcome, mode, baseline }: { outcome: Ok; mode: Cal
           <Tile label="Total paid" value={money(s.totalPaid)} />
           {mode !== 'TENURE' && <Tile label="Tenure" value={tenureText} />}
           {s.fees.total.gt(0) && <Tile label="Fees + GST" value={money(s.fees.total)} />}
-          <Tile label="APR (true yearly cost)" value={`${s.aprPct.toFixed(2)}%`} />
+          <Tile label="APR (true yearly cost)" value={`${s.aprPct.toFixed(2)}%`} sub={`nominal ${s.nominalPct.toFixed(2)}% p.a.`} testId="apr-value" />
           {saved && saved.gt(0) && <Tile label="Interest saved by prepaying" value={money(saved)} testId="interest-saved" />}
           {s.tax && <Tile label="Tax saved" value={money(s.tax.totalTaxSaved)} />}
           {s.postTaxCost && <Tile label="Cost after tax" value={money(s.postTaxCost)} />}
@@ -84,7 +92,7 @@ export function EmiResults({ outcome, mode, baseline }: { outcome: Ok; mode: Cal
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={balance} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={40} />
-                <YAxis tick={{ fontSize: 10 }} width={56} tickFormatter={(v: number) => `${Math.round(v / 100000)}L`} />
+                <YAxis tick={{ fontSize: 10 }} width={56} tickFormatter={compactInr} />
                 <Tooltip {...TOOLTIP_PROPS} formatter={(v: number) => formatINR(String(v))} />
                 <Area dataKey="balance" name="Balance" type="monotone" stroke="hsl(var(--primary))" fill="hsl(var(--primary) / 0.15)" />
               </AreaChart>

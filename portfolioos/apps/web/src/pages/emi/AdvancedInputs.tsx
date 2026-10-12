@@ -1,24 +1,11 @@
 import { Plus, Trash2 } from 'lucide-react';
 import type { FieldError } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Field, errorFor } from './EmiField';
+import { Field, Select, errorFor } from './EmiField';
 import type { CalcState, PrepaymentRow, RateChangeRow } from './emiState';
 
 const MODE_LABEL = { REDUCE_TENURE: 'Cut tenure', REDUCE_EMI: 'Cut EMI' } as const;
 const newId = () => Math.random().toString(36).slice(2, 10);
-
-function Select<T extends string>(props: { id: string; label: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
-  return (
-    <div className="space-y-1">
-      <Label htmlFor={props.id}>{props.label}</Label>
-      <select id={props.id} value={props.value} onChange={(e) => props.onChange(e.target.value as T)}
-        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm">
-        {props.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </div>
-  );
-}
 
 function Switch({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -50,7 +37,7 @@ export function AdvancedInputs({ state, onChange, errors }: { state: CalcState; 
             </Button>
           </div>
         ))}
-        <Button type="button" variant="outline" size="sm" onClick={() => set('prepayments', [...state.prepayments, { id: newId(), month: '12', amount: '', recurrence: 'ONCE', mode: 'REDUCE_TENURE' }])}>
+        <Button type="button" variant="outline" size="sm" onClick={() => set('prepayments', [...state.prepayments, { id: newId(), month: '12', amount: '1,00,000', recurrence: 'ONCE', mode: 'REDUCE_TENURE' }])}>
           <Plus className="mr-1 h-4 w-4" /> Add prepayment
         </Button>
       </section>
