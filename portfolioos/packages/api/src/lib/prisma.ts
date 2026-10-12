@@ -223,6 +223,13 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'SplitShareLink',
   'SplitSettings',
   'SplitReminder',
+  // Legacy Transfer (20261013120000_legacy_transfer). ENABLE+FORCE RLS on all
+  // five; without these entries every read returns zero rows (see Goal/BankAccount note).
+  'LegacyPlan',
+  'LegacyNominee',
+  'LegacyToken',
+  'LegacyCode',
+  'LegacyOutbox',
 ]);
 
 /**

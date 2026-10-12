@@ -19,3 +19,4 @@ export * from './insurance/index.js';
 export * from './familyRelations.js';
 export * from './split.types.js';
 export * from './loans/index.js';
+export * from './legacy.js';

@@ -36,6 +36,7 @@ import { loansRouter } from './loans.routes.js';
 import { loansGivenRouter } from './loansGiven.routes.js';
 import { splitRouter } from './split.routes.js';
 import { emiRouter } from './emi.routes.js';
+import { legacyRouter, legacyPublicRouter, legacyViewRouter } from './legacy.routes.js';
 import { loanRatesRouter } from './loanRates.routes.js';
 import { creditCardsRouter } from './creditCards.routes.js';
 import { bankAccountsRouter } from './bankAccounts.routes.js';
@@ -108,6 +109,9 @@ export function registerRoutes(app: Express): void {
   app.use('/api/loans-given', loansGivenRouter);
   app.use('/api/split', splitRouter);
   app.use('/api/emi', emiRouter);
+  app.use('/api/legacy', legacyRouter);
+  app.use('/api/legacy-public', legacyPublicRouter);
+  app.use('/api/legacy-view', legacyViewRouter);
   app.use('/api/loan-rates', loanRatesRouter);
   app.use('/api/credit-cards', creditCardsRouter);
   app.use('/api/bank-accounts', bankAccountsRouter);

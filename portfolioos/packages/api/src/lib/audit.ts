@@ -40,7 +40,20 @@ export type AuditAction =
   | 'loan_rate_override_cleared'
   | 'loan_rate_suspect_approved'
   | 'loan_rate_suspect_rejected'
-  | 'loan_rate_run_now';
+  | 'loan_rate_run_now'
+  | 'legacy_activated'
+  | 'legacy_changed'
+  | 'legacy_warning'
+  | 'legacy_reset'
+  | 'legacy_im_ok'
+  | 'legacy_verifier_answer'
+  | 'legacy_released'
+  | 'legacy_revoked'
+  | 'legacy_otp_ok'
+  | 'legacy_otp_failed'
+  | 'legacy_view'
+  | 'legacy_document_download'
+  | 'legacy_pdf';
 
 export interface AuditInput {
   userId?: string | null;

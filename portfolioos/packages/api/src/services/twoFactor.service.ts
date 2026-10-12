@@ -127,7 +127,7 @@ export async function enableTwoFactor(userId: string, code: string, req?: Reques
  * Accept an authenticator code (never the same time step twice) or an unused
  * backup code (marked used). Returns how it matched, or null.
  */
-async function acceptCode(user: User, code: string): Promise<'totp' | 'backup' | null> {
+export async function acceptCode(user: User, code: string): Promise<'totp' | 'backup' | null> {
   if (!user.twoFactorSecretEnc) return null;
   const trimmed = code.trim();
   if (/^\d{6}$/.test(trimmed.replace(/\s/g, ''))) {

@@ -65,6 +65,9 @@ import { ExpenseDetailPage } from './pages/split/ExpenseDetailPage';
 import { FriendPage } from './pages/split/FriendPage';
 import { SplitSettingsPage } from './pages/split/SplitSettingsPage';
 import { EmiCalculatorPage } from './pages/emi/EmiCalculatorPage';
+import { LegacyPage } from './pages/legacy/LegacyPage';
+import { LegacyLinkPage } from './pages/legacy/LegacyLinkPage';
+import { LegacyAccessPage } from './pages/legacy/LegacyAccessPage';
 import { GoalsPage } from './pages/goals/GoalsPage';
 import { IncomePage } from './pages/income/IncomePage';
 import { HealthScorePage } from './pages/intelligence/HealthScorePage';
@@ -110,6 +113,12 @@ export function App() {
       {/* Outside the protected tree on purpose: the person taking over the
           account kept for them has no login yet — that is the point. */}
       <Route path="/family/claims/:token" element={<ClaimProfilePage />} />
+      {/* Legacy Transfer links: outside the protected tree on purpose — the
+          owner may be unable to sign in, and nominees have no account. */}
+      <Route path="/legacy/ok/:token" element={<LegacyLinkPage kind="ok" />} />
+      <Route path="/legacy/ack/:token" element={<LegacyLinkPage kind="ack" />} />
+      <Route path="/legacy/verify/:token" element={<LegacyLinkPage kind="verify" />} />
+      <Route path="/legacy/access/:token" element={<LegacyAccessPage />} />
       {/* Outside the protected tree on purpose: a professional opening this
           link may not have an account yet, and has to be told who is asking
           before being asked to make one. */}
@@ -209,6 +218,7 @@ export function App() {
         <Route path="/loans/:id" element={<LoanDetailPage />} />
         <Route path="/split" element={<SplitHomePage />} />
         <Route path="/emi" element={<EmiCalculatorPage />} />
+        <Route path="/legacy" element={<LegacyPage />} />
         <Route path="/split/settings" element={<SplitSettingsPage />} />
         <Route path="/split/groups/:id" element={<GroupPage />} />
         <Route path="/split/expenses/:id" element={<ExpenseDetailPage />} />
