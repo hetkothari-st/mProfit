@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { emptyWillPayload } from '@everypaisa/shared';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
@@ -8,6 +8,7 @@ import {
   refreshWillEstate, saveWillSection,
 } from '../../src/services/will/will.service.js';
 import type { EstateCandidate } from '../../src/services/will/estate/types.js';
+import { sealWillPayload } from '../../src/services/will/willStore.js';
 import { TODAY, validWillPayload } from './willFixtures.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';
@@ -131,5 +132,58 @@ describe('will drafts', () => {
     const s = await a.runAs(() => listWillPeopleSuggestions(a.userId));
     expect(s).toHaveLength(1);
     expect(s[0]).toMatchObject({ userId: b.userId, relation: 'Son', relationship: 'SON', dob: '1999-05-05' });
+  });
+});
+
+describe('draft edge cases (final fix wave)', () => {
+  let c: TestScope;
+  beforeAll(async () => {
+    c = await createTestScope('will-draft-c');
+  });
+  afterEach(async () => {
+    await runAsSystem(() => prisma.will.deleteMany({ where: { userId: c.userId } }));
+  });
+  afterAll(async () => {
+    await c.cleanup();
+  });
+
+  it('names the existing draft and its step on every draft-exists conflict, even a create race', async () => {
+    const results = await Promise.allSettled([0, 1, 2].map(() => c.runAs(() => createWillDraft(c.userId, null))));
+    const won = results.filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof createWillDraft>>> => r.status === 'fulfilled');
+    expect(won).toHaveLength(1);
+    for (const r of results) {
+      if (r.status === 'rejected') {
+        expect(r.reason).toMatchObject({ statusCode: 409, details: { reason: 'WILL_DRAFT_EXISTS', draftId: won[0]!.value.id, currentStep: 2 } });
+      }
+    }
+  });
+
+  it('a draft discarded while a save is in flight answers WILL_NOT_DRAFT, not a revision conflict', async () => {
+    const d = await c.runAs(() => createWillDraft(c.userId, null));
+    const discardMidway = {
+      today: () => TODAY,
+      collect: async () => {
+        await runAsSystem(() => prisma.will.update({ where: { id: d.id }, data: { status: 'DISCARDED' } }));
+        return { candidates: [bank], failed: [] };
+      },
+    };
+    await expect(c.runAs(() => refreshWillEstate(c.userId, d.id, 0, discardMidway))).rejects.toMatchObject({
+      statusCode: 409, details: { reason: 'WILL_NOT_DRAFT' },
+    });
+  });
+
+  it('cloning another user\'s will is a 404', async () => {
+    const other = await a.runAs(() => prisma.will.findFirstOrThrow({ where: { userId: a.userId }, select: { id: true } }));
+    await expect(c.runAs(() => createWillDraft(c.userId, other.id))).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('an unreadable stored payload is a fixed 500 that echoes nothing', async () => {
+    const d = await c.runAs(() => createWillDraft(c.userId, null));
+    const broken = { ...emptyWillPayload(), details: { legalName: 'Zzyzx Secretname', dob: 'not-a-date' } } as unknown as Parameters<typeof sealWillPayload>[2];
+    const sealed = await sealWillPayload(c.userId, d.id, broken);
+    await runAsSystem(() => prisma.will.update({ where: { id: d.id }, data: { payload: sealed } }));
+    const err = await c.runAs(() => getWillDraft(c.userId, d.id, deps)).catch((e: unknown) => e);
+    expect(err).toMatchObject({ statusCode: 500, code: 'WILL_PAYLOAD_UNREADABLE' });
+    expect(JSON.stringify({ m: (err as Error).message, d: (err as { details?: unknown }).details })).not.toContain('Zzyzx');
   });
 });

@@ -10,6 +10,7 @@ import { istCalendarDate, willPayloadSchema, type WillPayload } from '@everypais
 import { prisma } from '../../lib/prisma.js';
 import { AppError, ConflictError, NotFoundError } from '../../lib/errors.js';
 import { openForUser, sealForUser, userKeysAvailable } from '../../lib/userKeys.js';
+import { logger } from '../../lib/logger.js';
 
 export function newWillId(): string {
   return randomUUID();
@@ -31,7 +32,13 @@ export async function sealWillPayload(userId: string, willId: string, payload: W
 export async function openWillPayload(userId: string, willId: string, sealed: Uint8Array): Promise<WillPayload> {
   requireWillKeys();
   const plain = await openForUser(userId, slot(willId), Buffer.from(sealed));
-  return willPayloadSchema.parse(JSON.parse(plain.toString('utf8')));
+  const parsed = willPayloadSchema.safeParse(JSON.parse(plain.toString('utf8')));
+  if (!parsed.success) {
+    // Paths and codes only - the payload holds names and addresses.
+    logger.error({ willId, issues: zodIssues(parsed.error) }, 'will.payload_unreadable');
+    throw new AppError('This will could not be read. Please contact support.', 500, 'WILL_PAYLOAD_UNREADABLE');
+  }
+  return parsed.data;
 }
 
 export async function loadOwnedWill(userId: string, willId: string): Promise<Will> {
@@ -42,10 +49,12 @@ export async function loadOwnedWill(userId: string, willId: string): Promise<Wil
 
 export async function loadDraft(userId: string, willId: string): Promise<{ will: Will; payload: WillPayload }> {
   const will = await loadOwnedWill(userId, willId);
-  if (will.status !== 'DRAFT') {
-    throw new ConflictError('This will can no longer be edited. Start a new version instead.', { reason: 'WILL_NOT_DRAFT' });
-  }
+  if (will.status !== 'DRAFT') throw notDraft();
   return { will, payload: await openWillPayload(userId, will.id, will.payload) };
+}
+
+export function notDraft(): ConflictError {
+  return new ConflictError('This will can no longer be edited. Start a new version instead.', { reason: 'WILL_NOT_DRAFT' });
 }
 
 export function revisionConflict(current: number): ConflictError {

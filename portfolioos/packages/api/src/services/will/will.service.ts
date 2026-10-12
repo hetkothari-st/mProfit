@@ -12,7 +12,7 @@ import { collectEstate, type EstateCollection } from './estate/registry.js';
 import { candidatesToItems, reconcileEstate } from './estate/reconcile.js';
 import type { EstateContext } from './estate/types.js';
 import {
-  loadDraft, loadOwnedWill, newWillId, openWillPayload, revisionConflict, sealWillPayload, todayIst, zodIssues,
+  loadDraft, loadOwnedWill, newWillId, notDraft, openWillPayload, revisionConflict, sealWillPayload, todayIst, zodIssues,
 } from './willStore.js';
 
 export interface WillServiceDeps {
@@ -46,6 +46,15 @@ function toDraftWire(will: Will, payload: WillPayload, today: string): WillDraft
 
 const DRAFT_EXISTS = 'You already have a draft will. Continue it or discard it first.';
 
+function findOpenDraft(userId: string): Promise<{ id: string; currentStep: number } | null> {
+  return prisma.will.findFirst({ where: { userId, status: 'DRAFT' }, select: { id: true, currentStep: true } });
+}
+
+/** Names the open draft and its step so the web can take the user straight back to it. */
+function draftExists(d: { id: string; currentStep: number }): ConflictError {
+  return new ConflictError(DRAFT_EXISTS, { reason: 'WILL_DRAFT_EXISTS', draftId: d.id, currentStep: d.currentStep });
+}
+
 export async function getWillOverview(userId: string, deps: WillServiceDeps = {}): Promise<WillOverviewWire> {
   const today = (deps.today ?? todayIst)();
   const wills = await prisma.will.findMany({
@@ -75,8 +84,8 @@ export async function getWillOverview(userId: string, deps: WillServiceDeps = {}
 }
 
 export async function createWillDraft(userId: string, fromWillId: string | null): Promise<WillDraftWire> {
-  const existing = await prisma.will.findFirst({ where: { userId, status: 'DRAFT' }, select: { id: true } });
-  if (existing) throw new ConflictError(DRAFT_EXISTS, { reason: 'WILL_DRAFT_EXISTS', draftId: existing.id });
+  const existing = await findOpenDraft(userId);
+  if (existing) throw draftExists(existing);
 
   let payload = emptyWillPayload();
   if (fromWillId) {
@@ -95,7 +104,8 @@ export async function createWillDraft(userId: string, fromWillId: string | null)
   } catch (err) {
     // Two tabs pressing "Create" at once: the partial unique index lets one win.
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new ConflictError(DRAFT_EXISTS, { reason: 'WILL_DRAFT_EXISTS' });
+      const winner = await findOpenDraft(userId);
+      throw winner ? draftExists(winner) : new ConflictError(DRAFT_EXISTS, { reason: 'WILL_DRAFT_EXISTS' });
     }
     throw err;
   }
@@ -114,8 +124,10 @@ async function writeDraft(userId: string, will: Will, payload: WillPayload, curr
     data: { payload: sealed, revision: { increment: 1 }, currentStep },
   });
   if (res.count === 0) {
-    const now = await prisma.will.findFirst({ where: { id: will.id, userId }, select: { revision: true } });
-    throw revisionConflict(now?.revision ?? will.revision);
+    const now = await prisma.will.findFirst({ where: { id: will.id, userId }, select: { revision: true, status: true } });
+    // Discarded or generated while this save was in flight: no reload will help.
+    if (!now || now.status !== 'DRAFT') throw notDraft();
+    throw revisionConflict(now.revision);
   }
   return { revision: will.revision + 1, updatedAt: new Date().toISOString() };
 }
