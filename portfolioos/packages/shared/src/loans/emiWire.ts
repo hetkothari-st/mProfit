@@ -30,8 +30,12 @@ export const EMI_LIMITS = {
   max80C: new Decimal(150000),
 } as const;
 
-/** Plain non-negative decimal; '.5' and '5.' are accepted (decimal.js parses both). */
-const NUMBER = /^(\d+\.?\d*|\.\d+)$/;
+/**
+ * Plain non-negative decimal; '.5' and '5.' are accepted (decimal.js parses both).
+ * Written without adjacent quantifiers over the same digits so matching stays
+ * linear (CodeQL js/polynomial-redos).
+ */
+const NUMBER = /^(?:\d+(?:\.\d*)?|\.\d+)$/;
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** "Rs 10,00,000.50" style input to "1000000.50". */

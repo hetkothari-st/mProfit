@@ -91,3 +91,12 @@ describe('validateLoanWire - derived values and cross-field rules', () => {
     expect(e).toEqual([{ field: 'rateChanges.1.fromMonth', message: 'Only one rate change per month' }]);
   });
 });
+
+describe('number pattern', () => {
+  it('rejects a long adversarial string quickly (no polynomial backtracking)', () => {
+    const start = Date.now();
+    const errs = validateLoanWire({ ...ok, principal: `0${'00'.repeat(20000)}x` });
+    expect(errs.map((e) => e.field)).toContain('principal');
+    expect(Date.now() - start).toBeLessThan(500);
+  });
+});

@@ -42,7 +42,7 @@ export const groupedWhole = (digits: string): string => formatINR(digits, { show
 export const CARRIED_FORWARD_LABEL = 'Excess interest (carried forward, not valued)';
 
 /** Plain non-negative decimal as typed (after cleaning); '.5' and '5.' allowed, like the shared validator. */
-export const NUMBER_TEXT = /^(\d+\.?\d*|\.\d+)$/;
+export const NUMBER_TEXT = /^(?:\d+(?:\.\d*)?|\.\d+)$/;
 
 export interface OfferState { label: string; principal: string; ratePct: string; tenure: string; tenureUnit: 'Y' | 'M'; feeKind: 'PCT' | 'AMOUNT'; feeValue: string; otherCharges: string }
 export interface CompareState { offers: OfferState[] }
