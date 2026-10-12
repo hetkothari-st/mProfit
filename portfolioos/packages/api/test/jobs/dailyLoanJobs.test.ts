@@ -16,4 +16,11 @@ describe('runDailyLoanJobs (spec s6.3: checks run after the rates job)', () => {
     });
     expect(order).toEqual(['rates', 'checks']);
   });
+
+  it('logs a failing checks step instead of rejecting (one log, review fix)', async () => {
+    await expect(runDailyLoanJobs({
+      rates: async () => undefined,
+      checks: async () => { throw new Error('db down'); },
+    })).resolves.toBeUndefined();
+  });
 });

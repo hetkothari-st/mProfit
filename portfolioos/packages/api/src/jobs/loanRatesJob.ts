@@ -125,7 +125,11 @@ export async function runDailyLoanJobs(
   } catch (err) {
     logger.error({ err }, '[cron] loan rates step failed - running the loan checks anyway');
   }
-  await steps.checks();
+  try {
+    await steps.checks();
+  } catch (err) {
+    logger.error({ err }, '[cron] loan checks step failed');
+  }
 }
 
 export function startLoanRatesJob(): void {

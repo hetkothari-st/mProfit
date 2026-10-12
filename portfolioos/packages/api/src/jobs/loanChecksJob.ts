@@ -16,6 +16,8 @@ export interface LoanChecksOptions {
   now?: Date;
   /** Limit the run to these users (tests, manual re-runs). Default: every eligible user. */
   userIds?: string[];
+  /** Market-rate lookup seam for tests. Default: bestMarketRate. */
+  marketLookup?: (type: RateLoanType, now: Date) => Promise<MarketRateWire | null>;
 }
 
 export interface LoanChecksResult {
@@ -41,13 +43,19 @@ export async function runLoanChecks(options: LoanChecksOptions = {}): Promise<Lo
       changes: await findBenchmarkChanges(now),
       userIds: await eligibleUserIds(options.userIds),
     }));
-    // One market lookup per loan type per run, shared by every user.
+    // One market lookup per loan type per run, shared by every user. A rejected lookup is evicted (the
+    // current caller still sees the rejection), so one transient error does not cost later users the check.
+    const lookup = options.marketLookup ?? bestMarketRate;
     const cache = new Map<RateLoanType, Promise<MarketRateWire | null>>();
     const market = (type: RateLoanType): Promise<MarketRateWire | null> => {
       let pending = cache.get(type);
       if (pending === undefined) {
-        pending = bestMarketRate(type, now);
-        cache.set(type, pending);
+        const created = lookup(type, now);
+        cache.set(type, created);
+        created.catch(() => {
+          if (cache.get(type) === created) cache.delete(type);
+        });
+        pending = created;
       }
       return pending;
     };
@@ -70,14 +78,9 @@ export async function runLoanChecks(options: LoanChecksOptions = {}): Promise<Lo
   }
 }
 
-/** Cron entry point (via runDailyLoanJobs). */
+/** Cron entry point (via runDailyLoanJobs, which logs a failure once). */
 export async function runLoanChecksJob(): Promise<LoanChecksResult | null> {
-  try {
-    const result = await runLoanChecks();
-    if (result) logger.info(result, '[cron] loan checks done');
-    return result;
-  } catch (err) {
-    logger.error({ err }, '[cron] loan checks failed');
-    throw err;
-  }
+  const result = await runLoanChecks();
+  if (result) logger.info(result, '[cron] loan checks done');
+  return result;
 }

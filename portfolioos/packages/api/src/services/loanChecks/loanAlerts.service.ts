@@ -114,15 +114,20 @@ export async function checkUserLoans(userId: string, ctx: LoanCheckContext): Pro
     orderBy: { createdAt: 'asc' },
   });
   const result: UserCheckResult = { refinance: 0, benchmark: 0, failedLoans: 0 };
+  // Each check fails on its own: a loan whose schedule cannot be built, or a failed market lookup, must not
+  // cost this loan its other check or the user's other loans theirs. Failures are counted and logged with the id.
   for (const loan of loans) {
     try {
       result.refinance += await refinanceCheck(loan, ctx);
+    } catch (err) {
+      result.failedLoans++;
+      logger.warn({ err, loanId: loan.id }, '[loanChecks] refinance check skipped');
+    }
+    try {
       result.benchmark += await benchmarkChecks(loan, ctx);
     } catch (err) {
-      // One loan whose schedule cannot be built must not cost the user's other loans their checks; it is
-      // counted in the run result and logged with its id.
       result.failedLoans++;
-      logger.warn({ err, loanId: loan.id }, '[loanChecks] loan skipped');
+      logger.warn({ err, loanId: loan.id }, '[loanChecks] benchmark check skipped');
     }
   }
   return result;
