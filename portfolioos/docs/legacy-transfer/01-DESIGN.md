@@ -58,15 +58,15 @@ Status: DRAFT for owner review · 2026-10-12 · branch `feat/legacy-transfer`
 3. **Scope per nominee**:
    - Categories (multi-select): Investments · Bank accounts · Insurance · Loans & credit cards · Property · Vehicles · Provident fund / NPS · Documents (vault) · Personal letter
    - `showAmounts`: on → values visible; off → "what exists + where" (institution, type, nominee-on-record, how to claim) with no ₹ figures.
-   - `revealIdentifiers`: off by default → account/folio/policy numbers masked to last 4.
+   - Identifiers (account/folio/policy numbers) are always last-4 only in v1. Full numbers are never decrypted for nominees.
    - Documents: pick specific vault documents, not the whole vault.
 4. **Trigger**: `INACTIVITY` (days ≥ 30, default 90) · `SCHEDULED` (date) · `BOTH` (first to fire wins).
 5. **Verifier** (optional): mark one nominee.
 6. **Personal letter** (optional, encrypted): free text, e.g. "FD papers are in SBI Andheri locker #42".
-7. **Activate**: requires password re-entry, plus the 2FA code if 2FA is on. Nominees are emailed an invite.
-8. **Nominee invite**: the email says "X has named you as a trusted contact." It shows nothing financial. The nominee clicks Acknowledge, which proves the email works. Unacknowledged nominees are shown to the owner as ⚠ "email not confirmed".
+7. **Activate**: requires a step-up code: the TOTP/backup code if 2FA is on, otherwise a 6-digit code emailed to the owner (Google-only users have no password). One step-up grants 15 minutes of changes. Nominees are emailed an invite.
+8. **Nominee invite**: the email says "X has named you as a trusted contact." It shows nothing financial. The nominee clicks Acknowledge, which proves the email works. Unacknowledged nominees are shown to the owner as ⚠ "email not confirmed". Acknowledgement is only an owner-facing warning: release still goes to every nominee.
 
-Every later change (add/remove nominee, change scope, change trigger, pause, delete) needs the same re-auth and sends the owner a "your Legacy Plan was changed" email. This protects against a hijacked session silently adding an attacker as nominee.
+Every later change (add/remove nominee, change scope, change trigger, pause, delete) needs the same step-up and sends the owner a "your Legacy Plan was changed" email. This protects against a hijacked session silently adding an attacker as nominee.
 
 ## 5. Real-activity tracking
 
@@ -118,9 +118,9 @@ It is **not** updated by:
 
 ## 7. Nominee access
 
-1. On RELEASED: each acknowledged nominee gets an email with a link `/legacy/access/<token>`. The token is 32 random bytes; only its **SHA-256 hash is stored** (the same pattern as PR #230 invite tokens). Valid 90 days and re-issuable from the access page.
+1. On RELEASED: every nominee (acknowledged or not) gets an email with a link `/legacy/access/<token>`. The token is 32 random bytes; only its **SHA-256 hash is stored** (the same pattern as PR #230 invite tokens). Valid 90 days and re-issuable from the access page.
 2. Opening the link → "Send code to n•••@gmail.com" → 6-digit email OTP (hash stored, 10-min expiry, 5 attempts, then 30-min lock). Rate limit is 5/min per IP and per token.
-3. Correct OTP → a short-lived **legacy session** (httpOnly cookie, 30 min, scoped to `/api/legacy-view/*` only). It is a separate auth path and never a normal user JWT, so it cannot reach any other route.
+3. Correct OTP → a short-lived **legacy session** (sent as the `X-Legacy-Session` header and kept in the tab's sessionStorage, 30 min, accepted only on `/api/legacy-view/*`). It is a separate auth path and never a normal user JWT, so it cannot reach any other route.
 4. **Legacy View** (read-only, server-filtered):
    - Summary header (net worth only if `showAmounts`).
    - One section per allowed category: institution · type · masked identifier · nominee on record · branch/contact · "how to claim" steps.
@@ -143,57 +143,16 @@ It is **not** updated by:
 
 - New flag `LEGACY_TRANSFER` in `packages/shared/src/entitlements.ts`, min tier **`PLUS`** (D7).
 - **Lapse rule (important):** if the owner dies, their subscription will lapse. So **a plan armed while premium stays armed and releases even after the plan lapses**. A lapsed owner can still pause, cancel, revoke and see status, but cannot add nominees or widen scope until they upgrade again.
-- Account deletion (the existing purge job): delete the plan and nominees, and notify acknowledged nominees "X has closed their account". The `RESTRICT` FKs must be pre-cleared (see the account-deletion notes).
+- Account deletion (the existing purge job): delete the plan, nominees and every Legacy code. No nominee notice in v1: telling nominees an account closed would leak information about a living person.
 
-## 10. Data model (sketch)
+## 10. Data model
 
-```prisma
-model LegacyPlan {
-  id               String   @id @default(cuid())
-  userId           String   @unique
-  status           LegacyStatus   // DRAFT ARMED WARNING_1 WARNING_2 FINAL_WARNING GRACE RELEASED PAUSED
-  triggerMode      LegacyTrigger  // INACTIVITY SCHEDULED BOTH
-  inactivityDays   Int      @default(90)   // CHECK >= 30
-  scheduledFor     DateTime? @db.Date
-  pausedUntil      DateTime? @db.Date
-  stageEnteredAt   DateTime?
-  cycle            Int      @default(1)
-  releasedAt       DateTime?
-  letterEnc        String?  // encrypted personal letter
-  activatedAt      DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  nominees         LegacyNominee[]
-}
+See `packages/api/prisma/schema.prisma`: `LegacyPlan`, `LegacyNominee`, `LegacyToken`, `LegacyCode` (nominee OTP + session, owner step-up code + grant), `LegacyOutbox` (send-once email outbox), plus `User.lastActiveAt`. Migration `20261013120000_legacy_transfer` adds owner-only RLS on all five tables.
 
-model LegacyNominee {
-  id                 String   @id @default(cuid())
-  planId             String
-  userId             String   // owner, for RLS
-  nameEnc            String
-  emailEnc           String
-  relationship       String
-  priority           Int
-  isVerifier         Boolean  @default(false)
-  categories         String[] // scope
-  documentIds        String[]
-  showAmounts        Boolean  @default(false)
-  revealIdentifiers  Boolean  @default(false)
-  acknowledgedAt     DateTime?
-  removedAt          DateTime?
-}
-
-model LegacyAccessToken   { id, nomineeId, userId, tokenHash @unique, purpose (INVITE|ACCESS|IM_OK|VERIFY), expiresAt, usedAt }
-model LegacyOtp           { id, nomineeId, codeHash, expiresAt, attempts, lockedUntil }
-model LegacyAccessSession { id, nomineeId, sessionHash @unique, expiresAt, ip, userAgent }
-model LegacyOutbox        { id, planId, stage, cycle, recipient, sentAt  @@unique([planId, stage, cycle, recipient]) }
-
-// User: + lastActiveAt DateTime?
-```
-
-- All tables carry `userId` (the owner) → added to `USER_SCOPED_MODELS` + RLS policies. The nominee path reads via `runAsSystem` inside `buildLegacyView`, which is the **only** system-context reader, and is covered by a dedicated scope test.
-- Nominee name and email are encrypted at rest (Privacy P0 rule: all identifiers encrypted).
-- Audit actions: `legacy.activate`, `legacy.change`, `legacy.warning_sent`, `legacy.im_ok`, `legacy.verifier_answer`, `legacy.released`, `legacy.nominee_otp_ok/fail`, `legacy.view`, `legacy.document_download`, `legacy.pdf`, `legacy.revoke`.
+- All tables carry the owner's `userId` and are in `USER_SCOPED_MODELS`. The nominee path reads owner data under `runAsUser(ownerId)` inside `buildLegacyView`, with find-only calls and a dedicated scope test.
+- Nominee name and email and the personal letter are encrypted at rest.
+- Audit actions: `legacy_activated`, `legacy_changed`, `legacy_warning`, `legacy_reset`, `legacy_im_ok`, `legacy_verifier_answer`, `legacy_released`, `legacy_revoked`, `legacy_otp_ok`, `legacy_otp_failed`, `legacy_view`, `legacy_document_download`, `legacy_pdf`.
+- Public link actions (I'm OK, acknowledge, verifier answer) are POSTs fired from a button page, so link-preview bots that open URLs can't trigger them.
 
 ## 11. Deferred: SMS channel (do not forget)
 
@@ -224,7 +183,7 @@ The state machine needs no change. Only the outbox gets a `channel` column.
 
 1. **Backend core**: schema + migration + RLS, `lastActiveAt` tracking, plan/nominee CRUD with re-auth, entitlement flag, state-machine job + outbox + emails, I'm-OK/verifier links. Tests: state-machine table tests (fake clock), activity-source tests, idempotency, RLS.
 2. **Owner UI**: `/legacy` setup wizard, nominee scope editor, status card ("next warning on …"), pause/revoke, change-alert emails.
-3. **Nominee access**: token + OTP + legacy session, `buildLegacyView`, Legacy View page, PDF, claims checklist. Tests: scope filtering, OTP lockout, session isolation (legacy cookie rejected on every other route).
+3. **Nominee access**: token + OTP + legacy session, `buildLegacyView`, Legacy View page, PDF, claims checklist. Tests: scope filtering, OTP lockout, session isolation (legacy session header rejected on every other route).
 4. **Hardening**: audit coverage, account-deletion purge, lapse rule, manual QA on the Docker Postgres with a time-travel script.
 
 ## 14. Open questions
