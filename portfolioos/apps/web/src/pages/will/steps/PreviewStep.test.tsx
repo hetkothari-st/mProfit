@@ -165,7 +165,7 @@ describe('PreviewStep', () => {
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: /generate pdf/i }));
     await waitFor(() => expect(willApi.generate).toHaveBeenCalledWith('w1', 7, '2026-10-11'));
-    expect(await screen.findByText(/your preview is from yesterday - reload it/i)).toBeTruthy();
+    expect(await screen.findByText(/your preview is from an earlier day - reload it/i)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
     await waitFor(() => expect(willApi.preview).toHaveBeenCalledTimes(2));
     expect(await screen.findByTestId('will-document')).toBeTruthy();

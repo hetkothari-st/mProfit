@@ -93,6 +93,8 @@ function OverviewBody() {
   const o = q.data;
   const latest = o.versions.find((v) => v.status === 'GENERATED' || v.status === 'EXECUTED') ?? null;
   const nominee = money(o.estate.nomineeOnly);
+  // 'truncated' marks a cut-off list, not a source that failed.
+  const unreadSources = o.estateFailedSources.filter((s) => s !== 'truncated').length;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -159,7 +161,7 @@ function OverviewBody() {
           </div>
           <p className="text-xs text-muted-foreground">
             From your EveryPaisa accounts today. Insurance paid to nominees ({nominee}) is not counted.
-            {o.estateFailedSources.length > 0 && ` ${o.estateFailedSources.length} source(s) could not be read right now.`}
+            {unreadSources > 0 && ` ${unreadSources} source(s) could not be read right now.`}
           </p>
         </Card>
 

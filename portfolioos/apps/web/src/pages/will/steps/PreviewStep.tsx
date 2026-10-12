@@ -95,7 +95,7 @@ export function PreviewStep({ willId, findings, flush, getRevision, reload, goTo
       <Notice tone="warning">
         <p>
           {outdated
-            ? "Your preview is from yesterday - reload it to see the will with today's date before you generate."
+            ? "Your preview is from an earlier day - reload it to see the will with today's date before you generate."
             : 'Your will changed since this preview. Reload the preview to see the latest version before you generate.'}
         </p>
         <Button size="sm" variant="outline" className="mt-2" onClick={() => { generate.reset(); setAck(false); void reload().then(() => preview.refetch()); }}>Reload preview</Button>
