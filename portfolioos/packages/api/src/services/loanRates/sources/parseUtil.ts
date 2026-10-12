@@ -19,7 +19,8 @@ export function normPct(raw: string): string {
   return d.decimalPlaces() < 2 ? d.toFixed(2) : d.toString();
 }
 
-const NUM = String.raw`(\d{1,2}(?:\.\d{1,3})?)`;
+// The lookbehind stops "100%" reading as "00" and "1250.5%" as "50.5".
+const NUM = String.raw`(?<![\d.])(\d{1,2}(?:\.\d{1,3})?)(?!\d)`;
 
 /** Every "N%" / "N %" figure in the text, in order. */
 export function percents(text: string): string[] {
@@ -28,7 +29,7 @@ export function percents(text: string): string[] {
   return out;
 }
 
-/** "8% to 13.45%", "7.70% - 12.00%", "8.75% – 9.65%", "7.40 % to 10.25 %", "Between 9.99% and 16.50%". */
+/** "8% to 13.45%", "7.70% - 12.00%", "8.75% \u2013 9.65%", "7.40 % to 10.25 %", "Between 9.99% and 16.50%". */
 export function percentRange(text: string): { min: string; max: string } | null {
   const m = new RegExp(`${NUM}\\s*%?\\s*(?:-|\\u2013|\\u2014|to|and)\\s*${NUM}\\s*%`, 'i').exec(text);
   if (!m) return null;

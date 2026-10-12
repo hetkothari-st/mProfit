@@ -8,12 +8,7 @@
 // Usage: node scripts/sanitize-loan-rate-fixtures.mjs <captureDir> <fixtureDir> [name.html ...]
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
-
-const [src, dest, ...names] = process.argv.slice(2);
-if (!src || !dest) {
-  console.error('usage: node scripts/sanitize-loan-rate-fixtures.mjs <captureDir> <fixtureDir> [name.html ...]');
-  process.exit(2);
-}
+import { fileURLToPath } from 'node:url';
 
 const DEFAULT_FILES = [
   'rbi-home.html', 'sbi-mclr.html', 'sbi-eblr.html', 'sbi-LAP.html', 'sbi-rates-index.html',
@@ -27,17 +22,30 @@ export function sanitizePage(raw) {
   return raw
     .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (whole, body) => (body.trim().startsWith('self.__next_f.push(') ? whole : ''))
     .replace(/<(style|noscript|svg|iframe)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
-    .replace(/<!--[\s\S]*?-->/g, '');
+    .replace(/<!--[\s\S]*?-->/g, '')
+    // ASP.NET state blobs are opaque high-entropy strings; keep the element, blank the value.
+    .replace(/(<input\b[^>]*\bname="__(?:VIEWSTATE|EVENTVALIDATION)"[^>]*\bvalue=")[^"]*(")/gi, '$1$2');
 }
 
-mkdirSync(dest, { recursive: true });
-for (const name of names.length > 0 ? names : DEFAULT_FILES) {
-  if (!name.endsWith('.html')) {
-    copyFileSync(join(src, name), join(dest, name));
-    continue;
+function main() {
+  const [src, dest, ...names] = process.argv.slice(2);
+  if (!src || !dest) {
+    console.error('usage: node scripts/sanitize-loan-rate-fixtures.mjs <captureDir> <fixtureDir> [name.html ...]');
+    process.exit(2);
   }
-  const raw = readFileSync(join(src, name), 'utf8');
-  const out = sanitizePage(raw);
-  writeFileSync(join(dest, name), out);
-  console.log(`${name}: ${raw.length} -> ${out.length} chars`);
+
+  mkdirSync(dest, { recursive: true });
+  for (const name of names.length > 0 ? names : DEFAULT_FILES) {
+    if (!name.endsWith('.html')) {
+      copyFileSync(join(src, name), join(dest, name));
+      continue;
+    }
+    const raw = readFileSync(join(src, name), 'utf8');
+    const out = sanitizePage(raw);
+    writeFileSync(join(dest, name), out);
+    console.log(`${name}: ${raw.length} -> ${out.length} chars`);
+  }
+
 }
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

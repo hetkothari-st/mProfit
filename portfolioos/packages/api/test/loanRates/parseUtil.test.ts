@@ -17,7 +17,7 @@ describe('numbers', () => {
   it.each([
     [' 8% to 13.45%', '8.00', '13.45'],
     ['For Salaried individuals | 7.70% - 12.00% | -', '7.70', '12.00'],
-    ['8.75% – 9.65%', '8.75', '9.65'],
+    ['8.75% \u2013 9.65%', '8.75', '9.65'],
     ['7.40 % to 10.25 %', '7.40', '10.25'],
     ['Between 9.99% and 16.50% per annum', '9.99', '16.50'],
   ])('reads the range in %j', (text, min, max) => {
@@ -74,5 +74,29 @@ describe('MCLR tables', () => {
       ],
       effectiveDate: '2026-10-07',
     });
+  });
+});
+
+describe('digit boundaries', () => {
+  it('never reads the tail of a longer number', () => {
+    expect(percents('LTV up to 100% at 8.50%')).toEqual(['8.50']);
+    expect(percents('fee 1250.5% x')).toEqual([]);
+    expect(percentRange('LTV 100% to 8.50%')).toBeNull();
+  });
+});
+
+describe('sanitizePage', () => {
+  it('drops scripts and comments, keeps Next.js flight data, blanks ASP.NET state', async () => {
+    // @ts-expect-error plain .mjs script, no type declarations
+    const { sanitizePage } = (await import('../../scripts/sanitize-loan-rate-fixtures.mjs')) as { sanitizePage: (s: string) => string };
+    const out = sanitizePage(
+      '<p>a</p><script>var k="secret";</script><!-- note --><script>self.__next_f.push([1,"x"])</script>' +
+        '<input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="AbC+/123" />',
+    );
+    expect(out).not.toContain('var k');
+    expect(out).not.toContain('note');
+    expect(out).toContain('self.__next_f.push([1,"x"])');
+    expect(out).toContain('name="__VIEWSTATE" id="__VIEWSTATE" value=""');
+    expect(out).not.toContain('AbC');
   });
 });
