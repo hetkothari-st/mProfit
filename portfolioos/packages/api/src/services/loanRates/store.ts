@@ -68,20 +68,21 @@ export async function recordReading(
   now: Date,
 ): Promise<{ outcome: RecordOutcome; rowId: string; reasons: SanityReason[] }> {
   const key = { sourceId: source.id, tenor: reading.tenor, origin: 'AUTO' };
-  const latest = await prisma.loanRate.findFirst({
-    where: { ...key, status: { in: ['ACTIVE', 'SUSPECT'] } },
-    orderBy: { fetchedAt: 'desc' },
-  });
-  if (latest && sameValues(latest, reading)) return { outcome: 'UNCHANGED', rowId: latest.id, reasons: [] };
-
-  const lastActive =
-    latest?.status === 'ACTIVE'
-      ? latest
-      : await prisma.loanRate.findFirst({ where: { ...key, status: 'ACTIVE' }, orderBy: { fetchedAt: 'desc' } });
-  const verdict = checkReading(reading, lastActive ? lastActive.minRatePct.toString() : null, istDate(now));
-  const note = [reading.note, ...verdict.reasons].filter((x): x is string => Boolean(x)).join('; ') || null;
-
-  const row = await runInTransaction(async (tx) => {
+  return runInTransaction(async (tx) => {
+    await lockKey(tx, rateKey(source.id, reading.tenor));
+    const latest = await tx.loanRate.findFirst({
+      where: { ...key, status: { in: ['ACTIVE', 'SUSPECT'] } },
+      orderBy: { fetchedAt: 'desc' },
+    });
+    if (latest && sameValues(latest, reading)) {
+      return { outcome: 'UNCHANGED' as RecordOutcome, rowId: latest.id, reasons: [] as SanityReason[] };
+    }
+    const lastActive =
+      latest?.status === 'ACTIVE'
+        ? latest
+        : await tx.loanRate.findFirst({ where: { ...key, status: 'ACTIVE' }, orderBy: { fetchedAt: 'desc' } });
+    const verdict = checkReading(reading, lastActive ? lastActive.minRatePct.toString() : null, istDate(now));
+    const note = [reading.note, ...verdict.reasons].filter((x): x is string => Boolean(x)).join('; ') || null;
     const created = await tx.loanRate.create({
       data: {
         sourceId: source.id,
@@ -103,14 +104,15 @@ export async function recordReading(
         where: { ...key, status: 'ACTIVE', id: { not: created.id } },
         data: { status: 'SUPERSEDED' },
       });
+      await writeBenchmark(source, reading.tenor, reading.minRatePct, reading.effectiveDate, now, tx);
     }
-    return created;
+    return { outcome: verdict.status as RecordOutcome, rowId: created.id, reasons: verdict.reasons };
   });
+}
 
-  if (verdict.status === 'ACTIVE') {
-    await writeBenchmark(source, reading.tenor, reading.minRatePct, reading.effectiveDate, now);
-  }
-  return { outcome: verdict.status, rowId: row.id, reasons: verdict.reasons };
+/** Serialise writers on one logical key for the rest of the transaction (the tables have no usable unique key for this). */
+async function lockKey(tx: Prisma.TransactionClient, key: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
 }
 
 /**
@@ -118,17 +120,21 @@ export async function recordReading(
  * (source, tenor) and updates the benchmark series. Returns null when the row is missing or not SUSPECT.
  */
 export async function activateSuspect(id: string, now: Date): Promise<LoanRate | null> {
-  const row = await prisma.loanRate.findUnique({ where: { id }, include: { source: true } });
-  if (!row || row.status !== 'SUSPECT' || row.origin !== 'AUTO') return null;
-  const updated = await runInTransaction(async (tx) => {
+  const head = await prisma.loanRate.findUnique({ where: { id }, select: { sourceId: true, tenor: true } });
+  if (!head) return null;
+  return runInTransaction(async (tx) => {
+    await lockKey(tx, rateKey(head.sourceId, head.tenor));
+    const row = await tx.loanRate.findUnique({ where: { id }, include: { source: true } });
+    if (!row || row.status !== 'SUSPECT' || row.origin !== 'AUTO') return null;
     await tx.loanRate.updateMany({
       where: { sourceId: row.sourceId, tenor: row.tenor, origin: 'AUTO', status: 'ACTIVE' },
       data: { status: 'SUPERSEDED' },
     });
-    return tx.loanRate.update({ where: { id }, data: { status: 'ACTIVE' } });
+    const flipped = await tx.loanRate.updateMany({ where: { id, status: 'SUSPECT' }, data: { status: 'ACTIVE' } });
+    if (flipped.count === 0) return null;
+    await writeBenchmark(row.source, row.tenor, row.minRatePct.toString(), isoDate(row.effectiveDate), now, tx);
+    return tx.loanRate.findUniqueOrThrow({ where: { id } });
   });
-  await writeBenchmark(row.source, row.tenor, row.minRatePct.toString(), isoDate(row.effectiveDate), now);
-  return updated;
 }
 
 /**
@@ -141,20 +147,23 @@ export async function writeBenchmark(
   ratePct: string,
   effectiveDate: string | null,
   now: Date,
+  tx?: Prisma.TransactionClient,
 ): Promise<BenchmarkRate | null> {
+  if (!tx) return runInTransaction((t) => writeBenchmark(source, tenor, ratePct, effectiveDate, now, t));
   const kind = source.loanType === 'REPO' ? 'REPO' : source.loanType === 'MCLR' ? 'MCLR' : null;
   if (kind === null) return null;
   const lender = kind === 'REPO' ? null : source.lender;
   const benchTenor = kind === 'MCLR' ? tenor : null;
-  const latest = await prisma.benchmarkRate.findFirst({
+  await lockKey(tx, `bench|${kind}|${lender ?? ''}|${benchTenor ?? ''}`);
+  const latest = await tx.benchmarkRate.findFirst({
     where: { kind, lender, tenor: benchTenor },
     orderBy: [{ effectiveDate: 'desc' }, { fetchedAt: 'desc' }],
   });
   if (latest && latest.ratePct.equals(ratePct)) return null;
   const date = dateOnly(effectiveDate ?? istDate(now));
-  const sameDay = await prisma.benchmarkRate.findFirst({ where: { kind, lender, tenor: benchTenor, effectiveDate: date } });
-  if (sameDay) return prisma.benchmarkRate.update({ where: { id: sameDay.id }, data: { ratePct, fetchedAt: now } });
-  return prisma.benchmarkRate.create({ data: { kind, lender, tenor: benchTenor, ratePct, effectiveDate: date, fetchedAt: now } });
+  const sameDay = await tx.benchmarkRate.findFirst({ where: { kind, lender, tenor: benchTenor, effectiveDate: date } });
+  if (sameDay) return tx.benchmarkRate.update({ where: { id: sameDay.id }, data: { ratePct, fetchedAt: now } });
+  return tx.benchmarkRate.create({ data: { kind, lender, tenor: benchTenor, ratePct, effectiveDate: date, fetchedAt: now } });
 }
 
 /**

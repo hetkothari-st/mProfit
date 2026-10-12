@@ -35,6 +35,9 @@ describe('checkReading', () => {
     expect(verdict(r({ tenor: '1Y', basis: 'MCLR', effectiveDate: '2026-04-15' })).status).toBe('ACTIVE');
     expect(verdict(r({ tenor: '1Y', basis: 'MCLR', effectiveDate: '2026-04-14' })).reasons).toEqual(['ASOF_STALE']);
   });
+  it('an unparseable as-of date is SUSPECT, not silently accepted', () => {
+    expect(verdict(r({ effectiveDate: 'not-a-date' })).reasons).toEqual(['BAD_DATE']);
+  });
   it('reasons accumulate', () => {
     expect(verdict(r({ minRatePct: '2.00', effectiveDate: '2027-01-01' }), '8.50').reasons).toEqual(['OUT_OF_RANGE', 'JUMP', 'ASOF_FUTURE']);
   });

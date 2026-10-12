@@ -4,7 +4,7 @@ import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { ensureLoanRateSources } from '../../src/services/loanRates/sourceList.js';
 import {
-  activateSuspect, effectiveRates, rateKey, recordReading, type StoreSource,
+  activateSuspect, effectiveRates, rateKey, recordReading, writeBenchmark, type StoreSource,
 } from '../../src/services/loanRates/store.js';
 import type { RateReading } from '../../src/services/loanRates/types.js';
 import { clearLoanRateTables } from '../helpers/loanRates.js';
@@ -115,5 +115,34 @@ describe('effectiveRates', () => {
     expect(eff.get(rateKey('hdfc.home', null))?.id).not.toBe(auto.rowId);
     expect(eff.get(rateKey('sbi.mclr', 'ON'))?.minRatePct.toString()).toBe('7.85');
     expect(eff.has(rateKey('sbi.mclr', '1Y'))).toBe(false);
+  });
+});
+
+describe('concurrency', () => {
+  it('two concurrent recordReading calls for one key leave exactly one ACTIVE AUTO row', async () => {
+    await Promise.all([
+      sys(() => recordReading(HOME, home('8.00'), READER, NOW)),
+      sys(() => recordReading(HOME, home('8.25'), READER, later(1))),
+    ]);
+    expect(await prisma.loanRate.count({ where: { sourceId: 'hdfc.home', origin: 'AUTO', status: 'ACTIVE' } })).toBe(1);
+  });
+
+  it('two concurrent approvals of one SUSPECT row give one success and one null', async () => {
+    await sys(() => recordReading(HOME, home('8.00'), READER, NOW));
+    const jump = await sys(() => recordReading(HOME, home('11.00'), READER, later(1)));
+    const res = await Promise.all([
+      sys(() => activateSuspect(jump.rowId, later(2))),
+      sys(() => activateSuspect(jump.rowId, later(2))),
+    ]);
+    expect(res.filter((x) => x !== null)).toHaveLength(1);
+    expect(await prisma.loanRate.count({ where: { sourceId: 'hdfc.home', status: 'ACTIVE' } })).toBe(1);
+  });
+
+  it('two concurrent REPO writes with the same value and date give one BenchmarkRate row', async () => {
+    await Promise.all([
+      sys(() => writeBenchmark(REPO, null, '5.50', '2026-10-12', NOW)),
+      sys(() => writeBenchmark(REPO, null, '5.50', '2026-10-12', NOW)),
+    ]);
+    expect(await prisma.benchmarkRate.count({ where: { kind: 'REPO' } })).toBe(1);
   });
 });

@@ -13,7 +13,7 @@ export const MAX_FUTURE_DAYS = 7;
 /** As-of guard: MCLR is reset at least half-yearly; a product sheet at least yearly. */
 export const MAX_ASOF_AGE_DAYS = { MCLR: 180, PRODUCT: 400 } as const;
 
-export type SanityReason = 'OUT_OF_RANGE' | 'BAD_MAX' | 'JUMP' | 'ASOF_FUTURE' | 'ASOF_STALE';
+export type SanityReason = 'OUT_OF_RANGE' | 'BAD_MAX' | 'JUMP' | 'ASOF_FUTURE' | 'ASOF_STALE' | 'BAD_DATE';
 
 export interface SanityVerdict {
   status: 'ACTIVE' | 'SUSPECT';
@@ -45,7 +45,9 @@ export function checkReading(reading: RateReading, lastActiveMinPct: string | nu
     if (max.lessThan(min) || max.greaterThan(MAX_CEILING_PCT)) reasons.push('BAD_MAX');
   }
   if (lastActiveMinPct !== null && min.minus(lastActiveMinPct).abs().greaterThan(MAX_JUMP_PP)) reasons.push('JUMP');
-  if (reading.effectiveDate !== null) {
+  if (reading.effectiveDate !== null && !Number.isFinite(Date.parse(`${reading.effectiveDate}T00:00:00Z`))) {
+    reasons.push('BAD_DATE');
+  } else if (reading.effectiveDate !== null) {
     const age = daysBetween(reading.effectiveDate, today);
     const maxAge = reading.tenor !== null ? MAX_ASOF_AGE_DAYS.MCLR : MAX_ASOF_AGE_DAYS.PRODUCT;
     if (age < -MAX_FUTURE_DAYS) reasons.push('ASOF_FUTURE');
