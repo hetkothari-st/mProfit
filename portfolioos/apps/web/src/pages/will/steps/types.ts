@@ -17,5 +17,6 @@ export interface WillStepProps {
   getRevision: () => number;
   /** Re-read the draft from the server (adopts its revision). */
   reload: () => Promise<void>;
-  goTo: (n: number) => void;
+  /** Go to step `n`; `tab` opens a named tab there (People: executor, guardian). */
+  goTo: (n: number, tab?: string) => void;
 }

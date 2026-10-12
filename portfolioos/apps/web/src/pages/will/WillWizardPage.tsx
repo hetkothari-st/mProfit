@@ -47,7 +47,7 @@ function WizardBody() {
    * to an earlier step) is allowed on the second try so a dead connection can't
    * trap you, and the unsaved edit stays queued for the unmount flush.
    */
-  async function go(n: number, mayLeaveUnsaved = false) {
+  async function go(n: number, mayLeaveUnsaved = false, tab?: string) {
     const ok = await draft.flush(n > 1 ? n : undefined);
     if (ok) {
       failedLeaves.current = 0;
@@ -56,7 +56,7 @@ function WizardBody() {
       const stuck = failedLeaves.current >= 2 && mayLeaveUnsaved && !conflictRef.current;
       if (!stuck) return;
     }
-    navigate(willStepPath(id, n));
+    navigate(tab ? `${willStepPath(id, n)}?tab=${encodeURIComponent(tab)}` : willStepPath(id, n));
   }
 
   return (
@@ -93,8 +93,8 @@ function WizardBody() {
             refreshEstate={draft.refreshEstate}
             flush={() => draft.flush(meta.n)}
             getRevision={draft.getRevision}
-          reload={draft.reload}
-            goTo={(n) => void go(n)}
+            reload={draft.reload}
+            goTo={(n, tab) => void go(n, false, tab)}
           />
         </fieldset>
       )}

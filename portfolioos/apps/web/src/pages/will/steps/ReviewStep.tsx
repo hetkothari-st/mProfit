@@ -5,6 +5,13 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import type { WillStepProps } from './types';
 
+/** Rules fixed on a particular tab of their step. */
+const RULE_TAB: Record<string, string> = {
+  EXECUTOR_APPOINTED: 'executor',
+  EXECUTOR_GUARDIAN_INDIVIDUAL: 'executor',
+  GUARDIAN_IF_MINOR_CHILDREN: 'guardian',
+};
+
 export function ReviewStep({ payload, findings, goTo }: WillStepProps) {
   const blockers = findings.filter((f) => f.severity === 'BLOCKER').length;
   const rules = WILL_RULES.filter((r) => r.id !== 'LEGAL_REVIEW_RECOMMENDED');
@@ -39,7 +46,7 @@ export function ReviewStep({ payload, findings, goTo }: WillStepProps) {
                   </div>
                 </div>
                 {hits.length > 0 && (
-                  <Button size="sm" variant="ghost" onClick={() => goTo(r.step)}>Fix</Button>
+                  <Button size="sm" variant="ghost" onClick={() => goTo(r.step, RULE_TAB[r.id])}>Fix</Button>
                 )}
               </li>
             );

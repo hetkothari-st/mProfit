@@ -18,13 +18,13 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-function setup(payload: WillPayload = fullPayload()) {
+function setup(payload: WillPayload = fullPayload(), route = '/') {
   const update = vi.fn();
   const p: WillStepProps = {
     willId: 'w1', payload, findings: runWillRules(payload, { today: TODAY }), today: TODAY, wide: true, update,
     refreshEstate: vi.fn(), flush: vi.fn(async () => true), getRevision: () => 0, goTo: vi.fn(), reload: vi.fn(async () => undefined),
   };
-  renderWithProviders(<PeopleStep {...p} />);
+  renderWithProviders(<PeopleStep {...p} />, { route });
   return update;
 }
 
@@ -111,5 +111,20 @@ describe('PeopleStep', () => {
     const select = screen.getByLabelText(/^executor$/i) as HTMLSelectElement;
     expect(select.value).toBe('p-trust');
     expect(select.selectedOptions[0]!.textContent).toBe('Pune Animal Trust (not eligible)');
+  });
+
+  it('opens on the tab named in the address (Review "Fix" links)', () => {
+    setup(fullPayload(), '/will/w1/people?tab=executor');
+    expect(screen.getByText(/the executor collects your assets/i)).toBeTruthy();
+  });
+
+  it('words the organisation form for an organisation', () => {
+    setup();
+    fireEvent.click(screen.getByRole('tab', { name: /others/i }));
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /others/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add an organisation/i }));
+    expect(screen.getByRole('button', { name: /save organisation/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /save person/i })).toBeNull();
+    expect(screen.getByLabelText(/if it no longer exists, its gifts go to/i)).toBeTruthy();
   });
 });

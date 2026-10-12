@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { UserPlus } from 'lucide-react';
 import {
@@ -23,8 +24,14 @@ function blank(partyType: WillPerson['partyType']): WillPerson {
   };
 }
 
+const PEOPLE_TABS = ['beneficiaries', 'executor', 'guardian', 'others'];
+
 export function PeopleStep({ payload, update, findings, today }: WillStepProps) {
-  const [tab, setTab] = useState('beneficiaries');
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(() => {
+    const asked = params.get('tab');
+    return asked && PEOPLE_TABS.includes(asked) ? asked : 'beneficiaries';
+  });
   const [editing, setEditing] = useState<WillPerson | null>(null);
   const [removing, setRemoving] = useState<WillPerson | null>(null);
   const { people, roles } = payload;

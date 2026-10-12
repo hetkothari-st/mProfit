@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import { renderWithProviders } from '@/pages/split/testUtils';
 import { willApi } from '@/api/will.api';
 import { WillWizardPage } from './WillWizardPage';
-import { draftWire, resetStores, signIn } from './willTestData';
+import { draftWire, fullPayload, resetStores, signIn } from './willTestData';
 
 vi.mock('react-hot-toast', () => ({ default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 vi.mock('@/api/will.api', () => ({
@@ -39,6 +39,17 @@ describe('WillWizardPage', () => {
     await waitFor(() => expect(willApi.saveSection).toHaveBeenCalledWith('w1', 'details', expect.objectContaining({ revision: 0, currentStep: 3 })));
     // /will/w1/people matches the same route: the wizard now shows the People step.
     expect(await screen.findByRole('tab', { name: /beneficiaries/i })).toBeTruthy();
+    expect(screen.getByText('Step 3 of 8')).toBeTruthy();
+  });
+
+  it('Review "Fix" for the executor opens People on the Executor tab', async () => {
+    const payload = fullPayload();
+    payload.roles.executorId = null;
+    vi.mocked(willApi.getDraft).mockResolvedValue(draftWire({ payload }));
+    renderWithProviders(<WillWizardPage />, { route: '/will/w1/review', path: '/will/:id/:step' });
+    const row = await screen.findByTestId('check-EXECUTOR_APPOINTED');
+    fireEvent.click(within(row).getByRole('button', { name: /fix/i }));
+    expect(await screen.findByText(/the executor collects your assets/i)).toBeTruthy();
     expect(screen.getByText('Step 3 of 8')).toBeTruthy();
   });
 

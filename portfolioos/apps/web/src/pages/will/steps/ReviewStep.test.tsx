@@ -37,7 +37,7 @@ describe('ReviewStep', () => {
     const row = screen.getByTestId('check-EXECUTOR_APPOINTED');
     expect(row.textContent).toContain('Choose an executor');
     fireEvent.click(within(row).getByRole('button', { name: /fix/i }));
-    expect(goTo).toHaveBeenCalledWith(3);
+    expect(goTo).toHaveBeenCalledWith(3, 'executor');
   });
 
   it('shows a finding from an unknown rule id and counts it as a blocker', () => {
@@ -65,5 +65,14 @@ describe('ReviewStep', () => {
     const unknownIcon = screen.getByTestId('check-MYSTERY_RULE').querySelector('svg')!;
     expect(unknownIcon.getAttribute('class')).toContain('text-warning');
     expect(unknownIcon.getAttribute('class')).toContain('lucide-triangle-alert');
+  });
+
+  it('Fix for a guardian check opens the Guardian tab of People', () => {
+    const payload = fullPayload();
+    payload.people.push({ ...payload.people[1]!, id: 'kid', name: 'Kid', relationship: 'SON', dob: '2016-03-03', contingentId: null });
+    payload.roles.guardianId = null;
+    const goTo = setup(payload);
+    fireEvent.click(within(screen.getByTestId('check-GUARDIAN_IF_MINOR_CHILDREN')).getByRole('button', { name: /fix/i }));
+    expect(goTo).toHaveBeenCalledWith(3, 'guardian');
   });
 });

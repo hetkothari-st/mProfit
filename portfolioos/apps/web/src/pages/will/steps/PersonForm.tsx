@@ -57,7 +57,7 @@ export function PersonForm({ initial, others, today, onSave, onCancel }: {
         <Field id={pid('contact')} label="Phone or email (optional)">
           <Input id={pid('contact')} value={p.contact ?? ''} maxLength={120} onChange={(e) => setP({ ...p, contact: e.target.value })} />
         </Field>
-        <Field id={pid('backup')} label="If they die before you, their gifts go to">
+        <Field id={pid('backup')} label={org ? 'If it no longer exists, its gifts go to' : 'If they die before you, their gifts go to'}>
           <Select id={pid('backup')} value={p.contingentId ?? ''} onChange={(e) => setP({ ...p, contingentId: e.target.value || null })}>
             <option value="">Shared among the others (default)</option>
             {others.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
@@ -66,7 +66,7 @@ export function PersonForm({ initial, others, today, onSave, onCancel }: {
       </div>
       {error && <p id={pid('error')} className="text-sm text-negative" role="alert">{error}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" onClick={save}>Save person</Button>
+        <Button size="sm" onClick={save}>{org ? 'Save organisation' : 'Save person'}</Button>
         <Button size="sm" variant="outline" onClick={onCancel}>Cancel</Button>
       </div>
     </div>
