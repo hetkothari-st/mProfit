@@ -92,7 +92,7 @@ function OverviewBody() {
   }
   const o = q.data;
   const latest = o.versions.find((v) => v.status === 'GENERATED' || v.status === 'EXECUTED') ?? null;
-  const nominee = formatINR(o.estate.nomineeOnly);
+  const nominee = money(o.estate.nomineeOnly);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -143,9 +143,11 @@ function OverviewBody() {
           {!o.draft && !latest && (
             <Button disabled={create.isPending} onClick={() => create.mutate(undefined)}>Create my will</Button>
           )}
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Clock className="h-3.5 w-3.5" />About 15-20 minutes. Your progress is saved as you go.
-          </p>
+          {!latest && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Clock className="h-3.5 w-3.5" />About 15-20 minutes. Your progress is saved as you go.
+            </p>
+          )}
         </Card>
 
         <Card className="space-y-3 p-4 sm:p-5">

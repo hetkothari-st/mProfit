@@ -115,6 +115,21 @@ describe('WillOverviewPage', () => {
     expect(other.textContent).not.toMatch(/downloading/i);
   });
 
+  it('shows the nominee-only amount like the tiles, and drops the time estimate once a will is generated', async () => {
+    api.overview.mockResolvedValue(overview({ estate: { assets: '1750000.0000', liabilities: '400000.0000', net: '1350000.0000', nomineeOnly: '300000.0000' } }));
+    renderWithProviders(<WillOverviewPage />, { route: '/will', path: '/will' });
+    expect(await screen.findByText(/insurance paid to nominees \(₹3,00,000\) is not counted/i)).toBeTruthy();
+    expect(screen.getByText(/about 15-20 minutes/i)).toBeTruthy();
+    cleanup();
+    api.overview.mockResolvedValue(overview({
+      status: 'GENERATED',
+      versions: [{ id: 'v1', willId: 'w1', versionNo: 1, status: 'GENERATED', generatedOn: '2026-10-12', templateId: 'isa-hindu', templateVersion: 1 }],
+    }));
+    renderWithProviders(<WillOverviewPage />, { route: '/will', path: '/will' });
+    expect(await screen.findByText(/insurance paid to nominees \(₹0\) is not counted/i)).toBeTruthy();
+    expect(screen.queryByText(/about 15-20 minutes/i)).toBeNull();
+  });
+
   it('is locked on the Free plan and does not call the API', async () => {
     signIn('FREE');
     renderWithProviders(<WillOverviewPage />, { route: '/will', path: '/will' });
