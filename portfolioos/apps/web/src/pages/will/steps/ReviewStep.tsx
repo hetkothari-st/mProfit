@@ -24,8 +24,9 @@ export function ReviewStep({ payload, findings, goTo }: WillStepProps) {
         <ul className="divide-y divide-border/60">
           {rules.map((r) => {
             const hits = findings.filter((f) => f.ruleId === r.id);
-            const Icon = hits.length === 0 ? CheckCircle2 : r.severity === 'BLOCKER' ? XCircle : AlertTriangle;
-            const tone = hits.length === 0 ? 'text-positive' : r.severity === 'BLOCKER' ? 'text-negative' : 'text-warning';
+            const hardStop = hits.some((h) => h.severity === 'BLOCKER');
+            const Icon = hits.length === 0 ? CheckCircle2 : hardStop ? XCircle : AlertTriangle;
+            const tone = hits.length === 0 ? 'text-positive' : hardStop ? 'text-negative' : 'text-warning';
             return (
               <li key={r.id} data-testid={`check-${r.id}`} className="flex flex-wrap items-start justify-between gap-2 py-2 text-sm">
                 <div className="flex min-w-0 flex-1 items-start gap-2">
@@ -46,7 +47,9 @@ export function ReviewStep({ payload, findings, goTo }: WillStepProps) {
           {unknown.map((f, i) => (
             <li key={`${f.ruleId}-${i}`} data-testid={`check-${f.ruleId}`} className="flex flex-wrap items-start justify-between gap-2 py-2 text-sm">
               <div className="flex min-w-0 flex-1 items-start gap-2">
-                <XCircle className={cn('mt-0.5 h-4 w-4 shrink-0', f.severity === 'BLOCKER' ? 'text-negative' : 'text-warning')} />
+                {f.severity === 'BLOCKER'
+                  ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-negative" />
+                  : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />}
                 <div className="min-w-0">
                   <p className="font-medium text-foreground">Something needs another look</p>
                   <p className="break-words text-xs text-muted-foreground">{f.message}</p>

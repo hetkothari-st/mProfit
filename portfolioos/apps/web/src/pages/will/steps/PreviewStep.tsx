@@ -7,34 +7,48 @@ import { formatDateOnly, WILL_ACKNOWLEDGEMENT, type WillVersionWire } from '@eve
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { apiErrorMessage } from '@/api/client';
-import { isWillBlocked, willApi } from '@/api/will.api';
+import { isWillBlocked, isWillRevisionConflict, willApi } from '@/api/will.api';
 import { BlocksView } from '../BlocksView';
 import { Notice } from '../parts';
+import { stepBySlug } from '../willSteps';
 import type { WillStepProps } from './types';
 
-export function PreviewStep({ willId, flush, getRevision, goTo }: WillStepProps) {
+const REVIEW_STEP = stepBySlug('review')!.n;
+
+export function PreviewStep({ willId, findings, flush, getRevision, goTo }: WillStepProps) {
   const qc = useQueryClient();
   const [ack, setAck] = useState(false);
   const [done, setDone] = useState<WillVersionWire | null>(null);
 
+  // A preview is what the user consents to, so it is never served from cache and
+  // the revision it was rendered at is what Generate is checked against.
+  const [mountedAt] = useState(() => getRevision());
   const preview = useQuery({
-    queryKey: ['will', 'preview', willId],
+    queryKey: ['will', 'preview', willId, mountedAt],
     queryFn: async () => {
       if (!(await flush())) throw new Error("Couldn't save your latest changes");
-      return willApi.preview(willId);
+      const revision = getRevision();
+      return { ...(await willApi.preview(willId)), revision };
     },
     retry: false,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
   });
+  const previewedRevision = preview.data?.revision;
+  const blocked = findings.some((f) => f.severity === 'BLOCKER');
   const generate = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (revision: number) => {
       if (!(await flush())) throw new Error("Couldn't save your latest changes");
-      return willApi.generate(willId, getRevision());
+      return willApi.generate(willId, revision);
     },
     onSuccess: (r) => {
       setDone(r.version);
       void qc.invalidateQueries({ queryKey: ['will', 'overview'] });
     },
-    onError: (err) => toast.error(apiErrorMessage(err, "Couldn't create your will")),
+    onError: (err) => {
+      if (!isWillBlocked(err) && !isWillRevisionConflict(err)) toast.error(apiErrorMessage(err, "Couldn't create your will"));
+    },
   });
   const download = useMutation({
     mutationFn: (v: WillVersionWire) => willApi.downloadPdf(v.id, v.versionNo),
@@ -63,15 +77,29 @@ export function PreviewStep({ willId, flush, getRevision, goTo }: WillStepProps)
     );
   }
 
+  const reviewNotice = (
+    <Notice tone="warning">
+      <p>Fix the items on the Review step first.</p>
+      <Button size="sm" variant="outline" className="mt-2" onClick={() => goTo(REVIEW_STEP)}>Go to Review</Button>
+    </Notice>
+  );
+
+  if (generate.isError && isWillBlocked(generate.error)) return reviewNotice;
+  if (generate.isError && isWillRevisionConflict(generate.error)) {
+    return (
+      <Notice tone="warning">
+        <p>Your will changed since this preview. Reload the preview to see the latest version before you generate.</p>
+        <Button size="sm" variant="outline" className="mt-2" onClick={() => { generate.reset(); setAck(false); void preview.refetch(); }}>Reload preview</Button>
+      </Notice>
+    );
+  }
   if (preview.isLoading) return <p className="text-sm text-muted-foreground">Preparing your preview...</p>;
   if (preview.isError || !preview.data) {
-    return isWillBlocked(preview.error) ? (
+    return isWillBlocked(preview.error) ? reviewNotice : (
       <Notice tone="warning">
-        <p>Fix the items on the Review step first.</p>
-        <Button size="sm" variant="outline" className="mt-2" onClick={() => goTo(7)}>Go to Review</Button>
+        <p>{apiErrorMessage(preview.error, "Couldn't prepare the preview")}</p>
+        <Button size="sm" variant="outline" className="mt-2" onClick={() => void preview.refetch()}>Retry</Button>
       </Notice>
-    ) : (
-      <Notice tone="warning">{apiErrorMessage(preview.error, "Couldn't prepare the preview")}</Notice>
     );
   }
 
@@ -88,9 +116,10 @@ export function PreviewStep({ willId, flush, getRevision, goTo }: WillStepProps)
           <input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={ack} onChange={(e) => setAck(e.target.checked)} />
           <span>{WILL_ACKNOWLEDGEMENT}</span>
         </label>
-        <Button disabled={!ack || generate.isPending} onClick={() => generate.mutate()}>
+        <Button disabled={!ack || blocked || generate.isPending} onClick={() => generate.mutate(previewedRevision ?? getRevision())}>
           {generate.isPending ? 'Generating...' : 'Generate PDF'}
         </Button>
+        {blocked && <p className="text-sm text-negative">Fix the items on the Review step first.</p>}
       </Card>
     </div>
   );
