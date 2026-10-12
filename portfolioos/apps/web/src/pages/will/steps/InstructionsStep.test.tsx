@@ -11,7 +11,7 @@ describe('InstructionsStep', () => {
     const update = vi.fn();
     render(
       <InstructionsStep willId="w1" payload={fullPayload()} findings={[]} today={TODAY} wide update={update}
-        refreshEstate={vi.fn()} flush={vi.fn(async () => true)} getRevision={() => 0} goTo={vi.fn()} />,
+        refreshEstate={vi.fn()} flush={vi.fn(async () => true)} getRevision={() => 0} goTo={vi.fn()} reload={vi.fn(async () => undefined)} />,
     );
     const box = screen.getByLabelText(/additional instructions/i) as HTMLTextAreaElement;
     expect(box.maxLength).toBe(1000);

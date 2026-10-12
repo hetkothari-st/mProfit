@@ -78,13 +78,14 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
               </ul>
               <div className="flex flex-wrap items-end gap-2">
                 {notInSplit.length > 0 && (
-                  <Field id="will-add-residuary" label="Add someone to the split">
+                  <Field id="will-add-residuary" label="Add someone to the split" hint={remaining.greaterThan(0) ? undefined : "Lower someone's share first."}>
                     <Select
                       id="will-add-residuary"
+                      disabled={!remaining.greaterThan(0)}
                       value=""
                       onChange={(e) => {
                         if (!e.target.value) return;
-                        set({ residuary: [...a.residuary, { personId: e.target.value, sharePct: remaining.greaterThan(0) ? remaining.toFixed(2) : '0' }] });
+                        set({ residuary: [...a.residuary, { personId: e.target.value, sharePct: remaining.toFixed(2) }] });
                       }}
                     >
                       <option value="">Choose a person...</option>
@@ -159,7 +160,7 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
               </Field>
               <Button
                 size="sm"
-                disabled={!giftItem || !giftPerson || duplicateGift}
+                disabled={!giftItem || !giftPerson || duplicateGift || remainingOf(giftItem).lte(0)}
                 onClick={() => {
                   set({ specificGifts: [...a.specificGifts, { itemId: giftItem, personId: giftPerson, sharePct: remainingOf(giftItem).toFixed(2) }] });
                   setGiftItem('');

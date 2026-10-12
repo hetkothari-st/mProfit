@@ -16,7 +16,7 @@ afterEach(cleanup);
 function setup(payload: WillPayload = fullPayload()) {
   const p: WillStepProps = {
     willId: 'w1', payload, findings: runWillRules(payload, { today: TODAY }), today: TODAY, wide: true, update: vi.fn(),
-    refreshEstate: vi.fn(), flush: vi.fn(async () => true), getRevision: () => 0, goTo: vi.fn(),
+    refreshEstate: vi.fn(), flush: vi.fn(async () => true), getRevision: () => 0, goTo: vi.fn(), reload: vi.fn(async () => undefined),
   };
   render(<AllocationStep {...p} />);
   return p;
@@ -135,5 +135,24 @@ describe('AllocationStep', () => {
     fireEvent.change(screen.getByLabelText(/^person$/i), { target: { value: 'p-son' } });
     fireEvent.change(screen.getByLabelText(/^amount$/i), { target: { value: '0' } });
     expect((screen.getByRole('button', { name: /add amount/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('disables Add gift when the chosen asset has nothing left, and the split add when nothing is left', () => {
+    const p = setup();
+    expect(p).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: /specific gifts/i }));
+    fireEvent.change(screen.getByLabelText(/^asset$/i), { target: { value: 'holdings:pf1:EQUITY' } });
+    fireEvent.change(screen.getByLabelText(/^to$/i), { target: { value: 'p-spouse' } });
+    expect((screen.getByRole('button', { name: /add gift/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('will not add someone to a split that is already at 100%', () => {
+    const payload = fullPayload();
+    payload.allocation.residuary = [{ personId: 'p-spouse', sharePct: '100' }];
+    const p = setup(payload);
+    const select = screen.getByLabelText(/add someone to the split/i) as HTMLSelectElement;
+    expect(select.disabled).toBe(true);
+    expect(screen.getByText(/lower someone's share first/i)).toBeTruthy();
+    expect(p.update).not.toHaveBeenCalled();
   });
 });

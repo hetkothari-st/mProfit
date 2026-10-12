@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -15,7 +15,7 @@ import type { WillStepProps } from './types';
 
 const REVIEW_STEP = stepBySlug('review')!.n;
 
-export function PreviewStep({ willId, findings, flush, getRevision, goTo }: WillStepProps) {
+export function PreviewStep({ willId, findings, flush, getRevision, reload, goTo }: WillStepProps) {
   const qc = useQueryClient();
   const [ack, setAck] = useState(false);
   const [done, setDone] = useState<WillVersionWire | null>(null);
@@ -35,6 +35,8 @@ export function PreviewStep({ willId, findings, flush, getRevision, goTo }: Will
     gcTime: 0,
     refetchOnMount: 'always',
   });
+  // Whatever the user ticked applied to the preview they saw; a new one needs a fresh tick.
+  useEffect(() => setAck(false), [preview.dataUpdatedAt]);
   const previewedRevision = preview.data?.revision;
   const blocked = findings.some((f) => f.severity === 'BLOCKER');
   const generate = useMutation({
@@ -89,7 +91,7 @@ export function PreviewStep({ willId, findings, flush, getRevision, goTo }: Will
     return (
       <Notice tone="warning">
         <p>Your will changed since this preview. Reload the preview to see the latest version before you generate.</p>
-        <Button size="sm" variant="outline" className="mt-2" onClick={() => { generate.reset(); setAck(false); void preview.refetch(); }}>Reload preview</Button>
+        <Button size="sm" variant="outline" className="mt-2" onClick={() => { generate.reset(); setAck(false); void reload().then(() => preview.refetch()); }}>Reload preview</Button>
       </Notice>
     );
   }

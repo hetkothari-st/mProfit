@@ -22,7 +22,7 @@ function setup(payload: WillPayload = fullPayload()) {
   const update = vi.fn();
   const p: WillStepProps = {
     willId: 'w1', payload, findings: runWillRules(payload, { today: TODAY }), today: TODAY, wide: true, update,
-    refreshEstate: vi.fn(), flush: vi.fn(async () => true), getRevision: () => 0, goTo: vi.fn(),
+    refreshEstate: vi.fn(), flush: vi.fn(async () => true), getRevision: () => 0, goTo: vi.fn(), reload: vi.fn(async () => undefined),
   };
   renderWithProviders(<PeopleStep {...p} />);
   return update;

@@ -68,4 +68,25 @@ describe('WillWizardPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /^back$/i }));
     await waitFor(() => expect(screen.getByText('Step 2 of 8')).toBeTruthy());
   });
+
+  it('a successful Retry resets the failed-leave count, so Back needs two fresh failures again', async () => {
+    renderWithProviders(<WillWizardPage />, { route: '/will/w1/people', path: '/will/:id/:step' });
+    await screen.findByRole('tab', { name: /beneficiaries/i });
+    vi.mocked(willApi.saveSection).mockRejectedValue(new Error('Network Error'));
+    fireEvent.click(screen.getByRole('button', { name: /^add a person/i }));
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'Kavya Iyer' } });
+    fireEvent.click(screen.getByRole('button', { name: /save person/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^back$/i }));
+    await screen.findByText('Could not save your changes. Check your connection and try again.');
+    vi.mocked(willApi.saveSection).mockResolvedValue({ revision: 1, updatedAt: '2026-10-12T05:00:00.000Z' });
+    fireEvent.click(screen.getByRole('button', { name: /^retry$/i }));
+    await waitFor(() => expect(screen.getByText('All changes saved')).toBeTruthy());
+    vi.mocked(willApi.saveSection).mockRejectedValue(new Error('Network Error'));
+    fireEvent.click(screen.getByRole('button', { name: /^add a person/i }));
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'Second Person' } });
+    fireEvent.click(screen.getByRole('button', { name: /save person/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^back$/i }));
+    await screen.findByText('Could not save your changes. Check your connection and try again.');
+    expect(screen.getByText('Step 3 of 8')).toBeTruthy();
+  });
 });

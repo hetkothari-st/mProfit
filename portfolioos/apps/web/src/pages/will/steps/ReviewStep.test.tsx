@@ -12,7 +12,7 @@ function setup(payload: WillPayload) {
   const goTo = vi.fn();
   const p: WillStepProps = {
     willId: 'w1', payload, findings: runWillRules(payload, { today: TODAY }), today: TODAY, wide: true, update: vi.fn(),
-    refreshEstate: vi.fn(), flush: vi.fn(async () => true), getRevision: () => 0, goTo,
+    refreshEstate: vi.fn(), flush: vi.fn(async () => true), getRevision: () => 0, goTo, reload: vi.fn(async () => undefined),
   };
   render(<ReviewStep {...p} />);
   return goTo;
@@ -45,7 +45,7 @@ describe('ReviewStep', () => {
     const payload = fullPayload();
     const findings: WillFinding[] = [{ ruleId: 'RULE_ERROR', severity: 'BLOCKER', step: 2, message: 'A check could not run', refs: [] }];
     render(<ReviewStep willId="w1" payload={payload} findings={findings} today={TODAY} wide update={vi.fn()}
-      refreshEstate={vi.fn()} flush={vi.fn(async () => true)} getRevision={() => 0} goTo={goTo} />);
+      refreshEstate={vi.fn()} flush={vi.fn(async () => true)} getRevision={() => 0} goTo={goTo} reload={vi.fn(async () => undefined)} />);
     expect(screen.getByText(/1 thing to fix/i)).toBeTruthy();
     const row = screen.getByTestId('check-RULE_ERROR');
     expect(row.textContent).toContain('A check could not run');
@@ -60,7 +60,7 @@ describe('ReviewStep', () => {
       { ruleId: 'MYSTERY_RULE', severity: 'WARNING', step: 4, message: 'Odd', refs: [] },
     ];
     render(<ReviewStep willId="w1" payload={payload} findings={findings} today={TODAY} wide update={vi.fn()}
-      refreshEstate={vi.fn()} flush={vi.fn(async () => true)} getRevision={() => 0} goTo={vi.fn()} />);
+      refreshEstate={vi.fn()} flush={vi.fn(async () => true)} getRevision={() => 0} goTo={vi.fn()} reload={vi.fn(async () => undefined)} />);
     expect(screen.getByTestId('check-ESTATE_STALE').querySelector('svg')!.getAttribute('class')).toContain('text-negative');
     const unknownIcon = screen.getByTestId('check-MYSTERY_RULE').querySelector('svg')!;
     expect(unknownIcon.getAttribute('class')).toContain('text-warning');

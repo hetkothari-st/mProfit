@@ -15,5 +15,7 @@ export interface WillStepProps {
   /** Save pending edits now; resolves false if they could not be saved. */
   flush: () => Promise<boolean>;
   getRevision: () => number;
+  /** Re-read the draft from the server (adopts its revision). */
+  reload: () => Promise<void>;
   goTo: (n: number) => void;
 }

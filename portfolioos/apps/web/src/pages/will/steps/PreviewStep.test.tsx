@@ -29,6 +29,7 @@ function propsFor(findings = runWillRules(m, { today: TODAY })): WillStepProps {
   return {
     willId: 'w1', payload: m, findings, today: TODAY, wide: true, update: vi.fn(),
     refreshEstate: vi.fn(), flush: vi.fn(async () => true), getRevision: () => revision, goTo: vi.fn(),
+    reload: vi.fn(async () => undefined),
   };
 }
 
@@ -159,5 +160,35 @@ describe('PreviewStep', () => {
     setup();
     fireEvent.click(await screen.findByRole('button', { name: /^retry$/i }));
     expect(await screen.findByTestId('will-document')).toBeTruthy();
+  });
+
+  it('Reload preview reloads the draft first, so the previewed revision is the server one', async () => {
+    vi.mocked(willApi.generate).mockRejectedValueOnce(new Error('conflict'));
+    vi.mocked(isWillRevisionConflict).mockImplementation((e) => e instanceof Error && e.message === 'conflict');
+    const p = propsFor();
+    vi.mocked(p.reload).mockImplementation(async () => { revision = 12; });
+    renderWithProviders(<PreviewStep {...p} />);
+    await screen.findByTestId('will-document');
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: /generate pdf/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /reload preview/i }));
+    await waitFor(() => expect(willApi.preview).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(p.reload).toHaveBeenCalledTimes(1);
+    vi.mocked(willApi.generate).mockRejectedValue(new Error('x'));
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: /generate pdf/i }));
+    await waitFor(() => expect(willApi.generate).toHaveBeenLastCalledWith('w1', 12));
+  });
+
+  it('clears the acknowledgement when the preview is refetched', async () => {
+    const p = propsFor();
+    const view = renderWithProviders(<PreviewStep {...p} />);
+    await screen.findByTestId('will-document');
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
+    vi.mocked(willApi.preview).mockResolvedValue({ ...previewWire });
+    await view.queryClient?.refetchQueries({ queryKey: ['will', 'preview'] });
+    await waitFor(() => expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false));
   });
 });

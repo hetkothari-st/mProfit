@@ -12,7 +12,7 @@ function props(over: Partial<WillStepProps> = {}): WillStepProps {
   const payload = over.payload ?? emptyWillPayload();
   return {
     willId: 'w1', payload, findings: runWillRules(payload, { today: TODAY }), today: TODAY, wide: true,
-    update: vi.fn(), refreshEstate: vi.fn(), flush: vi.fn(async () => true), getRevision: () => 0, goTo: vi.fn(), ...over,
+    update: vi.fn(), refreshEstate: vi.fn(), flush: vi.fn(async () => true), getRevision: () => 0, goTo: vi.fn(), reload: vi.fn(async () => undefined), ...over,
   };
 }
 

@@ -27,6 +27,8 @@ function WizardBody() {
   const meta = stepBySlug(step);
   const draft = useWillDraft(id);
   const failedLeaves = useRef(0);
+  const conflictRef = useRef(false);
+  conflictRef.current = draft.conflict;
   const [ref, width] = useElementWidth<HTMLDivElement>();
   const today = useMemo(() => istCalendarDate(new Date()), []);
   const findings = useMemo(() => (draft.payload ? runWillRules(draft.payload, { today }) : []), [draft.payload, today]);
@@ -35,6 +37,10 @@ function WizardBody() {
   const Step = WILL_STEP_COMPONENTS[meta.slug];
   if (!Step) return <Navigate to="/will" replace />;
   const blockers = findings.filter((f) => f.severity === 'BLOCKER');
+
+  async function retrySave() {
+    if (await draft.flush()) failedLeaves.current = 0;
+  }
 
   /**
    * Save, then move. A failed save keeps you here with a Retry; going back (or
@@ -47,7 +53,7 @@ function WizardBody() {
       failedLeaves.current = 0;
     } else {
       failedLeaves.current += 1;
-      const stuck = failedLeaves.current >= 2 && mayLeaveUnsaved && !draft.conflict;
+      const stuck = failedLeaves.current >= 2 && mayLeaveUnsaved && !conflictRef.current;
       if (!stuck) return;
     }
     navigate(willStepPath(id, n));
@@ -66,7 +72,7 @@ function WizardBody() {
       {draft.error && !draft.conflict && (
         <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-negative">
           <span>{draft.error}</span>
-          <Button size="sm" variant="outline" onClick={() => void draft.flush()}>Retry</Button>
+          <Button size="sm" variant="outline" onClick={() => void retrySave()}>Retry</Button>
         </div>
       )}
       {draft.status === 'loading' && <p className="text-sm text-muted-foreground">Loading your will...</p>}
@@ -87,6 +93,7 @@ function WizardBody() {
             refreshEstate={draft.refreshEstate}
             flush={() => draft.flush(meta.n)}
             getRevision={draft.getRevision}
+          reload={draft.reload}
             goTo={(n) => void go(n)}
           />
         </fieldset>

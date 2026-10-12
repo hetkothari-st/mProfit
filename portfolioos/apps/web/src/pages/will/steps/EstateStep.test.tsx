@@ -11,7 +11,7 @@ afterEach(cleanup);
 function setup(payload: WillPayload = fullPayload(), wide = true, refreshOk = true) {
   const p: WillStepProps = {
     willId: 'w1', payload, findings: runWillRules(payload, { today: TODAY }), today: TODAY, wide, update: vi.fn(),
-    refreshEstate: vi.fn(async (): Promise<boolean | undefined> => (refreshOk ? undefined : false)), flush: vi.fn(async () => true), getRevision: () => 0, goTo: vi.fn(),
+    refreshEstate: vi.fn(async (): Promise<boolean | undefined> => (refreshOk ? undefined : false)), flush: vi.fn(async () => true), getRevision: () => 0, goTo: vi.fn(), reload: vi.fn(async () => undefined),
   };
   render(<EstateStep {...p} />);
   return p;
