@@ -3,7 +3,7 @@ import type { WillPayload } from '../schema.js';
 import type { WillBlock } from '../ast.js';
 import { willMinorChildren } from '../estateMath.js';
 import { Decimal } from '../../decimal.js';
-import { inrFigure, itemText, pctText, resolveGifts, type WillRenderContext } from './common.v1.js';
+import { inrFigure, itemText, pctText, personName, resolveGifts, type WillRenderContext } from './common.v1.js';
 
 export const SUMMARY_V1 = {
   id: 'summary',
@@ -18,21 +18,23 @@ export const SUMMARY_V1 = {
     ];
     const ex = get(m.roles.executorId);
     const altEx = get(m.roles.altExecutorId);
-    if (ex) out.push({ t: 'para', text: `${ex.name} will carry out your will as executor${altEx ? `, with ${altEx.name} as back-up` : ''}.` });
+    if (ex) out.push({ t: 'para', text: `${personName(ex)} will carry out your will as executor${altEx ? `, with ${personName(altEx)} as back-up` : ''}.` });
     const g = get(m.roles.guardianId);
     const altG = get(m.roles.altGuardianId);
     if (g && willMinorChildren(m, ctx.generatedOn).length > 0) {
-      out.push({ t: 'para', text: `${g.name} will look after your children under 18${altG ? `, with ${altG.name} as back-up` : ''}.` });
+      out.push({ t: 'para', text: `${personName(g)} will look after your children under 18${altG ? `, with ${personName(altG)} as back-up` : ''}.` });
     }
     for (const x of gifts.specific) {
       const share = new Decimal(x.pct).equals(100) ? '' : ` (${pctText(x.pct)})`;
-      out.push({ t: 'para', text: `${itemText(x.item)} goes to ${x.who.name}${share}.` });
+      out.push({ t: 'para', text: `${itemText(x.item)} goes to ${personName(x.who)}${share}.` });
     }
-    for (const x of gifts.fixed) out.push({ t: 'para', text: `${x.who.name} receives ${inrFigure(x.amount)}.` });
+    for (const x of gifts.fixed) out.push({ t: 'para', text: `${personName(x.who)} receives ${inrFigure(x.amount)}.` });
     if (gifts.residuary.length) {
-      out.push({ t: 'para', text: `Everything else is shared: ${gifts.residuary.map((x) => `${x.who.name} ${pctText(x.pct)}`).join(', ')}.` });
+      out.push({ t: 'para', text: `Everything else is shared: ${gifts.residuary.map((x) => `${personName(x.who)} ${pctText(x.pct)}`).join(', ')}.` });
     }
-    for (const x of gifts.backups) out.push({ t: 'para', text: `If ${x.who.name} dies before you, their gifts go to ${x.backup.name}.` });
+    for (const x of gifts.backups) {
+      out.push({ t: 'para', text: `If ${personName(x.who)} dies before you or within thirty days of you, their gifts go to ${personName(x.backup)}.` });
+    }
     const live = m.estate.items.filter((i) => i.review !== 'EXCLUDED');
     if (live.some((i) => i.ownership.type === 'JOINT')) {
       out.push({ t: 'para', text: 'Only your share of jointly held assets passes under the will.' });

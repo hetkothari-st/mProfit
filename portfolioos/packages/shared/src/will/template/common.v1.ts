@@ -18,7 +18,7 @@ import {
 import { willMinorChildren } from '../estateMath.js';
 
 export interface WillRenderContext {
-  /** YYYY-MM-DD; printed as the date of the will. */
+  /** YYYY-MM-DD; the day the will is generated (minor children, schedule date). Never printed as the will's date. */
   generatedOn: string;
 }
 
@@ -39,22 +39,39 @@ const MARITAL_WORDS: Record<MaritalStatus, string> = {
   SEPARATED: 'separated from my spouse',
 };
 
+/** Text the user typed, on one line: line breaks, tabs and control characters become single spaces. */
+export function oneLine(s: string): string {
+  return s.replace(/[\s\p{Cc}]+/gu, ' ').trim();
+}
+
+/** Locale-independent order: lowercased code units first, then exact code units. */
+export function cmpText(a: string, b: string): number {
+  const x = a.toLowerCase();
+  const y = b.toLowerCase();
+  if (x !== y) return x < y ? -1 : 1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+export function personName(p: WillPerson): string {
+  return oneLine(p.name);
+}
+
 export function byName(a: WillPerson, b: WillPerson): number {
-  return a.name.localeCompare(b.name, 'en') || a.id.localeCompare(b.id);
+  return cmpText(personName(a), personName(b)) || cmpText(a.id, b.id);
 }
 
 function byKindThenLabel(a: WillAssetItem, b: WillAssetItem): number {
   return WILL_ESTATE_KINDS.indexOf(a.kind) - WILL_ESTATE_KINDS.indexOf(b.kind)
-    || a.label.localeCompare(b.label, 'en')
-    || a.sourceKey.localeCompare(b.sourceKey);
+    || cmpText(oneLine(a.label), oneLine(b.label))
+    || cmpText(a.sourceKey, b.sourceKey);
 }
 
 /** "my son Arjun Verma, born on 10/02/1998" - used where the will names someone formally. */
 export function describePerson(p: WillPerson): string {
-  if (p.partyType === 'ORGANISATION') return p.name;
+  if (p.partyType === 'ORGANISATION') return personName(p);
   const rel = RELATIONSHIP_WORDS[p.relationship];
   const born = p.dob ? `, born on ${formatDateOnly(p.dob)}` : '';
-  return rel ? `my ${rel} ${p.name}${born}` : `${p.name}${born}`;
+  return rel ? `my ${rel} ${personName(p)}${born}` : `${personName(p)}${born}`;
 }
 
 /** describePerson inside a sentence: "my son Arjun Verma, born on 10/02/1998, as ..." closes the aside. */
@@ -66,7 +83,7 @@ function describePersonInline(p: WillPerson): string {
 /** "Arjun Verma (son)" - used in tables. */
 export function namePerson(p: WillPerson): string {
   const rel = RELATIONSHIP_WORDS[p.relationship];
-  return p.partyType === 'INDIVIDUAL' && rel ? `${p.name} (${rel})` : p.name;
+  return p.partyType === 'INDIVIDUAL' && rel ? `${personName(p)} (${rel})` : personName(p);
 }
 
 export function pctText(v: string): string {
@@ -82,7 +99,8 @@ export function moneyText(v: string): string {
 }
 
 export function itemText(i: WillAssetItem): string {
-  return i.ref ? `${i.label} (${i.ref})` : i.label;
+  const ref = i.ref ? oneLine(i.ref) : '';
+  return ref ? `${oneLine(i.label)} (${ref})` : oneLine(i.label);
 }
 
 function scheduleValue(i: WillAssetItem): string {
@@ -119,7 +137,12 @@ export function resolveGifts(m: WillPayload): ResolvedGifts {
     const who = r.get(g.personId);
     if (item && who) specific.push({ item, who, pct: g.sharePct });
   }
-  specific.sort((a, b) => a.item.label.localeCompare(b.item.label, 'en') || byName(a.who, b.who));
+  specific.sort(
+    (a, b) => cmpText(oneLine(a.item.label), oneLine(b.item.label))
+      || cmpText(a.item.sourceKey, b.item.sourceKey)
+      || byName(a.who, b.who)
+      || new Decimal(a.pct).comparedTo(b.pct),
+  );
   const fixed: ResolvedGifts['fixed'] = [];
   for (const g of m.allocation.fixedGifts) {
     const who = r.get(g.personId);
@@ -146,12 +169,13 @@ export function willDocumentBlocks(m: WillPayload, ctx: WillRenderContext, stand
   const r = resolve(m);
   const gifts = resolveGifts(m);
   const d = m.details;
+  const legalName = oneLine(d.legalName);
   const live = m.estate.items.filter((i) => i.review !== 'EXCLUDED');
   const assets = live.filter((i) => i.side === 'ASSET').sort(byKindThenLabel);
   const liabilities = live.filter((i) => i.side === 'LIABILITY').sort(byKindThenLabel);
   const blocks: WillBlock[] = [
     { t: 'title', text: 'Last Will and Testament' },
-    { t: 'heading', text: `of ${d.legalName}` },
+    { t: 'heading', text: `of ${legalName}` },
   ];
   let n = 0;
   const clause = (title: string, paras: string[]) => {
@@ -159,7 +183,7 @@ export function willDocumentBlocks(m: WillPayload, ctx: WillRenderContext, stand
   };
 
   clause('Declaration', [
-    `I, ${d.legalName}, born on ${formatDateOnly(d.dob)}, residing at ${d.address}, ${standing}, make this my last Will and Testament on ${formatDateOnly(ctx.generatedOn)}.`,
+    `I, ${legalName}, born on ${formatDateOnly(d.dob)}, residing at ${oneLine(d.address)}, ${standing}, make this my last Will and Testament on the date written below.`,
     'I revoke all Wills, codicils and other testamentary writings made by me before this Will.',
   ]);
 
@@ -183,7 +207,7 @@ export function willDocumentBlocks(m: WillPayload, ctx: WillRenderContext, stand
     clause('Executor', [
       `I appoint ${describePersonInline(ex)} as the Executor of this Will.`,
       ...(altEx
-        ? [`If ${ex.name} dies before me, or is unable or unwilling to act, I appoint ${describePersonInline(altEx)} as Executor in their place.`]
+        ? [`If ${personName(ex)} dies before me, or is unable or unwilling to act, I appoint ${describePersonInline(altEx)} as Executor in their place.`]
         : []),
       'My Executor may collect my assets, pay my debts and expenses, sell or transfer any asset where needed, and distribute my estate as this Will directs.',
     ]);
@@ -195,7 +219,7 @@ export function willDocumentBlocks(m: WillPayload, ctx: WillRenderContext, stand
     clause('Guardian of my minor children', [
       `If any of my children is under eighteen years of age at my death, I appoint ${describePersonInline(guardian)} as the guardian of the person and property of that child.`,
       ...(altGuardian
-        ? [`If ${guardian.name} is unable or unwilling to act, I appoint ${describePersonInline(altGuardian)} as guardian in their place.`]
+        ? [`If ${personName(guardian)} is unable or unwilling to act, I appoint ${describePersonInline(altGuardian)} as guardian in their place.`]
         : []),
     ]);
   }
@@ -229,13 +253,13 @@ export function willDocumentBlocks(m: WillPayload, ctx: WillRenderContext, stand
   clause('If a beneficiary dies before me', [
     'A person must survive me by thirty days to receive anything under this Will.',
     ...gifts.backups.map(
-      (x) => `If ${x.who.name} does not survive me, everything given to ${x.who.name} under this Will shall go to ${describePerson(x.backup)}.`,
+      (x) => `If ${personName(x.who)} does not survive me by thirty days, everything given to ${personName(x.who)} under this Will shall go to ${describePerson(x.backup)}.`,
     ),
     'Any other gift that fails shall fall into my residuary estate. If a share of my residuary estate fails, it shall be divided among the other residuary beneficiaries in proportion to their shares.',
   ]);
 
   clause('Debts and expenses', [
-    'My Executor shall pay my debts, funeral and testamentary expenses, and any taxes due from my estate out of my residuary estate before it is divided.',
+    'My Executor shall pay my debts, funeral and testamentary expenses, and any taxes due from my estate out of my residuary estate, before any gift in this Will is paid or transferred and before the residue is divided.',
     ...(liabilities.length ? ['My known liabilities on the date of this Will are listed in the Schedule.'] : []),
   ]);
 
@@ -254,8 +278,13 @@ export function willDocumentBlocks(m: WillPayload, ctx: WillRenderContext, stand
     ]);
   }
 
-  const wishes = m.instructions.text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-  if (wishes.length) clause('Additional wishes', wishes);
+  const wishes = m.instructions.text.split(/\r?\n/).map(oneLine).filter(Boolean);
+  if (wishes.length) {
+    clause('Additional wishes', [
+      'The following are my wishes. They do not alter or revoke any gift made above in this Will, and if anything below conflicts with those gifts, the gifts above prevail.',
+      ...wishes,
+    ]);
+  }
 
   if (assets.length || liabilities.length) {
     blocks.push({ t: 'heading', text: 'Schedule' });
@@ -275,7 +304,7 @@ export function willDocumentBlocks(m: WillPayload, ctx: WillRenderContext, stand
       'Date: ____________________',
       '',
       'Signature of the Testator: ____________________',
-      `(${d.legalName})`,
+      `(${legalName})`,
     ],
   });
   blocks.push({
