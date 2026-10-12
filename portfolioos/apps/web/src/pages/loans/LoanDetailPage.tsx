@@ -37,6 +37,8 @@ import {
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
+import { MarketCheckCard } from './MarketCheckCard';
+import { LoanRateFields, rateFieldsFrom, rateFieldsPayload, type RateFieldsValue } from './LoanRateFields';
 import {
   loansApi,
   type LoanDTO,
@@ -129,6 +131,7 @@ function PaymentDialog({
       qc.invalidateQueries({ queryKey: ['loan', loanId] });
       qc.invalidateQueries({ queryKey: ['loan-summary', loanId] });
       qc.invalidateQueries({ queryKey: ['loan-amortization', loanId] });
+      qc.invalidateQueries({ queryKey: ['loan-market-check', loanId] });
       qc.invalidateQueries({ queryKey: ['loans'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Payment recorded');
@@ -256,7 +259,7 @@ function calcEmi(principal: string, rate: string, tenure: string): string {
   }
 }
 
-function EditLoanDialog({
+export function EditLoanDialog({
   open,
   onOpenChange,
   loan,
@@ -286,6 +289,7 @@ function EditLoanDialog({
   });
 
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+  const [rate, setRate] = useState<RateFieldsValue>(() => rateFieldsFrom(loan));
 
   // Re-sync form when dialog reopens or the underlying loan changes
   useEffect(() => {
@@ -309,6 +313,7 @@ function EditLoanDialog({
         portfolioId: loan.portfolioId ?? null,
       });
       setErrors({});
+      setRate(rateFieldsFrom(loan));
     }
   }, [open, loan]);
 
@@ -317,6 +322,7 @@ function EditLoanDialog({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['loan', loan.id] });
       qc.invalidateQueries({ queryKey: ['loans'] });
+      qc.invalidateQueries({ queryKey: ['loan-market-check', loan.id] });
       toast.success('Loan updated');
       onOpenChange(false);
     },
@@ -439,6 +445,8 @@ function EditLoanDialog({
             </div>
           </div>
 
+          <LoanRateFields idPrefix="edit-loan" value={rate} onChange={setRate} />
+
           <div>
             <Label>Portfolio</Label>
             <PortfolioSelect
@@ -457,7 +465,7 @@ function EditLoanDialog({
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => { if (validate()) mutation.mutate(form); }} disabled={mutation.isPending}>
+          <Button onClick={() => { if (validate()) mutation.mutate({ ...form, ...rateFieldsPayload(rate) }); }} disabled={mutation.isPending}>
             {mutation.isPending ? 'Saving…' : 'Save'}
           </Button>
         </DialogFooter>
@@ -477,6 +485,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
       qc.invalidateQueries({ queryKey: ['loan', loan.id] });
       qc.invalidateQueries({ queryKey: ['loan-summary', loan.id] });
       qc.invalidateQueries({ queryKey: ['loan-amortization', loan.id] });
+      qc.invalidateQueries({ queryKey: ['loan-market-check', loan.id] });
       qc.invalidateQueries({ queryKey: ['loans'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Payment removed');
@@ -605,6 +614,7 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
     qc.invalidateQueries({ queryKey: ['loan', loan.id] });
     qc.invalidateQueries({ queryKey: ['loan-summary', loan.id] });
     qc.invalidateQueries({ queryKey: ['loan-amortization', loan.id] });
+    qc.invalidateQueries({ queryKey: ['loan-market-check', loan.id] });
     qc.invalidateQueries({ queryKey: ['loans'] });
     qc.invalidateQueries({ queryKey: ['dashboard'] });
   };
@@ -1189,6 +1199,13 @@ export function LoanDetailPage() {
       {summary && summary.taxBenefit && (
         <div className="mb-4">
           <TaxBenefitPanel summary={summary} />
+        </div>
+      )}
+
+      {/* Compare with market (EMI plan 3, spec s6.2) */}
+      {loan.status === 'ACTIVE' && (
+        <div className="mb-4">
+          <MarketCheckCard loan={loan} />
         </div>
       )}
 

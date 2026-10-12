@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import {
   Bell, CheckCheck, Trash2, Plus, RefreshCw, Filter, AlertTriangle,
 } from 'lucide-react';
@@ -14,6 +15,7 @@ import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/common/EmptyState';
 import { alertsApi, type AlertType, type AlertDTO } from '@/api/alerts.api';
 import { cn } from '@/lib/cn';
+import { alertLink, isInformationalAlert } from './alertLinks';
 
 import { formatDateIST } from '@everypaisa/shared';
 /**
@@ -50,12 +52,15 @@ const TYPE_LABELS: Record<AlertType, string> = {
   DIVIDEND_RECEIVED: 'Dividend',
   CORPORATE_ACTION: 'Corporate action',
   PRICE_TARGET: 'Price target',
+  LOAN_REFINANCE: 'Loan refinance',
+  LOAN_BENCHMARK_CHANGE: 'Loan rate change',
   CUSTOM: 'Custom',
 };
 
 const ALL_TYPES: AlertType[] = [
   'FD_MATURITY', 'BOND_MATURITY', 'MF_LOCK_IN_EXPIRY', 'SIP_DUE',
-  'INSURANCE_PREMIUM', 'DIVIDEND_RECEIVED', 'CORPORATE_ACTION', 'PRICE_TARGET', 'CUSTOM',
+  'INSURANCE_PREMIUM', 'DIVIDEND_RECEIVED', 'CORPORATE_ACTION', 'PRICE_TARGET',
+  'LOAN_REFINANCE', 'LOAN_BENCHMARK_CHANGE', 'CUSTOM',
 ];
 
 const PAGE_SIZE = 30;
@@ -72,9 +77,9 @@ function exactDate(iso: string): string {
   return formatDateIST(iso);
 }
 
-/** Short relative form for the left column — same idiom as the family feed. */
-function relativeDay(days: number): string {
-  if (days < 0) return `${Math.abs(days)}d late`;
+/** Short relative form for the left column - same idiom as the family feed. News is "ago", not "late". */
+function relativeDay(days: number, informational = false): string {
+  if (days < 0) return informational ? `${Math.abs(days)}d ago` : `${Math.abs(days)}d late`;
   if (days === 0) return 'today';
   if (days === 1) return 'tomorrow';
   return `in ${days}d`;
@@ -91,8 +96,9 @@ const BANDS: { key: BandKey; label: string; caption: string }[] = [
   { key: 'later',   label: 'Later',      caption: 'beyond 30 days' },
 ];
 
-function bandOf(days: number): BandKey {
-  if (days < 0) return 'overdue';
+function bandOf(days: number, informational = false): BandKey {
+  // Informational alerts (loan checks) are dated when they were raised: past means recent, never overdue.
+  if (days < 0) return informational ? 'week' : 'overdue';
   if (days <= 7) return 'week';
   if (days <= 30) return 'month';
   return 'later';
@@ -113,7 +119,9 @@ function AlertRow({ alert, onMarkRead, onDelete }: {
   onDelete: (id: string) => void;
 }) {
   const days = daysUntil(alert.triggerDate);
-  const overdue = days < 0;
+  const informational = isInformationalAlert(alert.type);
+  const overdue = days < 0 && !informational;
+  const href = alertLink(alert.type, alert.metadata);
   const unread = !alert.isRead;
   const typeLabel = TYPE_LABELS[alert.type as AlertType] ?? alert.type.replace(/_/g, ' ').toLowerCase();
 
@@ -138,7 +146,7 @@ function AlertRow({ alert, onMarkRead, onDelete }: {
           'numeric tabular-nums text-[12px] leading-tight tracking-tight sm:text-[12.5px]',
           overdue ? 'font-medium text-negative' : unread ? 'text-foreground' : 'text-muted-foreground',
         )}>
-          {relativeDay(days)}
+          {relativeDay(days, informational)}
         </p>
         <p className="numeric tabular-nums mt-0.5 text-[10.5px] leading-tight text-muted-foreground/70">
           {exactDate(alert.triggerDate)}
@@ -154,7 +162,9 @@ function AlertRow({ alert, onMarkRead, onDelete }: {
           'mt-1 text-[13.5px] leading-snug tracking-[-0.011em] text-pretty sm:text-[14px]',
           unread ? 'font-medium text-foreground' : 'text-muted-foreground',
         )}>
-          {alert.title}
+          {href !== null ? (
+            <Link to={href} className="underline-offset-2 hover:underline focus-ring rounded-sm">{alert.title}</Link>
+          ) : alert.title}
         </p>
         {alert.description && (
           <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/85 text-pretty">
@@ -358,18 +368,18 @@ export function AlertsPage() {
   const counts = useMemo(() => {
     let overdue = 0, soon = 0, unread = 0;
     for (const a of alerts) {
-      const d = daysUntil(a.triggerDate);
-      if (d < 0) overdue += 1;
-      else if (d <= 7) soon += 1;
+      const band = bandOf(daysUntil(a.triggerDate), isInformationalAlert(a.type));
+      if (band === 'overdue') overdue += 1;
+      else if (band === 'week') soon += 1;
       if (!a.isRead) unread += 1;
     }
     return { all: alerts.length, overdue, soon, unread };
   }, [alerts]);
 
   const visible = useMemo(() => alerts.filter((a) => {
-    const d = daysUntil(a.triggerDate);
-    if (lens === 'overdue') return d < 0;
-    if (lens === 'soon') return d >= 0 && d <= 7;
+    const band = bandOf(daysUntil(a.triggerDate), isInformationalAlert(a.type));
+    if (lens === 'overdue') return band === 'overdue';
+    if (lens === 'soon') return band === 'week';
     if (lens === 'unread') return !a.isRead;
     return true;
   }), [alerts, lens]);
@@ -377,7 +387,7 @@ export function AlertsPage() {
   /** Bucket into time bands, each internally sorted soonest-first. */
   const banded = useMemo(() => {
     const map: Record<BandKey, AlertDTO[]> = { overdue: [], week: [], month: [], later: [] };
-    for (const a of visible) map[bandOf(daysUntil(a.triggerDate))].push(a);
+    for (const a of visible) map[bandOf(daysUntil(a.triggerDate), isInformationalAlert(a.type))].push(a);
     for (const key of Object.keys(map) as BandKey[]) {
       map[key].sort((x, y) => daysUntil(x.triggerDate) - daysUntil(y.triggerDate));
     }

@@ -11,3 +11,4 @@ export type { TaxRegime, TaxLoanKind, TaxInput, TaxYear, TaxSummary as EmiTaxSum
 export * from './summary.js';
 export * from './emiWire.js';
 export * from './loanRates.js';
+export * from './loanChecks.js';

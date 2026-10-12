@@ -11,11 +11,12 @@
 import { Decimal } from 'decimal.js';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { NotFoundError } from '../lib/errors.js';
+import { NotFoundError, ValidationError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
-import { serializeMoney } from '@everypaisa/shared';
+import { serializeMoney, type LoanRateBenchmark, type LoanRateType } from '@everypaisa/shared';
 import { loanAccountNumberColumns, PLATE_SELECT, readLoanAccountNumber, revealVehicle } from './piiAtRest.service.js';
 import { last4 } from './pfCredentials.service.js';
+import { isRealDate } from './loanRates/sanity.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,12 @@ export interface CreateLoanInput {
   status?: (typeof LOAN_STATUSES)[number];
   closedDate?: string | null;
   lenderMatchKey?: string | null;
+  /** spec s6.1. Default UNKNOWN. */
+  rateType?: LoanRateType;
+  /** Only for FLOATING loans. */
+  rateBenchmark?: LoanRateBenchmark | null;
+  /** 'YYYY-MM-DD'. Only for FLOATING loans. */
+  nextRateResetDate?: string | null;
 }
 
 export type UpdateLoanInput = Partial<CreateLoanInput>;
@@ -143,6 +150,45 @@ function addMonths(date: Date, n: number): Date {
   const target = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + n + 1, 0));
   if (d.getUTCDate() < date.getUTCDate()) return target;
   return d;
+}
+
+export interface RateFieldsData {
+  rateType?: string;
+  rateBenchmark?: string | null;
+  nextRateResetDate?: Date | null;
+}
+
+/**
+ * spec s6.1 + plan ruling 12: a benchmark and a reset date describe FLOATING loans only. Giving either for a
+ * loan that is (or is becoming) FIXED/UNKNOWN is refused; switching a loan away from FLOATING clears both.
+ * `existing` is null on create.
+ */
+export function resolveRateFields(
+  input: Pick<UpdateLoanInput, 'rateType' | 'rateBenchmark' | 'nextRateResetDate'>,
+  existing: { rateType: string } | null,
+): RateFieldsData {
+  // The body schema only checks the shape; 2026-02-30 must be refused, not rolled to 2 March.
+  if (typeof input.nextRateResetDate === 'string' && !isRealDate(input.nextRateResetDate)) {
+    throw new ValidationError('Not a real date', { field: 'nextRateResetDate' });
+  }
+  const type = input.rateType ?? existing?.rateType ?? 'UNKNOWN';
+  const out: RateFieldsData = {};
+  if (input.rateType !== undefined) out.rateType = input.rateType;
+  if (type !== 'FLOATING') {
+    const field =
+      (input.rateBenchmark ?? null) !== null ? 'rateBenchmark' : (input.nextRateResetDate ?? null) !== null ? 'nextRateResetDate' : null;
+    if (field !== null) {
+      throw new ValidationError('A benchmark and a reset date apply to floating-rate loans only', { field });
+    }
+    if (existing === null || input.rateType !== undefined) {
+      out.rateBenchmark = null;
+      out.nextRateResetDate = null;
+    }
+    return out;
+  }
+  if (input.rateBenchmark !== undefined) out.rateBenchmark = input.rateBenchmark;
+  if (input.nextRateResetDate !== undefined) out.nextRateResetDate = input.nextRateResetDate ? toDate(input.nextRateResetDate) : null;
+  return out;
 }
 
 /**
@@ -374,13 +420,14 @@ export function splitLoanPayment(
 }
 
 /**
- * Compute a high-level summary of the current loan state.
+ * Compute a high-level summary of the current loan state. `asOf` (default now) is the day the position is
+ * taken on; the loan-check job passes its own clock.
  */
-export function computeLoanSummary(loan: StoredLoan): LoanSummary {
+export function computeLoanSummary(loan: StoredLoan, asOf: Date = new Date()): LoanSummary {
   const ZERO = new Decimal(0);
 
   const schedule = buildAmortizationSchedule(loan);
-  const today = new Date();
+  const today = new Date(asOf.getTime());
   today.setUTCHours(0, 0, 0, 0);
 
   // Total principal and interest paid from stored payments
@@ -646,6 +693,7 @@ export async function createLoan(userId: string, input: CreateLoanInput) {
       status: input.status ?? 'ACTIVE',
       closedDate: input.closedDate ? toDate(input.closedDate) : null,
       lenderMatchKey: input.lenderMatchKey ?? null,
+      ...resolveRateFields(input, null),
     },
   });
   return withMaskedAccount(loan);
@@ -691,6 +739,7 @@ export async function updateLoan(
         closedDate: input.closedDate ? toDate(input.closedDate) : null,
       }),
       ...(input.lenderMatchKey !== undefined && { lenderMatchKey: input.lenderMatchKey }),
+      ...resolveRateFields(input, existing),
     },
   });
   return withMaskedAccount(loan);
