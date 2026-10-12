@@ -1,8 +1,9 @@
 import 'dotenv/config';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+import cron from 'node-cron';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { DLQ_EXCERPT_BYTES, runLoanRates, truncateUtf8 } from '../../src/jobs/loanRatesJob.js';
+import { DLQ_EXCERPT_BYTES, runLoanRates as runLoanRatesRaw, sanitizedExcerpt, startLoanRatesJob, truncateUtf8 } from '../../src/jobs/loanRatesJob.js';
 import { FetchPageError } from '../../src/services/loanRates/fetchPage.js';
 import { hdfcRatesReader } from '../../src/services/loanRates/sources/hdfc.js';
 import { PAGE_READERS, readerById } from '../../src/services/loanRates/sources/index.js';
@@ -13,6 +14,11 @@ import { READER_FIXTURES, fixture } from '../loanRates/readerFixtures.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';
 if (!/localhost|127\.0\.0\.1/.test(DB_URL)) throw new Error('Refusing to run: DATABASE_URL must point at a local database');
+
+vi.mock('node-cron', () => ({ default: { schedule: vi.fn() } }));
+
+/** Single-flight makes the raw result nullable; these tests never overlap runs unless they say so. */
+const runLoanRates = async (...args: Parameters<typeof runLoanRatesRaw>) => (await runLoanRatesRaw(...args))!;
 
 const NOW = new Date('2026-10-12T02:00:00Z');
 const later = (hours: number) => new Date(NOW.getTime() + hours * 3_600_000);
@@ -86,6 +92,8 @@ describe('runLoanRates', () => {
     expect(payload.url).toBe(readerById('sbi.rates')!.url);
     expect(payload.sourceIds).toEqual(['sbi.mclr']);
     expect(Buffer.byteLength(payload.htmlExcerpt, 'utf8')).toBeLessThanOrEqual(DLQ_EXCERPT_BYTES);
+    expect(payload.htmlExcerpt).not.toContain('<script');
+    expect(payload.htmlExcerpt).not.toContain('<head');
   });
 
   it('a reader that returns only some of its sources: every expected source it dropped is failed, the rest update', async () => {
@@ -101,6 +109,99 @@ describe('runLoanRates', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('single-flight: a second concurrent run returns null and fetches nothing', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetched: string[] = [];
+    const slow = async (url: string) => {
+      fetched.push(url);
+      await gate;
+      return fromFixtures(url);
+    };
+    const first = runLoanRatesRaw({ readerIds: ['lic.home'], now: NOW, fetchHtml: slow, opsUserId: ops.userId });
+    await vi.waitFor(() => expect(fetched).toHaveLength(1));
+    const second = await runLoanRatesRaw({ readerIds: ['lic.home'], now: NOW, fetchHtml: slow, opsUserId: ops.userId });
+    expect(second).toBeNull();
+    release();
+    expect((await first)?.pages[0]?.status).toBe('OK');
+    expect(fetched).toHaveLength(1);
+    expect(await runLoanRatesRaw({ readerIds: [], now: NOW, opsUserId: ops.userId })).not.toBeNull();
+  });
+
+  it('a DB error while recording a page failure does not stop the next page', async () => {
+    const hdfc = readerById('hdfc.home')!.url;
+    // The model delegate is a lazy property: mockRestore would delete it, so hand the original back instead.
+    const original = prisma.loanRateSource.updateMany.bind(prisma.loanRateSource);
+    const spy = vi.spyOn(prisma.loanRateSource, 'updateMany').mockRejectedValueOnce(new Error('db down'));
+    try {
+      const res = await runLoanRates({
+        readerIds: ['hdfc.home', 'axis.home'],
+        now: NOW,
+        opsUserId: ops.userId,
+        fetchHtml: async (url) => {
+          if (url === hdfc) throw new FetchPageError('HTTP_STATUS', 'HTTP 500');
+          return fromFixtures(url);
+        },
+      });
+      expect(res.pages.map((p) => [p.readerId, p.status])).toEqual([
+        ['hdfc.home', 'FAILED'],
+        ['axis.home', 'OK'],
+      ]);
+    } finally {
+      spy.mockImplementation(original);
+    }
+    expect(await prisma.loanRate.count({ where: { sourceId: 'axis.home', status: 'ACTIVE' } })).toBe(1);
+  });
+
+  it('transient fetch errors set lastError only; structural ones also write a DLQ row', async () => {
+    for (const code of ['TIMEOUT', 'NETWORK', 'ROBOTS_UNAVAILABLE'] as const) {
+      const res = await runLoanRates({
+        readerIds: ['lic.home'],
+        now: NOW,
+        opsUserId: ops.userId,
+        fetchHtml: async () => {
+          throw new FetchPageError(code, `transient ${code}`);
+        },
+      });
+      expect(res.pages[0]?.status).toBe('FAILED');
+      expect(res.dlqRows).toBe(0);
+    }
+    expect((await prisma.loanRateSource.findUniqueOrThrow({ where: { id: 'lic.home' } })).lastError).toContain('transient');
+    expect(await failuresFor('loanrates.lic.home')).toHaveLength(0);
+    for (const code of ['ROBOTS_DISALLOWED', 'NOT_ALLOWED', 'TOO_MANY_REDIRECTS'] as const) {
+      const res = await runLoanRates({
+        readerIds: ['lic.home'],
+        now: NOW,
+        opsUserId: ops.userId,
+        fetchHtml: async () => {
+          throw new FetchPageError(code, `structural ${code}`);
+        },
+      });
+      expect(res.dlqRows).toBe(1);
+    }
+    expect(await failuresFor('loanrates.lic.home')).toHaveLength(3);
+  });
+
+  it('a SUSPECT reading is not a success: lastSuccessAt stays, lastError says held for review', async () => {
+    await runLoanRates({ readerIds: ['lic.home'], now: NOW, fetchHtml: fromFixtures, opsUserId: ops.userId });
+    const reader = readerById('lic.home')!;
+    const real = reader.read.bind(reader);
+    const spy = vi.spyOn(reader, 'read').mockImplementation((html: string) =>
+      real(html).map((r) => ({ ...r, minRatePct: '29.00', maxRatePct: null })),
+    );
+    try {
+      const res = await runLoanRates({ readerIds: ['lic.home'], now: later(24), fetchHtml: fromFixtures, opsUserId: ops.userId });
+      expect(res.pages[0]?.suspect).toBeGreaterThan(0);
+    } finally {
+      spy.mockRestore();
+    }
+    const src = await prisma.loanRateSource.findUniqueOrThrow({ where: { id: 'lic.home' } });
+    expect(src.lastSuccessAt?.getTime()).toBe(NOW.getTime());
+    expect(src.lastError).toBe('reading held for review (SUSPECT)');
   });
 
   it('a failing page and a page with no readings are DLQ-ed while the other pages still run', async () => {
@@ -160,5 +261,41 @@ describe('truncateUtf8', () => {
     expect(Buffer.byteLength(out, 'utf8')).toBeLessThanOrEqual(DLQ_EXCERPT_BYTES);
     expect(out.endsWith('\uFFFD')).toBe(false);
     expect(truncateUtf8('short', DLQ_EXCERPT_BYTES)).toBe('short');
+  });
+});
+
+describe('sanitizedExcerpt', () => {
+  it('drops head, scripts and tags, and starts near the first % token', () => {
+    const html = `<html><head><title>T</title><script>var secret=1</script></head><body>${'<p>intro</p>'.repeat(200)}<script>x()</script><table><tr><td>Rate 8.50%</td></tr></table></body></html>`;
+    const out = sanitizedExcerpt(html);
+    expect(out).toContain('8.50%');
+    expect(out).not.toMatch(/<|secret|x\(\)/);
+    expect(out.length).toBeLessThan(500);
+    expect(sanitizedExcerpt('')).toBe('');
+  });
+});
+
+describe('startLoanRatesJob', () => {
+  const schedule = vi.mocked(cron.schedule);
+  const saved = process.env.ENABLE_LOAN_RATES_CRON;
+  afterAll(() => {
+    if (saved === undefined) delete process.env.ENABLE_LOAN_RATES_CRON;
+    else process.env.ENABLE_LOAN_RATES_CRON = saved;
+  });
+
+  it('schedules 07:30 IST when enabled', () => {
+    schedule.mockClear();
+    process.env.ENABLE_LOAN_RATES_CRON = 'true';
+    startLoanRatesJob();
+    expect(schedule).toHaveBeenCalledTimes(1);
+    expect(schedule.mock.calls[0]![0]).toBe('30 7 * * *');
+    expect(schedule.mock.calls[0]![2]).toEqual({ timezone: 'Asia/Kolkata' });
+  });
+
+  it('does not schedule when ENABLE_LOAN_RATES_CRON=false', () => {
+    schedule.mockClear();
+    process.env.ENABLE_LOAN_RATES_CRON = 'false';
+    startLoanRatesJob();
+    expect(schedule).not.toHaveBeenCalled();
   });
 });

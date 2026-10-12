@@ -19,10 +19,11 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
-import { fetchPage } from '../services/loanRates/fetchPage.js';
+import { FetchPageError, fetchPage } from '../services/loanRates/fetchPage.js';
 import { isSourceStale, istDate, STALE_AFTER_DAYS } from '../services/loanRates/sanity.js';
 import { ensureLoanRateSources } from '../services/loanRates/sourceList.js';
 import { PAGE_READERS } from '../services/loanRates/sources/index.js';
+import { clean, loadPage } from '../services/loanRates/sources/parseUtil.js';
 import { dateOnly, recordReading } from '../services/loanRates/store.js';
 import type { PageReader } from '../services/loanRates/types.js';
 
@@ -61,26 +62,34 @@ export interface LoanRatesRunResult {
 
 let running = false;
 
-export function runLoanRates(options: LoanRatesRunOptions = {}): Promise<LoanRatesRunResult> {
-  return runAsSystem(() => runInner(options));
-}
-
-/** Cron / "Run now (all)" entry point with a single-flight guard. Returns null when a run is in progress. */
-export async function runLoanRatesJob(): Promise<LoanRatesRunResult | null> {
+/**
+ * Single-flight for every caller (cron, admin run-now-all, run-now-single): returns null, without fetching
+ * anything, when a run is already in progress.
+ */
+export async function runLoanRates(options: LoanRatesRunOptions = {}): Promise<LoanRatesRunResult | null> {
   if (running) {
-    logger.warn('[cron] loan rates job already running - skipping');
+    logger.warn('[loanRates] run already in progress - skipping');
     return null;
   }
   running = true;
   try {
+    return await runAsSystem(() => runInner(options));
+  } finally {
+    running = false;
+  }
+}
+
+/** Cron entry point. Null when a run is already in progress. */
+export async function runLoanRatesJob(): Promise<LoanRatesRunResult | null> {
+  try {
     const result = await runLoanRates();
-    logger.info({ pages: result.pages.map((p) => `${p.readerId}:${p.status}`), stale: result.staleSources.length }, '[cron] loan rates done');
+    if (result) {
+      logger.info({ pages: result.pages.map((p) => `${p.readerId}:${p.status}`), stale: result.staleSources.length }, '[cron] loan rates done');
+    }
     return result;
   } catch (err) {
     logger.error({ err }, '[cron] loan rates job failed');
     throw err;
-  } finally {
-    running = false;
   }
 }
 
@@ -139,24 +148,36 @@ async function runPage(
   opsUserId: string | null,
 ): Promise<{ result: PageRunResult; dlqRows: number }> {
   const ownIds = own.map((s) => s.id);
+  const recorded = new Set<string>();
   let html = '';
   try {
     html = await fetchHtml(reader.url);
     const readings = reader.read(html).filter((r) => ownIds.includes(r.sourceId));
-    if (readings.length === 0) throw new Error(`No readings found on ${reader.url}`);
+    if (readings.length === 0) throw new PageReadError(`No readings found on ${reader.url}`);
 
     const counts = { active: 0, suspect: 0, unchanged: 0 };
+    const suspectIds = new Set<string>();
     for (const reading of readings) {
       const source = own.find((s) => s.id === reading.sourceId)!;
       const { outcome } = await recordReading(source, reading, reader, now);
+      recorded.add(source.id);
       if (outcome === 'ACTIVE') counts.active++;
-      else if (outcome === 'SUSPECT') counts.suspect++;
-      else counts.unchanged++;
+      else if (outcome === 'SUSPECT') {
+        counts.suspect++;
+        suspectIds.add(source.id);
+      } else counts.unchanged++;
     }
 
     const readIds = [...new Set(readings.map((r) => r.sourceId))];
+    const okIds = readIds.filter((id) => !suspectIds.has(id));
     const missing = ownIds.filter((id) => !readIds.includes(id));
-    await prisma.loanRateSource.updateMany({ where: { id: { in: readIds } }, data: { lastSuccessAt: now } });
+    await prisma.loanRateSource.updateMany({ where: { id: { in: okIds } }, data: { lastSuccessAt: now } });
+    if (suspectIds.size > 0) {
+      await prisma.loanRateSource.updateMany({
+        where: { id: { in: [...suspectIds] } },
+        data: { lastErrorAt: now, lastError: SUSPECT_ERROR },
+      });
+    }
     let dlqRows = 0;
     if (missing.length > 0) {
       const message = `No reading for ${missing.join(', ')} on ${reader.url}`;
@@ -170,16 +191,45 @@ async function runPage(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.warn({ err, readerId: reader.id }, '[loanRates] page failed - last good rates stay displayed');
-    await prisma.loanRateSource.updateMany({
-      where: { id: { in: ownIds } },
-      data: { lastErrorAt: now, lastError: message.slice(0, 500) },
-    });
-    const dlqRows = await writeDlq(opsUserId, reader, err instanceof Error ? err : message, html, ownIds);
+    const failedIds = ownIds.filter((id) => !recorded.has(id));
+    let dlqRows = 0;
+    try {
+      await prisma.loanRateSource.updateMany({
+        where: { id: { in: failedIds } },
+        data: { lastErrorAt: now, lastError: message.slice(0, 500) },
+      });
+      if (!isTransient(err)) dlqRows = await writeDlq(opsUserId, reader, err instanceof Error ? err : message, html, failedIds);
+    } catch (recordErr) {
+      logger.error({ err: recordErr, readerId: reader.id }, '[loanRates] could not record the page failure - continuing with the next page');
+    }
     return {
-      result: { readerId: reader.id, status: 'FAILED', active: 0, suspect: 0, unchanged: 0, missing: ownIds, error: message },
+      result: { readerId: reader.id, status: 'FAILED', active: 0, suspect: 0, unchanged: 0, missing: failedIds, error: message },
       dlqRows,
     };
   }
+}
+
+const SUSPECT_ERROR = 'reading held for review (SUSPECT)';
+const TRANSIENT_FETCH_CODES: ReadonlySet<string> = new Set(['ROBOTS_UNAVAILABLE', 'TIMEOUT', 'NETWORK']);
+
+class PageReadError extends Error {}
+
+/**
+ * Transient fetch errors need no DLQ row: they set lastError only, and the 7-day stale rule alerts if they
+ * persist. Everything structural (disallowed, bad status, no readings, parse errors) is DLQ-ed.
+ */
+function isTransient(err: unknown): boolean {
+  return err instanceof FetchPageError && TRANSIENT_FETCH_CODES.has(err.code);
+}
+
+/** Visible text only (no head, scripts, styles), starting just before the first '%' token, capped at 8 KB. */
+export function sanitizedExcerpt(html: string): string {
+  if (html === '') return '';
+  const $ = loadPage(html);
+  $('head').remove();
+  const text = clean($.root().text());
+  const at = text.indexOf('%');
+  return truncateUtf8(text.slice(at < 0 ? 0 : Math.max(0, at - 200)), DLQ_EXCERPT_BYTES);
 }
 
 async function writeDlq(
@@ -200,7 +250,7 @@ async function writeDlq(
     sourceRef: reader.url,
     error,
     // Public bank page, no PII; the excerpt is what an admin needs to see what changed.
-    rawPayload: { url: reader.url, sourceIds, htmlExcerpt: truncateUtf8(html, DLQ_EXCERPT_BYTES) },
+    rawPayload: { url: reader.url, sourceIds, htmlExcerpt: sanitizedExcerpt(html) },
   });
   return row ? 1 : 0;
 }

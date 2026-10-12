@@ -41,6 +41,7 @@ import { startMfAnalysisJob } from './jobs/mfAnalysisJob.js';
 import { startMfProseJob } from './jobs/mfProseJob.js';
 import { startMfOpsAlertsJob } from './jobs/mfOpsAlertsJob.js';
 import { startMfScoreJob } from './jobs/mfScoreJob.js';
+import { startLoanRatesJob } from './jobs/loanRatesJob.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
 import { makeOriginCheck } from './lib/corsOrigins.js';
@@ -274,6 +275,8 @@ const server = app.listen(env.PORT, '::', () => {
    * assigned without every peer's composite in hand.
    */
   startMfScoreJob();
+  // Daily 07:30 IST live loan rates (EMI calculator, spec s5.4). ENABLE_LOAN_RATES_CRON=false disables it.
+  startLoanRatesJob();
   // Fire-and-forget: run initial data sync in background so server stays responsive
   runStartupSync().catch((err) => logger.error({ err }, 'Startup sync failed'));
 });
