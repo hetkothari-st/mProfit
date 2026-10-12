@@ -7,6 +7,7 @@
  */
 import { z } from 'zod';
 import { Decimal } from '../decimal.js';
+import { isRealIsoDate } from './dates.js';
 
 export const WILL_PAYLOAD_SCHEMA_VER = 1;
 export const WILL_MANUAL_ITEM_PREFIX = 'manual:';
@@ -37,7 +38,11 @@ export type WillReviewState = (typeof WILL_REVIEW_STATES)[number];
 export const WILL_SECTIONS = ['details', 'people', 'estate', 'allocation', 'instructions'] as const;
 export type WillSection = (typeof WILL_SECTIONS)[number];
 
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+// zod 3.25 still runs refine() after a failed regex(); isRealIsoDate re-checks the shape and never throws.
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((v) => isRealIsoDate(v), { message: 'not a real date' });
 const amount = z.string().regex(/^\d{1,13}(\.\d{1,2})?$/);
 const PERCENT_RE = /^\d{1,3}(\.\d{1,2})?$/;
 // zod 3.25 still runs refine() after a failed regex(), so the refine re-checks the shape before parsing.

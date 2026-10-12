@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasWillBlockers, runWillRules, WILL_RULES } from './rules.js';
+import { hasWillBlockers, runWillRules, WILL_RULES, WILL_RULESET_VERSION } from './rules.js';
 import type { WillPayload } from '../schema.js';
 import { item, person, TODAY, validWillPayload } from '../__tests__/fixtures.js';
 
@@ -20,9 +20,9 @@ describe('the valid fixture', () => {
 });
 
 describe('rule ids are unique and every rule has a step and title', () => {
-  it('has 23 well-formed rules', () => {
-    expect(WILL_RULES).toHaveLength(23);
-    expect(new Set(WILL_RULES.map((r) => r.id)).size).toBe(23);
+  it('has 25 well-formed rules', () => {
+    expect(WILL_RULES).toHaveLength(25);
+    expect(new Set(WILL_RULES.map((r) => r.id)).size).toBe(25);
     for (const r of WILL_RULES) {
       expect(r.step).toBeGreaterThanOrEqual(2);
       expect(r.step).toBeLessThanOrEqual(7);
@@ -31,8 +31,15 @@ describe('rule ids are unique and every rule has a step and title', () => {
   });
 });
 
+it('pins the ruleset version', () => {
+  expect(WILL_RULESET_VERSION).toBe(1);
+});
+
 // One golden case per rule: [rule id, expected severity, mutation that must trigger it].
+const EXPECT: Record<string, [number, string[]]> = {"JURISDICTION_INDIA_ONLY":[2,[]],"MUSLIM_LAW_UNSUPPORTED":[2,[]],"REQUIRED_FIELDS":[2,[]],"TESTATOR_ADULT":[2,[]],"EXECUTOR_APPOINTED":[3,[]],"GUARDIAN_IF_MINOR_CHILDREN":[3,["kid"]],"EXECUTOR_GUARDIAN_INDIVIDUAL":[3,["p-trust"]],"CONTINGENT_IS_SELF":[3,["p-son"]],"DOB_MISSING_FOR_PERSON":[3,["p-son"]],"ITEMS_NEED_REVIEW":[4,["bank:b1"]],"ESTATE_STALE":[4,[]],"ESTATE_SOURCE_FAILED":[4,[]],"JOINT_OWNERSHIP_ONLY_SHARE":[4,["bank:b1"]],"HUF_COPARCENARY_SHARE":[4,["bank:b1"]],"NOMINEE_IS_TRUSTEE_NOTE":[4,["ins:1"]],"RESIDUARY_SUMS_100":[5,[]],"SPECIFIC_ITEM_OVERALLOCATED":[5,["holdings:pf1:EQUITY"]],"GIFT_ON_EXCLUDED_OR_LIABILITY":[5,["loan:l1"]],"DANGLING_REFERENCE":[5,["gone"]],"MINOR_BENEFICIARY":[5,["kid"]],"FIXED_GIFTS_EXCEED_NET_ESTATE":[5,[]],"UNALLOCATED_ASSETS":[5,["bank:b1"]],"LEGAL_REVIEW_RECOMMENDED":[7,[]]};
 const CASES: Array<[string, 'BLOCKER' | 'WARNING' | 'INFO', (m: WillPayload) => void]> = [
+  ['INVALID_DATE', 'BLOCKER', (m) => { m.details.dob = '2026-02-31'; }],
+  ['INVALID_PERSON_DATE', 'WARNING', (m) => { m.people[1]!.dob = '2026-13-01'; }],
   ['JURISDICTION_INDIA_ONLY', 'BLOCKER', (m) => { m.details.jurisdiction = 'OTHER'; }],
   ['MUSLIM_LAW_UNSUPPORTED', 'BLOCKER', (m) => { m.details.personalLaw = 'MUSLIM'; }],
   ['REQUIRED_FIELDS', 'BLOCKER', (m) => { m.details.address = ''; }],
@@ -66,6 +73,9 @@ describe.each(CASES)('%s', (id, severity, fn) => {
     const found = runWillRules(mutate(fn), ctx).find((f) => f.ruleId === id);
     expect(found?.severity).toBe(severity);
     expect(found?.message.length).toBeGreaterThan(10);
+    const exp = EXPECT[id] ?? (id === 'INVALID_DATE' ? [2, []] : [3, ['p-son']]);
+    expect(found?.step).toBe(exp[0]);
+    expect([...(found?.refs ?? [])].sort()).toEqual([...exp[1]].sort());
   });
 });
 
@@ -126,5 +136,49 @@ describe('rule details', () => {
   it('sorts by step, then severity', () => {
     const f = runWillRules(mutate((m) => { m.details.address = ''; m.estate.items[0]!.review = 'NEEDS_REVIEW'; m.roles.executorId = null; }), ctx);
     expect(f.map((x) => x.ruleId)).toEqual(['REQUIRED_FIELDS', 'EXECUTOR_APPOINTED', 'ITEMS_NEED_REVIEW', 'LEGAL_REVIEW_RECOMMENDED']);
+  });
+});
+
+describe('hardening', () => {
+  it('muslim message names the one-third limit and legal advice', () => {
+    const f = runWillRules(mutate((m) => { m.details.personalLaw = 'MUSLIM'; }), ctx).find((x) => x.ruleId === 'MUSLIM_LAW_UNSUPPORTED')!;
+    expect(f.message).toContain('one-third');
+    expect(f.message).toContain('legal advice');
+  });
+
+  it('impossible and future dates of birth are flagged for the testator and a child', () => {
+    for (const bad of ['2026-02-31', '2026-13-01', '2030-01-01']) {
+      expect(ids(mutate((m) => { m.details.dob = bad; }))).toContain('INVALID_DATE');
+      expect(ids(mutate((m) => { m.people[1]!.dob = bad; }))).toContain('INVALID_PERSON_DATE');
+    }
+  });
+
+  it('an invalid or future asOf counts as stale', () => {
+    expect(ids(mutate((m) => { m.estate.asOf = '2026-02-31'; }))).toContain('ESTATE_STALE');
+    expect(ids(mutate((m) => { m.estate.asOf = '2027-01-01'; }))).toContain('ESTATE_STALE');
+  });
+
+  it('never throws on malformed values', () => {
+    const cases: Array<(m: WillPayload) => void> = [
+      (m) => { m.allocation.residuary[0]!.sharePct = ''; },
+      (m) => { m.allocation.residuary[0]!.sharePct = '5%'; },
+      (m) => { m.details.dob = '05/01/1990'; },
+      (m) => { m.people[1]!.dob = '05/01/1990'; },
+    ];
+    for (const fn of cases) {
+      const m = mutate(fn);
+      let f: ReturnType<typeof runWillRules> = [];
+      expect(() => { f = runWillRules(m, ctx); }).not.toThrow();
+      expect(f.length).toBeGreaterThan(0);
+    }
+    const f = runWillRules(mutate((m) => { m.allocation.residuary[0]!.sharePct = ''; }), ctx);
+    const err = f.find((x) => x.ruleId === 'RULE_ERROR');
+    expect(err?.severity).toBe('BLOCKER');
+    expect(err?.message).toContain('RESIDUARY_SUMS_100');
+  });
+
+  it('duplicate person ids are flagged', () => {
+    const f = runWillRules(mutate((m) => { m.people.push(person({ id: 'p-son', name: 'Twin' })); }), ctx).find((x) => x.ruleId === 'DANGLING_REFERENCE');
+    expect(f?.refs).toEqual(['p-son']);
   });
 });

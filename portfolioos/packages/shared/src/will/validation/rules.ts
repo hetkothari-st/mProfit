@@ -4,6 +4,7 @@
  * counts only - never a name - because the API may return them.
  */
 import { Decimal } from '../../decimal.js';
+import { isRealIsoDate } from '../dates.js';
 import type { WillPayload, WillPerson } from '../schema.js';
 import type { WillFinding, WillSeverity } from '../wire.js';
 import {
@@ -33,7 +34,7 @@ export interface WillRule {
   check(m: WillPayload, ctx: WillRuleContext): WillRuleHit[];
 }
 
-const NONE: WillRuleHit[] = [];
+const none = (): WillRuleHit[] => [];
 const hit = (message: string, refs: string[] = []): WillRuleHit[] => [{ message, refs }];
 const people = (m: WillPayload) => new Map<string, WillPerson>(m.people.map((p) => [p.id, p]));
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
@@ -51,11 +52,11 @@ function roleIds(m: WillPayload): string[] {
 export const WILL_RULES: readonly WillRule[] = [
   {
     id: 'JURISDICTION_INDIA_ONLY', severity: 'BLOCKER', step: 2, title: 'Will made under Indian law',
-    check: (m) => (m.details.jurisdiction === 'IN' ? NONE : hit(FOREIGN_LAW_MESSAGE)),
+    check: (m) => (m.details.jurisdiction === 'IN' ? none() : hit(FOREIGN_LAW_MESSAGE)),
   },
   {
     id: 'MUSLIM_LAW_UNSUPPORTED', severity: 'BLOCKER', step: 2, title: 'Personal law supported',
-    check: (m) => (m.details.personalLaw === 'MUSLIM' ? hit(MUSLIM_LAW_MESSAGE) : NONE),
+    check: (m) => (m.details.personalLaw === 'MUSLIM' ? hit(MUSLIM_LAW_MESSAGE) : none()),
   },
   {
     id: 'REQUIRED_FIELDS', severity: 'BLOCKER', step: 2, title: 'Your details are complete',
@@ -68,13 +69,21 @@ export const WILL_RULES: readonly WillRule[] = [
       if (!d.address) missing.push('address');
       if (!d.maritalStatus) missing.push('marital status');
       if (d.hasChildren === null) missing.push('whether you have children');
-      return missing.length ? hit(`Fill in your ${missing.join(', ')}.`) : NONE;
+      return missing.length ? hit(`Fill in your ${missing.join(', ')}.`) : none();
     },
   },
   {
     id: 'TESTATOR_ADULT', severity: 'BLOCKER', step: 2, title: 'You are 18 or older',
     check: (m, c) =>
-      m.details.dob && ageOn(m.details.dob, c.today) < ADULT_AGE ? hit('You must be 18 or older to make a will.') : NONE,
+      isRealIsoDate(m.details.dob) && isRealIsoDate(c.today) && ageOn(m.details.dob, c.today) < ADULT_AGE ? hit('You must be 18 or older to make a will.') : none(),
+  },
+  {
+    id: 'INVALID_DATE', severity: 'BLOCKER', step: 2, title: 'Your date of birth is a real date',
+    check: (m, c) => {
+      const d = m.details.dob;
+      if (!d) return none();
+      return isRealIsoDate(d) && d <= c.today ? none() : hit('Your date of birth is not a real date, or is in the future.');
+    },
   },
   {
     id: 'EXECUTOR_APPOINTED', severity: 'BLOCKER', step: 3, title: 'Executor appointed',
@@ -82,18 +91,18 @@ export const WILL_RULES: readonly WillRule[] = [
       const ex = m.roles.executorId;
       if (!ex || !people(m).has(ex)) return hit('Choose an executor - the person who will carry out your will.');
       if (m.roles.altExecutorId === ex) return hit('The back-up executor must be a different person.', [ex]);
-      return NONE;
+      return none();
     },
   },
   {
     id: 'GUARDIAN_IF_MINOR_CHILDREN', severity: 'BLOCKER', step: 3, title: 'Guardian for children under 18',
     check: (m, c) => {
       const minors = willMinorChildren(m, c.today);
-      if (minors.length === 0) return NONE;
+      if (minors.length === 0) return none();
       const g = m.roles.guardianId;
       if (!g || !people(m).has(g)) return hit('You have a child under 18 - choose a guardian.', minors.map((x) => x.id));
       if (m.roles.altGuardianId === g) return hit('The back-up guardian must be a different person.', [g]);
-      return NONE;
+      return none();
     },
   },
   {
@@ -106,14 +115,14 @@ export const WILL_RULES: readonly WillRule[] = [
       });
       return bad.length
         ? hit('An executor or guardian must be an adult individual, not an organisation or a child.', unique(bad))
-        : NONE;
+        : none();
     },
   },
   {
     id: 'CONTINGENT_IS_SELF', severity: 'BLOCKER', step: 3, title: 'Back-up beneficiaries are valid',
     check: (m) => {
       const bad = m.people.filter((p) => p.contingentId === p.id).map((p) => p.id);
-      return bad.length ? hit('A person cannot be their own back-up beneficiary.', bad) : NONE;
+      return bad.length ? hit('A person cannot be their own back-up beneficiary.', bad) : none();
     },
   },
   {
@@ -125,7 +134,16 @@ export const WILL_RULES: readonly WillRule[] = [
         .map((p) => p.id);
       return missing.length
         ? hit(`Add a date of birth for ${missing.length} ${plural(missing.length, 'person', 'people')} so we can tell whether anyone is under 18.`, missing)
-        : NONE;
+        : none();
+    },
+  },
+  {
+    id: 'INVALID_PERSON_DATE', severity: 'WARNING', step: 3, title: 'Dates of birth are real dates',
+    check: (m, c) => {
+      const bad = m.people.filter((p) => !!p.dob && !(isRealIsoDate(p.dob) && p.dob <= c.today)).map((p) => p.id);
+      return bad.length
+        ? hit(`${bad.length} ${plural(bad.length, 'date of birth is', 'dates of birth are')} not a real date, or in the future.`, bad)
+        : none();
     },
   },
   {
@@ -134,14 +152,16 @@ export const WILL_RULES: readonly WillRule[] = [
       const keys = m.estate.items.filter((i) => i.review === 'NEEDS_REVIEW' || i.review === 'STALE').map((i) => i.sourceKey);
       return keys.length
         ? hit(`${keys.length} ${plural(keys.length, 'item still needs', 'items still need')} your review.`, keys)
-        : NONE;
+        : none();
     },
   },
   {
     id: 'ESTATE_STALE', severity: 'WARNING', step: 4, title: 'Asset list is recent',
     check: (m, c) => {
-      if (!m.estate.asOf) return hit('Your assets have not been fetched yet.');
-      return daysBetween(m.estate.asOf, c.today) > 30 ? hit('Your asset list is more than 30 days old - refresh it.') : NONE;
+      const a = m.estate.asOf;
+      if (!a) return hit('Your assets have not been fetched yet.');
+      if (!isRealIsoDate(a) || !isRealIsoDate(c.today) || a > c.today) return hit('The date your assets were fetched is not valid - refresh the list.');
+      return daysBetween(a, c.today) > 30 ? hit('Your asset list is more than 30 days old - refresh it.') : none();
     },
   },
   {
@@ -149,20 +169,20 @@ export const WILL_RULES: readonly WillRule[] = [
     check: (m) =>
       m.estate.failedSources.length
         ? hit(`${m.estate.failedSources.length} ${plural(m.estate.failedSources.length, 'source', 'sources')} could not be read. Try refreshing, or add those assets by hand.`)
-        : NONE,
+        : none(),
   },
   {
     id: 'JOINT_OWNERSHIP_ONLY_SHARE', severity: 'WARNING', step: 4, title: 'Jointly held assets',
     check: (m) => {
       const keys = m.estate.items.filter((i) => i.review !== 'EXCLUDED' && i.ownership.type === 'JOINT').map((i) => i.sourceKey);
-      return keys.length ? hit('Only your share of a jointly held asset passes under your will.', keys) : NONE;
+      return keys.length ? hit('Only your share of a jointly held asset passes under your will.', keys) : none();
     },
   },
   {
     id: 'HUF_COPARCENARY_SHARE', severity: 'WARNING', step: 4, title: 'HUF property',
     check: (m) => {
       const keys = m.estate.items.filter((i) => i.review !== 'EXCLUDED' && i.ownership.type === 'HUF').map((i) => i.sourceKey);
-      return keys.length ? hit('For HUF property you can give away only your own share, as the law allows.', keys) : NONE;
+      return keys.length ? hit('For HUF property you can give away only your own share, as the law allows.', keys) : none();
     },
   },
   {
@@ -171,7 +191,7 @@ export const WILL_RULES: readonly WillRule[] = [
       const keys = m.estate.items.filter((i) => i.review !== 'EXCLUDED' && i.ownership.type === 'NOMINEE_ONLY').map((i) => i.sourceKey);
       return keys.length
         ? hit('Insurance and nominated accounts are paid to the nominee, who generally holds the money for the heirs named in your will.', keys)
-        : NONE;
+        : none();
     },
   },
   {
@@ -184,7 +204,7 @@ export const WILL_RULES: readonly WillRule[] = [
       const zero = r.filter((x) => new Decimal(x.sharePct).isZero()).map((x) => x.personId);
       if (zero.length) return hit('Remove people with a 0% share.', zero);
       const total = sumPercents(r.map((x) => x.sharePct));
-      return total.equals(100) ? NONE : hit(`The percentage split adds up to ${total.toFixed(2)}% - it must be exactly 100%.`);
+      return total.equals(100) ? none() : hit(`The percentage split adds up to ${total.toFixed(2)}% - it must be exactly 100%.`);
     },
   },
   {
@@ -195,7 +215,7 @@ export const WILL_RULES: readonly WillRule[] = [
         byItem.set(g.itemId, (byItem.get(g.itemId) ?? new Decimal(0)).plus(g.sharePct));
       }
       const over = [...byItem.entries()].filter(([, v]) => v.greaterThan(100)).map(([k]) => k);
-      return over.length ? hit('An asset is given away more than 100%.', over) : NONE;
+      return over.length ? hit('An asset is given away more than 100%.', over) : none();
     },
   },
   {
@@ -210,7 +230,7 @@ export const WILL_RULES: readonly WillRule[] = [
         .map((g) => g.itemId);
       return bad.length
         ? hit('A gift names an asset that is excluded, is a liability, or is no longer in your list.', unique(bad))
-        : NONE;
+        : none();
     },
   },
   {
@@ -223,7 +243,12 @@ export const WILL_RULES: readonly WillRule[] = [
         ...willBeneficiaryIds(m),
       ];
       const missing = unique(named.filter((id) => !map.has(id)));
-      return missing.length ? hit('Something refers to a person who is no longer in your list.', missing) : NONE;
+      const seen = new Set<string>();
+      const dupes = unique(m.people.map((p) => p.id).filter((id) => (seen.has(id) ? true : (seen.add(id), false))));
+      return [
+        ...(missing.length ? hit('Something refers to a person who is no longer in your list.', missing) : none()),
+        ...(dupes.length ? hit('Two people in your list share the same internal id - remove and re-add one of them.', dupes) : none()),
+      ];
     },
   },
   {
@@ -236,29 +261,29 @@ export const WILL_RULES: readonly WillRule[] = [
       });
       return minors.length
         ? hit('A beneficiary is under 18 - their share will be managed by their guardian until they turn 18.', minors)
-        : NONE;
+        : none();
     },
   },
   {
     id: 'FIXED_GIFTS_EXCEED_NET_ESTATE', severity: 'WARNING', step: 5, title: 'Money gifts fit your estate',
     check: (m) => {
       const fixed = m.allocation.fixedGifts.reduce((s, g) => s.plus(g.amount), new Decimal(0));
-      if (fixed.isZero()) return NONE;
+      if (fixed.isZero()) return none();
       const { net } = willEstateTotals(m.estate.items);
-      return fixed.greaterThan(net) ? hit('Your money gifts add up to more than your estimated net estate.') : NONE;
+      return fixed.greaterThan(net) ? hit('Your money gifts add up to more than your estimated net estate.') : none();
     },
   },
   {
     id: 'UNALLOCATED_ASSETS', severity: 'WARNING', step: 5, title: 'Every asset has a recipient',
     check: (m) => {
-      if (m.allocation.residuary.length > 0) return NONE;
+      if (m.allocation.residuary.length > 0) return none();
       const gifted = new Set(m.allocation.specificGifts.map((g) => g.itemId));
       const loose = m.estate.items
         .filter((i) => i.side === 'ASSET' && i.review !== 'EXCLUDED' && i.ownership.type !== 'NOMINEE_ONLY' && !gifted.has(i.sourceKey))
         .map((i) => i.sourceKey);
       return loose.length
         ? hit(`${loose.length} ${plural(loose.length, 'asset is', 'assets are')} not given to anyone yet.`, loose)
-        : NONE;
+        : none();
     },
   },
   {
@@ -272,7 +297,16 @@ const SEVERITY_RANK: Record<WillSeverity, number> = { BLOCKER: 0, WARNING: 1, IN
 export function runWillRules(m: WillPayload, ctx: WillRuleContext): WillFinding[] {
   const out: Array<WillFinding & { order: number }> = [];
   WILL_RULES.forEach((rule, order) => {
-    for (const h of rule.check(m, ctx)) {
+    let hits: WillRuleHit[];
+    try {
+      hits = rule.check(m, ctx);
+    } catch {
+      // A rule must never take the page down on a malformed draft: report it as a blocker. The error is
+      // deliberately not logged or echoed - it can embed payload values.
+      out.push({ ruleId: 'RULE_ERROR', severity: 'BLOCKER', step: rule.step, message: `The check "${rule.id}" could not run because some of your entries are not valid. Review this step.`, refs: [], order });
+      return;
+    }
+    for (const h of hits) {
       out.push({ ruleId: rule.id, severity: rule.severity, step: rule.step, message: h.message, refs: h.refs ?? [], order });
     }
   });
