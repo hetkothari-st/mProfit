@@ -67,7 +67,37 @@ describe('compareWithMarket', () => {
   });
 });
 
+describe('compareWithMarket: edge rates and tenures (final review)', () => {
+  it('a 0% market rate: no new interest, the whole current interest is saved', () => {
+    const r = compareWithMarket({ outstanding: D(120000), remainingMonths: 12, currentRatePct: D('9.00'), marketRatePct: D('0'), switchingCost: D(0) })!;
+    expect(r.newEmi.toFixed(2)).toBe('10000.00');
+    expect(r.newInterest.toFixed(2)).toBe('0.00');
+    expect(r.grossSaving.toFixed(2)).toBe(r.currentInterest.toFixed(2));
+    expect(r.breakEvenMonth).toBe(1);
+  });
+  it('1 month remaining: one EMI at each rate', () => {
+    const r = compareWithMarket({ outstanding: D(100000), remainingMonths: 1, currentRatePct: D('12'), marketRatePct: D('6'), switchingCost: D(0) })!;
+    expect(r.currentEmi.toFixed(2)).toBe('101000.00');
+    expect(r.newEmi.toFixed(2)).toBe('100500.00');
+    expect(r.grossSaving.toFixed(2)).toBe('500.00');
+    expect(r.breakEvenMonth).toBe(1);
+  });
+});
+
 describe('passThroughEstimate (full pass-through of a benchmark change)', () => {
+  it('a 0% loan: EMI is principal over months; a rise adds interest and months', () => {
+    const e = passThroughEstimate({ outstanding: D(120000), remainingMonths: 12, currentRatePct: D('0'), deltaPct: D('0.25') })!;
+    expect(e.currentEmi.toFixed(2)).toBe('10000.00');
+    expect(e.newRatePct.toFixed(2)).toBe('0.25');
+    expect(e.newEmi.greaterThan(e.currentEmi)).toBe(true);
+    expect(e.tenureDeltaMonths).toBe(1);
+  });
+  it('1 month remaining: the single EMI changes, the tenure cannot', () => {
+    const e = passThroughEstimate({ outstanding: D(100000), remainingMonths: 1, currentRatePct: D('12'), deltaPct: D('-1') })!;
+    expect(e.currentEmi.toFixed(2)).toBe('101000.00');
+    expect(e.newEmi.toFixed(2)).toBe('100917.00');
+    expect(e.tenureDeltaMonths).toBe(0);
+  });
   it('a 0.25 cut: lower EMI over the same months, or 5 months fewer at the same EMI', () => {
     const e = passThroughEstimate({ outstanding: D(3000000), remainingMonths: 180, currentRatePct: D('8.50'), deltaPct: D('-0.25') })!;
     expect(e.currentEmi.toFixed(0)).toBe('29543');
@@ -118,5 +148,10 @@ describe('approxInr', () => {
     ['12500000', '₹1.3 crore'],
     ['45000.40', '₹45,000'],
     ['-10444.26', '-₹10,444'],
+    // The unit comes from the rounded value (final review).
+    ['99999.6', '₹1 lakh'],
+    ['9996000', '₹1 crore'],
+    ['-0.4', '₹0'],
+    ['-99999.6', '-₹1 lakh'],
   ])('%s -> %s', (v, want) => expect(approxInr(D(v))).toBe(want));
 });

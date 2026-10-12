@@ -159,15 +159,19 @@ export function nextResetOnOrAfter(stored: string | null, from: string, kind: Be
   return date;
 }
 
-/** Rounded rupees for alert text: "₹2.1 lakh", "₹1.3 crore", below a lakh "₹45,000". */
+/**
+ * Rounded rupees for alert text: "₹2.1 lakh", "₹1.3 crore", below a lakh "₹45,000". The unit is chosen from
+ * the rounded value, so 99,999.6 is "₹1 lakh" (not "₹1,00,000") and 99.96 lakh is "₹1 crore" (not "₹100 lakh");
+ * an amount that rounds to zero is "₹0", never "-₹0".
+ */
 export function approxInr(amount: Decimal): string {
-  const abs = amount.abs();
-  const sign = amount.isNegative() ? '-' : '';
-  const unit = (size: number, word: string) =>
-    `${sign}₹${abs.div(size).toDecimalPlaces(1, Decimal.ROUND_HALF_UP).toFixed(1).replace(/\.0$/, '')} ${word}`;
-  if (abs.greaterThanOrEqualTo(10_000_000)) return unit(10_000_000, 'crore');
-  if (abs.greaterThanOrEqualTo(100_000)) return unit(100_000, 'lakh');
-  return formatINR(amount.toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toFixed(0), { fractionDigits: 0 });
+  const rupees = amount.abs().toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
+  const sign = amount.isNegative() && !rupees.isZero() ? '-' : '';
+  if (rupees.lessThan(100_000)) return `${sign}${formatINR(rupees.toFixed(0), { fractionDigits: 0 })}`;
+  const inUnit = (size: number) => rupees.div(size).toDecimalPlaces(1, Decimal.ROUND_HALF_UP);
+  const lakhs = inUnit(100_000);
+  const [value, word] = lakhs.lessThan(100) ? [lakhs, 'lakh'] : [inUnit(10_000_000), 'crore'];
+  return `${sign}₹${value.toFixed(1).replace(/\.0$/, '')} ${word}`;
 }
 
 // ─── Wire shapes (GET /api/loans/:id/market-check, /api/notifications/preferences) ───
