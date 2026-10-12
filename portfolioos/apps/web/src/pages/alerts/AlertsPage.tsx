@@ -77,7 +77,7 @@ function exactDate(iso: string): string {
   return formatDateIST(iso);
 }
 
-/** Short relative form for the left column — same idiom as the family feed. News is "ago", not "late". */
+/** Short relative form for the left column - same idiom as the family feed. News is "ago", not "late". */
 function relativeDay(days: number, informational = false): string {
   if (days < 0) return informational ? `${Math.abs(days)}d ago` : `${Math.abs(days)}d late`;
   if (days === 0) return 'today';
