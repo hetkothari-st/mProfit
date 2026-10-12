@@ -1,6 +1,7 @@
 import { Area, AreaChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatDateOnly, formatINR, type EmiWarning } from '@everypaisa/shared';
-import { compactInr, money } from './emiState';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { compactInr, money, moneyWhole } from './emiState';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { CalcMode, CalcOutcome } from './emiState';
 
@@ -38,6 +39,8 @@ function Tile({ label, value, testId, strong, sub }: { label: string; value: str
 
 export function EmiResults({ outcome, mode, baseline }: { outcome: Ok; mode: CalcMode; baseline: Ok | null }) {
   const s = outcome.summary;
+  // Phones get whole rupees so crore-size tiles fit; paise from `sm` up.
+  const tileMoney = useMediaQuery('(min-width: 640px)') ? money : moneyWhole;
   const years = Math.floor(s.months / 12);
   const rest = s.months % 12;
   const tenureText = `${years ? `${years} yr ` : ''}${rest ? `${rest} mo` : ''}`.trim();
@@ -55,17 +58,17 @@ export function EmiResults({ outcome, mode, baseline }: { outcome: Ok; mode: Cal
       <CardHeader className="pb-2"><CardTitle className="text-base">Result</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          {mode === 'MAX_LOAN' && <Tile label="You can borrow" value={money(outcome.principal)} testId="max-loan-value" strong />}
+          {mode === 'MAX_LOAN' && <Tile label="You can borrow" value={tileMoney(outcome.principal)} testId="max-loan-value" strong />}
           {mode === 'TENURE' && <Tile label="Loan paid off in" value={tenureText} testId="tenure-value" strong />}
-          <Tile label="Monthly EMI" value={money(s.emi)} testId="emi-value" strong={mode === 'EMI'} />
-          <Tile label="Total interest" value={money(s.totalInterest)} />
-          <Tile label="Total paid" value={money(s.totalPaid)} />
+          <Tile label="Monthly EMI" value={tileMoney(s.emi)} testId="emi-value" strong={mode === 'EMI'} />
+          <Tile label="Total interest" value={tileMoney(s.totalInterest)} />
+          <Tile label="Total paid" value={tileMoney(s.totalPaid)} />
           {mode !== 'TENURE' && <Tile label="Tenure" value={tenureText} />}
-          {s.fees.total.gt(0) && <Tile label="Fees + GST" value={money(s.fees.total)} />}
+          {s.fees.total.gt(0) && <Tile label="Fees + GST" value={tileMoney(s.fees.total)} />}
           <Tile label="APR (true yearly cost)" value={`${s.aprPct.toFixed(2)}%`} sub={`nominal ${s.nominalPct.toFixed(2)}% p.a.`} testId="apr-value" />
-          {saved && saved.gt(0) && <Tile label="Interest saved by prepaying" value={money(saved)} testId="interest-saved" />}
-          {s.tax && <Tile label="Tax saved" value={money(s.tax.totalTaxSaved)} />}
-          {s.postTaxCost && <Tile label="Cost after tax" value={money(s.postTaxCost)} />}
+          {saved && saved.gt(0) && <Tile label="Interest saved by prepaying" value={tileMoney(saved)} testId="interest-saved" />}
+          {s.tax && <Tile label="Tax saved" value={tileMoney(s.tax.totalTaxSaved)} />}
+          {s.postTaxCost && <Tile label="Cost after tax" value={tileMoney(s.postTaxCost)} />}
         </div>
         {s.tax?.note && <p className="text-xs text-muted-foreground">{s.tax.note}</p>}
         {s.warnings.map((w) => <p key={w} className="text-xs text-amber-600 dark:text-amber-400">{WARNING_TEXT[w]}</p>)}

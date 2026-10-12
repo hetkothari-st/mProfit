@@ -1,23 +1,26 @@
 import { useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { formatDateOnly, groupScheduleByFy, type Decimal, type LoanSummary } from '@everypaisa/shared';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { moneyWhole } from './emiState';
+import { PX_PER_MONEY_COLUMN, useElementWidth } from './useElementWidth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 type Group = ReturnType<typeof groupScheduleByFy>[number];
-/** Tailwind `sm`: a table from here up, stacked cards below, so nothing scrolls sideways. */
-const SM_QUERY = '(min-width: 640px)';
 
 export function ScheduleTable({ summary }: { summary: LoanSummary }) {
   const groups = groupScheduleByFy(summary.schedule);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (fy: string) => setOpen((o) => { const n = new Set(o); if (n.has(fy)) n.delete(fy); else n.add(fy); return n; });
   const hasPrepay = summary.totalPrepaid.gt(0);
-  const wide = useMediaQuery(SM_QUERY);
+  // A table only when the card itself has room for every column of crore
+  // figures (it sits in different-width containers across breakpoints);
+  // otherwise stacked cards. Either way nothing clips or scrolls sideways.
+  const [cardRef, cardWidth] = useElementWidth<HTMLDivElement>();
+  const columns = 6 + (hasPrepay ? 1 : 0);
+  const wide = cardWidth >= columns * PX_PER_MONEY_COLUMN;
 
   return (
-    <Card data-testid="schedule-card" className="overflow-hidden">
+    <Card ref={cardRef} data-testid="schedule-card" className="overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Repayment schedule</CardTitle>
         <p className="text-xs text-muted-foreground">Whole rupees on screen; the PDF and Excel files show paise.</p>

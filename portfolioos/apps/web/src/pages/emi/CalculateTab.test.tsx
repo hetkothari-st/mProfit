@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { useState } from 'react';
 import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
 import { CalculateTab } from './CalculateTab';
-import { CARRIED_FORWARD_LABEL, computeCalc, defaultCalcState, money, type CalcState } from './emiState';
+import { CARRIED_FORWARD_LABEL, computeCalc, defaultCalcState, moneyWhole, type CalcState } from './emiState';
 
 vi.mock('recharts', async (orig) => {
   const actual = await orig<typeof import('recharts')>();
@@ -90,7 +90,8 @@ describe('CalculateTab error surfacing and baseline', () => {
     const withBoth = computeCalc({ ...base, rateChanges, prepayments });
     const rcOnly = computeCalc({ ...base, rateChanges });
     if (!withBoth.ok || !rcOnly.ok) throw new Error('fixture invalid');
-    const expected = money(rcOnly.summary.totalInterest.minus(withBoth.summary.totalInterest));
+    // jsdom has no matchMedia -> narrow layout -> whole-rupee tiles.
+    const expected = moneyWhole(rcOnly.summary.totalInterest.minus(withBoth.summary.totalInterest));
     render(<Harness initial={{ rateChanges, prepayments }} />);
     await waitFor(() => expect(screen.getByTestId('interest-saved').textContent).toBe(expected));
   });
@@ -165,14 +166,57 @@ describe('CalculateTab sliders, tax table and layout', () => {
     expect(card.querySelector('.overflow-x-auto, table')).toBeNull();
   });
 
-  it('wide screens get a whole-rupee table', async () => {
-    const original = window.matchMedia;
-    window.matchMedia = ((q: string) => ({ matches: true, media: q, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia;
+  it('a card with room for every column gets a whole-rupee table; a narrow one gets cards', async () => {
+    withCardWidth(1000);
     try {
       render(<Harness />);
       const table = await screen.findByTestId('schedule-table');
       expect(table.textContent).not.toMatch(/\.\d{2}\b/);
       expect(table.closest('[data-testid="schedule-card"]')!.querySelector('.overflow-x-auto')).toBeNull();
+      cleanup();
+      withCardWidth(600); // 6 columns need 576 px, 7 (with prepayments) need 672
+      render(<Harness initial={{ prepayments: [{ id: 'p', month: '12', amount: '1,00,000', recurrence: 'ONCE', mode: 'REDUCE_TENURE' }] }} />);
+      expect(await screen.findByTestId('schedule-cards')).toBeTruthy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('the tax table also switches to rows when its card is narrow', async () => {
+    withCardWidth(400); // let-out needs 5 x 96 = 480 px
+    try {
+      render(<Harness initial={{ taxOn: true, loanKind: 'HOME_LET_OUT' }} />);
+      const card = await screen.findByTestId('tax-table');
+      expect(card.querySelector('table')).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+/** Fake ResizeObserver reporting a fixed width for every observed element. */
+function withCardWidth(width: number) {
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(private cb: ResizeObserverCallback) {}
+    observe(el: Element) { this.cb([{ target: el, contentRect: { width } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver); }
+    disconnect() {}
+    unobserve() {}
+  });
+}
+
+describe('result tiles by width', () => {
+  it('phones show whole rupees in the tiles', async () => {
+    render(<Harness initial={{ mode: 'MAX_LOAN', emi: '5,00,000', tenure: '30' }} />);
+    const v = await screen.findByTestId('max-loan-value');
+    expect(v.textContent).toMatch(/^₹[\d,]+$/);
+    expect(v.getAttribute('title')).toBe(v.textContent);
+  });
+  it('sm and up keep paise', async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: true, media: q, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia;
+    try {
+      render(<Harness />);
+      await waitFor(() => expect(screen.getByTestId('emi-value').textContent).toBe('₹8,679.00'));
     } finally {
       window.matchMedia = original;
     }

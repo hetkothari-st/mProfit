@@ -1,13 +1,14 @@
 import type { EmiTaxSummary } from '@everypaisa/shared';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CARRIED_FORWARD_LABEL, moneyWhole } from './emiState';
+import { PX_PER_MONEY_COLUMN, useElementWidth } from './useElementWidth';
 
-/** Per-FY tax benefit: a small table from `sm` up, stacked rows below so nothing scrolls sideways. */
+/** Per-FY tax benefit: a small table when its card has room for every column, stacked rows otherwise, so nothing clips or scrolls sideways. */
 export function TaxBenefitTable({ tax, letOut }: { tax: EmiTaxSummary; letOut: boolean }) {
-  const wide = useMediaQuery('(min-width: 640px)');
+  const [cardRef, cardWidth] = useElementWidth<HTMLDivElement>();
+  const wide = cardWidth >= (letOut ? 5 : 4) * PX_PER_MONEY_COLUMN;
   return (
-    <Card data-testid="tax-table" className="overflow-hidden">
+    <Card ref={cardRef} data-testid="tax-table" className="overflow-hidden">
       <CardHeader className="pb-2"><CardTitle className="text-base">Tax benefit by year</CardTitle></CardHeader>
       <CardContent className="p-0 pb-2">
         {wide ? (
