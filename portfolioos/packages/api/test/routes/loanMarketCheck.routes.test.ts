@@ -151,20 +151,20 @@ describe('GET /api/loans/:id/market-check', () => {
     expect((await body(l.id)).market).toBeNull();
   });
 
-  it("uses the loan's own schedule (past EMIs paid), not principal and tenure", async () => {
-    const l = await loan(user, { firstEmiDate: fifth(-3) });
-    await sys(() => prisma.loanPayment.createMany({
-      data: [
-        { loanId: l.id, paymentType: 'EMI', paidOn: day(fifth(-3)), amount: '30607' },
-        { loanId: l.id, paymentType: 'EMI', paidOn: day(fifth(-2)), amount: '30607' },
-      ],
+  it("uses the loan's own schedule: a recorded EMI for the next month shortens it", async () => {
+    const l = await loan(user, { firstEmiDate: fifth(1) });
+    await sys(() => prisma.loanPayment.create({
+      data: { loanId: l.id, paymentType: 'EMI', paidOn: day(fifth(0)), amount: '30607', forMonth: fifth(1).slice(0, 7) },
     }));
     const stored = await sys(() => prisma.loan.findUniqueOrThrow({ where: { id: l.id }, include: { payments: { orderBy: { paidOn: 'asc' } } } }));
-    const want = computeLoanSummary(stored as unknown as StoredLoan, new Date());
+    const now = new Date();
+    const without = computeLoanSummary({ ...(stored as unknown as StoredLoan), payments: [] }, now);
+    const withPaid = computeLoanSummary(stored as unknown as StoredLoan, now);
+    expect(without.remainingEmiCount).toBe(180);
+    expect(withPaid.remainingEmiCount).toBe(179);
     const b = await body(l.id);
-    expect(b.outstanding).toBe(new Decimal(want.outstandingBalance).toFixed(2));
-    expect(b.remainingMonths).toBe(want.remainingEmiCount);
-    expect(b.remainingMonths).toBeLessThan(180);
-    expect(new Decimal(b.outstanding).lessThan(3000000)).toBe(true);
+    expect(b.remainingMonths).toBe(179);
+    expect(b.outstanding).toBe(new Decimal(withPaid.outstandingBalance).toFixed(2));
+    expect(new Decimal(b.outstanding).lessThan(new Decimal(without.outstandingBalance))).toBe(true);
   });
 });

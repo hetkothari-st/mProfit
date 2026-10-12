@@ -89,6 +89,10 @@ export async function getLoanMarketCheck(userId: string, loanId: string, now: Da
   const lender = canonicalLender(loan.lenderName);
   const position = loanPosition(loan as unknown as StoredLoan, now);
   const target = benchmarkTarget(loan.rateType, loan.rateBenchmark, lender);
+  const [market, benchmark] = await Promise.all([
+    rateLoanType !== null ? bestMarketRate(rateLoanType, now) : Promise.resolve(null),
+    target !== null ? benchmarkSummary(target) : Promise.resolve(null),
+  ]);
   return {
     loanId: loan.id,
     status: loan.status,
@@ -102,7 +106,7 @@ export async function getLoanMarketCheck(userId: string, loanId: string, now: Da
     outstanding: position.outstanding.toFixed(2),
     remainingMonths: position.remainingMonths,
     nextEmiDate: position.nextEmiDate,
-    market: rateLoanType !== null ? await bestMarketRate(rateLoanType, now) : null,
-    benchmark: target !== null ? await benchmarkSummary(target) : null,
+    market,
+    benchmark,
   };
 }
