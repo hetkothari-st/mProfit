@@ -17,6 +17,10 @@ Status: DRAFT for owner review · 2026-10-12 · branch `feat/legacy-transfer`
 | D4 | SMS | **Not in v1.** Email-only warnings. See §11 (deferred work) |
 | D5 | Plan | **Premium feature** |
 | D6 | Amounts | **Owner chooses per nominee**: full amounts, or "what exists + where" only |
+| D7 | Tier | `LEGACY_TRANSFER` min tier = **PLUS** |
+| D8 | Cadence | Warnings 7 + 7 + 7 days, grace 7 days |
+| D9 | Verifier "they're fine" | **Full reset** → ARMED, fresh cycle |
+| D10 | Max pause | 180 days |
 
 ## 2. Scope
 
@@ -103,7 +107,7 @@ It is **not** updated by:
 - **BOTH**: both clocks run, and whichever reaches release first wins.
 - **Verifier answers** (from the GRACE email):
   - "Yes, release now" → RELEASED immediately.
-  - "No, they're fine" → back to FINAL_WARNING with a fresh 7-day clock, and the owner is alerted that the verifier vouched for them.
+  - "No, they're fine" → **full reset** to ARMED with a new cycle (inactivity clock restarts from the verifier's answer), and the owner is alerted that the verifier vouched for them.
   - No answer → release at the end of GRACE. An unreachable verifier must never block release forever.
 - **Nominees can never start a release.** The verifier can only speed up or delay one that is already in GRACE.
 - Owner **pause** (e.g. long trek with no internet): ARMED → PAUSED until a chosen date (max 180 days), with no warnings. Resumes to ARMED.
@@ -137,7 +141,7 @@ It is **not** updated by:
 
 ## 9. Premium gating and lapse
 
-- New flag `LEGACY_TRANSFER` in `packages/shared/src/entitlements.ts`. **Proposed min tier: `PLUS`** (lowest paid tier). Confirm.
+- New flag `LEGACY_TRANSFER` in `packages/shared/src/entitlements.ts`, min tier **`PLUS`** (D7).
 - **Lapse rule (important):** if the owner dies, their subscription will lapse. So **a plan armed while premium stays armed and releases even after the plan lapses**. A lapsed owner can still pause, cancel, revoke and see status, but cannot add nominees or widen scope until they upgrade again.
 - Account deletion (the existing purge job): delete the plan and nominees, and notify acknowledged nominees "X has closed their account". The `RESTRICT` FKs must be pre-cleared (see the account-deletion notes).
 
@@ -223,9 +227,6 @@ The state machine needs no change. Only the outbox gets a `channel` column.
 3. **Nominee access**: token + OTP + legacy session, `buildLegacyView`, Legacy View page, PDF, claims checklist. Tests: scope filtering, OTP lockout, session isolation (legacy cookie rejected on every other route).
 4. **Hardening**: audit coverage, account-deletion purge, lapse rule, manual QA on the Docker Postgres with a time-travel script.
 
-## 14. Open questions for owner
+## 14. Open questions
 
-1. Min tier for `LEGACY_TRANSFER`: **PLUS** (any paid plan) or **FAMILY**?
-2. Warning cadence 7 + 7 + 7 + 7 (grace) days. OK?
-3. Verifier "No, they're fine" → restart FINAL_WARNING. OK, or should it fully reset to ARMED?
-4. Max pause length 180 days. OK?
+None. All answered 2026-10-12 (D7–D10).
