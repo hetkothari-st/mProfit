@@ -12,6 +12,7 @@ import { startPfFetchWorker } from './pfFetchWorker.js';
 import { startPfNudgeJob } from './pfNudgeJob.js';
 import { startSplitShareLinkReconcileJob } from './splitShareLinkReconcileJob.js';
 import { startSplitDigestJobs } from './splitDigestJobs.js';
+import { startLoanRatesJob } from './loanRatesJob.js';
 // Self-registering PF adapters — import side-effects call registerPfAdapter()
 import '../adapters/pf/epf/epfo.v1.js';
 import '../adapters/pf/ppf/sbi.v1.js';
@@ -108,6 +109,8 @@ async function runStartupSyncInner(): Promise<void> {
   startPfNudgeJob();
   startSplitShareLinkReconcileJob();
   startSplitDigestJobs();
+  // Daily 07:30 IST live loan rates (EMI calculator, spec s5.4). ENABLE_LOAN_RATES_CRON=false disables it.
+  startLoanRatesJob();
 
   logger.info('[startup] initial data sync complete');
 }
