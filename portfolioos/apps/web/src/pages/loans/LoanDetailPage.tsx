@@ -37,6 +37,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
+import { MarketCheckCard } from './MarketCheckCard';
 import { LoanRateFields, rateFieldsFrom, rateFieldsPayload, type RateFieldsValue } from './LoanRateFields';
 import {
   loansApi,
@@ -1195,6 +1196,13 @@ export function LoanDetailPage() {
       {summary && summary.taxBenefit && (
         <div className="mb-4">
           <TaxBenefitPanel summary={summary} />
+        </div>
+      )}
+
+      {/* Compare with market (EMI plan 3, spec s6.2) */}
+      {loan.status === 'ACTIVE' && (
+        <div className="mb-4">
+          <MarketCheckCard loan={loan} />
         </div>
       )}
 
