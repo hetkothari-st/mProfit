@@ -9,6 +9,7 @@
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { load } from 'cheerio';
 
 const DEFAULT_FILES = [
   'rbi-home.html', 'sbi-mclr.html', 'sbi-eblr.html', 'sbi-LAP.html', 'sbi-rates-index.html',
@@ -19,12 +20,31 @@ const DEFAULT_FILES = [
 ];
 
 export function sanitizePage(raw) {
-  return raw
-    .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (whole, body) => (body.trim().startsWith('self.__next_f.push(') ? whole : ''))
-    .replace(/<(style|noscript|svg|iframe)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    // ASP.NET state blobs are opaque high-entropy strings; keep the element, blank the value.
-    .replace(/(<input\b[^>]*\bname="__(?:VIEWSTATE|EVENTVALIDATION)"[^>]*\bvalue=")[^"]*(")/gi, '$1$2');
+  // Parser-based, not regex-based: regexes miss `</script >` and re-assembled `<scr<script>ipt>` forms.
+  const $ = load(raw);
+  $('script').each((_, el) => {
+    if (!$(el).text().trim().startsWith('self.__next_f.push(')) $(el).remove();
+  });
+  $('style, noscript, svg, iframe').remove();
+  $.root()
+    .find('*')
+    .addBack()
+    .contents()
+    .filter((_, node) => node.type === 'comment')
+    .remove();
+  // ASP.NET state blobs are opaque high-entropy strings; keep the element, blank the value.
+  $('input').each((_, el) => {
+    const name = ($(el).attr('name') ?? '').toUpperCase();
+    if (name === '__VIEWSTATE' || name === '__EVENTVALIDATION') $(el).attr('value', '');
+  });
+  // Public SSO/portal links carry opaque `authId` query values; they look like keys, so blank them.
+  $('[href], [src]').each((_, el) => {
+    for (const attr of ['href', 'src']) {
+      const v = $(el).attr(attr);
+      if (v !== undefined) $(el).attr(attr, v.replace(/([?&;]authid=)[^&#"'\s]*/gi, '$1'));
+    }
+  });
+  return $.html();
 }
 
 function main() {

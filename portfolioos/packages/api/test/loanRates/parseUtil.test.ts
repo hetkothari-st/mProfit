@@ -1,3 +1,4 @@
+import { load } from 'cheerio';
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
@@ -114,5 +115,21 @@ describe('sanitizePage', () => {
     expect(out).toContain('self.__next_f.push([1,"x"])');
     expect(out).toContain('name="__VIEWSTATE" id="__VIEWSTATE" value=""');
     expect(out).not.toContain('AbC');
+  });
+
+  it('survives malformed closers, nested tag fragments and blanks authId params', async () => {
+    // @ts-expect-error plain .mjs script, no type declarations
+    const { sanitizePage } = (await import('../../scripts/sanitize-loan-rate-fixtures.mjs')) as { sanitizePage: (s: string) => string };
+    const out = sanitizePage(
+      '<p>keep</p><script>var a="s1";</script ><scr<script>ipt>var b="s2";</scr</script>ipt><!-- c1 --><!-- <!-- c2 -->' +
+        '<a href="https://x.example/p?AuthID=ABC123&amp;z=1">l</a><a href="https://y.example/?appType=main&authId=XYZ">m</a>',
+    );
+    expect(out).toContain('keep');
+    // The parser reads `<scr<script>ipt>` as one inert, oddly-named element, never a script; re-parsing the
+    // output must still find no script element, and the real script body and the comments must be gone.
+    expect(load(out)('script').length).toBe(0);
+    expect(out).not.toMatch(/s1|c1|c2/);
+    expect(out).not.toMatch(/ABC123|XYZ/);
+    expect(out).toContain('z=1');
   });
 });
