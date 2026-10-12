@@ -41,6 +41,7 @@ import {
   ShieldCheck,
   Compass,
   Percent,
+  ScrollText,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -81,6 +82,7 @@ export const OVERVIEW_ITEMS: NavItem[] = [
   { label: 'Portfolio Score', to: '/health-score', icon: HeartPulse },
   { label: 'Advisor', to: '/advisor', icon: Compass },
   { label: 'Goals', to: '/goals', icon: Target },
+  { label: 'Will Maker', to: '/will', icon: ScrollText },
   { label: 'Transactions', to: '/transactions', icon: Receipt },
   { label: 'Cash Activity', to: '/cashflows', icon: ArrowLeftRight },
 ];
