@@ -41,7 +41,7 @@ function FyRows({ group: g, open, onToggle, hasPrepay }: { group: ReturnType<typ
     <>
       <tr className="border-b bg-muted/40">
         <td className="px-3 py-2">
-          <button type="button" onClick={onToggle} aria-expanded={open} className="flex items-center gap-1 font-medium">
+          <button type="button" onClick={onToggle} aria-expanded={open} className="flex items-center gap-1 whitespace-nowrap font-medium">
             {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             FY {g.fy}
           </button>

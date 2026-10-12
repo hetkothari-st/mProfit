@@ -4,6 +4,12 @@ import { money } from './emiState';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { CalcMode, CalcOutcome } from './emiState';
 
+const TOOLTIP_PROPS = {
+  contentStyle: { background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: 12, padding: '10px 12px' },
+  labelStyle: { color: 'hsl(var(--muted-foreground))', marginBottom: 4, fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: '0.1em' },
+  itemStyle: { color: 'hsl(var(--foreground))' },
+};
+
 type Ok = Extract<CalcOutcome, { ok: true }>;
 
 const WARNING_TEXT: Record<EmiWarning, string> = {
@@ -17,7 +23,7 @@ function Tile({ label, value, testId, strong }: { label: string; value: string; 
   return (
     <div className="min-w-0 rounded-lg border p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div data-testid={testId} className={strong ? 'break-words text-xl font-semibold tabular-nums sm:text-2xl' : 'break-words text-base font-medium tabular-nums'}>{value}</div>
+      <div data-testid={testId} className={strong ? 'whitespace-nowrap text-xl font-semibold tabular-nums' : 'whitespace-nowrap text-base font-medium tabular-nums'}>{value}</div>
     </div>
   );
 }
@@ -40,7 +46,7 @@ export function EmiResults({ outcome, mode, baseline }: { outcome: Ok; mode: Cal
     <Card>
       <CardHeader className="pb-2"><CardTitle className="text-base">Result</CardTitle></CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3">
           {mode === 'MAX_LOAN' && <Tile label="You can borrow" value={money(outcome.principal)} testId="max-loan-value" strong />}
           {mode === 'TENURE' && <Tile label="Loan paid off in" value={tenureText} testId="tenure-value" strong />}
           <Tile label="Monthly EMI" value={money(s.emi)} testId="emi-value" strong={mode === 'EMI'} />
@@ -57,23 +63,29 @@ export function EmiResults({ outcome, mode, baseline }: { outcome: Ok; mode: Cal
         {s.warnings.map((w) => <p key={w} className="text-xs text-amber-600 dark:text-amber-400">{WARNING_TEXT[w]}</p>)}
 
         <div className="grid gap-4 md:grid-cols-[200px_minmax(0,1fr)]">
-          <div className="h-48">
+          <div>
+            <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={pie} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="85%" stroke="none">
                   <Cell fill="hsl(var(--primary))" />
                   <Cell fill="hsl(var(--muted-foreground) / 0.45)" />
                 </Pie>
-                <Tooltip formatter={(v: number) => formatINR(String(v))} />
+                <Tooltip {...TOOLTIP_PROPS} formatter={(v: number) => formatINR(String(v))} />
               </PieChart>
             </ResponsiveContainer>
+            </div>
+            <ul className="mt-2 space-y-1 text-xs">
+              <li className="flex items-center justify-between gap-2 whitespace-nowrap"><span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: 'hsl(var(--primary))' }} />Principal</span><span className="tabular-nums">{money(outcome.principal)}</span></li>
+              <li className="flex items-center justify-between gap-2 whitespace-nowrap"><span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: 'hsl(var(--muted-foreground) / 0.45)' }} />Interest</span><span className="tabular-nums">{money(s.totalInterest)}</span></li>
+            </ul>
           </div>
           <div className="h-48 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={balance} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={40} />
                 <YAxis tick={{ fontSize: 10 }} width={56} tickFormatter={(v: number) => `${Math.round(v / 100000)}L`} />
-                <Tooltip formatter={(v: number) => formatINR(String(v))} />
+                <Tooltip {...TOOLTIP_PROPS} formatter={(v: number) => formatINR(String(v))} />
                 <Area dataKey="balance" name="Balance" type="monotone" stroke="hsl(var(--primary))" fill="hsl(var(--primary) / 0.15)" />
               </AreaChart>
             </ResponsiveContainer>
