@@ -67,7 +67,7 @@ describe('useWillDraft', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'));
     act(() => result.current.update('details', { ...fullPayload().details, legalName: 'New Name' }));
     await act(async () => { expect(await result.current.flush()).toBe(false); });
-    expect(result.current.error).toContain('Network Error');
+    expect(result.current.error).toBe('Could not save your changes. Check your connection and try again.');
     await act(async () => { expect(await result.current.flush()).toBe(true); });
     expect(api.saveSection).toHaveBeenCalledTimes(2);
     expect(result.current.error).toBeNull();
@@ -83,5 +83,24 @@ describe('useWillDraft', () => {
     expect(api.refreshEstate).toHaveBeenCalledWith('w1', 1);
     expect(result.current.payload?.estate.asOf).toBe('2026-10-13');
     expect(result.current.getRevision()).toBe(2);
+  });
+
+  it('flushes a pending edit when the page unmounts inside the debounce window', async () => {
+    const api = fakeApi();
+    const { result, unmount } = renderHook(() => useWillDraft('w1', { api, debounceMs: 5000 }));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    act(() => result.current.update('instructions', { text: 'late edit' }));
+    expect(api.saveSection).not.toHaveBeenCalled();
+    unmount();
+    await waitFor(() => expect(api.saveSection).toHaveBeenCalledWith('w1', 'instructions', expect.objectContaining({ data: { text: 'late edit' } })));
+  });
+
+  it('flushes a pending edit on pagehide', async () => {
+    const api = fakeApi();
+    const { result } = renderHook(() => useWillDraft('w1', { api, debounceMs: 5000 }));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    act(() => result.current.update('instructions', { text: 'closing tab' }));
+    window.dispatchEvent(new Event('pagehide'));
+    await waitFor(() => expect(api.saveSection).toHaveBeenCalledTimes(1));
   });
 });

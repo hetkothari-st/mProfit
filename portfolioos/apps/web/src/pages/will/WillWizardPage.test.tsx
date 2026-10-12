@@ -48,4 +48,24 @@ describe('WillWizardPage', () => {
     expect(screen.getByText(/will maker is locked/i)).toBeTruthy();
     expect(willApi.getDraft).not.toHaveBeenCalled();
   });
+
+  it('shows a retry after a failed save; Next stays blocked, Back goes through on the second try', async () => {
+    renderWithProviders(<WillWizardPage />, { route: '/will/w1/people', path: '/will/:id/:step' });
+    await screen.findByRole('tab', { name: /beneficiaries/i });
+    vi.mocked(willApi.saveSection).mockRejectedValue(new Error('Network Error'));
+    fireEvent.click(screen.getByRole('button', { name: /^add a person/i }));
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'Kavya Iyer' } });
+    fireEvent.click(screen.getByRole('button', { name: /save person/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^next$/i }));
+    expect(await screen.findByText('Could not save your changes. Check your connection and try again.')).toBeTruthy();
+    const retry = screen.getByRole('button', { name: /^retry$/i });
+    fireEvent.click(retry);
+    await waitFor(() => expect(vi.mocked(willApi.saveSection).mock.calls.length).toBeGreaterThanOrEqual(2));
+    expect(screen.getByText('Step 3 of 8')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^next$/i }));
+    await waitFor(() => expect(vi.mocked(willApi.saveSection).mock.calls.length).toBeGreaterThanOrEqual(3));
+    expect(screen.getByText('Step 3 of 8')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^back$/i }));
+    await waitFor(() => expect(screen.getByText('Step 2 of 8')).toBeTruthy());
+  });
 });

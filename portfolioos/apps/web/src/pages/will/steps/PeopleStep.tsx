@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { willApi } from '@/api/will.api';
+import { ConfirmDialog } from '@/pages/split/ConfirmDialog';
 import { Field, FindingList, newLocalId, RELATIONSHIP_LABEL } from '../parts';
 import { PersonForm } from './PersonForm';
 import type { WillStepProps } from './types';
@@ -25,13 +26,14 @@ function blank(partyType: WillPerson['partyType']): WillPerson {
 export function PeopleStep({ payload, update, findings, today }: WillStepProps) {
   const [tab, setTab] = useState('beneficiaries');
   const [editing, setEditing] = useState<WillPerson | null>(null);
+  const [removing, setRemoving] = useState<WillPerson | null>(null);
   const { people, roles } = payload;
   const suggestions = useQuery({ queryKey: ['will', 'suggestions'], queryFn: () => willApi.suggestions() });
 
   const save = (next: WillPerson[], nextRoles: WillRoles = roles) => update('people', { people: next, roles: nextRoles });
-  function upsert(p: WillPerson) {
+  function upsert(p: WillPerson, closeForm = true) {
     save(people.some((x) => x.id === p.id) ? people.map((x) => (x.id === p.id ? p : x)) : [...people, p]);
-    setEditing(null);
+    if (closeForm) setEditing(null);
   }
   function remove(id: string) {
     const next = removeWillPerson(payload, id);
@@ -42,7 +44,7 @@ export function PeopleStep({ payload, update, findings, today }: WillStepProps) 
     upsert({
       id: newLocalId('p'), partyType: 'INDIVIDUAL', name: s.name, relationship: s.relationship ?? 'OTHER_RELATIVE',
       dob: s.dob, contact: null, sourceFamilyMemberId: s.userId, contingentId: null,
-    });
+    }, false);
   }
 
   const individuals = people.filter((p) => p.partyType === 'INDIVIDUAL');
@@ -65,24 +67,30 @@ export function PeopleStep({ payload, update, findings, today }: WillStepProps) 
       <div className="flex items-center gap-2">
         {isMinorOn(p.dob, today) === true && <Badge variant="outline">Under 18</Badge>}
         <Button size="sm" variant="ghost" onClick={() => setEditing(p)}>Edit</Button>
-        <Button size="sm" variant="ghost" onClick={() => remove(p.id)}>Remove</Button>
+        <Button size="sm" variant="ghost" onClick={() => setRemoving(p)}>Remove</Button>
       </div>
     </li>
   );
 
-  const roleSelect = (id: string, label: string, value: string | null, key: keyof WillRoles, options: WillPerson[]) => (
+  const roleSelect = (id: string, label: string, value: string | null, key: keyof WillRoles, options: WillPerson[]) => {
+    // A chosen person who stopped being eligible (e.g. turned out to be a minor)
+    // stays visible so the screen matches what is saved; the review step flags it.
+    const stale = value && !options.some((o) => o.id === value) ? people.find((x) => x.id === value) : undefined;
+    return (
     <Field id={id} label={label}>
       <Select id={id} value={value ?? ''} onChange={(e) => save(people, { ...roles, [key]: e.target.value || null })}>
         <option value="">Not chosen</option>
         {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+        {stale && <option value={stale.id}>{stale.name} (not eligible)</option>}
       </Select>
     </Field>
-  );
+    );
+  };
 
   return (
     <div className="space-y-4">
       {editing && (
-        <PersonForm key={editing.id} initial={editing} others={people.filter((x) => x.id !== editing.id)} onSave={upsert} onCancel={() => setEditing(null)} />
+        <PersonForm key={editing.id} initial={editing} others={people.filter((x) => x.id !== editing.id)} today={today} onSave={upsert} onCancel={() => setEditing(null)} />
       )}
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
@@ -135,6 +143,15 @@ export function PeopleStep({ payload, update, findings, today }: WillStepProps) 
         </TabsContent>
       </Tabs>
       <FindingList findings={stepFindings} />
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(o) => { if (!o) setRemoving(null); }}
+        title={removing ? `Remove ${removing.name}?` : 'Remove person?'}
+        description="Their shares and gifts will be removed from your will, and any role they hold will be cleared."
+        confirmLabel="Remove person"
+        destructive
+        onConfirm={() => { if (removing) remove(removing.id); }}
+      />
     </div>
   );
 }

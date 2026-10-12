@@ -12,10 +12,11 @@ import type { WillStepProps } from './types';
 const yesNo = (v: boolean | null) => (v === null ? '' : v ? 'yes' : 'no');
 const fromYesNo = (v: string) => (v === '' ? null : v === 'yes');
 
-export function DetailsStep({ payload, update, findings }: WillStepProps) {
+export function DetailsStep({ payload, update, findings, today }: WillStepProps) {
   const d = payload.details;
   const set = (patch: Partial<WillDetails>) => update('details', { ...d, ...patch });
-  const blockers = findings.filter((f) => f.step === 2 && f.severity === 'BLOCKER' && f.ruleId === 'REQUIRED_FIELDS');
+  // The Muslim-law and foreign-law blockers already have their own notices above.
+  const stepFindings = findings.filter((f) => f.step === 2 && f.ruleId !== 'MUSLIM_LAW_UNSUPPORTED' && f.ruleId !== 'JURISDICTION_INDIA_ONLY');
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -25,7 +26,7 @@ export function DetailsStep({ payload, update, findings }: WillStepProps) {
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field id="will-dob" label="Date of birth" required>
-            <Input id="will-dob" type="date" value={d.dob ?? ''} onChange={(e) => set({ dob: e.target.value || null })} />
+            <Input id="will-dob" type="date" min="1900-01-01" max={today} value={d.dob ?? ''} onChange={(e) => set({ dob: e.target.value || null })} />
           </Field>
           <Field id="will-country" label="Country whose law applies" required>
             <Select id="will-country" value={d.jurisdiction} onChange={(e) => set({ jurisdiction: e.target.value === 'IN' ? 'IN' : 'OTHER' })}>
@@ -67,7 +68,7 @@ export function DetailsStep({ payload, update, findings }: WillStepProps) {
             </Select>
           </Field>
         </div>
-        <FindingList findings={blockers} />
+        <FindingList findings={stepFindings} />
       </Card>
       <Card tone="muted" className="h-fit min-w-0 space-y-2 p-4 text-sm">
         <p className="font-medium text-foreground">Why we ask</p>

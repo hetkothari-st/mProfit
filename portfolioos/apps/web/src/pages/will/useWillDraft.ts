@@ -6,6 +6,8 @@ import {
 import { apiErrorMessage } from '@/api/client';
 import { isWillRevisionConflict, willApi } from '@/api/will.api';
 
+export const SAVE_FAILED = 'Could not save your changes. Check your connection and try again.';
+
 export type WillDraftApi = Pick<typeof willApi, 'getDraft' | 'saveSection' | 'refreshEstate'>;
 
 export interface UseWillDraft {
@@ -70,13 +72,6 @@ export function useWillDraft(id: string, opts: { debounceMs?: number; api?: Will
     void load();
   }, [load]);
 
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
-
   const saveDirty = useCallback(async (): Promise<boolean> => {
     while (dirty.current.size > 0 && !frozen.current) {
       const section = dirty.current.values().next().value as WillSection;
@@ -99,7 +94,7 @@ export function useWillDraft(id: string, opts: { debounceMs?: number; api?: Will
           setConflict(true);
         } else {
           dirty.current.add(section);
-          setError(apiErrorMessage(err, "Couldn't save your changes"));
+          setError(SAVE_FAILED);
         }
         setSaving(false);
         return false;
@@ -113,6 +108,24 @@ export function useWillDraft(id: string, opts: { debounceMs?: number; api?: Will
     chain.current = chain.current.then(saveDirty, saveDirty);
     return chain.current;
   }, [saveDirty]);
+
+  // Edits still waiting out the debounce are saved when the page goes away
+  // (route change or tab close), not dropped.
+  useEffect(() => {
+    const flushPending = () => {
+      if (dirty.current.size === 0 || frozen.current) return;
+      if (timer.current) {
+        clearTimeout(timer.current);
+        timer.current = null;
+      }
+      void enqueue();
+    };
+    window.addEventListener('pagehide', flushPending);
+    return () => {
+      window.removeEventListener('pagehide', flushPending);
+      flushPending();
+    };
+  }, [enqueue]);
 
   const update = useCallback(
     <S extends WillSection>(section: S, data: WillSectionData[S]) => {

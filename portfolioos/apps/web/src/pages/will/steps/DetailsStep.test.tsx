@@ -4,7 +4,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { emptyWillPayload, runWillRules } from '@everypaisa/shared';
 import { DetailsStep } from './DetailsStep';
 import type { WillStepProps } from './types';
-import { TODAY } from '../willTestData';
+import { fullPayload, TODAY } from '../willTestData';
 
 afterEach(cleanup);
 
@@ -39,4 +39,19 @@ describe('DetailsStep', () => {
     render(<DetailsStep {...props()} />);
     expect(screen.getByText(/fill in your full legal name/i)).toBeTruthy();
   });
+
+  it('shows other step-2 findings such as the adult check, and bounds the date of birth', () => {
+    const payload = fullPayloadUnder18();
+    render(<DetailsStep {...props({ payload })} />);
+    expect(screen.getByText(/18 or older|at least 18|under 18/i)).toBeTruthy();
+    const dob = screen.getByLabelText(/date of birth/i) as HTMLInputElement;
+    expect(dob.min).toBe('1900-01-01');
+    expect(dob.max).toBe(TODAY);
+  });
 });
+
+function fullPayloadUnder18() {
+  const payload = fullPayload();
+  payload.details.dob = '2015-01-01';
+  return payload;
+}
