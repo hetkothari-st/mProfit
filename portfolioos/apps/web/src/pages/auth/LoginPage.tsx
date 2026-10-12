@@ -46,8 +46,10 @@ export function LoginPage() {
   });
 
   useEffect(() => {
-    if (isAuthed) navigate(nextPath ?? '/dashboard', { replace: true });
-  }, [isAuthed, navigate, nextPath]);
+    // Runs right after finishSignIn's setSession too, so it must honour the
+    // same return path or it overrides that navigation with /dashboard.
+    if (isAuthed) navigate(nextPath ?? fromLocationPath(location.state) ?? '/dashboard', { replace: true });
+  }, [isAuthed, navigate, nextPath, location.state]);
 
   const {
     register,
