@@ -63,6 +63,8 @@ function alertHref(type: string): string {
       return '/rental';
     case 'LOAN_EMI_OVERDUE':
     case 'LOAN_EMI_DUE':
+    case 'LOAN_REFINANCE':
+    case 'LOAN_BENCHMARK_CHANGE':
       return '/loans';
     case 'LOAN_GIVEN_DUE':
       return '/loans?view=given';

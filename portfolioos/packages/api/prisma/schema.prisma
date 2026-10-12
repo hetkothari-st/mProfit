@@ -169,6 +169,8 @@ model User {
 
   // UI preferences — sidebar asset class order + visibility per user.
   preferences Json?
+  /// Settings -> Notifications -> Loan rate alerts (EMI plan 3, spec s6.3). Default on.
+  loanRateAlerts Boolean @default(true)
 
   // Per-user transactional notification settings (currently SMTP only —
   // SMS provider config can land here too when DLT is sorted).
@@ -1550,6 +1552,8 @@ enum AlertType {
   PROPERTY_TAX_DUE
   PROPERTY_POSSESSION_DUE
   PF_REFRESH_DUE
+  LOAN_REFINANCE
+  LOAN_BENCHMARK_CHANGE
   CUSTOM
 }
 
@@ -2926,6 +2930,11 @@ model Loan {
   status            String    @default("ACTIVE")
   closedDate        DateTime? @db.Date
   lenderMatchKey    String?
+  /// Existing-loan checks (EMI plan 3, spec s6.1): FIXED | FLOATING | UNKNOWN.
+  rateType          String    @default("UNKNOWN")
+  /// REPO | MCLR | OTHER. Only for FLOATING loans (loans.service resolveRateFields).
+  rateBenchmark     String?
+  nextRateResetDate DateTime? @db.Date
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)

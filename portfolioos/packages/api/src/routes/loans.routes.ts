@@ -13,6 +13,7 @@ import {
   deletePaymentHandler,
   computeEmiHandler,
   revealLoanAccountHandler,
+  getLoanMarketCheckHandler,
 } from '../controllers/loans.controller.js';
 import { piiLimiter } from '../middleware/rateLimit.js';
 
@@ -36,6 +37,7 @@ loansRouter.delete('/payments/:paymentId', asyncHandler(deletePaymentHandler));
 // Computed views
 loansRouter.get('/:id/summary', asyncHandler(getLoanSummaryHandler));
 loansRouter.get('/:id/amortization', asyncHandler(getAmortizationHandler));
+loansRouter.get('/:id/market-check', asyncHandler(getLoanMarketCheckHandler));
 
 // Payments (scoped under loan)
 loansRouter.post('/:id/payments', asyncHandler(addPaymentHandler));

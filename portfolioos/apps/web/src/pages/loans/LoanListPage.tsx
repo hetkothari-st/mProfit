@@ -24,6 +24,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { InstitutionField } from '@/components/common/InstitutionField';
 import { LoansGivenSection } from './given/LoansGivenSection';
 import { LoanSectionHeader, LoanSectionNav, LoansOverview, type LoanSectionKey } from './LoanSections';
+import { LoanRateFields, rateFieldsFrom, rateFieldsPayload, type RateFieldsValue } from './LoanRateFields';
 import { loansGivenApi } from '@/api/loansGiven.api';
 import { InstallmentProgress, InstallmentTracker } from './InstallmentTracker';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
@@ -320,7 +321,7 @@ function calcEmi(principal: string, rate: string, tenure: string): string {
   }
 }
 
-function CreateLoanDialog({
+export function CreateLoanDialog({
   open,
   onOpenChange,
   initial,
@@ -351,6 +352,7 @@ function CreateLoanDialog({
   });
 
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+  const [rate, setRate] = useState<RateFieldsValue>(() => rateFieldsFrom(initial));
 
   // Re-sync form when dialog opens with a different initial loan
   useEffect(() => {
@@ -374,6 +376,7 @@ function CreateLoanDialog({
         portfolioId: initial?.portfolioId ?? null,
       });
       setErrors({});
+      setRate(rateFieldsFrom(initial));
     }
   }, [open, initial]);
 
@@ -419,6 +422,7 @@ function CreateLoanDialog({
       borrowerName: form.borrowerName.trim(),
       accountNumber: form.accountNumber?.trim() || null,
       taxBenefitSection: form.taxBenefitSection || null,
+      ...rateFieldsPayload(rate),
     });
   }
 
@@ -531,6 +535,8 @@ function CreateLoanDialog({
               </Select>
             </div>
           </div>
+
+          <LoanRateFields idPrefix="add-loan" value={rate} onChange={setRate} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { notificationsApi } from '@/api/notifications.api';
 import { gmailApi } from '@/api/gmail.api';
+import { LoanRateAlertsCard } from './LoanRateAlertsCard';
 
 /**
  * Zero-password email setup. The landlord clicks "Connect Gmail", grants
@@ -62,6 +63,7 @@ export function NotificationsSection() {
   const connected = !!status?.gmailConnected;
 
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
@@ -147,6 +149,8 @@ export function NotificationsSection() {
         )}
       </CardContent>
     </Card>
+    <LoanRateAlertsCard />
+    </>
   );
 }
 

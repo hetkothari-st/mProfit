@@ -13,6 +13,8 @@
  * REGISTRATION: startLoanRatesJob() is called from src/index.ts (beside startMfScoreJob, outside the startup
  * sync, so ENABLE_STARTUP_SYNC does not gate it). ENABLE_LOAN_RATES_CRON=false disables it (the test env sets
  * that).
+ *
+ * LOAN CHECKS: the cron runs runDailyLoanJobs - this job, then jobs/loanChecksJob.ts (EMI plan 3).
  */
 import cron from 'node-cron';
 import type { LoanRateSource, Prisma } from '@prisma/client';
@@ -27,6 +29,7 @@ import { PAGE_READERS } from '../services/loanRates/sources/index.js';
 import { clean, loadPage } from '../services/loanRates/sources/parseUtil.js';
 import { dateOnly, recordReading } from '../services/loanRates/store.js';
 import type { PageReader } from '../services/loanRates/types.js';
+import { runLoanChecksJob } from './loanChecksJob.js';
 
 const TZ = 'Asia/Kolkata';
 export const LOAN_RATES_ALERT_SOURCE = 'loan-rates';
@@ -109,6 +112,26 @@ export async function runLoanRatesJob(): Promise<LoanRatesRunResult | null> {
   }
 }
 
+/**
+ * The 07:30 IST cron (spec s5.4 + s6.3): refresh the rates, then run the existing-loan checks against them.
+ * The checks run even when the rates step fails - yesterday's rates and any benchmark change already
+ * recorded are still worth checking. Admin "Run now" calls runLoanRates directly and does not trigger checks.
+ */
+export async function runDailyLoanJobs(
+  steps: { rates: () => Promise<unknown>; checks: () => Promise<unknown> } = { rates: runLoanRatesJob, checks: runLoanChecksJob },
+): Promise<void> {
+  try {
+    await steps.rates();
+  } catch (err) {
+    logger.error({ err }, '[cron] loan rates step failed - running the loan checks anyway');
+  }
+  try {
+    await steps.checks();
+  } catch (err) {
+    logger.error({ err }, '[cron] loan checks step failed');
+  }
+}
+
 export function startLoanRatesJob(): void {
   if (process.env.ENABLE_LOAN_RATES_CRON === 'false') {
     logger.info('[cron] loan rates job disabled via ENABLE_LOAN_RATES_CRON=false');
@@ -117,11 +140,11 @@ export function startLoanRatesJob(): void {
   cron.schedule(
     '30 7 * * *',
     () => {
-      runLoanRatesJob().catch((err: unknown) => logger.error({ err }, '[cron] loan rates run rejected'));
+      runDailyLoanJobs().catch((err: unknown) => logger.error({ err }, '[cron] daily loan jobs rejected'));
     },
     { timezone: TZ },
   );
-  logger.info('[cron] scheduled: loan rates @07:30 IST');
+  logger.info('[cron] scheduled: loan rates + loan checks @07:30 IST');
 }
 
 /** Keep at most `maxBytes` of UTF-8, never ending in half a character. */

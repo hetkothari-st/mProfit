@@ -17,11 +17,12 @@ import {
   computeEmi,
 } from '../services/loans.service.js';
 import { revealLoanAccountNumber } from '../services/loans.service.js';
+import { getLoanMarketCheck } from '../services/loanChecks/marketCheck.service.js';
 import { writeAuditLog } from '../lib/audit.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { Decimal } from 'decimal.js';
-import { serializeMoney } from '@everypaisa/shared';
+import { LOAN_RATE_BENCHMARKS, LOAN_RATE_TYPES, serializeMoney } from '@everypaisa/shared';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const moneyString = z.string().regex(/^\d+(\.\d+)?$/, 'Expected positive decimal string');
@@ -48,6 +49,9 @@ const createLoanSchema = z.object({
   status: z.enum(LOAN_STATUSES).optional(),
   closedDate: isoDate.nullable().optional(),
   lenderMatchKey: z.string().nullable().optional(),
+  rateType: z.enum(LOAN_RATE_TYPES).optional(),
+  rateBenchmark: z.enum(LOAN_RATE_BENCHMARKS).nullable().optional(),
+  nextRateResetDate: isoDate.nullable().optional(),
 });
 
 const updateLoanSchema = createLoanSchema.partial();
@@ -115,6 +119,12 @@ export async function getAmortizationHandler(req: Request, res: Response) {
   const rows = await getAmortization(req.user.id, req.params['id']!);
   // Cap at 600 rows (enforced in service already, but be explicit)
   ok(res, rows.slice(0, 600));
+}
+
+/** GET /api/loans/:id/market-check (spec s6.2). */
+export async function getLoanMarketCheckHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  ok(res, await getLoanMarketCheck(req.user.id, req.params['id']!));
 }
 
 export async function addPaymentHandler(req: Request, res: Response) {
