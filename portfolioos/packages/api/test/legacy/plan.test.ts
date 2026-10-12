@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
+import { runInTransaction } from '../../src/lib/prisma.js';
 import { getOverview, saveSettings, addNominee, activate, pause, revoke, removeNominee } from '../../src/services/legacy/plan.service.js';
 import { imOk, answerVerify } from '../../src/services/legacy/publicLinks.service.js';
 import { createLinkToken, createNomineeSession, resolveNomineeSession } from '../../src/services/legacy/tokens.service.js';
@@ -58,7 +59,7 @@ describe('legacy plan service', () => {
     await s.runAs(() => addNominee(s.userId, nominee));
     await s.runAs(() => activate(s.userId));
     const plan = await runAsSystem(() => prisma.legacyPlan.update({ where: { userId: s.userId }, data: { status: 'WARNING_1', stageEnteredAt: new Date() } }));
-    const token = await runAsSystem(() => prisma.$transaction((tx) => createLinkToken(tx, { planId: plan.id, userId: s.userId, nomineeId: null, purpose: 'IM_OK', cycle: plan.cycle, now: new Date() })));
+    const token = await runAsSystem(() => runInTransaction((tx) => createLinkToken(tx, { planId: plan.id, userId: s.userId, nomineeId: null, purpose: 'IM_OK', cycle: plan.cycle, now: new Date() })));
     expect(await imOk(token)).toEqual({ ok: true });
     const after = await runAsSystem(() => prisma.legacyPlan.findUniqueOrThrow({ where: { id: plan.id } }));
     expect(after.status).toBe('ARMED');
@@ -70,7 +71,7 @@ describe('legacy plan service', () => {
     await s.runAs(() => activate(s.userId));
     const mk = async () => {
       const p = await runAsSystem(() => prisma.legacyPlan.update({ where: { userId: s.userId }, data: { status: 'GRACE', stageEnteredAt: new Date() } }));
-      return runAsSystem(() => prisma.$transaction((tx) => createLinkToken(tx, { planId: p.id, userId: s.userId, nomineeId: n.id, purpose: 'VERIFY', cycle: p.cycle, now: new Date() })));
+      return runAsSystem(() => runInTransaction((tx) => createLinkToken(tx, { planId: p.id, userId: s.userId, nomineeId: n.id, purpose: 'VERIFY', cycle: p.cycle, now: new Date() })));
     };
     expect(await answerVerify(await mk(), 'FINE')).toEqual({ ok: true });
     expect((await s.runAs(() => getOverview(s.userId, true))).status).toBe('ARMED');

@@ -126,7 +126,7 @@ export function LegacyPage() {
           <div className="space-y-1">
             <Label htmlFor="lg-days">Inactive for (days, at least {LEGACY_MIN_INACTIVITY_DAYS})</Label>
             <Input id="lg-days" type="number" min={LEGACY_MIN_INACTIVITY_DAYS} value={days} disabled={!canEdit}
-              onChange={(e) => setDays(Math.trunc(Number(e.target.value)) || 0)} />
+              onChange={(e) => setDays(Number.parseInt(e.target.value, 10) || 0)} />
             <p className="text-xs text-muted-foreground">Then 3 email reminders a week apart, and a 7-day notice to nominees, before anything is shared.</p>
           </div>
         )}

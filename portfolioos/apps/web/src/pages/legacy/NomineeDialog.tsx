@@ -47,7 +47,7 @@ export function NomineeDialog({ open, initial, onSave, onClose }: {
               <Input id="ln-rel" value={v.relationship} placeholder="Spouse" onChange={(e) => setV({ ...v, relationship: e.target.value })} /></div>
             <div className="space-y-1"><Label htmlFor="ln-pri">Priority</Label>
               <Input id="ln-pri" type="number" min={1} max={20} value={v.priority}
-                onChange={(e) => setV({ ...v, priority: Math.min(20, Math.max(1, Math.trunc(Number(e.target.value)) || 1)) })} /></div>
+                onChange={(e) => setV({ ...v, priority: Math.min(20, Math.max(1, Number.parseInt(e.target.value, 10) || 1)) })} /></div>
           </div>
           <fieldset>
             <legend className="mb-1 text-sm font-medium">What they can see</legend>

@@ -2,7 +2,7 @@ import type { LegacyNominee, LegacyPlan } from '@prisma/client';
 import {
   LEGACY_MAX_PAUSE_DAYS, type LegacyCategory, type LegacyNomineeDTO, type LegacyOverviewDTO,
 } from '@everypaisa/shared';
-import { prisma } from '../../lib/prisma.js';
+import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { encryptSecret, decryptSecret } from '../../lib/secrets.js';
 import { BadRequestError, NotFoundError } from '../../lib/errors.js';
@@ -112,7 +112,7 @@ async function validateNominee(userId: string, planId: string, input: LegacyNomi
 
 /** Invite a nominee on a live plan; on an already-released plan, also hand them access. */
 async function inviteIfLive(planId: string, nomineeId: string): Promise<void> {
-  const queued = await runAsSystem(() => prisma.$transaction(async (tx) => {
+  const queued = await runAsSystem(() => runInTransaction(async (tx) => {
     const plan = await tx.legacyPlan.findUniqueOrThrow({ where: { id: planId } });
     if (plan.status === 'DRAFT') return false;
     const now = new Date();
@@ -205,7 +205,7 @@ export async function pause(userId: string, until: string): Promise<void> {
   const max = new Date(Date.now() + LEGACY_MAX_PAUSE_DAYS * DAY).toISOString().slice(0, 10);
   if (until <= todayIso() || until > max) throw new BadRequestError(`Pause for up to ${LEGACY_MAX_PAUSE_DAYS} days.`);
   const wasGrace = plan.status === 'GRACE';
-  await runAsSystem(() => prisma.$transaction(async (tx) => {
+  await runAsSystem(() => runInTransaction(async (tx) => {
     const p = await tx.legacyPlan.update({
       where: { id: plan.id },
       data: { status: 'PAUSED', pausedUntil: new Date(`${until}T00:00:00Z`), stageEnteredAt: null, cycle: { increment: 1 } },
@@ -234,7 +234,7 @@ export async function resume(userId: string): Promise<void> {
 /** Back to DRAFT: every link and session for the plan stops working. */
 export async function deactivate(userId: string): Promise<void> {
   const plan = await ensurePlan(userId);
-  await runAsSystem(() => prisma.$transaction(async (tx) => {
+  await runAsSystem(() => runInTransaction(async (tx) => {
     await wipeNomineeAccess(tx, plan.id);
     await tx.legacyToken.deleteMany({ where: { planId: plan.id } });
     await tx.legacyPlan.update({
@@ -249,7 +249,7 @@ export async function deactivate(userId: string): Promise<void> {
 export async function revoke(userId: string, nomineeId?: string): Promise<void> {
   const plan = await ensurePlan(userId);
   if (plan.status !== 'RELEASED') throw new BadRequestError('Nothing has been shared yet.');
-  await runAsSystem(() => prisma.$transaction(async (tx) => {
+  await runAsSystem(() => runInTransaction(async (tx) => {
     const targets = await tx.legacyNominee.findMany({ where: { planId: plan.id, ...(nomineeId ? { id: nomineeId } : {}) } });
     if (nomineeId && targets.length === 0) throw new NotFoundError('Nominee not found');
     let cycle = plan.cycle;

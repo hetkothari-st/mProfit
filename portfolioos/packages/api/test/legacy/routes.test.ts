@@ -14,6 +14,7 @@ import { errorHandler } from '../../src/middleware/errorHandler.js';
 import { signAccessToken } from '../../src/services/jwt.service.js';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
+import { runInTransaction } from '../../src/lib/prisma.js';
 import { encryptSecret } from '../../src/lib/secrets.js';
 import { createLinkToken, createNomineeSession, issueNomineeOtp } from '../../src/services/legacy/tokens.service.js';
 
@@ -78,7 +79,7 @@ describe('legacy routes', () => {
   });
 
   it('wrong OTP is refused; right OTP yields a working session', async () => {
-    const access = await runAsSystem(() => prisma.$transaction((tx) =>
+    const access = await runAsSystem(() => runInTransaction((tx) =>
       createLinkToken(tx, { planId, userId: s.userId, nomineeId, purpose: 'ACCESS', cycle: 1, now: new Date() })));
     const code = await issueNomineeOtp(nomineeId, s.userId);
     const bad = await call('POST', `/api/legacy-public/access/${access}/session`, {}, { code: code === '000000' ? '111111' : '000000' });

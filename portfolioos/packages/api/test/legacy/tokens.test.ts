@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
+import { runInTransaction } from '../../src/lib/prisma.js';
 import {
   createLinkToken, resolveLinkToken, issueNomineeOtp, verifyNomineeOtp,
   createNomineeSession, resolveNomineeSession, startOwnerStepUp, verifyOwnerStepUp, checkOwnerGrant,
@@ -27,7 +28,7 @@ describe('legacy tokens', () => {
 
   it('link token resolves by purpose, not other purposes, and expires', async () => {
     const now = new Date('2027-01-01T00:00:00Z');
-    const raw = await runAsSystem(() => prisma.$transaction((tx) =>
+    const raw = await runAsSystem(() => runInTransaction((tx) =>
       createLinkToken(tx, { planId, userId: s.userId, nomineeId, purpose: 'ACCESS', cycle: 1, now })));
     expect((await resolveLinkToken(raw, 'ACCESS', now))?.nomineeId).toBe(nomineeId);
     expect(await resolveLinkToken(raw, 'IM_OK', now)).toBeNull();

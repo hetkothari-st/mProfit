@@ -1,4 +1,4 @@
-import { prisma } from '../../lib/prisma.js';
+import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { writeAuditLog } from '../../lib/audit.js';
 import { resolveLinkToken } from './tokens.service.js';
@@ -23,7 +23,7 @@ export async function imOk(token: string, now: Date = new Date()): Promise<{ ok:
   // An old cycle's link still records activity but must not reset a newer countdown stage.
   if (t.cycle === t.plan.cycle && COUNTDOWN.has(t.plan.status)) {
     const fromGrace = t.plan.status === 'GRACE';
-    await runAsSystem(() => prisma.$transaction((tx) => resetPlan(tx, t.plan, now, fromGrace)));
+    await runAsSystem(() => runInTransaction((tx) => resetPlan(tx, t.plan, now, fromGrace)));
     if (fromGrace) await flushOutbox();
   }
   await writeAuditLog({ userId: t.userId, action: 'legacy_im_ok', resource: `LegacyPlan:${t.planId}` });
@@ -53,7 +53,7 @@ export async function peekVerify(token: string, now: Date = new Date()): Promise
 export async function answerVerify(token: string, answer: 'CONFIRM' | 'FINE', now: Date = new Date()): Promise<{ ok: boolean }> {
   const t = await liveVerifyToken(token, now);
   if (!t) return { ok: false };
-  await runAsSystem(() => prisma.$transaction(async (tx) => {
+  await runAsSystem(() => runInTransaction(async (tx) => {
     await tx.legacyToken.update({ where: { id: t.id }, data: { usedAt: now } });
     if (answer === 'CONFIRM') {
       await releasePlan(tx, t.plan, now);

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
+import { runInTransaction } from '../../src/lib/prisma.js';
 import { encryptSecret } from '../../src/lib/secrets.js';
 import { enqueue, flushOutbox } from '../../src/services/legacy/outbox.service.js';
 import type { SendEmailInput } from '../../src/services/notifications/email.service.js';
@@ -18,11 +19,19 @@ describe('legacy outbox', () => {
   afterAll(async () => { await runAsSystem(() => prisma.legacyPlan.deleteMany({ where: { userId: s.userId } })); await s.cleanup(); });
 
   it('enqueue is send-once per (plan, kind, cycle, recipient)', async () => {
-    await runAsSystem(() => prisma.$transaction(async (tx) => {
+    await runAsSystem(() => runInTransaction(async (tx) => {
       await enqueue(tx, { planId, userId: s.userId, kind: 'INVITE', cycle: 1, recipientKey: nomineeId, token: 'tok' });
       await enqueue(tx, { planId, userId: s.userId, kind: 'INVITE', cycle: 1, recipientKey: nomineeId, token: 'tok2' });
     }));
     expect(await runAsSystem(() => prisma.legacyOutbox.count({ where: { planId } }))).toBe(1);
+  });
+
+  it('an enqueue inside a failed transaction is rolled back (state and mail commit together)', async () => {
+    await expect(runAsSystem(() => runInTransaction(async (tx) => {
+      await enqueue(tx, { planId, userId: s.userId, kind: 'RELEASED_OWNER', cycle: 9, recipientKey: 'owner' });
+      throw new Error('boom');
+    }))).rejects.toThrow('boom');
+    expect(await runAsSystem(() => prisma.legacyOutbox.count({ where: { planId, kind: 'RELEASED_OWNER' } }))).toBe(0);
   });
 
   it('failed send is retried on next flush, then marked sent with the link token cleared', async () => {

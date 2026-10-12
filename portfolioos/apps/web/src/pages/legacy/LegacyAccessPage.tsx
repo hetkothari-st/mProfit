@@ -14,12 +14,14 @@ const key = (t: string) => `legacy.session.${t.slice(0, 12)}`;
 function readSess(t: string): string | null {
   try { return sessionStorage.getItem(key(t)); } catch { return null; }
 }
-function writeSess(t: string, v: string | null): void {
+/** False when storage is blocked (private mode); the session then lives in component state only. */
+function writeSess(t: string, v: string | null): boolean {
   try {
     if (v) sessionStorage.setItem(key(t), v);
     else sessionStorage.removeItem(key(t));
+    return true;
   } catch {
-    // Private mode / blocked storage: the session stays in component state.
+    return false;
   }
 }
 

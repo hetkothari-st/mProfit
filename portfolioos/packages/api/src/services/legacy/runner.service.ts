@@ -1,5 +1,5 @@
 import type { LegacyPlan, Prisma } from '@prisma/client';
-import { prisma } from '../../lib/prisma.js';
+import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { logger } from '../../lib/logger.js';
 import { writeAuditLog, type AuditAction } from '../../lib/audit.js';
@@ -83,7 +83,7 @@ function auditFor(step: Step): AuditAction | null {
 }
 
 export async function applyStep(planId: string, step: Step, now: Date): Promise<void> {
-  const plan = await runAsSystem(() => prisma.$transaction(async (tx) => {
+  const plan = await runAsSystem(() => runInTransaction(async (tx) => {
     const p = await tx.legacyPlan.findUniqueOrThrow({ where: { id: planId } });
     switch (step.kind) {
       case 'reset':
