@@ -19,7 +19,8 @@ export interface UseWillDraft {
   error: string | null;
   update: <S extends WillSection>(section: S, data: WillSectionData[S]) => void;
   flush: (currentStep?: number) => Promise<boolean>;
-  refreshEstate: () => Promise<void>;
+  /** Resolves false when the refresh did not complete. */
+  refreshEstate: () => Promise<boolean>;
   reload: () => Promise<void>;
   getRevision: () => number;
 }
@@ -156,8 +157,8 @@ export function useWillDraft(id: string, opts: { debounceMs?: number; api?: Will
     [enqueue],
   );
 
-  const refreshEstate = useCallback(async () => {
-    if (!(await flush())) return;
+  const refreshEstate = useCallback(async (): Promise<boolean> => {
+    if (!(await flush())) return false;
     setSaving(true);
     try {
       const res = await client.refreshEstate(id, revisionRef.current);
@@ -166,6 +167,7 @@ export function useWillDraft(id: string, opts: { debounceMs?: number; api?: Will
       payloadRef.current = next;
       setPayload(next);
       setError(null);
+      return true;
     } catch (err) {
       if (isWillRevisionConflict(err)) {
         frozen.current = true;
@@ -173,6 +175,7 @@ export function useWillDraft(id: string, opts: { debounceMs?: number; api?: Will
       } else {
         setError(apiErrorMessage(err, "Couldn't refresh your assets"));
       }
+      return false;
     } finally {
       setSaving(false);
     }

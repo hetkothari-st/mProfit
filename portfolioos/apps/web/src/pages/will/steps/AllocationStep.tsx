@@ -4,11 +4,10 @@ import { Decimal, formatINR, sumPercents, type WillAllocation } from '@everypais
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/cn';
 import { DecimalField } from '../DecimalField';
-import { equalShares, isAmountText, normaliseAmountText } from '../allocationMath';
+import { equalShares } from '../allocationMath';
 import { Field, FindingList } from '../parts';
 import type { WillStepProps } from './types';
 
@@ -36,10 +35,14 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
   const total = sumPercents(a.residuary.map((r) => r.sharePct));
   const remaining = new Decimal(100).minus(total);
   const notInSplit = people.filter((p) => !a.residuary.some((r) => r.personId === p.id));
-  const giftable = payload.estate.items.filter((i) => i.side === 'ASSET' && i.review !== 'EXCLUDED');
+  // Nominee-only money passes by nomination, so it cannot be gifted by will.
+  const giftable = payload.estate.items.filter((i) => i.side === 'ASSET' && i.review !== 'EXCLUDED' && i.ownership.type !== 'NOMINEE_ONLY');
+  const remainingOf = (key: string) =>
+    Decimal.max(0, new Decimal(100).minus(sumPercents(a.specificGifts.filter((g) => g.itemId === key).map((g) => g.sharePct))));
+  const duplicateGift = a.specificGifts.some((g) => g.itemId === giftItem && g.personId === giftPerson);
   const slices = [
-    ...a.residuary.map((r) => ({ name: nameOf(r.personId), value: new Decimal(r.sharePct).toNumber() })),
-    ...(remaining.greaterThan(0) ? [{ name: 'Not shared yet', value: remaining.toNumber() }] : []),
+    ...a.residuary.map((r) => ({ id: r.personId, name: nameOf(r.personId), value: new Decimal(r.sharePct).toNumber() })),
+    ...(remaining.greaterThan(0) ? [{ id: 'unshared', name: 'Not shared yet', value: remaining.toNumber() }] : []),
   ];
 
   return (
@@ -108,7 +111,7 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
                 <PieChart>
                   <Pie data={slices} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="85%" stroke="none">
                     {slices.map((s, i) => (
-                      <Cell key={s.name} fill={s.name === 'Not shared yet' ? 'hsl(var(--muted))' : SLICE_COLOURS[i % SLICE_COLOURS.length]} />
+                      <Cell key={s.id} fill={s.id === 'unshared' ? 'hsl(var(--muted))' : SLICE_COLOURS[i % SLICE_COLOURS.length]} />
                     ))}
                   </Pie>
                   <Tooltip {...TOOLTIP_PROPS} formatter={(v: number) => `${v.toFixed(2)}%`} />
@@ -122,7 +125,7 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
           <Card className="min-w-0 space-y-3 p-4 sm:p-5">
             <ul className="space-y-2">
               {a.specificGifts.map((g, i) => (
-                <li key={`${g.itemId}-${g.personId}`} className="flex flex-wrap items-start gap-2 rounded-md border border-border/60 p-2">
+                <li key={`${g.itemId}|${g.personId}`} className="flex flex-wrap items-start gap-2 rounded-md border border-border/60 p-2">
                   <span className="min-w-0 flex-1 break-words pt-2 text-sm text-foreground">
                     {itemOf(g.itemId)?.label ?? 'Item no longer in your list'} - {nameOf(g.personId)}
                   </span>
@@ -137,11 +140,15 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
                 </li>
               ))}
             </ul>
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+            <div className={cn('grid gap-3', wide && 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end')}>
               <Field id="will-gift-item" label="Asset">
                 <Select id="will-gift-item" value={giftItem} onChange={(e) => setGiftItem(e.target.value)}>
                   <option value="">Choose an asset...</option>
-                  {giftable.map((i) => <option key={i.sourceKey} value={i.sourceKey}>{i.ref ? `${i.label} (${i.ref})` : i.label}</option>)}
+                  {giftable.map((i) => {
+                    const left = remainingOf(i.sourceKey);
+                    const name = `${i.ref ? `${i.label} (${i.ref})` : i.label}${i.review === 'STALE' ? ' (not found in latest refresh)' : ''}`;
+                    return <option key={i.sourceKey} value={i.sourceKey} disabled={left.lte(0)}>{name} - {left.toFixed(left.isInteger() ? 0 : 2)}% left</option>;
+                  })}
                 </Select>
               </Field>
               <Field id="will-gift-person" label="To">
@@ -152,9 +159,9 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
               </Field>
               <Button
                 size="sm"
-                disabled={!giftItem || !giftPerson}
+                disabled={!giftItem || !giftPerson || duplicateGift}
                 onClick={() => {
-                  set({ specificGifts: [...a.specificGifts, { itemId: giftItem, personId: giftPerson, sharePct: '100' }] });
+                  set({ specificGifts: [...a.specificGifts, { itemId: giftItem, personId: giftPerson, sharePct: remainingOf(giftItem).toFixed(2) }] });
                   setGiftItem('');
                   setGiftPerson('');
                 }}
@@ -162,6 +169,9 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
                 Add gift
               </Button>
             </div>
+            {duplicateGift && (
+              <p className="text-xs text-muted-foreground">{nameOf(giftPerson)} already has a share of this asset. Change that share above instead.</p>
+            )}
           </Card>
         </TabsContent>
 
@@ -178,12 +188,12 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
                     value={g.amount}
                     onValid={(v) => set({ fixedGifts: a.fixedGifts.map((x, j) => (j === i ? { ...x, amount: v } : x)) })}
                   />
-                  <span className="pt-2 text-xs text-muted-foreground tabular-nums">{formatINR(g.amount, { fractionDigits: 0 })}</span>
+                  <span className="pt-2 text-xs text-muted-foreground tabular-nums">{formatINR(g.amount, { fractionDigits: new Decimal(g.amount).isInteger() ? 0 : 2 })}</span>
                   <Button size="sm" variant="ghost" onClick={() => set({ fixedGifts: a.fixedGifts.filter((_, j) => j !== i) })}>Remove</Button>
                 </li>
               ))}
             </ul>
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+            <div className={cn('grid gap-3', wide && 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end')}>
               <Field id="will-fixed-person" label="Person">
                 <Select id="will-fixed-person" value={fixedPerson} onChange={(e) => setFixedPerson(e.target.value)}>
                   <option value="">Choose a person...</option>
@@ -191,13 +201,13 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
                 </Select>
               </Field>
               <Field id="will-fixed-amount" label="Amount">
-                <Input id="will-fixed-amount" inputMode="decimal" value={fixedAmount} onChange={(e) => setFixedAmount(e.target.value)} />
+                <DecimalField id="will-fixed-amount" label="Amount" kind="amount" value={fixedAmount} onValid={setFixedAmount} onInvalid={() => setFixedAmount('')} />
               </Field>
               <Button
                 size="sm"
-                disabled={!fixedPerson || !isAmountText(fixedAmount)}
+                disabled={!fixedPerson || fixedAmount === ''}
                 onClick={() => {
-                  set({ fixedGifts: [...a.fixedGifts, { personId: fixedPerson, amount: normaliseAmountText(fixedAmount) }] });
+                  set({ fixedGifts: [...a.fixedGifts, { personId: fixedPerson, amount: fixedAmount }] });
                   setFixedPerson('');
                   setFixedAmount('');
                 }}

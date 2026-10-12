@@ -10,7 +10,8 @@ export interface WillStepProps {
   /** True when the content area is at least 640 px wide. */
   wide: boolean;
   update: <S extends WillSection>(section: S, data: WillSectionData[S]) => void;
-  refreshEstate: () => Promise<void>;
+  /** Resolves false when the refresh failed (the mocks in tests may resolve undefined). */
+  refreshEstate: () => Promise<boolean | undefined>;
   /** Save pending edits now; resolves false if they could not be saved. */
   flush: () => Promise<boolean>;
   getRevision: () => number;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import {
-  formatDateOnly, formatINR, removeWillItem, willEstateTotals, WILL_MANUAL_ITEM_PREFIX, WILL_OWNERSHIP_TYPES,
+  Decimal, formatDateOnly, formatINR, itemShareValue, removeWillItem, willEstateTotals, WILL_MANUAL_ITEM_PREFIX, WILL_OWNERSHIP_TYPES,
   type WillAssetItem, type WillEstateKind, type WillOwnershipType, type WillReviewState,
 } from '@everypaisa/shared';
 import { Card } from '@/components/ui/card';
@@ -11,7 +11,6 @@ import { Select } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/cn';
 import { DecimalField } from '../DecimalField';
-import { isAmountText, normaliseAmountText } from '../allocationMath';
 import { Field, FindingList, newLocalId, Notice } from '../parts';
 import type { WillStepProps } from './types';
 
@@ -36,6 +35,23 @@ const SOURCE_LABEL: Record<string, string> = {
 interface RowActions {
   patch: (key: string, p: Partial<WillAssetItem>) => void;
   remove: (key: string) => void;
+  hasGifts: (key: string) => boolean;
+}
+
+const rupees = (v: string) => formatINR(v, { fractionDigits: 0 });
+
+/** The value this person owns, with a small note when it is only a share of the whole. */
+function ValueCell({ item, align }: { item: WillAssetItem; align: 'right' | 'left' }) {
+  const own = itemShareValue(item);
+  const partial = !new Decimal(item.ownership.sharePct).equals(100);
+  return (
+    <div className={cn('min-w-0 break-words tabular-nums', align === 'right' && 'text-right')}>
+      <p className="font-medium text-foreground">{rupees(own.toFixed(2))}</p>
+      {partial && (
+        <p className="text-xs text-muted-foreground">({item.ownership.sharePct}% share of {rupees(item.value)})</p>
+      )}
+    </div>
+  );
 }
 
 function OwnershipControl({ item, actions }: { item: WillAssetItem; actions: RowActions }) {
@@ -69,8 +85,9 @@ function OwnershipControl({ item, actions }: { item: WillAssetItem; actions: Row
 
 function ReviewControl({ item, actions }: { item: WillAssetItem; actions: RowActions }) {
   const manual = item.sourceKey.startsWith(WILL_MANUAL_ITEM_PREFIX);
+  const [editing, setEditing] = useState(false);
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <span className={cn('text-xs font-medium', REVIEW_TONE[item.review])}>{REVIEW_LABEL[item.review]}</span>
       {(item.review === 'NEEDS_REVIEW' || item.review === 'STALE') && (
         <Button size="sm" variant="ghost" onClick={() => actions.patch(item.sourceKey, { review: 'CONFIRMED' })}>Confirm</Button>
@@ -80,7 +97,20 @@ function ReviewControl({ item, actions }: { item: WillAssetItem; actions: RowAct
       ) : (
         <Button size="sm" variant="ghost" onClick={() => actions.patch(item.sourceKey, { review: 'EXCLUDED' })}>Exclude</Button>
       )}
+      {manual && <Button size="sm" variant="ghost" onClick={() => setEditing((e) => !e)}>{editing ? 'Done' : 'Edit value'}</Button>}
       {manual && <Button size="sm" variant="ghost" onClick={() => actions.remove(item.sourceKey)}>Remove</Button>}
+      {editing && (
+        <DecimalField
+          className="w-full"
+          kind="amount"
+          label={`Value of ${item.label}`}
+          value={item.value}
+          onValid={(v) => actions.patch(item.sourceKey, { value: v })}
+        />
+      )}
+      {item.review === 'EXCLUDED' && actions.hasGifts(item.sourceKey) && (
+        <p className="w-full text-xs text-warning">This item has gifts in step 5 - they will be flagged.</p>
+      )}
     </div>
   );
 }
@@ -103,9 +133,9 @@ function ItemTable({ items, actions }: { items: WillAssetItem[]; actions: RowAct
     <table className="w-full table-fixed text-sm">
       <thead>
         <tr className="text-left text-xs text-muted-foreground">
-          <th className="w-[34%] py-2 font-medium">Item</th>
-          <th className="w-[16%] py-2 text-right font-medium">Value</th>
-          <th className="w-[26%] py-2 pl-3 font-medium">Ownership</th>
+          <th className="w-[30%] py-2 font-medium">Item</th>
+          <th className="w-[22%] py-2 text-right font-medium">Value</th>
+          <th className="w-[24%] py-2 pl-3 font-medium">Ownership</th>
           <th className="w-[24%] py-2 font-medium">Status</th>
         </tr>
       </thead>
@@ -113,7 +143,7 @@ function ItemTable({ items, actions }: { items: WillAssetItem[]; actions: RowAct
         {items.map((i) => (
           <tr key={i.sourceKey} data-testid={`estate-item-${i.sourceKey}`} className="align-top">
             <td className="py-2 pr-2"><Describe item={i} /></td>
-            <td className="py-2 text-right tabular-nums text-foreground">{formatINR(i.value, { fractionDigits: 0 })}</td>
+            <td className="py-2"><ValueCell item={i} align="right" /></td>
             <td className="py-2 pl-3"><OwnershipControl item={i} actions={actions} /></td>
             <td className="py-2"><ReviewControl item={i} actions={actions} /></td>
           </tr>
@@ -130,7 +160,7 @@ function ItemCards({ items, actions }: { items: WillAssetItem[]; actions: RowAct
         <li key={i.sourceKey} data-testid={`estate-item-${i.sourceKey}`} className="space-y-2 rounded-md border border-border/60 p-3">
           <div className="flex items-start justify-between gap-2">
             <Describe item={i} />
-            <span className="shrink-0 tabular-nums text-sm font-medium text-foreground">{formatINR(i.value, { fractionDigits: 0 })}</span>
+            <div className="max-w-[50%] shrink-0 text-sm"><ValueCell item={i} align="right" /></div>
           </div>
           <OwnershipControl item={i} actions={actions} />
           <ReviewControl item={i} actions={actions} />
@@ -140,7 +170,7 @@ function ItemCards({ items, actions }: { items: WillAssetItem[]; actions: RowAct
   );
 }
 
-function AddManual({ today, onAdd }: { today: string; onAdd: (i: WillAssetItem) => void }) {
+function AddManual({ today, wide, onAdd }: { today: string; wide: boolean; onAdd: (i: WillAssetItem) => void }) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState('');
   const [side, setSide] = useState<'ASSET' | 'LIABILITY'>('ASSET');
@@ -148,10 +178,10 @@ function AddManual({ today, onAdd }: { today: string; onAdd: (i: WillAssetItem) 
   if (!open) {
     return <Button size="sm" variant="outline" onClick={() => setOpen(true)}>Add an asset or liability</Button>;
   }
-  const ready = label.trim().length > 0 && isAmountText(value);
+  const ready = label.trim().length > 0 && value !== '';
   return (
     <Card tone="muted" className="space-y-3 p-3">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className={cn('grid gap-3', wide && 'grid-cols-3')}>
         <Field id="will-manual-label" label="What is it">
           <Input id="will-manual-label" value={label} maxLength={160} onChange={(e) => setLabel(e.target.value)} />
         </Field>
@@ -162,7 +192,7 @@ function AddManual({ today, onAdd }: { today: string; onAdd: (i: WillAssetItem) 
           </Select>
         </Field>
         <Field id="will-manual-value" label="Value">
-          <Input id="will-manual-value" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} />
+          <DecimalField id="will-manual-value" label="Value" kind="amount" value={value} onValid={setValue} onInvalid={() => setValue('')} />
         </Field>
       </div>
       <div className="flex gap-2">
@@ -172,7 +202,7 @@ function AddManual({ today, onAdd }: { today: string; onAdd: (i: WillAssetItem) 
           onClick={() => {
             onAdd({
               sourceKey: `${WILL_MANUAL_ITEM_PREFIX}${newLocalId('m')}`, side, kind: side === 'ASSET' ? 'OTHER_ASSET' : 'OTHER_LIABILITY',
-              label: label.trim(), ref: null, value: normaliseAmountText(value), valueAsOf: today,
+              label: label.trim(), ref: null, value: value, valueAsOf: today,
               ownership: { type: 'SOLE', sharePct: '100' }, review: 'CONFIRMED', userEdited: true, note: null,
             });
             setOpen(false);
@@ -191,12 +221,14 @@ function AddManual({ today, onAdd }: { today: string; onAdd: (i: WillAssetItem) 
 export function EstateStep({ payload, update, refreshEstate, findings, wide, today }: WillStepProps) {
   const estate = payload.estate;
   const [refreshing, setRefreshing] = useState(false);
+  const [failed, setFailed] = useState(false);
   const started = useRef(false);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
+    setFailed(false);
     try {
-      await refreshEstate();
+      if ((await refreshEstate()) === false) setFailed(true);
     } finally {
       setRefreshing(false);
     }
@@ -211,6 +243,7 @@ export function EstateStep({ payload, update, refreshEstate, findings, wide, tod
 
   const actions: RowActions = {
     patch: (key, p) => update('estate', { ...estate, items: estate.items.map((i) => (i.sourceKey === key ? { ...i, ...p } : i)) }),
+    hasGifts: (key) => payload.allocation.specificGifts.some((g) => g.itemId === key),
     remove: (key) => {
       const next = removeWillItem(payload, key);
       update('estate', next.estate);
@@ -228,16 +261,19 @@ export function EstateStep({ payload, update, refreshEstate, findings, wide, tod
       <Card className="space-y-3 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">
-            {estate.asOf ? `As of ${formatDateOnly(estate.asOf)}. Values are estimates.` : 'Fetching your assets...'}
+            {estate.asOf
+              ? `As of ${formatDateOnly(estate.asOf)}. Values are estimates.`
+              : failed ? 'Could not fetch your assets. Try again.' : 'Fetching your assets...'}
           </p>
           <Button size="sm" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
             <RefreshCw className={cn('mr-1 h-4 w-4', refreshing && 'animate-spin')} />Refresh from my accounts
           </Button>
+          {failed && !estate.asOf && <Button size="sm" disabled={refreshing} onClick={() => void refresh()}>Retry</Button>}
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-md border border-border/60 p-3"><p className="text-xs text-muted-foreground">Assets</p><p className="text-lg font-semibold tabular-nums text-foreground">{money(totals.assets)}</p></div>
-          <div className="rounded-md border border-border/60 p-3"><p className="text-xs text-muted-foreground">Liabilities</p><p className="text-lg font-semibold tabular-nums text-foreground">{money(totals.liabilities)}</p></div>
-          <div className="rounded-md border border-border/60 p-3"><p className="text-xs text-muted-foreground">Net</p><p className="text-lg font-semibold tabular-nums text-foreground" data-testid="estate-net">{money(totals.net)}</p></div>
+        <div className={cn('grid grid-cols-1 gap-3', wide && 'grid-cols-3')}>
+          <div className="min-w-0 rounded-md border border-border/60 p-3"><p className="text-xs text-muted-foreground">Assets</p><p className="break-words text-lg font-semibold tabular-nums text-foreground">{money(totals.assets)}</p></div>
+          <div className="min-w-0 rounded-md border border-border/60 p-3"><p className="text-xs text-muted-foreground">Liabilities</p><p className="break-words text-lg font-semibold tabular-nums text-foreground">{money(totals.liabilities)}</p></div>
+          <div className="min-w-0 rounded-md border border-border/60 p-3"><p className="text-xs text-muted-foreground">Net</p><p className="break-words text-lg font-semibold tabular-nums text-foreground" data-testid="estate-net">{money(totals.net)}</p></div>
         </div>
         {totals.nomineeOnly.greaterThan(0) && (
           <p className="text-xs text-muted-foreground">Paid to nominees and not counted: {money(totals.nomineeOnly)}.</p>
@@ -260,7 +296,7 @@ export function EstateStep({ payload, update, refreshEstate, findings, wide, tod
         {liabilities.length ? <List items={liabilities} actions={actions} /> : <p className="text-sm text-muted-foreground">No liabilities.</p>}
       </Card>
 
-      <AddManual today={today} onAdd={(i) => update('estate', { ...estate, items: [...estate.items, i] })} />
+      <AddManual today={today} wide={wide} onAdd={(i) => update('estate', { ...estate, items: [...estate.items, i] })} />
     </div>
   );
 }

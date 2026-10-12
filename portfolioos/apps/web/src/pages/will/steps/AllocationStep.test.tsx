@@ -4,7 +4,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { runWillRules, type WillPayload } from '@everypaisa/shared';
 import { AllocationStep } from './AllocationStep';
 import type { WillStepProps } from './types';
-import { fullPayload, TODAY } from '../willTestData';
+import { fullPayload, item, TODAY } from '../willTestData';
 
 vi.mock('recharts', async (orig) => {
   const actual = await orig<typeof import('recharts')>();
@@ -64,7 +64,7 @@ describe('AllocationStep', () => {
     fireEvent.change(screen.getByLabelText(/^asset$/i), { target: { value: 'bank:b1' } });
     fireEvent.change(screen.getByLabelText(/^to$/i), { target: { value: 'p-spouse' } });
     fireEvent.click(screen.getByRole('button', { name: /add gift/i }));
-    expect(lastAllocation(p).specificGifts.at(-1)).toEqual({ itemId: 'bank:b1', personId: 'p-spouse', sharePct: '100' });
+    expect(lastAllocation(p).specificGifts.at(-1)).toEqual({ itemId: 'bank:b1', personId: 'p-spouse', sharePct: '100.00' });
 
     fireEvent.click(screen.getByRole('tab', { name: /fixed amounts/i }));
     fireEvent.change(screen.getByLabelText(/^person$/i), { target: { value: 'p-son' } });
@@ -81,5 +81,59 @@ describe('AllocationStep', () => {
     const options = Array.from((screen.getByLabelText(/^asset$/i) as HTMLSelectElement).options).map((o) => o.textContent ?? '');
     expect(options.some((o) => o.includes('HDFC'))).toBe(false);
     expect(options.some((o) => o.includes('Home loan'))).toBe(false);
+  });
+
+  it('shows what is left of each asset, disables fully gifted ones and defaults the share', () => {
+    const payload = fullPayload();
+    payload.allocation.specificGifts = [
+      { itemId: 'holdings:pf1:EQUITY', personId: 'p-son', sharePct: '100' },
+      { itemId: 'bank:b1', personId: 'p-son', sharePct: '60' },
+    ];
+    const p = setup(payload);
+    fireEvent.click(screen.getByRole('tab', { name: /specific gifts/i }));
+    const options = Array.from((screen.getByLabelText(/^asset$/i) as HTMLSelectElement).options);
+    const bank = options.find((o) => o.value === 'bank:b1')!;
+    const equity = options.find((o) => o.value === 'holdings:pf1:EQUITY')!;
+    expect(bank.textContent).toContain('40% left');
+    expect(equity.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/^asset$/i), { target: { value: 'bank:b1' } });
+    fireEvent.change(screen.getByLabelText(/^to$/i), { target: { value: 'p-spouse' } });
+    fireEvent.click(screen.getByRole('button', { name: /add gift/i }));
+    expect(lastAllocation(p).specificGifts.at(-1)).toEqual({ itemId: 'bank:b1', personId: 'p-spouse', sharePct: '40.00' });
+  });
+
+  it('blocks adding the same asset to the same person twice', () => {
+    const payload = fullPayload();
+    payload.allocation.specificGifts = [{ itemId: 'bank:b1', personId: 'p-son', sharePct: '30' }];
+    setup(payload);
+    fireEvent.click(screen.getByRole('tab', { name: /specific gifts/i }));
+    fireEvent.change(screen.getByLabelText(/^asset$/i), { target: { value: 'bank:b1' } });
+    fireEvent.change(screen.getByLabelText(/^to$/i), { target: { value: 'p-son' } });
+    expect((screen.getByRole('button', { name: /add gift/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/already has a share of this asset/i)).toBeTruthy();
+  });
+
+  it('does not offer nominee-only items, and marks stale ones', () => {
+    const payload = fullPayload();
+    payload.estate.items.push(
+      item({ sourceKey: 'ins:1', kind: 'INSURANCE', label: 'Term cover', ownership: { type: 'NOMINEE_ONLY', sharePct: '100' } }),
+      item({ sourceKey: 'bank:old', label: 'Old savings', review: 'STALE' }),
+    );
+    setup(payload);
+    fireEvent.click(screen.getByRole('tab', { name: /specific gifts/i }));
+    const options = Array.from((screen.getByLabelText(/^asset$/i) as HTMLSelectElement).options).map((o) => o.textContent ?? '');
+    expect(options.some((o) => o.includes('Term cover'))).toBe(false);
+    expect(options.some((o) => o.includes('Old savings') && o.includes('not found in latest refresh'))).toBe(true);
+  });
+
+  it('rejects a zero fixed amount and shows paise when present', () => {
+    const payload = fullPayload();
+    payload.allocation.fixedGifts = [{ personId: 'p-trust', amount: '50000.50' }];
+    setup(payload);
+    fireEvent.click(screen.getByRole('tab', { name: /fixed amounts/i }));
+    expect(screen.getByText(/50,000\.50/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/^person$/i), { target: { value: 'p-son' } });
+    fireEvent.change(screen.getByLabelText(/^amount$/i), { target: { value: '0' } });
+    expect((screen.getByRole('button', { name: /add amount/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
