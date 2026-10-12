@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Prisma } from '@prisma/client';
-import { ValidationError } from '../../src/lib/errors.js';
+import { NotFoundError, ValidationError } from '../../src/lib/errors.js';
 import {
   computeLoanSummary, createLoan, updateLoan, type CreateLoanInput, type StoredLoan,
 } from '../../src/services/loans.service.js';
@@ -17,8 +17,15 @@ const BASE: CreateLoanInput = {
 const iso = (d: Date | null) => (d === null ? null : d.toISOString().slice(0, 10));
 
 let user: TestScope;
-beforeAll(async () => { user = await createTestScope('loan-rate-fields'); });
-afterAll(async () => { await user.cleanup(); });
+let other: TestScope;
+beforeAll(async () => {
+  user = await createTestScope('loan-rate-fields');
+  other = await createTestScope('loan-rate-fields-other');
+});
+afterAll(async () => {
+  await user.cleanup();
+  await other.cleanup();
+});
 const as = <T>(fn: () => Promise<T>) => user.runAs(fn);
 
 describe('loan rate fields (spec s6.1)', () => {
@@ -51,6 +58,29 @@ describe('loan rate fields (spec s6.1)', () => {
     const moved = await as(() => updateLoan(user.userId, loan.id, { nextRateResetDate: '2027-02-01' }));
     expect(moved.rateBenchmark).toBe('REPO');
     expect(iso(moved.nextRateResetDate)).toBe('2027-02-01');
+  });
+
+  it('refuses a reset date that is not on the calendar (2026-02-30), on create and on update', async () => {
+    const create = as(() => createLoan(user.userId, { ...BASE, rateType: 'FLOATING', rateBenchmark: 'REPO', nextRateResetDate: '2026-02-30' }));
+    await expect(create).rejects.toBeInstanceOf(ValidationError);
+    await expect(create).rejects.toMatchObject({ statusCode: 422, details: { field: 'nextRateResetDate' } });
+    const loan = await as(() => createLoan(user.userId, { ...BASE, rateType: 'FLOATING', rateBenchmark: 'REPO' }));
+    await expect(as(() => updateLoan(user.userId, loan.id, { nextRateResetDate: '2026-02-30' }))).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('an UNKNOWN loan becomes FLOATING with its benchmark and reset date in one patch', async () => {
+    const loan = await as(() => createLoan(user.userId, BASE));
+    const updated = await as(() => updateLoan(user.userId, loan.id, { rateType: 'FLOATING', rateBenchmark: 'MCLR', nextRateResetDate: '2027-04-01' }));
+    expect(updated).toMatchObject({ rateType: 'FLOATING', rateBenchmark: 'MCLR' });
+    expect(iso(updated.nextRateResetDate)).toBe('2027-04-01');
+  });
+
+  it("another user's loan cannot be updated: not found, and nothing changes", async () => {
+    const loan = await as(() => createLoan(user.userId, BASE));
+    await expect(other.runAs(() => updateLoan(other.userId, loan.id, { rateType: 'FLOATING', rateBenchmark: 'REPO' })))
+      .rejects.toBeInstanceOf(NotFoundError);
+    const after = await as(() => updateLoan(user.userId, loan.id, {}));
+    expect(after).toMatchObject({ rateType: 'UNKNOWN', rateBenchmark: null });
   });
 
   it('an unrelated edit leaves the rate fields alone', async () => {

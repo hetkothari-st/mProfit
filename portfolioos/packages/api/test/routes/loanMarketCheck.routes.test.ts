@@ -168,3 +168,38 @@ describe('GET /api/loans/:id/market-check', () => {
     expect(new Decimal(b.outstanding).lessThan(new Decimal(without.outstandingBalance))).toBe(true);
   });
 });
+
+describe('PATCH /api/loans/:id rate fields (final review)', () => {
+  async function patch(loanId: string, payload: unknown, as: TestScope = user): Promise<Response> {
+    return fetch(`${base}/api/loans/${loanId}`, {
+      method: 'PATCH',
+      headers: { authorization: `Bearer ${token(as)}`, 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  it('the body schema refuses an unknown rate type, an unknown benchmark and a malformed date with 422', async () => {
+    const l = await loan(user, { rateType: 'UNKNOWN' });
+    for (const bad of [{ rateType: 'VARIABLE' }, { rateBenchmark: 'LIBOR' }, { nextRateResetDate: '01/01/2027' }]) {
+      const res = await patch(l.id, bad);
+      expect(res.status, JSON.stringify(bad)).toBe(422);
+      expect((await res.json()).code).toBe('VALIDATION_ERROR');
+    }
+  });
+
+  it('a reset date that is not on the calendar is 422, not rolled forward', async () => {
+    const l = await loan(user, { rateType: 'FLOATING', rateBenchmark: 'REPO' });
+    const res = await patch(l.id, { nextRateResetDate: '2026-02-30' });
+    expect(res.status).toBe(422);
+    const stored = await sys(() => prisma.loan.findUniqueOrThrow({ where: { id: l.id } }));
+    expect(stored.nextRateResetDate).toBeNull();
+  });
+
+  it('FLOATING with a benchmark in one patch; another user gets 404', async () => {
+    const l = await loan(user, { rateType: 'UNKNOWN' });
+    expect((await patch(l.id, { rateType: 'FLOATING', rateBenchmark: 'REPO' }, other)).status).toBe(404);
+    const res = await patch(l.id, { rateType: 'FLOATING', rateBenchmark: 'REPO', nextRateResetDate: '2027-01-01' });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toMatchObject({ rateType: 'FLOATING', rateBenchmark: 'REPO' });
+  });
+});

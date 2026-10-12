@@ -16,6 +16,7 @@ import { logger } from '../lib/logger.js';
 import { serializeMoney, type LoanRateBenchmark, type LoanRateType } from '@everypaisa/shared';
 import { loanAccountNumberColumns, PLATE_SELECT, readLoanAccountNumber, revealVehicle } from './piiAtRest.service.js';
 import { last4 } from './pfCredentials.service.js';
+import { isRealDate } from './loanRates/sanity.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -166,6 +167,10 @@ export function resolveRateFields(
   input: Pick<UpdateLoanInput, 'rateType' | 'rateBenchmark' | 'nextRateResetDate'>,
   existing: { rateType: string } | null,
 ): RateFieldsData {
+  // The body schema only checks the shape; 2026-02-30 must be refused, not rolled to 2 March.
+  if (typeof input.nextRateResetDate === 'string' && !isRealDate(input.nextRateResetDate)) {
+    throw new ValidationError('Not a real date', { field: 'nextRateResetDate' });
+  }
   const type = input.rateType ?? existing?.rateType ?? 'UNKNOWN';
   const out: RateFieldsData = {};
   if (input.rateType !== undefined) out.rateType = input.rateType;
