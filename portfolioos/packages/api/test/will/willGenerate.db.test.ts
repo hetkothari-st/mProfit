@@ -4,6 +4,8 @@ import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { saveBuffer } from '../../src/lib/documentStorage.js';
+import { createDocument, deleteDocument } from '../../src/services/document.service.js';
+import { sweepOrphanWillDocuments } from '../../src/services/will/willOrphanSweep.js';
 import { createWillDraft, saveWillSection } from '../../src/services/will/will.service.js';
 import {
   canonicalJson, generateWill, getWillVersionPdf, previewWill, sha256Hex,
@@ -153,5 +155,29 @@ describe('generate', () => {
     const doc = await a.runAs(() => prisma.document.findUniqueOrThrow({ where: { id: v.documentId } }));
     await saveBuffer(a.userId, doc.storageKey, Buffer.from('%PDF-1.7 tampered'));
     await expect(a.runAs(() => getWillVersionPdf(a.userId, firstVersionId))).rejects.toMatchObject({ statusCode: 500, code: 'WILL_PDF_INTEGRITY' });
+  });
+
+  it('the orphan sweep removes old unreferenced will PDFs only', async () => {
+    const d = await b.runAs(() => createWillDraft(b.userId, null));
+    const pdfDoc = () => b.runAs(() => createDocument({
+      userId: b.userId, ownerType: 'WILL', ownerId: d.id, fileName: 'will-v1.pdf',
+      mimeType: 'application/pdf', category: 'will', buffer: Buffer.from('%PDF-1.7 orphan'),
+    }));
+    const oldOrphan = await pdfDoc();
+    const freshOrphan = await pdfDoc();
+    const v = await a.runAs(() => prisma.willVersion.findUniqueOrThrow({ where: { id: firstVersionId } }));
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await runAsSystem(() => prisma.document.updateMany({ where: { id: { in: [oldOrphan.id, v.documentId] } }, data: { createdAt: twoHoursAgo } }));
+
+    const res = await sweepOrphanWillDocuments(new Date());
+    expect(res.deleted).toBeGreaterThanOrEqual(1);
+    expect(res.failed).toBe(0);
+    const left = await runAsSystem(() => prisma.document.findMany({
+      where: { id: { in: [oldOrphan.id, freshOrphan.id, v.documentId] } }, select: { id: true },
+    }));
+    expect(left.map((x) => x.id).sort()).toEqual([freshOrphan.id, v.documentId].sort());
+
+    await b.runAs(() => deleteDocument(b.userId, freshOrphan.id, { allowWill: true }));
+    await runAsSystem(() => prisma.will.deleteMany({ where: { id: d.id } }));
   });
 });

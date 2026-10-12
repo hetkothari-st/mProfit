@@ -24,6 +24,10 @@ export interface ScriptRun {
 const DEVANAGARI = /\p{Script_Extensions=Devanagari}/u;
 // Characters both fonts have; they stay with the run they follow so a run is never split by a space.
 const NEUTRAL = /[\s\d.,;:!?()'"/&%+*-]/;
+// Zero-width non-joiner and joiner shape the letters around them (e.g. a half form), so they
+// stay in the run they follow. Code points, not literals: both are invisible in source.
+const JOINERS = new Set([0x200c, 0x200d]);
+const isNeutral = (ch: string): boolean => NEUTRAL.test(ch) || JOINERS.has(ch.codePointAt(0) ?? 0);
 
 /**
  * Split text into runs that one font can draw. Noto Sans has Latin and the
@@ -34,7 +38,7 @@ export function scriptRuns(text: string): ScriptRun[] {
   const runs: ScriptRun[] = [];
   let pending = '';
   for (const ch of text) {
-    if (NEUTRAL.test(ch)) {
+    if (isNeutral(ch)) {
       const last = runs[runs.length - 1];
       if (last) last.text += ch;
       else pending += ch;

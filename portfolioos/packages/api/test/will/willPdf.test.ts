@@ -5,6 +5,21 @@ import { renderWillPdf } from '../../src/services/will/willPdf.js';
 import { scriptRuns } from '../../src/services/will/willFonts.js';
 import { TODAY, validWillPayload } from './willFixtures.js';
 
+interface PdfPage { getTextContent: () => Promise<{ items: Array<{ str: string }> }> }
+
+/** Text of each page, in page order. */
+async function pageTexts(buf: Buffer): Promise<string[]> {
+  const pages: string[] = [];
+  await pdfParse(buf, {
+    pagerender: async (pageData: PdfPage) => {
+      const text = (await pageData.getTextContent()).items.map((i) => i.str).join(' ');
+      pages.push(text);
+      return text;
+    },
+  });
+  return pages;
+}
+
 const render = (m: WillPayload) =>
   renderWillPdf({ blocks: selectWillTemplate(m).render(m, { generatedOn: TODAY }), generatedOn: TODAY, footer: WILL_PDF_FOOTER });
 
@@ -25,6 +40,13 @@ describe('scriptRuns', () => {
     expect(scriptRuns('(आशा)')).toEqual([{ text: '(आशा)', deva: true }]);
     expect(scriptRuns('')).toEqual([]);
     expect(scriptRuns('  ')).toEqual([{ text: '  ', deva: false }]);
+  });
+
+  it('keeps zero-width joiners inside the run they join', () => {
+    const ksha = String.fromCodePoint(0x915, 0x94d, 0x200d, 0x937);
+    expect(scriptRuns(ksha)).toEqual([{ text: ksha, deva: true }]);
+    const nonJoiner = String.fromCodePoint(0x915, 0x94d, 0x200c, 0x937);
+    expect(scriptRuns(`Asha ${nonJoiner}`)).toEqual([{ text: 'Asha ', deva: false }, { text: nonJoiner, deva: true }]);
   });
 
   it('treats the rupee sign as Latin text', () => {
@@ -55,6 +77,36 @@ describe('renderWillPdf', () => {
     const { text } = await pdfParse(buf);
     expect(text).toContain('₹50,000');
   });
+
+  it('is byte-identical across renders', async () => {
+    const first = await render(validWillPayload());
+    await new Promise((r) => setTimeout(r, 1100));
+    expect((await render(validWillPayload())).equals(first)).toBe(true);
+  });
+
+  it('keeps the attestation sentence on the same page as the signature and witness blocks', async () => {
+    const pages = await pageTexts(await render(validWillPayload()));
+    const page = pages.find((t) => t.includes('In witness whereof'));
+    expect(page).toBeDefined();
+    expect(page).toContain('Place:');
+    expect(page).toContain('Witness 1');
+    expect(page).toContain('Witness 2');
+  });
+
+  it('never strands the attestation sentence away from the signature, wherever the page breaks', async () => {
+    const m = validWillPayload();
+    const all = selectWillTemplate(m).render(m, { generatedOn: TODAY });
+    const tail = all.filter((x) => x.t === 'signature' || x.t === 'witnesses');
+    expect(tail.map((x) => x.t)).toEqual(['signature', 'witnesses']);
+    const attest = { t: 'para' as const, text: 'In witness whereof I have signed this Will on the date and at the place written below.' };
+    for (let n = 1; n <= 45; n++) {
+      const filler = Array.from({ length: n }, (_, i) => ({ t: 'para' as const, text: `Filler line ${i + 1}.` }));
+      const buf = await renderWillPdf({ blocks: [...filler, attest, ...tail], generatedOn: TODAY, footer: WILL_PDF_FOOTER });
+      const page = (await pageTexts(buf)).find((t) => t.includes('In witness whereof'));
+      expect({ n, together: !!page && page.includes('Place:') && page.includes('Witness 1') && page.includes('Witness 2') })
+        .toEqual({ n, together: true });
+    }
+  }, 30_000);
 
   it('pins the creation date to the date of the will', async () => {
     const raw = (await render(validWillPayload())).toString('latin1');

@@ -50,9 +50,92 @@ function write(doc: Doc, text: string, o: WriteOpts): void {
   if (o.gapAfter) doc.moveDown(o.gapAfter);
 }
 
-/** Start a new page unless `needed` points still fit, so a block is not split. */
+/**
+ * Start a new page unless `needed` points still fit, so a block is not split.
+ * Already at the top of a page, a new page would only add a blank one.
+ */
 function keepTogether(doc: Doc, needed: number): void {
-  if (doc.y + needed > doc.page.height - doc.page.margins.bottom) doc.addPage();
+  if (doc.y > doc.page.margins.top && doc.y + needed > doc.page.height - doc.page.margins.bottom) doc.addPage();
+}
+
+/** One write, or vertical space in lines of the given font size. */
+type Step = { text: string; o: WriteOpts } | { space: number; size: number };
+
+type BlockOf<T extends WillBlock['t']> = Extract<WillBlock, { t: T }>;
+
+const paraSteps = (text: string): Step[] => [{ text, o: { size: 10.5, align: 'justify', gapAfter: 0.6 } }];
+
+const signatureSteps = (b: BlockOf<'signature'>): Step[] => [
+  ...b.lines.map((line): Step => ({ text: line, o: { size: 10.5, gapAfter: 0.3 } })),
+  { space: 0.8, size: 10.5 },
+];
+
+function witnessSteps(b: BlockOf<'witnesses'>): Step[] {
+  const steps: Step[] = [{ text: b.intro, o: { size: 10, align: 'justify', gapAfter: 0.8 } }];
+  for (let i = 1; i <= b.count; i++) {
+    steps.push({ text: `Witness ${i}`, o: { size: 10.5, bold: true, gapAfter: 0.4 } });
+    for (const f of b.fields) steps.push({ text: `${f}: ______________________________`, o: { size: 10, gapAfter: 0.7 } });
+  }
+  return steps;
+}
+
+function runSteps(doc: Doc, steps: Step[]): void {
+  for (const s of steps) {
+    if ('text' in s) write(doc, s.text, s.o);
+    else doc.moveDown(s.space);
+  }
+}
+
+/** Height `write` will use, measured with the fonts it will draw with. */
+function measure(doc: Doc, text: string, o: WriteOpts): number {
+  const x = doc.page.margins.left + (o.indent ?? 0);
+  const width = doc.page.width - doc.page.margins.right - x;
+  const opts = { width, align: o.align ?? 'left', lineGap: 2 };
+  doc.font(o.bold ? 'bold' : 'body').fontSize(o.size);
+  const lineHeight = doc.currentLineHeight(true);
+  const runs = scriptRuns(text);
+  if (runs.length === 0) return lineHeight * 0.6;
+  let height = doc.heightOfString(text, opts);
+  if (runs.some((r) => r.deva)) {
+    // Devanagari lines are taller; take the larger of the two measurements.
+    doc.font(o.bold ? 'deva-bold' : 'deva');
+    height = Math.max(height, doc.heightOfString(text, opts));
+  }
+  return height + lineHeight * (o.gapAfter ?? 0);
+}
+
+function measureSteps(doc: Doc, steps: Step[]): number {
+  let height = 0;
+  for (const s of steps) {
+    if ('text' in s) height += measure(doc, s.text, s.o);
+    else height += doc.fontSize(s.size).currentLineHeight(true) * s.space;
+  }
+  return height;
+}
+
+/**
+ * Height of the attestation group starting at blocks[i], or 0 when none starts
+ * there. The group is the sentence directly before the signature block, the
+ * signature block and the witness block: they print on one page so the
+ * attestation is never stranded on the page before.
+ */
+function attestationGroupHeight(doc: Doc, blocks: WillBlock[], i: number): number {
+  let j = i;
+  let height = 0;
+  const first = blocks[j];
+  if (first?.t === 'para') {
+    if (blocks[j + 1]?.t !== 'signature') return 0;
+    height += measureSteps(doc, paraSteps(first.text));
+    j++;
+  }
+  const sig = blocks[j];
+  if (sig?.t === 'signature') {
+    height += measureSteps(doc, signatureSteps(sig));
+    j++;
+  }
+  const wit = blocks[j];
+  if (wit?.t === 'witnesses') height += measureSteps(doc, witnessSteps(wit));
+  return height;
 }
 
 function drawBlock(doc: Doc, b: WillBlock): void {
@@ -65,7 +148,7 @@ function drawBlock(doc: Doc, b: WillBlock): void {
       write(doc, b.text, { size: 12, bold: true, align: 'center', gapAfter: 0.8 });
       return;
     case 'para':
-      write(doc, b.text, { size: 10.5, align: 'justify', gapAfter: 0.6 });
+      runSteps(doc, paraSteps(b.text));
       return;
     case 'note':
       write(doc, b.text, { size: 9, color: MUTED, gapAfter: 0.6 });
@@ -89,17 +172,10 @@ function drawBlock(doc: Doc, b: WillBlock): void {
       doc.moveDown(0.4);
       return;
     case 'signature':
-      keepTogether(doc, 120);
-      for (const line of b.lines) write(doc, line, { size: 10.5, gapAfter: 0.3 });
-      doc.moveDown(0.8);
+      runSteps(doc, signatureSteps(b));
       return;
     case 'witnesses':
-      keepTogether(doc, 320);
-      write(doc, b.intro, { size: 10, align: 'justify', gapAfter: 0.8 });
-      for (let i = 1; i <= b.count; i++) {
-        write(doc, `Witness ${i}`, { size: 10.5, bold: true, gapAfter: 0.4 });
-        for (const f of b.fields) write(doc, `${f}: ______________________________`, { size: 10, gapAfter: 0.7 });
-      }
+      runSteps(doc, witnessSteps(b));
       return;
   }
 }
@@ -140,7 +216,11 @@ export function renderWillPdf(input: WillPdfInput): Promise<Buffer> {
       doc.registerFont('bold', WILL_FONTS.bold);
       doc.registerFont('deva', WILL_FONTS.deva);
       doc.registerFont('deva-bold', WILL_FONTS.devaBold);
-      for (const b of input.blocks) drawBlock(doc, b);
+      input.blocks.forEach((b, i) => {
+        const group = attestationGroupHeight(doc, input.blocks, i);
+        if (group > 0) keepTogether(doc, group);
+        drawBlock(doc, b);
+      });
       drawFooters(doc, input.footer);
       doc.end();
     } catch (err) {

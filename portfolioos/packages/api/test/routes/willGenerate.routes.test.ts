@@ -76,6 +76,24 @@ describe('preview, generate, download over HTTP', () => {
     expect((await audit('will_viewed'))?.resource).toBe(`Will:${willId}`);
   });
 
+  it('generate answers 409 to a stale revision and 503 when the keys are missing', async () => {
+    const post = (body: unknown) =>
+      fetch(`${base}/api/will/drafts/${willId}/generate`, { method: 'POST', headers: { ...auth(user), 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const stale = await post({ revision: revision - 1, acknowledge: true });
+    expect(stale.status).toBe(409);
+    expect(((await stale.json()) as { details: { reason: string } }).details.reason).toBe('WILL_REVISION_CONFLICT');
+
+    const key = process.env.APP_ENCRYPTION_KEY;
+    delete process.env.APP_ENCRYPTION_KEY;
+    try {
+      const res = await post({ revision, acknowledge: true });
+      expect(res.status).toBe(503);
+      expect(((await res.json()) as { code: string }).code).toBe('WILL_KEYS_UNAVAILABLE');
+    } finally {
+      process.env.APP_ENCRYPTION_KEY = key;
+    }
+  });
+
   it('generate needs the acknowledgement, then returns 201 and audits it', async () => {
     const post = (body: unknown) =>
       fetch(`${base}/api/will/drafts/${willId}/generate`, { method: 'POST', headers: { ...auth(user), 'content-type': 'application/json' }, body: JSON.stringify(body) });
