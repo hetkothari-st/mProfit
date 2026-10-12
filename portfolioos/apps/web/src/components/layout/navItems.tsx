@@ -40,6 +40,7 @@ import {
   IndianRupee,
   ShieldCheck,
   Compass,
+  Percent,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -102,6 +103,7 @@ export const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Corporate Actions', to: '/corporate-actions', icon: Split },
       { label: 'Accounting', to: '/accounting', icon: BookOpenCheck },
       { label: 'Split Expenses', to: '/split', icon: UsersRound },
+      { label: 'EMI Calculator', to: '/emi', icon: Percent },
       { label: 'Alerts', to: '/alerts', icon: BellRing },
       // Hidden for now — page still reachable at /import/failures.
       // { label: 'Failures (DLQ)', to: '/import/failures', icon: Bug },
