@@ -22,6 +22,14 @@ const MUTED = '#555555';
 const RULE = '#BBBBBB';
 const MARGIN = 64;
 const BOTTOM = 92; // room for the two-line footer
+/**
+ * Latin ligatures off: they draw "fi"/"ffi" as one glyph that some viewers
+ * copy or search as "i", and a will's text must copy exactly as written.
+ * fontkit takes an object of overrides on top of its default features (so
+ * kerning and the Devanagari shaping features stay on); pdfkit's types only
+ * describe the array form, which can switch features on but never off.
+ */
+const FEATURES = { liga: false, clig: false } as unknown as PDFKit.Mixins.OpenTypeFeatures[];
 
 interface WriteOpts {
   size: number;
@@ -43,7 +51,7 @@ function write(doc: Doc, text: string, o: WriteOpts): void {
   }
   runs.forEach((r, i) => {
     doc.font(r.deva ? (o.bold ? 'deva-bold' : 'deva') : o.bold ? 'bold' : 'body');
-    const opts = { width, align: o.align ?? 'left', continued: i < runs.length - 1, lineGap: 2 };
+    const opts = { width, align: o.align ?? 'left', continued: i < runs.length - 1, lineGap: 2, features: FEATURES };
     if (i === 0) doc.text(r.text, x, doc.y, opts);
     else doc.text(r.text, opts);
   });
@@ -90,7 +98,7 @@ function runSteps(doc: Doc, steps: Step[]): void {
 function measure(doc: Doc, text: string, o: WriteOpts): number {
   const x = doc.page.margins.left + (o.indent ?? 0);
   const width = doc.page.width - doc.page.margins.right - x;
-  const opts = { width, align: o.align ?? 'left', lineGap: 2 };
+  const opts = { width, align: o.align ?? 'left', lineGap: 2, features: FEATURES };
   doc.font(o.bold ? 'bold' : 'body').fontSize(o.size);
   const lineHeight = doc.currentLineHeight(true);
   const runs = scriptRuns(text);
@@ -138,13 +146,55 @@ function attestationGroupHeight(doc: Doc, blocks: WillBlock[], i: number): numbe
   return height;
 }
 
+/**
+ * Height of the start of a block: what must follow a heading onto its page.
+ * A table needs its title and first row; a clause its title and first
+ * paragraph; a paragraph all of itself (a heading's intro is short).
+ */
+function leadHeight(doc: Doc, b: WillBlock | undefined): number {
+  if (!b) return 0;
+  switch (b.t) {
+    case 'para':
+      return measureSteps(doc, paraSteps(b.text));
+    case 'note':
+      return measure(doc, b.text, { size: 9, gapAfter: 0.6 });
+    case 'clause':
+      return measure(doc, `${b.n}. ${b.title}`, { size: 11.5, bold: true, gapAfter: 0.3 })
+        + (b.paras[0] ? measure(doc, b.paras[0], { size: 10.5, align: 'justify', indent: 14, gapAfter: 0.4 }) : 0);
+    case 'table': {
+      const title = b.title ? measure(doc, b.title, { size: 10.5, bold: true, gapAfter: 0.3 }) : 0;
+      const row = b.rows[0];
+      return title + (row
+        ? measure(doc, row[0], { size: 10, bold: true, indent: 14, gapAfter: 0.05 }) + measure(doc, row[1], { size: 10, indent: 28, gapAfter: 0.35 })
+        : 0);
+    }
+    case 'heading':
+      return measure(doc, b.text, { size: 12, bold: true, align: 'center', gapAfter: 0.8 });
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Space a heading needs so it never ends a page: itself, the start of the
+ * next block, and - when that block is a short intro paragraph - the start of
+ * the block after it too (the Schedule heading, its intro, the first item).
+ */
+function headingGroupHeight(doc: Doc, blocks: WillBlock[], i: number): number {
+  const h = blocks[i];
+  if (h?.t !== 'heading') return 0;
+  const next = blocks[i + 1];
+  let height = leadHeight(doc, h) + leadHeight(doc, next);
+  if (next?.t === 'para' || next?.t === 'note') height += leadHeight(doc, blocks[i + 2]);
+  return height;
+}
+
 function drawBlock(doc: Doc, b: WillBlock): void {
   switch (b.t) {
     case 'title':
       write(doc, b.text.toUpperCase(), { size: 17, bold: true, align: 'center', gapAfter: 0.2 });
       return;
     case 'heading':
-      keepTogether(doc, 40);
       write(doc, b.text, { size: 12, bold: true, align: 'center', gapAfter: 0.8 });
       return;
     case 'para':
@@ -191,9 +241,9 @@ function drawFooters(doc: Doc, footer: string): void {
     const y = doc.page.height - BOTTOM + 22;
     doc.moveTo(x, y - 6).lineTo(x + width, y - 6).lineWidth(0.5).strokeColor(RULE).stroke();
     doc.font('body').fontSize(8).fillColor(MUTED);
-    doc.text('Signature of the Testator: ____________________', x, y, { width, align: 'left', lineBreak: false });
-    doc.text(`Page ${i - range.start + 1} of ${range.count}`, x, y, { width, align: 'right', lineBreak: false });
-    doc.fontSize(7).text(footer, x, y + 14, { width, align: 'center' });
+    doc.text('Signature of the Testator: ____________________', x, y, { width, align: 'left', lineBreak: false, features: FEATURES });
+    doc.text(`Page ${i - range.start + 1} of ${range.count}`, x, y, { width, align: 'right', lineBreak: false, features: FEATURES });
+    doc.fontSize(7).text(footer, x, y + 14, { width, align: 'center', features: FEATURES });
     doc.page.margins.bottom = keep;
   }
 }
@@ -217,7 +267,7 @@ export function renderWillPdf(input: WillPdfInput): Promise<Buffer> {
       doc.registerFont('deva', WILL_FONTS.deva);
       doc.registerFont('deva-bold', WILL_FONTS.devaBold);
       input.blocks.forEach((b, i) => {
-        const group = attestationGroupHeight(doc, input.blocks, i);
+        const group = Math.max(attestationGroupHeight(doc, input.blocks, i), headingGroupHeight(doc, input.blocks, i));
         if (group > 0) keepTogether(doc, group);
         drawBlock(doc, b);
       });

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { inflateSync } from 'node:zlib';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
-import { selectWillTemplate, WILL_PDF_FOOTER, type WillPayload } from '@everypaisa/shared';
+import { selectWillTemplate, WILL_PDF_FOOTER, type WillBlock, type WillPayload } from '@everypaisa/shared';
 import { renderWillPdf } from '../../src/services/will/willPdf.js';
 import { scriptRuns } from '../../src/services/will/willFonts.js';
 import { TODAY, validWillPayload } from './willFixtures.js';
@@ -18,6 +19,19 @@ async function pageTexts(buf: Buffer): Promise<string[]> {
     },
   });
   return pages;
+}
+
+/** Glyphs drawn by text operators across all page content streams. */
+function drawnGlyphs(buf: Buffer): number {
+  const raw = buf.toString('latin1');
+  let glyphs = 0;
+  // pdfkit deflates every stream it writes (page content and embedded fonts).
+  for (const m of raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    const body = inflateSync(Buffer.from(m[1]!, 'latin1')).toString('latin1');
+    if (!/\bBT\b[\s\S]*\bET\b/.test(body)) continue;
+    for (const h of body.matchAll(/<([0-9a-fA-F]+)>/g)) glyphs += h[1]!.length / 4;
+  }
+  return glyphs;
 }
 
 const render = (m: WillPayload) =>
@@ -107,6 +121,31 @@ describe('renderWillPdf', () => {
         .toEqual({ n, together: true });
     }
   }, 30_000);
+
+  it('never ends a page with the Schedule heading, wherever the page breaks', async () => {
+    const schedule: WillBlock[] = [
+      { t: 'heading', text: 'Schedule' },
+      { t: 'para', text: 'Assets and liabilities known to me on 12/10/2026. Values are estimates for identification only; this list does not limit my residuary estate.' },
+      { t: 'table', title: 'Assets', rows: [['First listed asset', '₹1,00,000'], ['Second listed asset', '₹2,00,000']] },
+    ];
+    for (let n = 1; n <= 45; n++) {
+      const filler = Array.from({ length: n }, (_, i) => ({ t: 'para' as const, text: `Filler line ${i + 1}.` }));
+      const buf = await renderWillPdf({ blocks: [...filler, ...schedule], generatedOn: TODAY, footer: WILL_PDF_FOOTER });
+      const page = (await pageTexts(buf)).find((t) => /\bSchedule\b/.test(t));
+      expect({ n, together: !!page && page.includes('Assets and liabilities known') && page.includes('First listed asset') })
+        .toEqual({ n, together: true });
+    }
+  }, 30_000);
+
+  it('writes words without ligature glyphs, so copied text is correct', async () => {
+    const { text } = await pdfParse(await render(validWillPayload()));
+    expect(text).toContain('beneficiary');
+    expect(text).toContain('influence');
+    // A ligature draws "ffi" as one glyph; some viewers then copy it as "i".
+    // Same character count, with and without ligature pairs: same glyph count.
+    const one = (t: string) => renderWillPdf({ blocks: [{ t: 'para', text: t }], generatedOn: TODAY, footer: WILL_PDF_FOOTER });
+    expect(drawnGlyphs(await one('office fluffy beneficiary'))).toBe(drawnGlyphs(await one('oxxxxx xxxxxx xxxxxxxxxxx')));
+  });
 
   it('pins the creation date to the date of the will', async () => {
     const raw = (await render(validWillPayload())).toString('latin1');
