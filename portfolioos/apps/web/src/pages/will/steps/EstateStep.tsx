@@ -32,6 +32,8 @@ const SOURCE_LABEL: Record<string, string> = {
   loans: 'loans', creditCards: 'credit cards',
 };
 
+const TRUNCATED = 'truncated';
+
 interface RowActions {
   patch: (key: string, p: Partial<WillAssetItem>) => void;
   remove: (key: string) => void;
@@ -250,6 +252,9 @@ export function EstateStep({ payload, update, refreshEstate, findings, wide, tod
       update('allocation', next.allocation);
     },
   };
+  // 'truncated' is not a source: the API cut a very long list short.
+  const truncated = estate.failedSources.includes(TRUNCATED);
+  const unread = estate.failedSources.filter((s) => s !== TRUNCATED);
   const totals = willEstateTotals(estate.items);
   const assets = estate.items.filter((i) => i.side === 'ASSET');
   const liabilities = estate.items.filter((i) => i.side === 'LIABILITY');
@@ -278,10 +283,13 @@ export function EstateStep({ payload, update, refreshEstate, findings, wide, tod
         {totals.nomineeOnly.greaterThan(0) && (
           <p className="text-xs text-muted-foreground">Paid to nominees and not counted: {money(totals.nomineeOnly)}.</p>
         )}
-        {estate.failedSources.length > 0 && (
+        {unread.length > 0 && (
           <Notice tone="warning">
-            We could not read your {estate.failedSources.map((s) => SOURCE_LABEL[s] ?? s).join(', ')} just now. Try refreshing, or add them by hand.
+            We could not read your {unread.map((s) => SOURCE_LABEL[s] ?? s).join(', ')} just now. Try refreshing, or add them by hand.
           </Notice>
+        )}
+        {truncated && (
+          <Notice tone="warning">Some items were left out because the list is very long.</Notice>
         )}
         <FindingList findings={findings.filter((f) => f.step === 4)} />
       </Card>

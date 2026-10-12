@@ -96,6 +96,20 @@ describe('EstateStep', () => {
     expect(screen.getByText(/could not read your bank accounts, loans/i)).toBeTruthy();
   });
 
+  it('explains a cut-off list instead of naming it as a source', () => {
+    const payload = fullPayload();
+    payload.estate.failedSources = ['truncated'];
+    setup(payload);
+    expect(screen.getByText(/some items were left out because the list is very long/i)).toBeTruthy();
+    expect(screen.queryByText(/could not read your/i)).toBeNull();
+    cleanup();
+    payload.estate.failedSources = ['loans', 'truncated'];
+    setup(payload);
+    expect(screen.getByText(/could not read your loans just now/i)).toBeTruthy();
+    expect(screen.queryByText(/truncated/i)).toBeNull();
+    expect(screen.getByText(/some items were left out because the list is very long/i)).toBeTruthy();
+  });
+
   it('can include an excluded item again and confirm a stale one', () => {
     const payload = fullPayload();
     payload.estate.items[0]!.review = 'EXCLUDED';
