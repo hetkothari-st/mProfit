@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { WillAssetItem } from '@everypaisa/shared';
-import { reconcileEstate, candidateToItem } from '../../src/services/will/estate/reconcile.js';
+import { reconcileEstate, candidateToItem, OWNERSHIP_CHANGED_NOTE } from '../../src/services/will/estate/reconcile.js';
 import type { EstateCandidate } from '../../src/services/will/estate/types.js';
 
 function cand(p: Partial<EstateCandidate> & { sourceKey: string }): EstateCandidate {
@@ -93,5 +93,39 @@ describe('reconcileEstate', () => {
   it('a NEEDS_REVIEW item follows the suggestion', () => {
     const out = reconcileEstate([existing({ sourceKey: 'bank:1', review: 'NEEDS_REVIEW' })], [cand({ sourceKey: 'bank:1', review: 'CONFIRMED' })]);
     expect(out[0]!.review).toBe('CONFIRMED');
+  });
+
+  it('keeps an ownership-change flag across refreshes until the user acts', () => {
+    const joint = { type: 'JOINT' as const, sharePct: '50.00' };
+    const first = reconcileEstate(
+      [existing({ sourceKey: 'prop:1', ownership: { type: 'SOLE', sharePct: '100' }, review: 'CONFIRMED' })],
+      [cand({ sourceKey: 'prop:1', ownership: joint, review: 'CONFIRMED' })],
+    );
+    expect(first[0]).toMatchObject({ review: 'NEEDS_REVIEW', note: OWNERSHIP_CHANGED_NOTE });
+    // Second refresh: same source, candidate still CONFIRMED. The flag must stay.
+    const second = reconcileEstate(first, [cand({ sourceKey: 'prop:1', ownership: joint, review: 'CONFIRMED' })]);
+    expect(second[0]).toMatchObject({ review: 'NEEDS_REVIEW', note: OWNERSHIP_CHANGED_NOTE, ownership: joint });
+    // The user confirms; the next refresh keeps the confirmation and the adapter's own note returns.
+    const confirmed = second.map((i) => ({ ...i, review: 'CONFIRMED' as const }));
+    const third = reconcileEstate(confirmed, [cand({ sourceKey: 'prop:1', ownership: joint, review: 'CONFIRMED' })]);
+    expect(third[0]).toMatchObject({ review: 'CONFIRMED', note: null });
+  });
+
+  it('keeps an exclusion when the ownership changes, adopting the new ownership', () => {
+    const out = reconcileEstate(
+      [existing({ sourceKey: 'prop:1', ownership: { type: 'SOLE', sharePct: '100' }, review: 'EXCLUDED' })],
+      [cand({ sourceKey: 'prop:1', ownership: { type: 'JOINT', sharePct: '50.00' } })],
+    );
+    expect(out[0]).toMatchObject({ review: 'EXCLUDED', ownership: { type: 'JOINT', sharePct: '50.00' } });
+  });
+
+  it('a confirmed item follows a new adapter exclusion, but not one the user already overrode', () => {
+    const note = 'May duplicate your bank accounts - include it only if it is separate cash';
+    const excludedNow = cand({ sourceKey: 'holdings:p:CASH', kind: 'HOLDING', review: 'EXCLUDED', note });
+    const newlyExcluded = reconcileEstate([existing({ sourceKey: 'holdings:p:CASH', kind: 'HOLDING', review: 'CONFIRMED' })], [excludedNow]);
+    expect(newlyExcluded[0]).toMatchObject({ review: 'EXCLUDED', note });
+    // The user includes it again; the same exclusion must not undo that.
+    const included = newlyExcluded.map((i) => ({ ...i, review: 'CONFIRMED' as const }));
+    expect(reconcileEstate(included, [excludedNow])[0]).toMatchObject({ review: 'CONFIRMED', note });
   });
 });

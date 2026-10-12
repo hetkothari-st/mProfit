@@ -15,9 +15,10 @@ export const holdingsAdapter: EstateAdapter = {
   async collect({ userId, today }) {
     const pf = await prisma.providentFundAccount.findMany({ where: { userId }, select: { assetKey: true } });
     // A bank statement import mirrors each account as a CASH holding (see healthScore liquidParts),
-    // so with a funded bank account on file the CASH groups are offered but left out by default.
+    // so with a funded bank account on file (the same accounts bankAccountsAdapter lists)
+    // the CASH groups are offered but left out by default.
     const fundedBank = await prisma.bankAccount.findFirst({
-      where: { userId, status: 'ACTIVE', accountType: { not: 'OD' }, currentBalance: { gt: 0 } },
+      where: { userId, status: { not: 'CLOSED' }, accountType: { not: 'OD' }, currentBalance: { gt: 0 } },
       select: { id: true },
     });
     const pfKeys = new Set(pf.map((p) => p.assetKey));

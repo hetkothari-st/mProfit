@@ -200,6 +200,25 @@ describe('collectEstate', () => {
     }
   });
 
+  it('a funded DORMANT account (listed by the bank adapter) also triggers the CASH exclusion', async () => {
+    const lone = await createTestScope('will-estate-dormant');
+    try {
+      await runAsSystem(async () => {
+        await prisma.holdingProjection.create({
+          data: { portfolioId: lone.portfolioId, assetKey: 'will-test:cash', assetClass: 'CASH', quantity: '1', avgCostPrice: '5000', totalCost: '5000', currentValue: '5000', sourceTxCount: 1 },
+        });
+        await prisma.bankAccount.create({ data: { userId: lone.userId, bankName: 'Dormant Bank', accountType: 'SAVINGS', accountHolder: 'Test', last4: '4444', currentBalance: '800', status: 'DORMANT' } });
+      });
+      const { candidates } = await lone.runAs(() => collectEstate({ userId: lone.userId, today: TODAY }));
+      expect(candidates.find((c) => c.kind === 'BANK_ACCOUNT')).toMatchObject({ ref: 'XXXX4444' });
+      expect(candidates.find((c) => c.sourceKey === `holdings:${lone.portfolioId}:CASH`)).toMatchObject({
+        review: 'EXCLUDED', note: CASH_MAY_DUPLICATE_NOTE,
+      });
+    } finally {
+      await lone.cleanup();
+    }
+  });
+
   it('counts CASH holdings normally when there is no funded bank account', async () => {
     const lone = await createTestScope('will-estate-cash');
     try {
