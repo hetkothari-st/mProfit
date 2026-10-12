@@ -191,35 +191,40 @@ export async function writeBenchmark(
 }
 
 /**
- * After a MANUAL override on a REPO or MCLR source is cleared (caller holds the per-key lock in `tx`): drop
- * the benchmark row that override wrote (same value, written at the override's fetchedAt) if it is still the
- * latest, then make the latest BenchmarkRate equal the effective AUTO rate again. With no ACTIVE AUTO row
- * the series keeps whatever is left.
+ * After a MANUAL override on a REPO or MCLR source is cleared (caller holds the per-key lock in `tx`): every
+ * benchmark row an override wrote since the effective AUTO reading (each MANUAL row for the key, any status,
+ * fetched after that AUTO row - so a corrected-then-cleared override leaves nothing behind) is removed, then
+ * the series is put back on the effective AUTO rate. A benchmark row is recognised as an override's by the
+ * same value and the override's fetchedAt; a row that matches an AUTO reading the same way is never touched.
+ * The restored row is dated from the AUTO reading itself (its as-of date, else the IST day it was fetched),
+ * never from the clear. With no ACTIVE AUTO row the series keeps whatever is left.
  */
 export async function restoreBenchmarkAfterClear(
   tx: Prisma.TransactionClient,
   source: StoreSource,
   tenor: string | null,
-  cleared: LoanRate[],
-  now: Date,
 ): Promise<void> {
   const kind = source.loanType === 'REPO' ? 'REPO' : source.loanType === 'MCLR' ? 'MCLR' : null;
   if (kind === null) return;
   const lender = kind === 'REPO' ? null : source.lender;
   const benchTenor = kind === 'MCLR' ? tenor : null;
   await lockKey(tx, `bench|${kind}|${lender ?? ''}|${benchTenor ?? ''}`);
-  const latest = await tx.benchmarkRate.findFirst({
-    where: { kind, lender, tenor: benchTenor },
-    orderBy: [{ effectiveDate: 'desc' }, { fetchedAt: 'desc' }],
-  });
-  const fromManual =
-    latest !== null && cleared.some((m) => m.fetchedAt.getTime() === latest.fetchedAt.getTime() && m.minRatePct.equals(latest.ratePct));
-  if (fromManual) await tx.benchmarkRate.delete({ where: { id: latest.id } });
   const auto = await tx.loanRate.findFirst({
     where: { sourceId: source.id, tenor, origin: 'AUTO', status: 'ACTIVE' },
     orderBy: { fetchedAt: 'desc' },
   });
-  if (auto) await writeBenchmark(source, tenor, auto.minRatePct.toString(), isoDate(auto.effectiveDate), now, tx);
+  const [manuals, autos, bench] = await Promise.all([
+    tx.loanRate.findMany({
+      where: { sourceId: source.id, tenor, origin: 'MANUAL', ...(auto ? { fetchedAt: { gt: auto.fetchedAt } } : {}) },
+    }),
+    tx.loanRate.findMany({ where: { sourceId: source.id, tenor, origin: 'AUTO' }, select: { fetchedAt: true, minRatePct: true } }),
+    tx.benchmarkRate.findMany({ where: { kind, lender, tenor: benchTenor } }),
+  ]);
+  const wrote = (r: { fetchedAt: Date; minRatePct: Prisma.Decimal }, b: BenchmarkRate) =>
+    r.fetchedAt.getTime() === b.fetchedAt.getTime() && r.minRatePct.equals(b.ratePct);
+  const stale = bench.filter((b) => manuals.some((m) => wrote(m, b)) && !autos.some((a) => wrote(a, b)));
+  if (stale.length > 0) await tx.benchmarkRate.deleteMany({ where: { id: { in: stale.map((b) => b.id) } } });
+  if (auto) await writeBenchmark(source, tenor, auto.minRatePct.toString(), isoDate(auto.effectiveDate), auto.fetchedAt, tx);
 }
 
 /**

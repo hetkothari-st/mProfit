@@ -8,24 +8,14 @@
  *   npx tsx scripts/seed-loan-rates-from-fixtures.ts
  */
 import { readFileSync } from 'node:fs';
-
-const LOCAL_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
-
-/** Exact host check on the parsed URL: 'db.example.com/?x=localhost' or 'localhost.evil.com' are refused. */
-function isLocalDatabaseUrl(raw: string): boolean {
-  try {
-    return LOCAL_HOSTS.has(new URL(raw).hostname);
-  } catch {
-    return false;
-  }
-}
+import { isLocalDatabaseUrl } from './localDbGuard.js';
 
 // The guard runs before anything that can open a database connection is loaded (dynamic imports below).
 for (const name of ['DATABASE_URL', 'DIRECT_URL'] as const) {
   const value = process.env[name];
   if (name === 'DIRECT_URL' && value === undefined) continue;
   if (!isLocalDatabaseUrl(value ?? '')) {
-    console.error(`Refusing to run: ${name} must point at localhost, 127.0.0.1 or ::1`);
+    console.error(`Refusing to run: ${name} must point at localhost, 127.0.0.1 or ::1 (host/hostaddr parameters included)`);
     process.exit(2);
   }
 }

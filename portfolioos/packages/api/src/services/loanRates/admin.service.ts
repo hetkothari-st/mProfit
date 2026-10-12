@@ -164,7 +164,6 @@ export async function setManualRate(
 export async function clearManualRate(
   sourceId: string,
   tenor: MclrTenor | null | undefined,
-  now: Date = new Date(),
 ): Promise<number> {
   const source = await prisma.loanRateSource.findUnique({ where: { id: sourceId } });
   if (!source) throw new NotFoundError(`Unknown loan-rate source ${sourceId}`);
@@ -185,7 +184,7 @@ export async function clearManualRate(
         data: { status: 'SUPERSEDED' },
       });
       retired += n;
-      await restoreBenchmarkAfterClear(tx, source, key, rows, now);
+      await restoreBenchmarkAfterClear(tx, source, key);
     }
     return retired;
   });
