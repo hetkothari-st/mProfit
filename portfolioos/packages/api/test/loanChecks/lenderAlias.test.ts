@@ -28,6 +28,8 @@ describe('canonicalLender (spec s6.1 LenderAlias)', () => {
   it.each([
     'PNB Housing Finance', 'ICICI Home Finance', 'Can Fin Homes', 'HDFC Credila', 'IDFC First Bank',
     'Bajaj Finance', 'Bajaj Housing Finance', 'LIC', 'Union', 'toString', '', '   ',
+    // Look-alikes of tracked lenders (final review).
+    'State Bank of Mauritius', 'HDFC Life', 'ICICI Prudential', 'Bank of India', 'United Bank of India', 'UBI',
   ])('%j is not a tracked lender', (name) => expect(canonicalLender(name)).toBeNull());
 
   it('null and undefined are unmatched', () => {

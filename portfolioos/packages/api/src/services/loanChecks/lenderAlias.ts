@@ -14,7 +14,8 @@ const ALIASES: Readonly<Record<string, readonly string[]>> = {
   PNB: ['pnb', 'punjab national bank'],
   'Bank of Baroda': ['bob', 'bank of baroda', 'baroda bank'],
   'Canara Bank': ['canara', 'canara bank'],
-  'Union Bank': ['union bank', 'union bank of india', 'ubi'],
+  // No 'ubi': it is also United Bank of India (merged into PNB), so the short form is ambiguous.
+  'Union Bank': ['union bank', 'union bank of india'],
   'LIC Housing Finance': ['lic housing finance', 'lic housing', 'lic hfl', 'lichfl', 'lic home loans'],
 };
 
