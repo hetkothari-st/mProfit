@@ -1,5 +1,7 @@
 # Legacy Transfer — Design
 
+> **Product name: Succession** (renamed 2026-10-12). Code, API paths, tables and web URLs keep the internal name `legacy`.
+
 Status: DRAFT for owner review · 2026-10-12 · branch `feat/legacy-transfer`
 
 > Ensure your loved ones are never left in the dark about your finances.

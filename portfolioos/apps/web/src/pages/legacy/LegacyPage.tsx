@@ -73,18 +73,18 @@ export function LegacyPage() {
   }
 
   if (q.isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
-  if (q.error || !q.data) return <div className="p-6 text-sm">{apiErrorMessage(q.error, 'Could not load Legacy Transfer.')}</div>;
+  if (q.error || !q.data) return <div className="p-6 text-sm">{apiErrorMessage(q.error, 'Could not load Succession.')}</div>;
   const o = q.data;
   const canEdit = ent.allowed && EDITABLE.has(o.status);
   const settingsValid = trigger === 'SCHEDULED' ? date !== '' : days >= LEGACY_MIN_INACTIVITY_DAYS && (trigger === 'INACTIVITY' || date !== '');
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
-      <PageHeader title="Legacy Transfer" description="Make sure your loved ones are never left in the dark about your finances." />
+      <PageHeader title="Succession" description="Make sure your loved ones are never left in the dark about your finances." />
 
       {!ent.allowed && (
         <Card><CardContent className="p-4 text-sm">
-          Legacy Transfer is part of the {ent.requiredTier} plan.
+          Succession is part of the {ent.requiredTier} plan.
           {o.status !== 'DRAFT' && ' Your existing plan keeps working; you can still pause, revoke or remove nominees.'}{' '}
           <Link className="underline" to="/pricing">See plans</Link>
         </CardContent></Card>
@@ -95,7 +95,7 @@ export function LegacyPage() {
         {o.nextEvent && <p className="text-sm text-muted-foreground">{o.nextEvent}</p>}
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {o.status === 'DRAFT' && (
-            <Button disabled={!ent.allowed || o.nominees.length === 0} onClick={() => guarded(legacyApi.activate, 'Legacy Transfer is on')}>Turn on</Button>
+            <Button disabled={!ent.allowed || o.nominees.length === 0} onClick={() => guarded(legacyApi.activate, 'Succession is on')}>Turn on</Button>
           )}
           {COUNTING.has(o.status) && (
             <>
@@ -107,7 +107,7 @@ export function LegacyPage() {
           {o.status === 'RELEASED' && (
             <Button variant="destructive" onClick={() => guarded(() => legacyApi.revoke(), 'Access withdrawn')}>Revoke all access</Button>
           )}
-          {o.status !== 'DRAFT' && <Button variant="ghost" onClick={() => guarded(legacyApi.deactivate, 'Legacy Transfer is off')}>Turn off</Button>}
+          {o.status !== 'DRAFT' && <Button variant="ghost" onClick={() => guarded(legacyApi.deactivate, 'Succession is off')}>Turn off</Button>}
         </div>
         {o.status === 'DRAFT' && o.nominees.length === 0 && <p className="text-xs text-muted-foreground">Add a nominee to turn it on.</p>}
       </CardContent></Card>
@@ -181,7 +181,7 @@ export function LegacyPage() {
       </CardContent></Card>
 
       <p className="text-xs text-muted-foreground">
-        Legacy Transfer shares information only. It is not a will and does not transfer any asset. Nominees never get edit access.
+        Succession shares information only. It is not a will and does not transfer any asset. Nominees never get edit access.
       </p>
 
       <NomineeDialog
