@@ -17,6 +17,7 @@ import {
   computeEmi,
 } from '../services/loans.service.js';
 import { revealLoanAccountNumber } from '../services/loans.service.js';
+import { getLoanMarketCheck } from '../services/loanChecks/marketCheck.service.js';
 import { writeAuditLog } from '../lib/audit.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
@@ -118,6 +119,12 @@ export async function getAmortizationHandler(req: Request, res: Response) {
   const rows = await getAmortization(req.user.id, req.params['id']!);
   // Cap at 600 rows (enforced in service already, but be explicit)
   ok(res, rows.slice(0, 600));
+}
+
+/** GET /api/loans/:id/market-check (spec s6.2). */
+export async function getLoanMarketCheckHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  ok(res, await getLoanMarketCheck(req.user.id, req.params['id']!));
 }
 
 export async function addPaymentHandler(req: Request, res: Response) {
