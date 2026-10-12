@@ -42,6 +42,10 @@ model User {
   plan                  PlanTier  @default(FREE)
   planExpiresAt         DateTime?
   isActive              Boolean   @default(true)
+  /// Last *real* owner activity (own session request, refresh, Legacy "I'm OK").
+  /// Never touched by system jobs or X-Act-As. Drives Legacy Transfer inactivity.
+  lastActiveAt          DateTime?
+  legacyPlan            LegacyPlan?
   /// A CA-owned client record: a real User row that exists so the client's
   /// books have an owner, but which can NEVER authenticate. Every auth entry
   /// point refuses these outright — see auth.service.ts. Deliberately its own
@@ -5325,4 +5329,140 @@ model BenchmarkRate {
   fetchedAt     DateTime @default(now()) @db.Timestamptz(3)
 
   @@unique([kind, lender, tenor, effectiveDate])
+}
+
+// --- Legacy Transfer (docs/legacy-transfer/01-DESIGN.md) --------------------
+
+enum LegacyStatus {
+  DRAFT
+  ARMED
+  WARNING_1
+  WARNING_2
+  FINAL_WARNING
+  GRACE
+  RELEASED
+  PAUSED
+}
+
+enum LegacyTrigger {
+  INACTIVITY
+  SCHEDULED
+  BOTH
+}
+
+enum LegacyTokenPurpose {
+  INVITE // nominee acknowledges they were named
+  ACCESS // nominee opens the released view (then OTP)
+  IM_OK // owner one-click reset
+  VERIFY // verifier answers during GRACE
+}
+
+enum LegacyCodePurpose {
+  NOMINEE_OTP
+  NOMINEE_SESSION
+  OWNER_STEPUP_CODE
+  OWNER_STEPUP_GRANT
+}
+
+model LegacyPlan {
+  id             String          @id @default(cuid())
+  userId         String          @unique
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         LegacyStatus    @default(DRAFT)
+  triggerMode    LegacyTrigger   @default(INACTIVITY)
+  inactivityDays Int             @default(90)
+  scheduledFor   DateTime?       @db.Date
+  pausedUntil    DateTime?       @db.Date
+  stageEnteredAt DateTime?
+  /// Inactivity is measured from max(User.lastActiveAt, clockResetAt).
+  clockResetAt   DateTime?
+  cycle          Int             @default(1)
+  activatedAt    DateTime?
+  releasedAt     DateTime?
+  letterEnc      String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  nominees       LegacyNominee[]
+  tokens         LegacyToken[]
+  outbox         LegacyOutbox[]
+
+  @@index([status])
+}
+
+model LegacyNominee {
+  id             String        @id @default(cuid())
+  planId         String
+  plan           LegacyPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId         String // owner (RLS)
+  nameEnc        String
+  emailEnc       String
+  relationship   String
+  priority       Int
+  isVerifier     Boolean       @default(false)
+  categories     String[]
+  documentIds    String[]      @default([])
+  showAmounts    Boolean       @default(false)
+  acknowledgedAt DateTime?
+  createdAt      DateTime      @default(now())
+  tokens         LegacyToken[]
+  codes          LegacyCode[]
+
+  @@index([planId])
+  @@index([userId])
+}
+
+model LegacyToken {
+  id        String             @id @default(cuid())
+  planId    String
+  plan      LegacyPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId    String // owner (RLS)
+  nomineeId String?
+  nominee   LegacyNominee?     @relation(fields: [nomineeId], references: [id], onDelete: Cascade)
+  purpose   LegacyTokenPurpose
+  cycle     Int
+  tokenHash String             @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime           @default(now())
+
+  @@index([planId, purpose])
+}
+
+/// Short-lived secrets: nominee OTP + session, owner step-up code + grant.
+/// One live row per (subjectId, purpose) — subjectId is a nomineeId, an owner
+/// userId, or (for sessions) the session hash.
+model LegacyCode {
+  id          String            @id @default(cuid())
+  userId      String // owner (RLS)
+  nomineeId   String?
+  nominee     LegacyNominee?    @relation(fields: [nomineeId], references: [id], onDelete: Cascade)
+  subjectId   String
+  purpose     LegacyCodePurpose
+  codeHash    String
+  expiresAt   DateTime
+  attempts    Int               @default(0)
+  lockedUntil DateTime?
+  createdAt   DateTime          @default(now())
+
+  @@unique([subjectId, purpose])
+  @@index([nomineeId])
+}
+
+model LegacyOutbox {
+  id           String     @id @default(cuid())
+  planId       String
+  plan         LegacyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId       String // owner (RLS)
+  kind         String // see emails.ts OutboxKind
+  cycle        Int
+  /// 'owner' or a nomineeId — makes (planId, kind, cycle, recipientKey) a send-once key.
+  recipientKey String
+  tokenEnc     String? // encrypted raw link token, cleared once sent
+  sentAt       DateTime?
+  attempts     Int        @default(0)
+  lastError    String?
+  createdAt    DateTime   @default(now())
+
+  @@unique([planId, kind, cycle, recipientKey])
+  @@index([sentAt])
 }
