@@ -247,8 +247,12 @@ export async function deleteDocument(
 export async function listAllDocuments(
   userId: string,
   filter?: { from?: Date; to?: Date },
+  opts: { excludeWill?: boolean } = {},
 ) {
   const where: Prisma.DocumentWhereInput = { userId };
+  // A will is its owner's alone: a CA or a family member reaching this
+  // person's vault never sees it.
+  if (opts.excludeWill) where.ownerType = { not: 'WILL' };
   if (filter?.from || filter?.to) {
     where.createdAt = {
       ...(filter.from ? { gte: filter.from } : {}),
@@ -271,9 +275,18 @@ export async function listAllDocuments(
  * agreements called "agreement.pdf" would otherwise overwrite each other
  * inside the archive and the zip would quietly contain less than it claims.
  */
-export async function zipDocuments(userId: string, ids: string[]): Promise<Buffer> {
+export async function zipDocuments(
+  userId: string,
+  ids: string[],
+  opts: { excludeWill?: boolean } = {},
+): Promise<Buffer> {
   const rows = await prisma.document.findMany({
-    where: { userId, id: { in: ids } },
+    where: {
+      userId,
+      id: { in: ids },
+      // Same rule as listAllDocuments: a will never leaves through someone else.
+      ...(opts.excludeWill ? { ownerType: { not: 'WILL' as const } } : {}),
+    },
     orderBy: { createdAt: 'asc' },
   });
 
