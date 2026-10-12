@@ -23,12 +23,12 @@ describe('legacy plan service', () => {
   });
 
   it('rejects inactivityDays below 30 and a past scheduled date', async () => {
-    await expect(s.runAs(() => saveSettings(s.userId, { triggerMode: 'INACTIVITY', inactivityDays: 29, scheduledFor: null, letter: null }))).rejects.toThrow(/30/);
-    await expect(s.runAs(() => saveSettings(s.userId, { triggerMode: 'SCHEDULED', inactivityDays: 90, scheduledFor: '2020-01-01', letter: null }))).rejects.toThrow(/future/);
+    await expect(s.runAs(() => saveSettings(s.userId, { triggerMode: 'INACTIVITY', inactivityDays: 29, scheduledFor: null, letter: null }, { isAdmin: false }))).rejects.toThrow(/30/);
+    await expect(s.runAs(() => saveSettings(s.userId, { triggerMode: 'SCHEDULED', inactivityDays: 90, scheduledFor: '2020-01-01', letter: null }, { isAdmin: false }))).rejects.toThrow(/future/);
   });
 
   it('activate needs a nominee, then arms and invites', async () => {
-    await s.runAs(() => saveSettings(s.userId, { triggerMode: 'INACTIVITY', inactivityDays: 90, scheduledFor: null, letter: 'Locker #42' }));
+    await s.runAs(() => saveSettings(s.userId, { triggerMode: 'INACTIVITY', inactivityDays: 90, scheduledFor: null, letter: 'Locker #42' }, { isAdmin: false }));
     await expect(s.runAs(() => activate(s.userId))).rejects.toThrow(/nominee/i);
     await s.runAs(() => addNominee(s.userId, nominee));
     await s.runAs(() => activate(s.userId));

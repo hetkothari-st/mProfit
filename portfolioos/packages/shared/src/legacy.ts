@@ -83,6 +83,8 @@ export interface LegacyOverviewDTO {
   status: LegacyStatusValue;
   triggerMode: LegacyTriggerValue;
   inactivityDays: number;
+  /** Admin-only: 1-minute inactivity and stages. */
+  testMode: boolean;
   scheduledFor: string | null; // YYYY-MM-DD
   pausedUntil: string | null; // YYYY-MM-DD
   hasLetter: boolean;

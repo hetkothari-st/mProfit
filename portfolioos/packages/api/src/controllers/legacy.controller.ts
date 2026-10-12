@@ -47,7 +47,7 @@ export async function stepUpVerifyHandler(req: Request, res: Response) {
 }
 
 export async function saveSettingsHandler(req: Request, res: Response) {
-  await plan.saveSettings(uid(req), req.body); changed(req); ok(res, { ok: true });
+  await plan.saveSettings(uid(req), req.body, { isAdmin: req.user!.role === 'ADMIN' }); changed(req); ok(res, { ok: true });
 }
 export async function addNomineeHandler(req: Request, res: Response) {
   const n = await plan.addNominee(uid(req), req.body); changed(req); ok(res, n);

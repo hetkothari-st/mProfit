@@ -26,10 +26,26 @@ async function retryOutbox(): Promise<void> {
   }
 }
 
-/** Daily state tick 10:00 IST; hourly outbox retry at :20. Set ENABLE_LEGACY_CRON=false in test/CI. */
+let testRunning = false;
+
+/** Admin test-mode plans only (1-minute stages); a no-op query when there are none. */
+async function testTick(): Promise<void> {
+  if (testRunning || running) return;
+  testRunning = true;
+  try {
+    const out = await runLegacyTick(new Date(), undefined, { testOnly: true });
+    if (out.plans > 0) logger.info({ out }, '[legacy.cron] test-mode tick done');
+  } catch (err) {
+    // Cron entrypoint: the next minute retries.
+    logger.error({ err }, '[legacy.cron] test-mode tick failed');
+  } finally { testRunning = false; }
+}
+
+/** Daily state tick 10:00 IST; hourly outbox retry at :20; per-minute tick for test-mode plans. Set ENABLE_LEGACY_CRON=false in test/CI. */
 export function startLegacyTransferJob(): void {
   if (process.env.ENABLE_LEGACY_CRON === 'false') return;
   cron.schedule('0 10 * * *', () => void tick(), { timezone: 'Asia/Kolkata' });
   cron.schedule('20 * * * *', () => void retryOutbox(), { timezone: 'Asia/Kolkata' });
+  cron.schedule('* * * * *', () => void testTick(), { timezone: 'Asia/Kolkata' });
   logger.info('[legacy.cron] scheduled (daily 10:00 IST, outbox hourly :20)');
 }

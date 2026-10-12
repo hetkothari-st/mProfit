@@ -21,7 +21,12 @@ export interface PlanClock {
   stageEnteredAt: Date | null;
   clockResetAt: Date | null;
   lastActiveAt: Date | null;
+  /** Admin-only test mode: inactivity and every stage last 1 minute instead of days. */
+  testMode: boolean;
 }
+
+const MIN_MS = 60_000;
+export const TEST_MODE_MINUTES = 1;
 
 export type Step =
   | { kind: 'reset'; from: LegacyStatusValue }
@@ -41,6 +46,13 @@ function istDayStart(d: Date): number {
 function daysBetween(from: Date, to: Date): number {
   return Math.round((istDayStart(to) - istDayStart(from)) / DAY_MS);
 }
+
+/** Whole units elapsed: IST calendar days normally, minutes in test mode. */
+function elapsed(p: PlanClock, from: Date, to: Date): number {
+  return p.testMode ? Math.floor((to.getTime() - from.getTime()) / MIN_MS) : daysBetween(from, to);
+}
+const inactivityUnits = (p: PlanClock) => (p.testMode ? TEST_MODE_MINUTES : p.inactivityDays);
+const stageUnits = (p: PlanClock) => (p.testMode ? TEST_MODE_MINUTES : LEGACY_STAGE_DAYS);
 
 export function inactiveSince(p: PlanClock): Date | null {
   const c = [p.lastActiveAt, p.clockResetAt].filter((d): d is Date => d !== null);
@@ -72,9 +84,9 @@ export function planSteps(p: PlanClock, now: Date): Step[] {
   }
   if (usesInactivity(p.triggerMode)) {
     const next = NEXT[p.status];
-    if (p.status === 'ARMED' && since && daysBetween(since, now) >= p.inactivityDays) {
+    if (p.status === 'ARMED' && since && elapsed(p, since, now) >= inactivityUnits(p)) {
       steps.push({ kind: 'advance', to: 'WARNING_1', reason: 'inactivity' });
-    } else if (next && p.stageEnteredAt && daysBetween(p.stageEnteredAt, now) >= LEGACY_STAGE_DAYS) {
+    } else if (next && p.stageEnteredAt && elapsed(p, p.stageEnteredAt, now) >= stageUnits(p)) {
       steps.push({ kind: 'advance', to: next, reason: 'inactivity' });
     }
   }
@@ -87,6 +99,9 @@ const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY_MS);
 
 /** One sentence for the owner's status card. */
 export function nextEventText(p: PlanClock, _now: Date): string | null {
+  if (p.testMode && p.status !== 'DRAFT' && p.status !== 'RELEASED' && p.status !== 'PAUSED') {
+    return 'Test mode: after 1 minute of inactivity, each reminder stage lasts 1 minute (release in about 5 minutes).';
+  }
   switch (p.status) {
     case 'DRAFT':
       return null;

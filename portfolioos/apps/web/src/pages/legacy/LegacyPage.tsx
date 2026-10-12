@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { apiErrorMessage } from '@/api/client';
 import { LEGACY_KEYS, legacyApi, type NomineeInput } from '@/api/legacy.api';
 import { useEntitlement } from '@/hooks/useEntitlement';
+import { useAuthStore } from '@/stores/auth.store';
 import { StepUpDialog } from './StepUpDialog';
 import { NomineeDialog } from './NomineeDialog';
 
@@ -43,6 +44,8 @@ export function LegacyPage() {
   const [days, setDays] = useState(LEGACY_DEFAULT_INACTIVITY_DAYS);
   const [date, setDate] = useState('');
   const [letter, setLetter] = useState('');
+  const [testMode, setTestMode] = useState(false);
+  const isAdmin = useAuthStore((s) => s.user?.role === 'ADMIN');
   const [pauseUntil, setPauseUntil] = useState('');
 
   // Seed once per load so a background refetch never wipes unsaved edits.
@@ -53,6 +56,7 @@ export function LegacyPage() {
     seeded.current = true;
     setTrigger(o.triggerMode);
     setDays(o.inactivityDays);
+    setTestMode(o.testMode);
     setDate(o.scheduledFor ?? '');
     setLetter(o.letter ?? '');
   }, [q.data]);
@@ -76,7 +80,9 @@ export function LegacyPage() {
   if (q.error || !q.data) return <div className="p-6 text-sm">{apiErrorMessage(q.error, 'Could not load Succession.')}</div>;
   const o = q.data;
   const canEdit = ent.allowed && EDITABLE.has(o.status);
-  const settingsValid = trigger === 'SCHEDULED' ? date !== '' : days >= LEGACY_MIN_INACTIVITY_DAYS && (trigger === 'INACTIVITY' || date !== '');
+  const settingsValid = testMode
+    ? trigger === 'INACTIVITY'
+    : trigger === 'SCHEDULED' ? date !== '' : days >= LEGACY_MIN_INACTIVITY_DAYS && (trigger === 'INACTIVITY' || date !== '');
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
@@ -91,7 +97,8 @@ export function LegacyPage() {
       )}
 
       <Card><CardContent className="space-y-2 p-4">
-        <div className="flex items-center gap-2"><span className="font-medium">Status</span><Badge>{STATUS_TEXT[o.status]}</Badge></div>
+        <div className="flex items-center gap-2"><span className="font-medium">Status</span><Badge>{STATUS_TEXT[o.status]}</Badge>
+          {o.testMode && <Badge variant="destructive">Test mode · 1 minute</Badge>}</div>
         {o.nextEvent && <p className="text-sm text-muted-foreground">{o.nextEvent}</p>}
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {o.status === 'DRAFT' && (
@@ -122,7 +129,20 @@ export function LegacyPage() {
             <option value="BOTH">Whichever comes first</option>
           </Select>
         </div>
-        {trigger !== 'SCHEDULED' && (
+        {isAdmin && (
+          <label className="flex items-start gap-2 rounded-md border border-dashed p-2 text-sm">
+            <input type="checkbox" className="mt-1" checked={testMode} disabled={!canEdit}
+              onChange={(e) => { setTestMode(e.target.checked); if (e.target.checked) setTrigger('INACTIVITY'); }} />
+            <span>
+              <span className="font-medium">Test mode: 1 minute (admins only)</span>
+              <span className="block text-xs text-muted-foreground">
+                After 1 minute of inactivity, each reminder stage lasts 1 minute, so nominees get access in about 5 minutes.
+                Browsing the app only counts as activity once an hour, so use the “I’m OK” email link to test a reset. Use test nominee emails.
+              </span>
+            </span>
+          </label>
+        )}
+        {trigger !== 'SCHEDULED' && !testMode && (
           <div className="space-y-1">
             <Label htmlFor="lg-days">Inactive for (days, at least {LEGACY_MIN_INACTIVITY_DAYS})</Label>
             <Input id="lg-days" type="number" min={LEGACY_MIN_INACTIVITY_DAYS} value={days} disabled={!canEdit}
@@ -142,7 +162,7 @@ export function LegacyPage() {
             onChange={(e) => setLetter(e.target.value)} />
         </div>
         <Button disabled={!canEdit || !settingsValid} onClick={() => guarded(() => legacyApi.saveSettings({
-          triggerMode: trigger, inactivityDays: days, scheduledFor: trigger === 'INACTIVITY' ? null : date || null, letter: letter.trim() || null,
+          triggerMode: trigger, inactivityDays: days, scheduledFor: trigger === 'INACTIVITY' ? null : date || null, letter: letter.trim() || null, testMode,
         }))}>Save</Button>
         {!EDITABLE.has(o.status) && <p className="text-xs text-muted-foreground">Settings are locked while reminders are going out or after release. Pause or revoke first.</p>}
       </CardContent></Card>

@@ -19,6 +19,8 @@ export interface SettingsInput {
   inactivityDays: number;
   scheduledFor: string | null;
   letter: string | null;
+  /** Admin-only on the server. */
+  testMode?: boolean;
 }
 
 // Step-up grant lives in memory only (15 min server-side; a minute of slack

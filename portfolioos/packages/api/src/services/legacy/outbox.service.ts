@@ -51,6 +51,8 @@ export async function enqueue(
   });
 }
 
+const fmtDateTime = (d: Date) =>
+  d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
 const fmtDate = (d: Date) =>
   d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 
@@ -100,7 +102,9 @@ export async function flushOutbox(
       let date: string | null = null;
       if (kind.startsWith('SCHEDULE_') && row.plan.scheduledFor) date = fmtDate(row.plan.scheduledFor);
       if ((kind === 'GRACE_OWNER' || kind === 'GRACE_NOMINEE') && row.plan.stageEnteredAt) {
-        date = fmtDate(new Date(row.plan.stageEnteredAt.getTime() + LEGACY_STAGE_DAYS * DAY_MS));
+        date = row.plan.testMode
+          ? `${fmtDateTime(new Date(row.plan.stageEnteredAt.getTime() + MIN_MS))} (test mode)`
+          : fmtDate(new Date(row.plan.stageEnteredAt.getTime() + LEGACY_STAGE_DAYS * DAY_MS));
       }
       const mail = renderLegacyEmail(kind, { ownerName: owner.name, recipientName, link, date, appUrl: env.FRONTEND_URL });
       const res = await send({ to, ...mail });

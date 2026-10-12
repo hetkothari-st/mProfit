@@ -5,7 +5,7 @@ import {
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { encryptSecret, decryptSecret } from '../../lib/secrets.js';
-import { BadRequestError, NotFoundError } from '../../lib/errors.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
 import { writeAuditLog } from '../../lib/audit.js';
 import { logger } from '../../lib/logger.js';
 import { env } from '../../config/env.js';
@@ -72,6 +72,7 @@ export async function getOverview(userId: string, entitled: boolean): Promise<Le
     status: plan.status,
     triggerMode: plan.triggerMode,
     inactivityDays: plan.inactivityDays,
+    testMode: plan.testMode,
     scheduledFor: dateOnly(plan.scheduledFor),
     pausedUntil: dateOnly(plan.pausedUntil),
     hasLetter: plan.letterEnc !== null,
@@ -85,8 +86,13 @@ export async function getOverview(userId: string, entitled: boolean): Promise<Le
   };
 }
 
-export async function saveSettings(userId: string, raw: LegacySettingsInput): Promise<void> {
+export async function saveSettings(userId: string, raw: LegacySettingsInput, opts: { isAdmin: boolean }): Promise<void> {
   const input = legacySettingsSchema.parse(raw);
+  if (input.testMode) {
+    // Test mode can release someone's finances in ~5 minutes: admins only, server-enforced.
+    if (!opts.isAdmin) throw new ForbiddenError('Test mode is for admins only.');
+    if (input.triggerMode !== 'INACTIVITY') throw new BadRequestError('Test mode works with the inactivity trigger only.');
+  }
   if (input.triggerMode !== 'INACTIVITY') {
     if (!input.scheduledFor) throw new BadRequestError('Pick a release date.');
     if (input.scheduledFor <= todayIso()) throw new BadRequestError('The release date must be in the future.');
@@ -100,9 +106,11 @@ export async function saveSettings(userId: string, raw: LegacySettingsInput): Pr
     data: {
       triggerMode: input.triggerMode,
       inactivityDays: input.inactivityDays,
+      testMode: input.testMode,
       scheduledFor: input.triggerMode === 'INACTIVITY' ? null : new Date(`${input.scheduledFor}T00:00:00Z`),
       letterEnc: input.letter ? encryptSecret(input.letter) : null,
-      ...(plan.status === 'ARMED' && plan.inactivityDays !== input.inactivityDays ? { clockResetAt: new Date() } : {}),
+      ...(plan.status === 'ARMED' && (plan.inactivityDays !== input.inactivityDays || plan.testMode !== input.testMode)
+        ? { clockResetAt: new Date() } : {}),
     },
   });
   await writeAuditLog({ userId, action: 'legacy_changed', resource: `LegacyPlan:${plan.id}`, metadata: { what: 'settings' } });
