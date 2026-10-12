@@ -25,6 +25,7 @@ import { assertNotPendingDeletion } from './accountDeletion.service.js';
 import { linkContactsForUser } from './split/linking.service.js';
 import { effectivePlan } from '../lib/effectivePlan.js';
 import { completeChallenge, createChallenge, isTwoFactorEnabled } from './twoFactor.service.js';
+import { touchActivitySoon } from './legacy/activity.service.js';
 
 interface IssueTokensResult {
   accessToken: string;
@@ -434,6 +435,9 @@ export async function refreshSession(refreshToken: string) {
     where: { id: stored.id },
     data: { revokedAt: new Date() },
   });
+
+  // Legacy Transfer: a refresh is the owner's own session being used.
+  touchActivitySoon(stored.userId);
 
   // A session signed in with a second factor stays one across refreshes.
   return issueSession(stored.user, { mfa: stored.mfa });
