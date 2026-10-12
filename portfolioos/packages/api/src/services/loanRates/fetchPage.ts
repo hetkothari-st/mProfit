@@ -45,7 +45,12 @@ export interface FetchPageOptions {
   allowPrivateHosts?: boolean;
 }
 
-/** True for loopback, private, link-local, unspecified and unique-local addresses, including IPv4-mapped IPv6. */
+/**
+ * True for anything that is not a plain public unicast address: loopback, private, link-local, unspecified,
+ * carrier-grade NAT (100.64/10), benchmarking (198.18/15), multicast, reserved and broadcast (224/4 and up),
+ * unique-local and multicast IPv6, and IPv6 forms that embed an IPv4 address (::a.b.c.d, ::ffff:a.b.c.d,
+ * 64:ff9b::/96 NAT64, 2002::/16 6to4) when the embedded address is one of those.
+ */
 export function isPrivateAddress(ip: string): boolean {
   const kind = isIP(ip);
   if (kind === 4) return isPrivateV4(ip.split('.').map((x) => Number.parseInt(x, 10)));
@@ -55,14 +60,29 @@ export function isPrivateAddress(ip: string): boolean {
   const first = groups[0]!;
   if ((first & 0xfe00) === 0xfc00) return true; // fc00::/7
   if ((first & 0xffc0) === 0xfe80) return true; // fe80::/10
-  const mapped = groups.slice(0, 5).every((g) => g === 0) && groups[5] === 0xffff; // ::ffff:a.b.c.d
-  if (mapped) return isPrivateV4([groups[6]! >> 8, groups[6]! & 255, groups[7]! >> 8, groups[7]! & 255]);
+  if ((first & 0xff00) === 0xff00) return true; // ff00::/8 multicast
+  const v4 = (hi: number, lo: number) => [hi >> 8, hi & 255, lo >> 8, lo & 255];
+  const zeros = (from: number, to: number) => groups.slice(from, to).every((g) => g === 0);
+  if (zeros(0, 5) && groups[5] === 0xffff) return isPrivateV4(v4(groups[6]!, groups[7]!)); // ::ffff:a.b.c.d
+  if (zeros(0, 6)) return isPrivateV4(v4(groups[6]!, groups[7]!)); // ::a.b.c.d (IPv4-compatible)
+  if (first === 0x64 && groups[1] === 0xff9b && zeros(2, 6)) return isPrivateV4(v4(groups[6]!, groups[7]!)); // NAT64
+  if (first === 0x2002) return isPrivateV4(v4(groups[1]!, groups[2]!)); // 6to4
   return false;
 }
 
 function isPrivateV4(o: number[]): boolean {
   const [a, b] = o as [number, number];
-  return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224
+  );
 }
 
 function expandV6(ip: string): number[] {
@@ -115,6 +135,10 @@ async function cancelBody(res: Response): Promise<void> {
 export async function fetchPage(url: string, opts: FetchPageOptions = {}): Promise<string> {
   const allowList = opts.allowList ?? READER_URLS;
   if (!allowList.has(url)) throw new FetchPageError('NOT_ALLOWED', `Not an allow-listed loan-rate page: ${url}`);
+  const literal = new URL(url).hostname.replace(/^\[|\]$/g, '');
+  if (!opts.allowPrivateHosts && isIP(literal) !== 0 && isPrivateAddress(literal)) {
+    throw new FetchPageError('NOT_ALLOWED', `${literal} is a private address`);
+  }
   const get = opts.get ?? (opts.allowPrivateHosts ? openGet : guardedGet);
   const allowedHosts = new Set([...allowList].map((u) => new URL(u).host));
   const timeoutMs = opts.timeoutMs ?? FETCH_TIMEOUT_MS;
@@ -127,7 +151,7 @@ export async function fetchPage(url: string, opts: FetchPageOptions = {}): Promi
   for (let hop = 0; ; hop++) {
     // Every hop (the first included) is robots-checked; redirect targets are vetted below before the next loop.
     await assertRobotsAllow(current, get, signal, robotsCache, maxBytes, allowedHosts);
-    const res = await request(get, current.toString(), signal, 'text/html,application/xhtml+xml');
+    const res = await request(get, current, signal, 'text/html,application/xhtml+xml');
     if (res.status >= 300 && res.status < 400 && res.headers.has('location')) {
       await cancelBody(res);
       if (hop >= MAX_REDIRECTS) throw new FetchPageError('TOO_MANY_REDIRECTS', `More than ${MAX_REDIRECTS} redirects from ${safeUrl(origin)}`);
@@ -171,7 +195,7 @@ async function fetchRobots(
 ): Promise<string> {
   let robotsUrl = new URL('/robots.txt', target.origin);
   for (let hop = 0; ; hop++) {
-    const res = await request(get, robotsUrl.toString(), signal, 'text/plain');
+    const res = await request(get, robotsUrl, signal, 'text/plain');
     if (res.status >= 300 && res.status < 400) {
       await cancelBody(res);
       const loc = res.headers.get('location');
@@ -225,9 +249,11 @@ async function assertRobotsAllow(
   }
 }
 
-async function request(get: HttpGet, url: string, signal: AbortSignal, accept: string): Promise<Response> {
+/** One GET. Error messages name the URL without its query (a robots redirect may carry one). */
+async function request(get: HttpGet, target: URL, signal: AbortSignal, accept: string): Promise<Response> {
+  const url = safeUrl(target);
   try {
-    return await get(url, {
+    return await get(target.toString(), {
       signal,
       redirect: 'manual',
       headers: { 'User-Agent': LOAN_RATES_USER_AGENT, Accept: accept },
@@ -237,7 +263,9 @@ async function request(get: HttpGet, url: string, signal: AbortSignal, accept: s
     for (let cause: unknown = err; cause instanceof Error; cause = cause.cause) {
       if (cause instanceof FetchPageError) throw cause; // e.g. the DNS guard, wrapped by fetch
     }
-    throw new FetchPageError('NETWORK', `${url}: ${err instanceof Error ? err.message : String(err)}`);
+    const raw = err instanceof Error ? err.message : String(err);
+    const detail = target.search === '' ? raw : raw.split(target.search).join('');
+    throw new FetchPageError('NETWORK', `${url}: ${detail}`);
   }
 }
 

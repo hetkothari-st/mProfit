@@ -183,6 +183,42 @@ describe('fetchPage hardening', () => {
     }
   });
 
+  it('classifies CGNAT, benchmarking, multicast, broadcast and IPv4 embedded in IPv6', () => {
+    const blocked = [
+      '100.64.0.1', '100.127.255.254', '198.18.0.1', '198.19.255.255', '224.0.0.1', '239.255.255.250', '240.0.0.1', '255.255.255.255',
+      '::127.0.0.1', '::10.0.0.1', '::a00:1', '64:ff9b::7f00:1', '64:ff9b::10.0.0.1', '64:ff9b::a9fe:a9fe', '2002:7f00:1::', '2002:c0a8:101::1', '2002:a00:1::', 'ff02::1',
+    ];
+    for (const ip of blocked) expect(isPrivateAddress(ip), ip).toBe(true);
+    for (const ip of ['100.63.255.255', '100.128.0.1', '198.17.0.1', '198.20.0.1', '223.255.255.255', '64:ff9b::808:808', '2002:808:808::1']) {
+      expect(isPrivateAddress(ip), ip).toBe(false);
+    }
+  });
+
+  it('refuses a private IP-literal page URL up front, before any request', async () => {
+    for (const page of ['https://127.0.0.1/rates', 'https://[::1]/rates', 'https://169.254.169.254/latest', 'https://[64:ff9b::a00:1]/x']) {
+      let called = false;
+      const get: HttpGet = async () => {
+        called = true;
+        return res('x');
+      };
+      expect(await codeOf(fetchPage(page, { allowList: new Set([page]), get })), page).toBe('NOT_ALLOWED');
+      expect(called, page).toBe(false);
+    }
+  });
+
+  it('never puts a robots redirect query string in TIMEOUT or NETWORK messages', async () => {
+    const secret = '?token=s3cr3t';
+    const first = (fail: (init: RequestInit) => Promise<Response>): HttpGet => async (url, init) =>
+      url === 'https://www.icici.bank.in/robots.txt' ? res(null, 301, { location: `/robots.txt${secret}` }) : fail(init);
+    const network = await fetchPage(PAGE, { get: first(async () => { throw new Error(`connect failed for https://www.icici.bank.in/robots.txt${secret}`); }) }).catch((e: unknown) => e);
+    expect((network as FetchPageError).code).toBe('NETWORK');
+    expect((network as FetchPageError).message).not.toContain('s3cr3t');
+    const hang = first((init) => new Promise((_ok, reject) => init.signal?.addEventListener('abort', () => reject(new Error('aborted')))));
+    const timeout = await fetchPage(PAGE, { get: hang, timeoutMs: 50 }).catch((e: unknown) => e);
+    expect((timeout as FetchPageError).code).toBe('TIMEOUT');
+    expect((timeout as FetchPageError).message).not.toContain('s3cr3t');
+  });
+
   it('the default transport refuses a private address; allowPrivateHosts is the test-only escape', async () => {
     const server = createServer((req, r) => r.end(req.url === '/robots.txt' ? '' : 'local page'));
     await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
