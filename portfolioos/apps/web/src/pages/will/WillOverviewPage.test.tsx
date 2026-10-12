@@ -46,6 +46,13 @@ describe('WillOverviewPage', () => {
     expect(await screen.findByRole('button', { name: /continue/i })).toBeTruthy();
     expect(screen.getByText(/12\/10\/2026/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /discard draft/i }));
+    expect(await screen.findByText(/discard this draft\?/i)).toBeTruthy();
+    expect(screen.getByText(/you can't get it back/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    await waitFor(() => expect(screen.queryByText(/discard this draft\?/i)).toBeNull());
+    expect(api.discard).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /discard draft/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^discard$/i }));
     await waitFor(() => expect(api.discard).toHaveBeenCalledWith('w1'));
   });
 

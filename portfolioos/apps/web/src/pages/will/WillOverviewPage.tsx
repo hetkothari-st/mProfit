@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { apiErrorMessage } from '@/api/client';
 import { willApi, willDraftExistsId } from '@/api/will.api';
+import { ConfirmDialog } from '@/pages/split/ConfirmDialog';
 import { WillGate } from './WillGuards';
 import { willStepPath } from './willSteps';
 
@@ -54,6 +56,7 @@ function OverviewBody() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['will', 'overview'], queryFn: () => willApi.overview() });
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const create = useMutation({
     mutationFn: (fromWillId?: string) => willApi.createDraft(fromWillId),
@@ -109,10 +112,19 @@ function OverviewBody() {
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" onClick={() => navigate(willStepPath(o.draft!.id, o.draft!.currentStep))}>Continue</Button>
-                <Button size="sm" variant="outline" disabled={discard.isPending} onClick={() => discard.mutate(o.draft!.id)}>
+                <Button size="sm" variant="outline" disabled={discard.isPending} onClick={() => setConfirmDiscard(true)}>
                   Discard draft
                 </Button>
               </div>
+              <ConfirmDialog
+                open={confirmDiscard}
+                onOpenChange={setConfirmDiscard}
+                title="Discard this draft?"
+                description="You can't get it back."
+                confirmLabel="Discard"
+                destructive
+                onConfirm={() => discard.mutate(o.draft!.id)}
+              />
             </div>
           )}
           {latest && (
