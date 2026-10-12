@@ -111,21 +111,21 @@ function CardBody({ check, costs, onCosts, onRateType, savingRateType }: {
       )}
 
       {model.kind === 'READY' && (
-        <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
-          <dt className="text-muted-foreground">New EMI</dt>
-          <dd data-testid="market-new-emi" className="text-right tabular-nums">
+        <dl className="grid grid-cols-1 gap-x-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-y-1">
+          <dt className="mt-1 text-muted-foreground sm:mt-0">New EMI</dt>
+          <dd data-testid="market-new-emi" className="tabular-nums sm:text-right">
             {`${moneyWhole(model.result.newEmi)} (now ${moneyWhole(model.result.currentEmi)}) over ${check.remainingMonths} months`}
           </dd>
-          <dt className="text-muted-foreground">Interest saved</dt>
-          <dd data-testid="market-gross" className="text-right tabular-nums">{moneyWhole(model.result.grossSaving)}</dd>
-          <dt className="text-muted-foreground">Switching costs</dt>
-          <dd data-testid="market-costs" className="text-right tabular-nums">{moneyWhole(model.result.switchingCost)}</dd>
-          <dt className="font-medium">Net saving</dt>
-          <dd data-testid="market-net" className={`text-right font-medium tabular-nums ${model.result.netSaving.greaterThan(0) ? 'text-positive' : 'text-negative'}`}>
+          <dt className="mt-1 text-muted-foreground sm:mt-0">Interest saved</dt>
+          <dd data-testid="market-gross" className="tabular-nums sm:text-right">{moneyWhole(model.result.grossSaving)}</dd>
+          <dt className="mt-1 text-muted-foreground sm:mt-0">Switching costs</dt>
+          <dd data-testid="market-costs" className="tabular-nums sm:text-right">{moneyWhole(model.result.switchingCost)}</dd>
+          <dt className="mt-1 font-medium sm:mt-0">Net saving</dt>
+          <dd data-testid="market-net" className={`font-medium tabular-nums sm:text-right ${model.result.netSaving.greaterThan(0) ? 'text-positive' : 'text-negative'}`}>
             {moneyWhole(model.result.netSaving)}
           </dd>
-          <dt className="text-muted-foreground">Break-even</dt>
-          <dd data-testid="market-break-even" className="text-right">
+          <dt className="mt-1 text-muted-foreground sm:mt-0">Break-even</dt>
+          <dd data-testid="market-break-even" className="sm:text-right">
             {model.result.breakEvenMonth !== null ? `Break-even in month ${model.result.breakEvenMonth}` : 'Switching would not pay off at these costs'}
           </dd>
         </dl>
@@ -156,8 +156,9 @@ function RateTypeLine({ check, onRateType, saving }: { check: LoanMarketCheckWir
   }
   if (check.rateType === 'FIXED') return <p className="text-muted-foreground">Fixed rate - no benchmark alerts.</p>;
   if (check.benchmark === null) {
+    // e.g. an MCLR loan with LIC Housing Finance: a tracked lender that publishes no MCLR series.
     return check.rateBenchmark === 'REPO' || check.rateBenchmark === 'MCLR'
-      ? null
+      ? <p data-testid="benchmark-line" className="text-muted-foreground">No benchmark data yet.</p>
       : <p className="text-muted-foreground">Set what the rate is linked to (repo or MCLR) in Edit to get change alerts.</p>;
   }
   return (

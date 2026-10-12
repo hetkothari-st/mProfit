@@ -131,6 +131,7 @@ function PaymentDialog({
       qc.invalidateQueries({ queryKey: ['loan', loanId] });
       qc.invalidateQueries({ queryKey: ['loan-summary', loanId] });
       qc.invalidateQueries({ queryKey: ['loan-amortization', loanId] });
+      qc.invalidateQueries({ queryKey: ['loan-market-check', loanId] });
       qc.invalidateQueries({ queryKey: ['loans'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Payment recorded');
@@ -484,6 +485,7 @@ function PaymentHistoryTable({ loan }: { loan: LoanDTO }) {
       qc.invalidateQueries({ queryKey: ['loan', loan.id] });
       qc.invalidateQueries({ queryKey: ['loan-summary', loan.id] });
       qc.invalidateQueries({ queryKey: ['loan-amortization', loan.id] });
+      qc.invalidateQueries({ queryKey: ['loan-market-check', loan.id] });
       qc.invalidateQueries({ queryKey: ['loans'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Payment removed');
@@ -612,6 +614,7 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
     qc.invalidateQueries({ queryKey: ['loan', loan.id] });
     qc.invalidateQueries({ queryKey: ['loan-summary', loan.id] });
     qc.invalidateQueries({ queryKey: ['loan-amortization', loan.id] });
+    qc.invalidateQueries({ queryKey: ['loan-market-check', loan.id] });
     qc.invalidateQueries({ queryKey: ['loans'] });
     qc.invalidateQueries({ queryKey: ['dashboard'] });
   };

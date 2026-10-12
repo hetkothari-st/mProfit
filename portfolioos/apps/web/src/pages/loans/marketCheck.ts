@@ -84,9 +84,10 @@ export function calculatorHref(check: LoanMarketCheckWire, costs: SwitchingInput
     firstEmiDate: check.nextEmiDate ?? base.firstEmiDate,
     feesOn: true,
     feeKind: 'PCT',
-    feeValue: parsed.processingPct.toString(),
+    // toFixed(), not toString(): a tiny fee must not reach the URL in exponent form ("1e-7").
+    feeValue: parsed.processingPct.toFixed(),
     gstPct: '0',
-    otherCharges: parsed.otherCharges.toString(),
+    otherCharges: parsed.otherCharges.toFixed(),
     loanKind: loanKindForRate(check.rateLoanType, base.loanKind),
   };
   return `/emi?${encodeEmiUrl('calculate', calc, defaultCompareState())}`;

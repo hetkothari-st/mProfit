@@ -51,6 +51,12 @@ describe('calculatorHref', () => {
       feesOn: true, feeKind: 'PCT', feeValue: '0.5', gstPct: '0', otherCharges: '10000', loanKind: 'HOME_SELF',
     });
   });
+  it('writes tiny costs in plain decimals, never exponent form', () => {
+    const href = calculatorHref(CHECK, { processingPct: '0.0000001', otherCharges: '0.0000001' }, new Date('2026-10-12T05:00:00Z'))!;
+    expect(href).not.toMatch(/e-/i);
+    const decoded = decodeEmiUrl(href.slice(href.indexOf('?')));
+    expect(decoded.calc).toMatchObject({ feeValue: '0.0000001', otherCharges: '0.0000001' });
+  });
   it('is null when the calculator cannot take the loan', () => {
     expect(calculatorHref({ ...CHECK, market: null }, DEFAULT_SWITCHING_INPUT)).toBeNull();
     expect(calculatorHref({ ...CHECK, remainingMonths: 481 }, DEFAULT_SWITCHING_INPUT)).toBeNull();

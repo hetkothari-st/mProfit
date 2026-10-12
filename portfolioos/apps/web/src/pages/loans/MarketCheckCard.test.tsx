@@ -80,6 +80,26 @@ describe('MarketCheckCard', () => {
     expect(screen.getByText(/isn't on our MCLR list/)).toBeTruthy();
   });
 
+  it('a floating MCLR or repo loan with no benchmark series says so (e.g. LIC Housing Finance has no MCLR)', async () => {
+    vi.mocked(loansApi.getMarketCheck).mockResolvedValueOnce({
+      ...CHECK, lender: 'LIC Housing Finance', rateType: 'FLOATING', rateBenchmark: 'MCLR', benchmark: null,
+    });
+    renderWithProviders(<MarketCheckCard loan={LOAN} />);
+    expect((await screen.findByTestId('benchmark-line')).textContent).toBe('No benchmark data yet.');
+    cleanup();
+    vi.mocked(loansApi.getMarketCheck).mockResolvedValueOnce({ ...CHECK, rateType: 'FLOATING', rateBenchmark: 'REPO', benchmark: null });
+    renderWithProviders(<MarketCheckCard loan={LOAN} />);
+    expect((await screen.findByTestId('benchmark-line')).textContent).toBe('No benchmark data yet.');
+  });
+
+  it('the result list stacks label over value below the sm breakpoint', async () => {
+    vi.mocked(loansApi.getMarketCheck).mockResolvedValue(CHECK);
+    renderWithProviders(<MarketCheckCard loan={LOAN} />);
+    const dl = (await screen.findByTestId('market-net')).closest('dl')!;
+    expect(dl.className.split(' ')).toContain('grid-cols-1');
+    expect(dl.className).toContain('sm:grid-cols-[minmax(0,1fr)_auto]');
+  });
+
   it('empty states: no market data, rates not available, already at or below the market', async () => {
     vi.mocked(loansApi.getMarketCheck).mockResolvedValueOnce({ ...CHECK, loanType: 'OTHER', rateLoanType: null, market: null });
     renderWithProviders(<MarketCheckCard loan={LOAN} />);
