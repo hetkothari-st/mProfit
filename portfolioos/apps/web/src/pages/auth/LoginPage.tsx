@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useNextPath } from '@/hooks/useNextPath';
+import { postLoginPath } from './loginRedirect';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -16,7 +17,6 @@ import { authApi, isMfaChallenge, type AuthResult } from '@/api/auth.api';
 import { TwoFactorChallenge } from '@/components/auth/TwoFactorChallenge';
 import { isSessionRemembered, useAuthStore } from '@/stores/auth.store';
 import { apiErrorCode, apiErrorMessage } from '@/api/client';
-import { isOnboardingUnfinished } from '@/lib/onboardingProgress';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 import { RestoreAccountNotice, pendingDeletionDate } from '@/components/auth/RestoreAccountNotice';
 
@@ -33,6 +33,7 @@ export function LoginPage() {
   const location = useLocation();
   const setSession = useAuthStore((s) => s.setSession);
   const isAuthed = useAuthStore((s) => Boolean(s.accessToken && s.user));
+  const authedUserId = useAuthStore((s) => s.user?.id);
   // Wrong email/password, shown under the field with a way out.
   const [credentialsRejected, setCredentialsRejected] = useState(false);
   // Set when the password (or Google) step passed on a two-factor account.
@@ -45,8 +46,10 @@ export function LoginPage() {
   });
 
   useEffect(() => {
-    if (isAuthed) navigate(nextPath ?? '/dashboard', { replace: true });
-  }, [isAuthed, navigate, nextPath]);
+    // Runs right after finishSignIn's setSession too, so it uses the same
+    // decision or it would override that navigation.
+    if (isAuthed) navigate(postLoginPath({ nextPath, userId: authedUserId, state: location.state }), { replace: true });
+  }, [isAuthed, authedUserId, navigate, nextPath, location.state]);
 
   const {
     register,
@@ -79,13 +82,7 @@ export function LoginPage() {
     // An explicit `?next=` outranks everything: the person was in the
     // middle of something — accepting an invitation, usually — and signing
     // in was the interruption, not the errand.
-    const to =
-      nextPath ??
-      (isOnboardingUnfinished(data.user.id)
-        ? '/onboarding'
-        : ((location.state as { from?: { pathname?: string } } | null)?.from?.pathname ??
-          '/dashboard'));
-    navigate(to, { replace: true });
+    navigate(postLoginPath({ nextPath, userId: data.user.id, state: location.state }), { replace: true });
   }
 
   const loginMutation = useMutation({

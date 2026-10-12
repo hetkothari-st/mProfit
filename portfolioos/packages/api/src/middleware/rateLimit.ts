@@ -190,6 +190,18 @@ export const receiptUploadLimiter = rateLimit({
   message: { success: false, error: 'Too many receipt uploads', code: 'RATE_LIMITED' },
 });
 
+/** EMI schedule PDF/Excel export: CPU-bound file building, 10 a minute per user. */
+export const emiExportLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  passOnStoreError: true,
+  keyGenerator: (req) => req.user?.id ?? 'anonymous',
+  store: makeStore('emi-export'),
+  message: { success: false, error: 'Too many exports - please wait a minute', code: 'RATE_LIMITED' },
+});
+
 export const importLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,

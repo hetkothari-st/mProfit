@@ -18,3 +18,4 @@ export * from './mfAnalytics.rating.js';
 export * from './insurance/index.js';
 export * from './familyRelations.js';
 export * from './split.types.js';
+export * from './loans/index.js';
