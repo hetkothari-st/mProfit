@@ -38,4 +38,8 @@ describe('text', () => {
     expect(repoLine({ ratePct: '5.75', effectiveDate: '2027-02-06', lastChange: { deltaPct: '0.25', date: '2027-02-06' } }))
       .toBe('RBI repo rate 5.75% - raised by 0.25% on 06/02/2027');
   });
+  it('a zero delta is not shown as a change', () => {
+    expect(repoLine({ ratePct: '5.50', effectiveDate: '2026-10-12', lastChange: { deltaPct: '0.00', date: '2026-10-12' } }))
+      .toBe('RBI repo rate 5.50% (as of 12/10/2026)');
+  });
 });

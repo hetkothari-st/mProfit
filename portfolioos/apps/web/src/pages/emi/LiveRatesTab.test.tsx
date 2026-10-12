@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
+import { screen, fireEvent, waitFor, cleanup, within, render } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { LoanRatesWire } from '@everypaisa/shared';
 import { renderWithProviders } from '@/pages/split/testUtils';
 import { loanRatesApi } from '@/api/loanRates.api';
@@ -57,12 +58,34 @@ describe('LiveRatesTab', () => {
     await waitFor(() => expect(loanRatesApi.list).toHaveBeenCalledWith('CAR'));
   });
 
-  it.each([
-    ['no rows', () => vi.mocked(loanRatesApi.list).mockResolvedValue({ loanType: 'HOME', rows: [], repo: null })],
-    ['an API error', () => vi.mocked(loanRatesApi.list).mockRejectedValue(new Error('502'))],
-  ])('shows "Rates not available yet" on %s', async (_label, arrange) => {
-    arrange();
+  it('shows "Rates not available yet" when there are no rows', async () => {
+    vi.mocked(loanRatesApi.list).mockResolvedValue({ loanType: 'HOME', rows: [], repo: null });
     renderWithProviders(<LiveRatesTab onUseRate={vi.fn()} />);
     expect((await screen.findByTestId('rates-empty')).textContent).toContain('Rates not available yet');
+    expect(screen.queryByTestId('rates-error')).toBeNull();
+  });
+
+  it('an API error shows an error line with Try again, distinct from empty; Try again refetches', async () => {
+    vi.mocked(loanRatesApi.list).mockRejectedValueOnce(new Error('502')).mockResolvedValueOnce(DATA);
+    renderWithProviders(<LiveRatesTab onUseRate={vi.fn()} />);
+    const error = await screen.findByTestId('rates-error');
+    expect(error.textContent).toContain("Couldn't load rates");
+    expect(screen.queryByTestId('rates-empty')).toBeNull();
+    fireEvent.click(within(error).getByRole('button', { name: /try again/i }));
+    expect(await screen.findByTestId('rate-row-hdfc.home')).toBeTruthy();
+    expect(loanRatesApi.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('with cached data and a wide container, the first paint is already the table (no cards first)', () => {
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 1000 } as DOMRect);
+    try {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      qc.setQueryData(['loan-rates', 'HOME'], DATA);
+      render(<QueryClientProvider client={qc}><LiveRatesTab onUseRate={vi.fn()} /></QueryClientProvider>);
+      // Synchronously after the initial render: no waiting, so a measure-after-paint hook would still show cards.
+      expect(screen.getByTestId('rate-row-hdfc.home').tagName).toBe('TR');
+    } finally {
+      rect.mockRestore();
+    }
   });
 });

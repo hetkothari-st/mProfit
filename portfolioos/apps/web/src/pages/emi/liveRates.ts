@@ -21,9 +21,10 @@ export function rateRange(row: Pick<LoanRateRowWire, 'minRatePct' | 'maxRatePct'
   return row.maxRatePct === null ? `from ${row.minRatePct}%` : `${row.minRatePct}% - ${row.maxRatePct}%`;
 }
 
+/** The repo header. A zero delta is not a change, so it reads like no change at all. */
 export function repoLine(repo: RepoRateWire): string {
   const base = `RBI repo rate ${repo.ratePct}%`;
-  if (repo.lastChange === null) return `${base} (as of ${formatDateOnly(repo.effectiveDate)})`;
-  const delta = new Decimal(repo.lastChange.deltaPct);
+  const delta = repo.lastChange === null ? null : new Decimal(repo.lastChange.deltaPct);
+  if (repo.lastChange === null || delta === null || delta.isZero()) return `${base} (as of ${formatDateOnly(repo.effectiveDate)})`;
   return `${base} - ${delta.isNegative() ? 'cut' : 'raised'} by ${delta.abs().toFixed(2)}% on ${formatDateOnly(repo.lastChange.date)}`;
 }

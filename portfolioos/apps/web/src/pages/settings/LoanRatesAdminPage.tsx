@@ -60,11 +60,21 @@ export function LoanRatesAdminPage() {
     onSuccess: () => { toast.success('Override cleared'); void refresh(); },
     onError,
   });
+  // Each Run now button tracks its own source ('*' = run all), so one slow page does not lock the others.
+  const [runningIds, setRunningIds] = useState<ReadonlySet<string>>(new Set());
   const run = useMutation({
     mutationFn: (sourceId: string | undefined) => loanRatesAdminApi.run(sourceId),
+    onMutate: (sourceId) => setRunningIds((s) => new Set(s).add(sourceId ?? '*')),
     onSuccess: (_d, sourceId) => { toast.success(sourceId ? 'Page read again' : 'Started - refresh in a minute'); void refresh(); },
     onError,
+    onSettled: (_d, _e, sourceId) => setRunningIds((s) => {
+      const next = new Set(s);
+      next.delete(sourceId ?? '*');
+      return next;
+    }),
   });
+  // Approve and Reject act on the same pending list: one at a time.
+  const reviewBusy = approve.isPending || reject.isPending;
 
   if (!isAdmin) {
     return (
@@ -86,7 +96,7 @@ export function LoanRatesAdminPage() {
         title="Loan rates"
         description="Daily lender rates behind the EMI calculator's Live rates tab. A rate you set here wins over the bank page until you clear it."
         actions={
-          <Button type="button" size="sm" variant="outline" disabled={run.isPending} onClick={() => run.mutate(undefined)}>
+          <Button type="button" size="sm" variant="outline" disabled={runningIds.has('*')} onClick={() => run.mutate(undefined)}>
             <RefreshCw className="mr-1 h-4 w-4" />Run all now
           </Button>
         }
@@ -108,8 +118,8 @@ export function LoanRatesAdminPage() {
                   <div className="text-muted-foreground">{readingText(reading)} read {formatDateTimeIST(reading.fetchedAt)}{reading.note ? ` - ${reading.note}` : ''}</div>
                 </div>
                 <div className="flex gap-2">
-                  <Button type="button" size="sm" onClick={() => approve.mutate(reading.id)}>Approve</Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setConfirm({ kind: 'reject', id: reading.id })}>Reject</Button>
+                  <Button type="button" size="sm" disabled={reviewBusy} onClick={() => approve.mutate(reading.id)}>Approve</Button>
+                  <Button type="button" size="sm" variant="outline" disabled={reviewBusy} onClick={() => setConfirm({ kind: 'reject', id: reading.id })}>Reject</Button>
                 </div>
               </div>
             ))}
@@ -134,7 +144,7 @@ export function LoanRatesAdminPage() {
           onSaved={() => { setEditing(null); void refresh(); }}
           onClear={(tenor) => setConfirm({ kind: 'clear', sourceId: source.id, tenor })}
           onRun={() => run.mutate(source.id)}
-          running={run.isPending}
+          running={runningIds.has(source.id)}
         />
       ))}
 

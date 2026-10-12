@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { ExternalLink, Loader2, RefreshCw } from 'lucide-react';
 import {
   RATE_BASIS_LABELS, RATE_LOAN_TYPES, RATE_LOAN_TYPE_LABELS, formatDateIST, formatDateOnly,
   type LoanRateRowWire, type RateLoanType,
@@ -39,7 +39,8 @@ function AsOf({ row }: { row: LoanRateRowWire }) {
 
 /**
  * Live rates (spec s5.7): indicative market rates by lender for one loan type, refreshed daily on the
- * server. The calculator never depends on this tab: an empty or failed load shows one line and nothing else.
+ * server. The calculator never depends on this tab: an empty load shows one line, a failed load one line and
+ * a Try again button, and nothing else.
  */
 export function LiveRatesTab({ onUseRate }: { onUseRate: (row: LoanRateRowWire) => void }) {
   const [loanType, setLoanType] = useState<RateLoanType>('HOME');
@@ -76,6 +77,13 @@ export function LiveRatesTab({ onUseRate }: { onUseRate: (row: LoanRateRowWire) 
         <div ref={boxRef}>
           {query.isLoading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" aria-label="Loading rates" /></div>
+          ) : query.isError && rows.length === 0 ? (
+            <div data-testid="rates-error" className="flex flex-col items-center gap-2 py-6 text-center text-sm">
+              <p className="text-muted-foreground">Couldn't load rates right now. The calculator still works.</p>
+              <Button type="button" size="sm" variant="outline" disabled={query.isFetching} onClick={() => void query.refetch()}>
+                <RefreshCw className="mr-1 h-4 w-4" />Try again
+              </Button>
+            </div>
           ) : rows.length === 0 ? (
             <p data-testid="rates-empty" className="py-6 text-center text-sm text-muted-foreground">Rates not available yet</p>
           ) : wide ? (

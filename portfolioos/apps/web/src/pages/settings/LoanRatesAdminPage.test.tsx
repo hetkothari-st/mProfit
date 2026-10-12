@@ -110,6 +110,32 @@ describe('LoanRatesAdminPage', () => {
     await waitFor(() => expect(loanRatesAdminApi.run).toHaveBeenCalledWith('hdfc.home'));
   });
 
+  it('Approve and Reject are both disabled while an approval is pending', async () => {
+    vi.mocked(loanRatesAdminApi.approve).mockReturnValue(new Promise(() => undefined));
+    renderWithProviders(<LoanRatesAdminPage />);
+    const suspect = await screen.findByTestId('suspect-s1');
+    const approve = within(suspect).getByRole('button', { name: 'Approve' }) as HTMLButtonElement;
+    const reject = within(suspect).getByRole('button', { name: 'Reject' }) as HTMLButtonElement;
+    expect(approve.disabled || reject.disabled).toBe(false);
+    fireEvent.click(approve);
+    await waitFor(() => expect(approve.disabled).toBe(true));
+    expect(reject.disabled).toBe(true);
+  });
+
+  it("a pending Run now disables only that source's button", async () => {
+    vi.mocked(loanRatesAdminApi.run).mockReturnValue(new Promise(() => undefined));
+    renderWithProviders(<LoanRatesAdminPage />);
+    const runOf = (id: string) => within(screen.getByTestId(`source-${id}`)).getByRole('button', { name: 'Run now' }) as HTMLButtonElement;
+    await screen.findByTestId('source-hdfc.home');
+    fireEvent.click(runOf('hdfc.home'));
+    await waitFor(() => expect(runOf('hdfc.home').disabled).toBe(true));
+    expect(runOf('sbi.mclr').disabled).toBe(false);
+    expect((screen.getByRole('button', { name: /run all now/i }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(runOf('sbi.mclr'));
+    await waitFor(() => expect(runOf('sbi.mclr').disabled).toBe(true));
+    expect(loanRatesAdminApi.run).toHaveBeenCalledTimes(2);
+  });
+
   it('shows the server message when the session lacks the second factor', async () => {
     vi.mocked(loanRatesAdminApi.list).mockRejectedValue(
       Object.assign(new Error('Request failed with status code 403'), {
