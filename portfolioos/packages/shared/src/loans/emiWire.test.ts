@@ -25,7 +25,8 @@ describe('validateLoanWire', () => {
     [{ tenureMonths: 12.5 }, 'tenureMonths'],
     [{ firstEmiDate: '2026-02-30' }, 'firstEmiDate'],
     [{ firstEmiDate: '05/11/2026' }, 'firstEmiDate'],
-    [{ emiOverride: '0' }, 'emiOverride'],
+    [{ emiOverride: '0' }, 'emi'],
+    [{ emiOverride: 'abc' }, 'emi'],
   ])('rejects %o', (patch, field) => expect(fields({ ...ok, ...patch } as LoanInputWire)).toContain(field));
   it('names the failing prepayment / rate change / fee field', () => {
     const errs = fields({

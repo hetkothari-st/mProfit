@@ -70,7 +70,7 @@ export function validateLoanWire(w: LoanInputWire): FieldError[] {
 
   if (w.emiOverride !== undefined) {
     const e = num(w.emiOverride);
-    if (!e || e.lte(0)) add('emiOverride', 'Enter an EMI above 0');
+    if (!e || e.lte(0)) add('emi', 'Enter an EMI above 0');
     else if (p && p.gt(0) && p.lte(EMI_LIMITS.maxPrincipal) && r && r.lte(EMI_LIMITS.maxRatePct)) {
       // The schedule's own length comes from this EMI, so the tenure limit applies to it too.
       try {
