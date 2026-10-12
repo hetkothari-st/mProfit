@@ -126,6 +126,37 @@ describe('bad dates', () => {
     expect(row.effectiveDate).toBeNull();
     expect(row.note).toContain('bad as-of date: 2026-13-45');
   });
+
+  it('the same bad-date reading on later runs adds no second SUSPECT row', async () => {
+    const bad = { ...home('8.00'), effectiveDate: '2026-13-45' };
+    const first = await sys(() => recordReading(HOME, bad, READER, NOW));
+    const again = await sys(() => recordReading(HOME, bad, READER, later(24 * 60)));
+    expect(again).toMatchObject({ outcome: 'UNCHANGED_SUSPECT', rowId: first.rowId });
+    expect(await prisma.loanRate.count({ where: { sourceId: 'hdfc.home', status: 'SUSPECT' } })).toBe(1);
+    const otherText = await sys(() => recordReading(HOME, { ...bad, effectiveDate: '2026-02-30' }, READER, later(48 * 60)));
+    expect(otherText.outcome).toBe('SUSPECT');
+    expect(await prisma.loanRate.count({ where: { sourceId: 'hdfc.home', status: 'SUSPECT' } })).toBe(2);
+  });
+
+  it('a repeated identical SUSPECT reading is UNCHANGED_SUSPECT, not UNCHANGED', async () => {
+    await sys(() => recordReading(HOME, home('8.00'), READER, NOW));
+    const jump = await sys(() => recordReading(HOME, home('11.00'), READER, later(1)));
+    const again = await sys(() => recordReading(HOME, home('11.00'), READER, later(2)));
+    expect(again).toMatchObject({ outcome: 'UNCHANGED_SUSPECT', rowId: jump.rowId });
+  });
+});
+
+describe('approving a stale SUSPECT', () => {
+  it('is refused with 409 LOAN_RATES_STALE_SUSPECT when a newer ACTIVE AUTO reading exists', async () => {
+    await sys(() => recordReading(HOME, home('8.00'), READER, NOW));
+    const jump = await sys(() => recordReading(HOME, home('11.00'), READER, later(1)));
+    const newer = await sys(() => recordReading(HOME, home('8.10'), READER, later(2)));
+    expect(newer.outcome).toBe('ACTIVE');
+    const err = await sys(() => activateSuspect(jump.rowId, later(3))).catch((e: unknown) => e);
+    expect(err).toMatchObject({ statusCode: 409, code: 'LOAN_RATES_STALE_SUSPECT', message: 'A newer reading exists - reject this one' });
+    expect((await prisma.loanRate.findUniqueOrThrow({ where: { id: jump.rowId } })).status).toBe('SUSPECT');
+    expect((await effectiveRates(['hdfc.home'])).get(rateKey('hdfc.home', null))?.id).toBe(newer.rowId);
+  });
 });
 
 describe('concurrency', () => {

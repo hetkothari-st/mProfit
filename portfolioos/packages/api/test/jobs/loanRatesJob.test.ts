@@ -3,7 +3,9 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vites
 import cron from 'node-cron';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { DLQ_EXCERPT_BYTES, runLoanRates as runLoanRatesRaw, sanitizedExcerpt, startLoanRatesJob, truncateUtf8 } from '../../src/jobs/loanRatesJob.js';
+import {
+  DLQ_EXCERPT_BYTES, runLoanRates as runLoanRatesRaw, sanitizedExcerpt, startLoanRatesJob, truncateUtf8, type SourceStateWriter,
+} from '../../src/jobs/loanRatesJob.js';
 import { FetchPageError } from '../../src/services/loanRates/fetchPage.js';
 import { hdfcRatesReader } from '../../src/services/loanRates/sources/hdfc.js';
 import { PAGE_READERS, readerById } from '../../src/services/loanRates/sources/index.js';
@@ -134,27 +136,68 @@ describe('runLoanRates', () => {
 
   it('a DB error while recording a page failure does not stop the next page', async () => {
     const hdfc = readerById('hdfc.home')!.url;
-    // The model delegate is a lazy property: mockRestore would delete it, so hand the original back instead.
-    const original = prisma.loanRateSource.updateMany.bind(prisma.loanRateSource);
-    const spy = vi.spyOn(prisma.loanRateSource, 'updateMany').mockRejectedValueOnce(new Error('db down'));
-    try {
-      const res = await runLoanRates({
-        readerIds: ['hdfc.home', 'axis.home'],
-        now: NOW,
-        opsUserId: ops.userId,
-        fetchHtml: async (url) => {
-          if (url === hdfc) throw new FetchPageError('HTTP_STATUS', 'HTTP 500');
-          return fromFixtures(url);
-        },
-      });
-      expect(res.pages.map((p) => [p.readerId, p.status])).toEqual([
-        ['hdfc.home', 'FAILED'],
-        ['axis.home', 'OK'],
-      ]);
-    } finally {
-      spy.mockImplementation(original);
-    }
+    // Through the run's own seam, never by patching the shared Prisma delegate (that leaked into later files).
+    let failNext = true;
+    const updateSources: SourceStateWriter = async (ids, data) => {
+      if (failNext) {
+        failNext = false;
+        throw new Error('db down');
+      }
+      return prisma.loanRateSource.updateMany({ where: { id: { in: ids } }, data });
+    };
+    const res = await runLoanRates({
+      readerIds: ['hdfc.home', 'axis.home'],
+      now: NOW,
+      opsUserId: ops.userId,
+      updateSources,
+      fetchHtml: async (url) => {
+        if (url === hdfc) throw new FetchPageError('HTTP_STATUS', 'HTTP 500');
+        return fromFixtures(url);
+      },
+    });
+    expect(failNext).toBe(false);
+    expect(res.pages.map((p) => [p.readerId, p.status])).toEqual([
+      ['hdfc.home', 'FAILED'],
+      ['axis.home', 'OK'],
+    ]);
     expect(await prisma.loanRate.count({ where: { sourceId: 'axis.home', status: 'ACTIVE' } })).toBe(1);
+    expect((await prisma.loanRateSource.findUniqueOrThrow({ where: { id: 'axis.home' } })).lastSuccessAt?.getTime()).toBe(NOW.getTime());
+  });
+
+  it('a reading that throws mid-page: the sources recorded before it still get lastSuccessAt', async () => {
+    const real = hdfcRatesReader.read.bind(hdfcRatesReader);
+    // hdfc.rates yields the five MCLR tenors, then personal, then car; the car reading cannot be stored.
+    const spy = vi.spyOn(hdfcRatesReader, 'read').mockImplementation((html: string) =>
+      real(html).map((r) => (r.sourceId === 'hdfc.car' ? { ...r, minRatePct: 'not-a-rate' } : r)),
+    );
+    try {
+      const res = await runLoanRates({ readerIds: ['hdfc.rates'], now: NOW, fetchHtml: fromFixtures, opsUserId: ops.userId });
+      expect(res.pages[0]).toMatchObject({ readerId: 'hdfc.rates', status: 'FAILED', missing: ['hdfc.car'] });
+    } finally {
+      spy.mockRestore();
+    }
+    for (const id of ['hdfc.mclr', 'hdfc.personal']) {
+      expect((await prisma.loanRateSource.findUniqueOrThrow({ where: { id } })).lastSuccessAt?.getTime(), id).toBe(NOW.getTime());
+    }
+    const car = await prisma.loanRateSource.findUniqueOrThrow({ where: { id: 'hdfc.car' } });
+    expect(car.lastSuccessAt).toBeNull();
+    expect(car.lastError).not.toBeNull();
+  });
+
+  it('a later successful reading clears lastError and lastErrorAt', async () => {
+    await runLoanRates({
+      readerIds: ['lic.home'],
+      now: NOW,
+      opsUserId: ops.userId,
+      fetchHtml: async () => {
+        throw new FetchPageError('TIMEOUT', 'Timed out');
+      },
+    });
+    expect((await prisma.loanRateSource.findUniqueOrThrow({ where: { id: 'lic.home' } })).lastError).toBe('Timed out');
+    await runLoanRates({ readerIds: ['lic.home'], now: later(24), fetchHtml: fromFixtures, opsUserId: ops.userId });
+    const src = await prisma.loanRateSource.findUniqueOrThrow({ where: { id: 'lic.home' } });
+    expect(src).toMatchObject({ lastError: null, lastErrorAt: null });
+    expect(src.lastSuccessAt?.getTime()).toBe(later(24).getTime());
   });
 
   it('transient fetch errors set lastError only; structural ones also write a DLQ row', async () => {
@@ -202,6 +245,28 @@ describe('runLoanRates', () => {
     const src = await prisma.loanRateSource.findUniqueOrThrow({ where: { id: 'lic.home' } });
     expect(src.lastSuccessAt?.getTime()).toBe(NOW.getTime());
     expect(src.lastError).toBe('reading held for review (SUSPECT)');
+  });
+
+  it('the same SUSPECT reading on a second run is still not a success, and adds no row', async () => {
+    await runLoanRates({ readerIds: ['lic.home'], now: NOW, fetchHtml: fromFixtures, opsUserId: ops.userId });
+    const reader = readerById('lic.home')!;
+    const real = reader.read.bind(reader);
+    const spy = vi.spyOn(reader, 'read').mockImplementation((html: string) =>
+      real(html).map((r) => ({ ...r, minRatePct: '29.00', maxRatePct: null })),
+    );
+    try {
+      await runLoanRates({ readerIds: ['lic.home'], now: later(24), fetchHtml: fromFixtures, opsUserId: ops.userId });
+      await sys(() => prisma.loanRateSource.update({ where: { id: 'lic.home' }, data: { lastError: null, lastErrorAt: null } }));
+      const second = await runLoanRates({ readerIds: ['lic.home'], now: later(48), fetchHtml: fromFixtures, opsUserId: ops.userId });
+      expect(second.pages[0]).toMatchObject({ status: 'OK', suspect: 1, unchanged: 0, active: 0 });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await prisma.loanRate.count({ where: { sourceId: 'lic.home', status: 'SUSPECT' } })).toBe(1);
+    const src = await prisma.loanRateSource.findUniqueOrThrow({ where: { id: 'lic.home' } });
+    expect(src.lastSuccessAt?.getTime()).toBe(NOW.getTime());
+    expect(src.lastError).toBe('reading held for review (SUSPECT)');
+    expect(src.lastErrorAt?.getTime()).toBe(later(48).getTime());
   });
 
   it('a failing page and a page with no readings are DLQ-ed while the other pages still run', async () => {

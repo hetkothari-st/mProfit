@@ -10,11 +10,12 @@
  * Runs under runAsSystem: the rate tables are global, and IngestionFailure, Alert and User are user-scoped
  * tables this job writes or reads for the ops admin.
  *
- * REGISTRATION: startLoanRatesJob() is called from startupSync.ts. ENABLE_LOAN_RATES_CRON=false disables it
- * (the test env sets that).
+ * REGISTRATION: startLoanRatesJob() is called from src/index.ts (beside startMfScoreJob, outside the startup
+ * sync, so ENABLE_STARTUP_SYNC does not gate it). ENABLE_LOAN_RATES_CRON=false disables it (the test env sets
+ * that).
  */
 import cron from 'node-cron';
-import type { LoanRateSource } from '@prisma/client';
+import type { LoanRateSource, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
@@ -40,7 +41,17 @@ export interface LoanRatesRunOptions {
   fetchHtml?: (url: string) => Promise<string>;
   /** Owner of IngestionFailure and Alert rows. Default: the oldest active ADMIN; null = log only. */
   opsUserId?: string | null;
+  /**
+   * Writer for LoanRateSource fetch state (lastSuccessAt / lastError*). Seam for tests that need it to fail;
+   * default: one updateMany on the given ids.
+   */
+  updateSources?: SourceStateWriter;
 }
+
+export type SourceStateWriter = (ids: string[], data: Prisma.LoanRateSourceUpdateManyMutationInput) => Promise<unknown>;
+
+const writeSourceState: SourceStateWriter = (ids, data) =>
+  prisma.loanRateSource.updateMany({ where: { id: { in: ids } }, data });
 
 export interface PageRunResult {
   readerId: string;
@@ -61,6 +72,11 @@ export interface LoanRatesRunResult {
 }
 
 let running = false;
+
+/** True while a run (cron, run-now-all or run-now-single) is in progress. */
+export function isLoanRatesRunning(): boolean {
+  return running;
+}
 
 /**
  * Single-flight for every caller (cron, admin run-now-all, run-now-single): returns null, without fetching
@@ -121,6 +137,7 @@ async function runInner(options: LoanRatesRunOptions): Promise<LoanRatesRunResul
   const robotsCache = new Map<string, string>();
   const fetchHtml = options.fetchHtml ?? ((url: string) => fetchPage(url, { robotsCache }));
   const opsUserId = options.opsUserId !== undefined ? options.opsUserId : await resolveOpsUserId();
+  const updateSources = options.updateSources ?? writeSourceState;
 
   const sources = await prisma.loanRateSource.findMany({ where: { mode: 'AUTO' } });
   const pages: PageRunResult[] = [];
@@ -129,7 +146,7 @@ async function runInner(options: LoanRatesRunOptions): Promise<LoanRatesRunResul
     if (options.readerIds && !options.readerIds.includes(reader.id)) continue;
     const own = sources.filter((s) => s.adapter === reader.id);
     if (own.length === 0) continue;
-    const outcome = await runPage(reader, own, fetchHtml, now, opsUserId);
+    const outcome = await runPage(reader, own, fetchHtml, now, opsUserId, updateSources);
     pages.push(outcome.result);
     dlqRows += outcome.dlqRows;
   }
@@ -146,9 +163,12 @@ async function runPage(
   fetchHtml: (url: string) => Promise<string>,
   now: Date,
   opsUserId: string | null,
+  updateSources: SourceStateWriter,
 ): Promise<{ result: PageRunResult; dlqRows: number }> {
   const ownIds = own.map((s) => s.id);
+  /** Sources whose every reading on this page has been recorded. */
   const recorded = new Set<string>();
+  const suspectIds = new Set<string>();
   let html = '';
   try {
     html = await fetchHtml(reader.url);
@@ -156,32 +176,24 @@ async function runPage(
     if (readings.length === 0) throw new PageReadError(`No readings found on ${reader.url}`);
 
     const counts = { active: 0, suspect: 0, unchanged: 0 };
-    const suspectIds = new Set<string>();
-    for (const reading of readings) {
+    for (const [i, reading] of readings.entries()) {
       const source = own.find((s) => s.id === reading.sourceId)!;
       const { outcome } = await recordReading(source, reading, reader, now);
-      recorded.add(source.id);
       if (outcome === 'ACTIVE') counts.active++;
-      else if (outcome === 'SUSPECT') {
+      else if (outcome === 'SUSPECT' || outcome === 'UNCHANGED_SUSPECT') {
+        // A repeat of a held reading is still held: not a success.
         counts.suspect++;
         suspectIds.add(source.id);
       } else counts.unchanged++;
+      if (!readings.slice(i + 1).some((r) => r.sourceId === source.id)) recorded.add(source.id);
     }
 
-    const readIds = [...new Set(readings.map((r) => r.sourceId))];
-    const okIds = readIds.filter((id) => !suspectIds.has(id));
-    const missing = ownIds.filter((id) => !readIds.includes(id));
-    await prisma.loanRateSource.updateMany({ where: { id: { in: okIds } }, data: { lastSuccessAt: now } });
-    if (suspectIds.size > 0) {
-      await prisma.loanRateSource.updateMany({
-        where: { id: { in: [...suspectIds] } },
-        data: { lastErrorAt: now, lastError: SUSPECT_ERROR },
-      });
-    }
+    const missing = ownIds.filter((id) => !recorded.has(id));
+    await markRecorded(updateSources, recorded, suspectIds, now);
     let dlqRows = 0;
     if (missing.length > 0) {
       const message = `No reading for ${missing.join(', ')} on ${reader.url}`;
-      await prisma.loanRateSource.updateMany({ where: { id: { in: missing } }, data: { lastErrorAt: now, lastError: message } });
+      await updateSources(missing, { lastErrorAt: now, lastError: message });
       dlqRows = await writeDlq(opsUserId, reader, message, html, missing);
     }
     return {
@@ -194,10 +206,9 @@ async function runPage(
     const failedIds = ownIds.filter((id) => !recorded.has(id));
     let dlqRows = 0;
     try {
-      await prisma.loanRateSource.updateMany({
-        where: { id: { in: failedIds } },
-        data: { lastErrorAt: now, lastError: message.slice(0, 500) },
-      });
+      // Readings recorded before the failure still count (a throw on the last source must not cost the others).
+      await markRecorded(updateSources, recorded, suspectIds, now);
+      if (failedIds.length > 0) await updateSources(failedIds, { lastErrorAt: now, lastError: message.slice(0, 500) });
       if (!isTransient(err)) dlqRows = await writeDlq(opsUserId, reader, err instanceof Error ? err : message, html, failedIds);
     } catch (recordErr) {
       logger.error({ err: recordErr, readerId: reader.id }, '[loanRates] could not record the page failure - continuing with the next page');
@@ -207,6 +218,14 @@ async function runPage(
       dlqRows,
     };
   }
+}
+
+/** Fully recorded sources: a success clears any earlier error; a held (SUSPECT) one keeps its last success. */
+async function markRecorded(updateSources: SourceStateWriter, recorded: Set<string>, suspectIds: Set<string>, now: Date): Promise<void> {
+  const okIds = [...recorded].filter((id) => !suspectIds.has(id));
+  const heldIds = [...recorded].filter((id) => suspectIds.has(id));
+  if (okIds.length > 0) await updateSources(okIds, { lastSuccessAt: now, lastErrorAt: null, lastError: null });
+  if (heldIds.length > 0) await updateSources(heldIds, { lastErrorAt: now, lastError: SUSPECT_ERROR });
 }
 
 const SUSPECT_ERROR = 'reading held for review (SUSPECT)';

@@ -1,6 +1,7 @@
 import type { BenchmarkRate, LoanRate, Prisma } from '@prisma/client';
 import type { LoanRateReadingWire, MclrTenor, RateBasis, RateOrigin, RateStatus } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
+import { AppError } from '../../lib/errors.js';
 import { checkReading, istDate, type SanityReason } from './sanity.js';
 import { normPct } from './sources/parseUtil.js';
 import type { PageReader, RateReading } from './types.js';
@@ -12,7 +13,11 @@ export interface StoreSource {
   loanType: string;
 }
 
-export type RecordOutcome = 'ACTIVE' | 'SUSPECT' | 'UNCHANGED';
+/**
+ * UNCHANGED_SUSPECT: the reading repeats the latest row and that row is SUSPECT (held for review). Nothing is
+ * inserted, but it is not a success either: callers treat it exactly like SUSPECT.
+ */
+export type RecordOutcome = 'ACTIVE' | 'SUSPECT' | 'UNCHANGED' | 'UNCHANGED_SUSPECT';
 
 export function dateOnly(iso: string): Date {
   return new Date(`${iso}T00:00:00.000Z`);
@@ -57,9 +62,11 @@ function sameValues(row: LoanRate, r: RateReading): boolean {
 
 /**
  * Append one AUTO reading (spec s5.3/s5.4). A reading identical to the latest AUTO row for the same
- * (source, tenor) inserts nothing, so a second run on the same day is a no-op. Otherwise the sanity rules
- * decide ACTIVE or SUSPECT; an ACTIVE row supersedes earlier ACTIVE AUTO rows and updates the benchmark
- * series, a SUSPECT row changes nothing users see.
+ * (source, tenor) inserts nothing, so a second run on the same day is a no-op (UNCHANGED, or
+ * UNCHANGED_SUSPECT when that row is held for review). A bad-date reading is stored with a null date and the
+ * raw text in its note, so a repeat of it is matched on the stored values and note instead. Otherwise the
+ * sanity rules decide ACTIVE or SUSPECT; an ACTIVE row supersedes earlier ACTIVE AUTO rows and updates the
+ * benchmark series, a SUSPECT row changes nothing users see.
  */
 export async function recordReading(
   source: StoreSource,
@@ -75,7 +82,8 @@ export async function recordReading(
       orderBy: { fetchedAt: 'desc' },
     });
     if (latest && sameValues(latest, reading)) {
-      return { outcome: 'UNCHANGED' as RecordOutcome, rowId: latest.id, reasons: [] as SanityReason[] };
+      const outcome: RecordOutcome = latest.status === 'SUSPECT' ? 'UNCHANGED_SUSPECT' : 'UNCHANGED';
+      return { outcome, rowId: latest.id, reasons: [] as SanityReason[] };
     }
     const lastActive =
       latest?.status === 'ACTIVE'
@@ -84,6 +92,14 @@ export async function recordReading(
     const verdict = checkReading(reading, lastActive ? lastActive.minRatePct.toString() : null, istDate(now));
     const badDate = verdict.reasons.includes('BAD_DATE') && reading.effectiveDate !== null;
     const note = [reading.note, ...verdict.reasons, badDate ? `bad as-of date: ${reading.effectiveDate?.slice(0, 40)}` : null].filter((x): x is string => Boolean(x)).join('; ') || null;
+    if (
+      verdict.status === 'SUSPECT' &&
+      latest?.status === 'SUSPECT' &&
+      latest.note === note &&
+      sameValues(latest, { ...reading, effectiveDate: badDate ? null : reading.effectiveDate })
+    ) {
+      return { outcome: 'UNCHANGED_SUSPECT' as RecordOutcome, rowId: latest.id, reasons: verdict.reasons };
+    }
     const created = await tx.loanRate.create({
       data: {
         sourceId: source.id,
@@ -112,13 +128,15 @@ export async function recordReading(
 }
 
 /** Serialise writers on one logical key for the rest of the transaction (the tables have no usable unique key for this). */
-async function lockKey(tx: Prisma.TransactionClient, key: string): Promise<void> {
+export async function lockKey(tx: Prisma.TransactionClient, key: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
 }
 
 /**
  * Admin approval of a SUSPECT AUTO reading: it becomes ACTIVE, supersedes the other ACTIVE AUTO rows for its
  * (source, tenor) and updates the benchmark series. Returns null when the row is missing or not SUSPECT.
+ * Refuses (409 LOAN_RATES_STALE_SUSPECT) when a newer ACTIVE AUTO reading exists for the key: approving the
+ * older one would roll the rate back.
  */
 export async function activateSuspect(id: string, now: Date): Promise<LoanRate | null> {
   const head = await prisma.loanRate.findUnique({ where: { id }, select: { sourceId: true, tenor: true } });
@@ -127,6 +145,11 @@ export async function activateSuspect(id: string, now: Date): Promise<LoanRate |
     await lockKey(tx, rateKey(head.sourceId, head.tenor));
     const row = await tx.loanRate.findUnique({ where: { id }, include: { source: true } });
     if (!row || row.status !== 'SUSPECT' || row.origin !== 'AUTO') return null;
+    const newer = await tx.loanRate.findFirst({
+      where: { sourceId: row.sourceId, tenor: row.tenor, origin: 'AUTO', status: 'ACTIVE', fetchedAt: { gt: row.fetchedAt } },
+      select: { id: true },
+    });
+    if (newer) throw new AppError('A newer reading exists - reject this one', 409, 'LOAN_RATES_STALE_SUSPECT');
     const flipped = await tx.loanRate.updateMany({ where: { id, status: 'SUSPECT' }, data: { status: 'ACTIVE' } });
     if (flipped.count === 0) return null;
     await tx.loanRate.updateMany({
@@ -165,6 +188,38 @@ export async function writeBenchmark(
   const sameDay = await tx.benchmarkRate.findFirst({ where: { kind, lender, tenor: benchTenor, effectiveDate: date } });
   if (sameDay) return tx.benchmarkRate.update({ where: { id: sameDay.id }, data: { ratePct, fetchedAt: now } });
   return tx.benchmarkRate.create({ data: { kind, lender, tenor: benchTenor, ratePct, effectiveDate: date, fetchedAt: now } });
+}
+
+/**
+ * After a MANUAL override on a REPO or MCLR source is cleared (caller holds the per-key lock in `tx`): drop
+ * the benchmark row that override wrote (same value, written at the override's fetchedAt) if it is still the
+ * latest, then make the latest BenchmarkRate equal the effective AUTO rate again. With no ACTIVE AUTO row
+ * the series keeps whatever is left.
+ */
+export async function restoreBenchmarkAfterClear(
+  tx: Prisma.TransactionClient,
+  source: StoreSource,
+  tenor: string | null,
+  cleared: LoanRate[],
+  now: Date,
+): Promise<void> {
+  const kind = source.loanType === 'REPO' ? 'REPO' : source.loanType === 'MCLR' ? 'MCLR' : null;
+  if (kind === null) return;
+  const lender = kind === 'REPO' ? null : source.lender;
+  const benchTenor = kind === 'MCLR' ? tenor : null;
+  await lockKey(tx, `bench|${kind}|${lender ?? ''}|${benchTenor ?? ''}`);
+  const latest = await tx.benchmarkRate.findFirst({
+    where: { kind, lender, tenor: benchTenor },
+    orderBy: [{ effectiveDate: 'desc' }, { fetchedAt: 'desc' }],
+  });
+  const fromManual =
+    latest !== null && cleared.some((m) => m.fetchedAt.getTime() === latest.fetchedAt.getTime() && m.minRatePct.equals(latest.ratePct));
+  if (fromManual) await tx.benchmarkRate.delete({ where: { id: latest.id } });
+  const auto = await tx.loanRate.findFirst({
+    where: { sourceId: source.id, tenor, origin: 'AUTO', status: 'ACTIVE' },
+    orderBy: { fetchedAt: 'desc' },
+  });
+  if (auto) await writeBenchmark(source, tenor, auto.minRatePct.toString(), isoDate(auto.effectiveDate), now, tx);
 }
 
 /**
