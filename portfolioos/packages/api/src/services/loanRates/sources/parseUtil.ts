@@ -139,7 +139,10 @@ export interface MclrRow {
 /**
  * The first MCLR table that lists at least four of overnight..1-year MCLR including 1-year. Each row's tenor
  * is the first cell that names one; its rate is the LAST cell that is a plain rate (pages show
- * "existing | revised"). The as-of date is the latest date in the table or the text just before it.
+ * "existing | revised"). The as-of date comes from the table's own header rows (the rows above the first
+ * tenor row; the latest one when they show "existing | revised" dates), else the date nearest the table in
+ * the heading just before it, else the latest date in the table body. A date further up the page or in a
+ * footnote row never wins over the heading.
  */
 export function findMclr(tables: PageTable[]): { rows: MclrRow[]; effectiveDate: string | null } | null {
   for (const t of tables) {
@@ -153,10 +156,20 @@ export function findMclr(tables: PageTable[]): { rows: MclrRow[]; effectiveDate:
       if (rate) rows.push({ tenor, ratePct: rate });
     }
     if (rows.length >= 4 && rows.some((r) => r.tenor === '1Y')) {
-      return { rows, effectiveDate: latestDate(`${t.before.slice(-200)} ${tableText(t)}`) };
+      return { rows, effectiveDate: mclrDate(t) };
     }
   }
   return null;
+}
+
+function mclrDate(t: PageTable): string | null {
+  const firstTenorRow = t.rows.findIndex((cells) => cells.some((c) => tenorOf(c) !== null));
+  const header = t.rows.slice(0, Math.max(0, firstTenorRow)).map((r) => r.join(' ')).join(' ');
+  const headerDate = latestDate(header);
+  if (headerDate !== null) return headerDate;
+  const heading = datesIn(t.before.slice(-200));
+  if (heading.length > 0) return heading[heading.length - 1]!;
+  return latestDate(tableText(t));
 }
 
 /** MCLR readings for one lender's MCLR source from the page's MCLR table; [] when the page has none. */

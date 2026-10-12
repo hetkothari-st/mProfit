@@ -60,6 +60,24 @@ describe('registry', () => {
       expect(new URL(r.url).protocol).toBe('https:');
       expect(r.version).toMatch(/^\d+$/);
     }
+    // Pinned: this list is the fetch allow-list, so adding or changing a URL must be a deliberate test change.
+    expect(PAGE_READERS.map((r) => [r.id, r.url])).toEqual([
+      ['rbi.home', 'https://www.rbi.org.in/'],
+      ['sbi.rates', 'https://sbi.bank.in/web/interest-rates/interest-rates/mclr'],
+      ['hdfc.home', 'https://homeloans.hdfc.bank.in/ps/home-loans-in-india/interest-rates'],
+      ['hdfc.rates', 'https://www.hdfc.bank.in/interest-rates'],
+      ['icici.home', 'https://www.icici.bank.in/personal-banking/loans/home-loan/interest-rates'],
+      ['icici.personal', 'https://www.icici.bank.in/personal-banking/loans/personal-loan/personal-loan-interest-rates'],
+      ['icici.rates', 'https://www.icici.bank.in/interest-rate'],
+      ['axis.home', 'https://www.axis.bank.in/loans/home-loan/interest-rates-charges'],
+      ['axis.mclr', 'https://www.axis.bank.in/mclr-rates'],
+      ['kotak.rates', 'https://www.kotak.bank.in/en/rates.html'],
+      ['pnb.mclr', 'https://pnb.bank.in/interst-rate-on-advances-linked-to-mclr.html'],
+      ['bob.retail', 'https://bankofbaroda.bank.in/interest-rate-and-service-charges/retail-loans-interest-rates'],
+      ['union.rates', 'https://www.unionbankofindia.bank.in/en/common/interest-rates-loans-and-advances'],
+      ['canara.range', 'https://www.canarabank.bank.in/pages/interest-rate-range-on-loans'],
+      ['lic.home', 'https://www.lichousing.com/housing-loan/home-loan'],
+    ]);
     expect(readerById('kotak.rates')).toBe(kotakRatesReader);
     expect(readerById('nope')).toBeUndefined();
   });

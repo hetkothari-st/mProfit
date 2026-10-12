@@ -63,6 +63,22 @@ describe('MCLR tables', () => {
     expect(findMclr(tables)?.rows.map((r) => r.ratePct)).toEqual(['7.80', '7.75', '7.95', '8.15', '8.30']);
   });
 
+  it('dates MCLR from the header row, then the heading, over a later date elsewhere', () => {
+    const body = [['Overnight', '7.80%'], ['1 Month', '7.75%'], ['3 Month', '7.95%'], ['6 Month', '8.15%'], ['1 Year', '8.30%']];
+    const header: PageTable = {
+      before: 'Rates valid till 31.12.2026. MCLR w.e.f. 01.09.2026',
+      rows: [['Tenor', 'Existing w.e.f. 01.08.2026', 'Revised w.e.f. 01.10.2026'], ...body, ['Note: reviewed on 15.11.2026', '']],
+    };
+    expect(findMclr([header])?.effectiveDate).toBe('2026-10-01');
+    const heading: PageTable = {
+      before: 'Deposits revised 20.11.2026. MCLR effective from 21.09.2026',
+      rows: [['Tenor', 'MCLR'], ...body, ['Base rate w.e.f. 01.12.2026', '']],
+    };
+    expect(findMclr([heading])?.effectiveDate).toBe('2026-09-21');
+    const bodyOnly: PageTable = { before: 'MCLR', rows: [['Tenor', 'MCLR'], ...body, ['w.e.f. 05.10.2026', '']] };
+    expect(findMclr([bodyOnly])?.effectiveDate).toBe('2026-10-05');
+  });
+
   it('on the real HDFC rates page, ignores the FD tables and dates the MCLR from its own heading', () => {
     expect(findMclr(pageTables(loadPage(fixture('hdfc-rates.html'))))).toEqual({
       rows: [

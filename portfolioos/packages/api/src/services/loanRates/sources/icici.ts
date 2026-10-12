@@ -4,7 +4,8 @@ import { loadPage, mclrReadings, minMax, pageTables, percentRange, percents } fr
 /**
  * Home-loan rate tables by credit score and by loan slab: header row `<Credit Score|Loan Slab> | Salaried |
  * Self - Employed`. The later "Salaried or Self - Employed (PSL)" table is not labelled as a home-loan
- * table (probably LAP) and is deliberately excluded.
+ * table (probably LAP) and is deliberately excluded. Both tables must be present: half the picture would
+ * report a narrower range than the page shows, so a page with only one of them reads as nothing.
  */
 export const iciciHomeReader: PageReader = {
   id: 'icici.home',
@@ -12,11 +13,14 @@ export const iciciHomeReader: PageReader = {
   url: 'https://www.icici.bank.in/personal-banking/loans/home-loan/interest-rates',
   read(html: string): RateReading[] {
     const rates: string[] = [];
+    const kinds = new Set<string>();
     for (const table of pageTables(loadPage(html))) {
       const [head, ...body] = table.rows;
       if (!head || !/^(credit score|loan slab)$/i.test(head[0] ?? '') || head[1] !== 'Salaried') continue;
+      kinds.add(head[0]!.toLowerCase());
       for (const cells of body) rates.push(...percents(cells.slice(1).join(' ')));
     }
+    if (!kinds.has('credit score') || !kinds.has('loan slab')) return [];
     const range = minMax(rates);
     return range
       ? [{ sourceId: 'icici.home', basis: 'REPO_LINKED', tenor: null, minRatePct: range.min, maxRatePct: range.max, effectiveDate: null }]

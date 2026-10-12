@@ -59,6 +59,12 @@ describe('PSU MCLR pages', () => {
   it('bob.retail reads only the MCLR table', () => {
     expect(bobRetailReader.read(fixture('bob-retail.html'))).toEqual(mclr('bob.mclr', '2026-10-12', ['7.85', '7.95', '8.30', '8.50', '8.75']));
   });
+  it('bob.retail never emits the BRLLR or product figures on the same page', () => {
+    const readings = bobRetailReader.read(fixture('bob-retail.html'));
+    expect(readings.every((r) => r.sourceId === 'bob.mclr' && r.basis === 'MCLR' && r.tenor !== null)).toBe(true);
+    expect(readings.map((r) => r.minRatePct)).not.toContain('12.40');
+    expect(readings.map((r) => r.minRatePct)).not.toContain('7.60');
+  });
   it('union.rates dates MCLR from its heading, not the base-rate row below', () => {
     expect(unionRatesReader.read(fixture('union-loans.html'))).toEqual(mclr('union.mclr', '2026-09-21', ['7.90', '8.10', '8.35', '8.65', '8.80']));
   });

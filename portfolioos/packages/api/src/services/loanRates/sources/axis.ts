@@ -1,7 +1,12 @@
 import type { PageReader, RateReading } from '../types.js';
 import { loadPage, mclrReadings, minMax, pageTables, percents } from './parseUtil.js';
 
-/** Home-loan table: `Cibil Score | REPO + Spread | Effective Rate of Interest`; the range is the last column. */
+/**
+ * Home-loan table: `Cibil Score | REPO + Spread | Effective Rate of Interest`; the range is the last column.
+ * The page also has an "ASHA Home Loans" table (`Programs | REPO + Spread | Effective Rate of Interest`,
+ * 10.15-11.90 %) for a different product, so the header must start with the Cibil score and no row above it
+ * may name ASHA.
+ */
 export const axisHomeReader: PageReader = {
   id: 'axis.home',
   version: '1',
@@ -9,7 +14,8 @@ export const axisHomeReader: PageReader = {
   read(html: string): RateReading[] {
     for (const table of pageTables(loadPage(html))) {
       const headAt = table.rows.findIndex((r) => r.some((c) => /^effective rate of interest$/i.test(c)));
-      if (headAt < 0) continue;
+      if (headAt < 0 || !/^cibil score$/i.test(table.rows[headAt]![0] ?? '')) continue;
+      if (table.rows.slice(0, headAt).some((r) => r.some((c) => /asha/i.test(c)))) continue;
       const col = table.rows[headAt]!.findIndex((c) => /^effective rate of interest$/i.test(c));
       const rates = table.rows.slice(headAt + 1).flatMap((r) => percents(r[col] ?? ''));
       const range = minMax(rates);
