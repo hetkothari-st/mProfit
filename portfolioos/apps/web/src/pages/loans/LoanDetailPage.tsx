@@ -37,6 +37,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
+import { LoanRateFields, rateFieldsFrom, rateFieldsPayload, type RateFieldsValue } from './LoanRateFields';
 import {
   loansApi,
   type LoanDTO,
@@ -286,6 +287,7 @@ function EditLoanDialog({
   });
 
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+  const [rate, setRate] = useState<RateFieldsValue>(() => rateFieldsFrom(loan));
 
   // Re-sync form when dialog reopens or the underlying loan changes
   useEffect(() => {
@@ -309,6 +311,7 @@ function EditLoanDialog({
         portfolioId: loan.portfolioId ?? null,
       });
       setErrors({});
+      setRate(rateFieldsFrom(loan));
     }
   }, [open, loan]);
 
@@ -317,6 +320,7 @@ function EditLoanDialog({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['loan', loan.id] });
       qc.invalidateQueries({ queryKey: ['loans'] });
+      qc.invalidateQueries({ queryKey: ['loan-market-check', loan.id] });
       toast.success('Loan updated');
       onOpenChange(false);
     },
@@ -439,6 +443,8 @@ function EditLoanDialog({
             </div>
           </div>
 
+          <LoanRateFields idPrefix="edit-loan" value={rate} onChange={setRate} />
+
           <div>
             <Label>Portfolio</Label>
             <PortfolioSelect
@@ -457,7 +463,7 @@ function EditLoanDialog({
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => { if (validate()) mutation.mutate(form); }} disabled={mutation.isPending}>
+          <Button onClick={() => { if (validate()) mutation.mutate({ ...form, ...rateFieldsPayload(rate) }); }} disabled={mutation.isPending}>
             {mutation.isPending ? 'Saving…' : 'Save'}
           </Button>
         </DialogFooter>

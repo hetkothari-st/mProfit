@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse } from '@everypaisa/shared';
+import type { ApiResponse, LoanMarketCheckWire, LoanRateBenchmark, LoanRateType } from '@everypaisa/shared';
 
 function unwrap<T>(r: ApiResponse<T>): T {
   if (!r.success) throw new Error(r.error);
@@ -41,6 +41,11 @@ export interface LoanDTO {
   taxBenefitSection: string | null;
   status: string; // ACTIVE | CLOSED | FORECLOSED | DEFAULT
   closedDate: string | null;
+  /** Existing-loan checks (spec s6.1). Optional only so older fixtures type-check; the API always sends them. */
+  rateType?: LoanRateType;
+  rateBenchmark?: LoanRateBenchmark | null;
+  /** ISO instant at UTC midnight, or null. */
+  nextRateResetDate?: string | null;
   payments: LoanPaymentDTO[];
   createdAt: string;
 }
@@ -99,6 +104,10 @@ export interface CreateLoanInput {
   portfolioId?: string | null;
   status?: string;
   closedDate?: string | null;
+  rateType?: LoanRateType;
+  rateBenchmark?: LoanRateBenchmark | null;
+  /** 'YYYY-MM-DD' or null. */
+  nextRateResetDate?: string | null;
 }
 
 export type UpdateLoanInput = Partial<CreateLoanInput>;
@@ -132,6 +141,10 @@ export const loansApi = {
     const { data } = await api.get<ApiResponse<AmortizationRowDTO[]>>(
       `/api/loans/${id}/amortization`,
     );
+    return unwrap(data);
+  },
+  async getMarketCheck(id: string): Promise<LoanMarketCheckWire> {
+    const { data } = await api.get<ApiResponse<LoanMarketCheckWire>>(`/api/loans/${id}/market-check`);
     return unwrap(data);
   },
   async create(input: CreateLoanInput): Promise<LoanDTO> {
