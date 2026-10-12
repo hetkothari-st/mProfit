@@ -10,7 +10,7 @@ import { isAmountText, isPercentText, normaliseAmountText } from './allocationMa
  * and that is above zero. `onInvalid` fires for anything else (including an
  * empty box), so a parent holding a draft can disable its button.
  */
-export function DecimalField({ id, label, value, kind, onValid, onInvalid, className }: {
+export function DecimalField({ id, label, value, kind, onValid, onInvalid, className, suffix }: {
   id?: string;
   label: string;
   value: string;
@@ -18,6 +18,8 @@ export function DecimalField({ id, label, value, kind, onValid, onInvalid, class
   onValid: (v: string) => void;
   onInvalid?: () => void;
   className?: string;
+  /** A unit shown after the box, e.g. "%". */
+  suffix?: string;
 }) {
   const [text, setText] = useState(value);
   const focused = useRef(false);
@@ -35,6 +37,7 @@ export function DecimalField({ id, label, value, kind, onValid, onInvalid, class
   const empty = text.trim() === '' && value === '';
   return (
     <div className={cn('min-w-0', className)}>
+      <div className="flex items-center gap-1">
       <Input
         id={id}
         aria-label={label}
@@ -53,6 +56,8 @@ export function DecimalField({ id, label, value, kind, onValid, onInvalid, class
           else onInvalid?.();
         }}
       />
+      {suffix && <span className="shrink-0 text-sm text-muted-foreground" aria-hidden="true">{suffix}</span>}
+      </div>
       {!valid && !empty && (
         <p className="mt-1 text-xs text-negative">
           {kind === 'percent' ? 'Enter a percentage above 0, like 25 or 33.33' : 'Enter an amount above 0, like 50000 or 50000.50'}

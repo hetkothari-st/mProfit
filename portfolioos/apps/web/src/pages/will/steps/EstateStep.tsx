@@ -74,9 +74,10 @@ function OwnershipControl({ item, actions }: { item: WillAssetItem; actions: Row
       </Select>
       {(item.ownership.type === 'JOINT' || item.ownership.type === 'HUF') && (
         <DecimalField
-          className="w-24"
+          className="w-28"
           kind="percent"
-          label={`Your share of ${item.label}`}
+          suffix="%"
+          label={`Your share of ${item.label} (percent)`}
           value={item.ownership.sharePct}
           onValid={(v) => actions.patch(item.sourceKey, { ownership: { ...item.ownership, sharePct: v }, userEdited: true })}
         />

@@ -155,4 +155,22 @@ describe('AllocationStep', () => {
     expect(screen.getByText(/lower someone's share first/i)).toBeTruthy();
     expect(p.update).not.toHaveBeenCalled();
   });
+
+  it('labels the donut with a legend in distinct chart colours, and wraps the tab bar on narrow screens', () => {
+    const payload = fullPayload();
+    payload.allocation.residuary = [
+      { personId: payload.people[0]!.id, sharePct: '50' },
+      { personId: payload.people[1]!.id, sharePct: '30' },
+    ];
+    setup(payload);
+    const legend = screen.getByTestId('donut-legend');
+    const rows = Array.from(legend.querySelectorAll('li'));
+    expect(rows.map((r) => r.textContent)).toEqual([
+      `${payload.people[0]!.name}50.00%`, `${payload.people[1]!.name}30.00%`, 'Not shared yet20.00%',
+    ]);
+    const colours = rows.map((r) => r.querySelector('[data-colour]')!.getAttribute('data-colour'));
+    expect(new Set(colours).size).toBe(3);
+    expect(colours.slice(0, 2).every((c) => /--chart-\d/.test(c ?? ''))).toBe(true);
+    expect(screen.getByRole('tablist').className).toContain('flex-wrap');
+  });
 });

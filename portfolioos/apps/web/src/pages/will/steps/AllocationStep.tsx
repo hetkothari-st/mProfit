@@ -17,9 +17,12 @@ const TOOLTIP_PROPS = {
   itemStyle: { color: 'hsl(var(--foreground))' },
 };
 
+/** Chart palette tokens: distinct hues in both themes (chart-2 is grey, kept for "not shared"). */
 const SLICE_COLOURS = [
-  'hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--positive))', 'hsl(var(--warning))', 'hsl(var(--muted-foreground))',
+  'hsl(var(--chart-1))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))', 'hsl(var(--chart-6))',
+  'hsl(var(--chart-7))', 'hsl(var(--chart-8))', 'hsl(var(--chart-3))',
 ];
+const UNSHARED_COLOUR = 'hsl(var(--muted))';
 
 export function AllocationStep({ payload, update, findings, wide }: WillStepProps) {
   const [tab, setTab] = useState('percent');
@@ -40,16 +43,23 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
   const remainingOf = (key: string) =>
     Decimal.max(0, new Decimal(100).minus(sumPercents(a.specificGifts.filter((g) => g.itemId === key).map((g) => g.sharePct))));
   const duplicateGift = a.specificGifts.some((g) => g.itemId === giftItem && g.personId === giftPerson);
+  // toNumber only for drawing the donut; the legend shows the exact decimals.
   const slices = [
-    ...a.residuary.map((r) => ({ id: r.personId, name: nameOf(r.personId), value: new Decimal(r.sharePct).toNumber() })),
-    ...(remaining.greaterThan(0) ? [{ id: 'unshared', name: 'Not shared yet', value: remaining.toNumber() }] : []),
+    ...a.residuary.map((r, i) => ({
+      id: r.personId, name: nameOf(r.personId), pct: new Decimal(r.sharePct).toFixed(2),
+      value: new Decimal(r.sharePct).toNumber(), colour: SLICE_COLOURS[i % SLICE_COLOURS.length]!,
+    })),
+    ...(remaining.greaterThan(0)
+      ? [{ id: 'unshared', name: 'Not shared yet', pct: remaining.toFixed(2), value: remaining.toNumber(), colour: UNSHARED_COLOUR }]
+      : []),
   ];
 
   return (
     <div className="min-w-0 space-y-4">
       <FindingList findings={findings.filter((f) => f.step === 5)} />
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
+        {/* Wraps rather than scrolls, so no tab is hidden off the edge at 375 px. */}
+        <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="percent">By percentage</TabsTrigger>
           <TabsTrigger value="specific">Specific gifts</TabsTrigger>
           <TabsTrigger value="fixed">Fixed amounts</TabsTrigger>
@@ -107,17 +117,26 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
                 {!total.equals(100) && ` - ${remaining.abs().toFixed(2)}% ${remaining.isNegative() ? 'too much' : 'left to share'}`}
               </p>
             </div>
+            <div className="min-w-0 space-y-2">
             <div className="h-40 min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={slices} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="85%" stroke="none">
-                    {slices.map((s, i) => (
-                      <Cell key={s.id} fill={s.id === 'unshared' ? 'hsl(var(--muted))' : SLICE_COLOURS[i % SLICE_COLOURS.length]} />
-                    ))}
+                    {slices.map((s) => <Cell key={s.id} fill={s.colour} />)}
                   </Pie>
                   <Tooltip {...TOOLTIP_PROPS} formatter={(v: number) => `${v.toFixed(2)}%`} />
                 </PieChart>
               </ResponsiveContainer>
+            </div>
+            <ul data-testid="donut-legend" className="space-y-1 text-xs">
+              {slices.map((s) => (
+                <li key={s.id} className="flex min-w-0 items-center gap-2">
+                  <span data-colour={s.colour} className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.colour }} aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate text-foreground">{s.name}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">{s.pct}%</span>
+                </li>
+              ))}
+            </ul>
             </div>
           </Card>
         </TabsContent>

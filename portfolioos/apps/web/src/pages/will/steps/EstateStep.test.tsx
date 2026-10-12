@@ -148,6 +148,14 @@ describe('EstateStep', () => {
     expect(within(screen.getByTestId('estate-item-bank:b1')).queryByText(/has gifts in step 5/i)).toBeNull();
   });
 
+  it('shows a % sign next to the joint share box', () => {
+    const payload = fullPayload();
+    payload.estate.items[0] = { ...payload.estate.items[0]!, ownership: { type: 'JOINT', sharePct: '50' } };
+    setup(payload, false);
+    const box = within(screen.getByTestId('estate-item-bank:b1')).getByLabelText(/your share of/i);
+    expect(box.parentElement!.textContent).toContain('%');
+  });
+
   it('edits the value of a manual item, and rejects zero', () => {
     const payload = fullPayload();
     payload.estate.items.push(item({ sourceKey: 'manual:x', kind: 'OTHER_ASSET', label: 'Painting', value: '5000' }));
