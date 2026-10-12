@@ -8,9 +8,34 @@
  *   npx tsx scripts/seed-loan-rates-from-fixtures.ts
  */
 import { readFileSync } from 'node:fs';
-import { runLoanRates } from '../src/jobs/loanRatesJob.js';
-import { prisma } from '../src/lib/prisma.js';
-import { PAGE_READERS } from '../src/services/loanRates/sources/index.js';
+
+const LOCAL_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+/** Exact host check on the parsed URL: 'db.example.com/?x=localhost' or 'localhost.evil.com' are refused. */
+function isLocalDatabaseUrl(raw: string): boolean {
+  try {
+    return LOCAL_HOSTS.has(new URL(raw).hostname);
+  } catch {
+    return false;
+  }
+}
+
+// The guard runs before anything that can open a database connection is loaded (dynamic imports below).
+for (const name of ['DATABASE_URL', 'DIRECT_URL'] as const) {
+  const value = process.env[name];
+  if (name === 'DIRECT_URL' && value === undefined) continue;
+  if (!isLocalDatabaseUrl(value ?? '')) {
+    console.error(`Refusing to run: ${name} must point at localhost, 127.0.0.1 or ::1`);
+    process.exit(2);
+  }
+}
+
+class MissingCaptureError extends Error {
+  constructor(readerId: string) {
+    super(`No saved capture listed for reader ${readerId} - add it to FIRST_CAPTURE`);
+    this.name = 'MissingCaptureError';
+  }
+}
 
 const FIRST_CAPTURE: Record<string, string> = {
   'rbi.home': 'rbi-home.html',
@@ -30,25 +55,33 @@ const FIRST_CAPTURE: Record<string, string> = {
   'lic.home': 'lic-HOME.html',
 };
 
-if (!/localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL ?? '')) {
-  console.error('Refusing to run: DATABASE_URL must point at a local database');
-  process.exit(2);
-}
+const { PAGE_READERS } = await import('../src/services/loanRates/sources/index.js');
+const { runLoanRates } = await import('../src/jobs/loanRatesJob.js');
+const { prisma } = await import('../src/lib/prisma.js');
 
 const dir = new URL('../test/fixtures/loanRates/', import.meta.url);
-const pages = new Map(PAGE_READERS.map((r) => [r.url, readFileSync(new URL(FIRST_CAPTURE[r.id]!, dir), 'utf8')]));
-const result = await runLoanRates({
-  opsUserId: null,
-  fetchHtml: async (url) => {
-    const page = pages.get(url);
-    if (page === undefined) throw new Error(`no saved capture for ${url}`);
-    return page;
-  },
-});
-if (result === null) {
-  console.error('A rates run is already in progress; try again shortly');
-  process.exitCode = 1;
-} else {
-  for (const p of result.pages) console.log(`${p.readerId}: ${p.status} (+${p.active} active, ${p.suspect} suspect, ${p.unchanged} unchanged)`);
+const pages = new Map(
+  PAGE_READERS.map((r) => {
+    const name = FIRST_CAPTURE[r.id];
+    if (name === undefined) throw new MissingCaptureError(r.id);
+    return [r.url, readFileSync(new URL(name, dir), 'utf8')] as const;
+  }),
+);
+try {
+  const result = await runLoanRates({
+    opsUserId: null,
+    fetchHtml: async (url) => {
+      const page = pages.get(url);
+      if (page === undefined) throw new Error(`no saved capture for ${url}`);
+      return page;
+    },
+  });
+  if (result === null) {
+    console.error('A rates run is already in progress; try again shortly');
+    process.exitCode = 1;
+  } else {
+    for (const p of result.pages) console.log(`${p.readerId}: ${p.status} (+${p.active} active, ${p.suspect} suspect, ${p.unchanged} unchanged)`);
+  }
+} finally {
+  await prisma.$disconnect();
 }
-await prisma.$disconnect();
