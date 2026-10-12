@@ -133,15 +133,17 @@ let ensured: Promise<void> | null = null;
  */
 export function ensureLoanRateSources(force = false): Promise<void> {
   if (ensured === null || force) {
-    ensured = (async () => {
+    const run = (async () => {
       for (const source of LOAN_RATE_SOURCES) {
         const { id, ...fields } = source;
         await prisma.loanRateSource.upsert({ where: { id }, create: source, update: fields });
       }
     })();
-    // A failed upsert must not be remembered as done; the next caller retries.
-    ensured.catch(() => {
-      ensured = null;
+    ensured = run;
+    // A failed upsert must not be remembered as done; the next caller retries. Only clear our own run, so a
+    // newer forced run is not discarded when an older one fails late.
+    run.catch(() => {
+      if (ensured === run) ensured = null;
     });
   }
   return ensured;

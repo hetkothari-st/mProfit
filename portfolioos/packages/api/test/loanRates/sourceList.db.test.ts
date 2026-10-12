@@ -16,4 +16,18 @@ describe('ensureLoanRateSources', () => {
     expect(rows.find((r) => r.id === 'pnb.home')).toMatchObject({ mode: 'MANUAL', adapter: null });
     expect(rows.every((r) => r.createdAt instanceof Date)).toBe(true);
   });
+
+  it('a re-run leaves fetch state alone (lastSuccessAt, lastError, createdAt)', async () => {
+    await ensureLoanRateSources(true);
+    const stamp = new Date('2026-10-01T05:30:00.000Z');
+    await prisma.loanRateSource.update({ where: { id: 'sbi.home' }, data: { lastSuccessAt: stamp, lastErrorAt: stamp, lastError: 'boom' } });
+    const before = await prisma.loanRateSource.findUniqueOrThrow({ where: { id: 'sbi.home' } });
+    await ensureLoanRateSources(true);
+    const after = await prisma.loanRateSource.findUniqueOrThrow({ where: { id: 'sbi.home' } });
+    expect(after.lastSuccessAt?.toISOString()).toBe(stamp.toISOString());
+    expect(after.lastErrorAt?.toISOString()).toBe(stamp.toISOString());
+    expect(after.lastError).toBe('boom');
+    expect(after.createdAt.toISOString()).toBe(before.createdAt.toISOString());
+    await prisma.loanRateSource.update({ where: { id: 'sbi.home' }, data: { lastSuccessAt: null, lastErrorAt: null, lastError: null } });
+  });
 });

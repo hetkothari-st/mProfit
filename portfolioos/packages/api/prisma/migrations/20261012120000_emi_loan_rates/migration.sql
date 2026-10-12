@@ -59,3 +59,13 @@ CREATE UNIQUE INDEX "BenchmarkRate_kind_lender_tenor_effectiveDate_key" ON "Benc
 
 -- AddForeignKey
 ALTER TABLE "LoanRate" ADD CONSTRAINT "LoanRate_sourceId_fkey" FOREIGN KEY ("sourceId") REFERENCES "LoanRateSource"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Explicit grant (global reference data: no RLS, no policy). Default privileges from
+-- 20260421150000 only cover tables created by the role that ran that migration.
+DO $do$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'portfolioos_app') THEN
+    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON "LoanRateSource", "LoanRate", "BenchmarkRate" TO portfolioos_app';
+  END IF;
+END
+$do$;
