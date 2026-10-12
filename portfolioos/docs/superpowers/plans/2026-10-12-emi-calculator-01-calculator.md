@@ -1670,7 +1670,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `type CalcOutcome = { ok: true; principal: Decimal; tenureMonths: number; summary: LoanSummary; wire: LoanInputWire; taxWire?: TaxInputWire } | { ok: false; errors: FieldError[] }`
   - `computeCalc(s: CalcState): CalcOutcome`
   - `type CompareOutcome = { ok: true; result: OfferComparison } | { ok: false; errors: FieldError[] }`
-  - `computeCompare(c: CompareState, firstEmiDate: string): CompareOutcome`
+  - `computeCompare(c: CompareState, firstEmiDate: string, tax?: TaxInputWire): CompareOutcome` — when `tax` is given (Calculate tab's tax switch on and valid) every offer gets the same tax input, so post-tax cost is comparable
   - `type EmiTab = 'calculate' | 'compare'`
   - `encodeEmiUrl(tab: EmiTab, calc: CalcState, compare: CompareState): string` (returns `v=1&tab=...&s=...&c=...` without the leading `?`)
   - `decodeEmiUrl(search: string): { tab: EmiTab; calc?: CalcState; compare?: CompareState; error?: string }`
@@ -1752,6 +1752,12 @@ describe('computeCompare', () => {
     const bad = computeCompare({ offers: [{ ...c.offers[0]!, ratePct: 'x' }, c.offers[1]!] }, '2026-11-05');
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.errors[0]!.field).toBe('offers.0.annualRatePct');
+  });
+  it('applies the tax input to every offer so post-tax cost is ranked', () => {
+    const o = computeCompare(defaultCompareState(), '2026-11-05', { regime: 'OLD', loanKind: 'HOME_SELF', slabPct: '30', remaining80C: '150000' });
+    if (!o.ok) throw new Error('expected ok');
+    expect(o.result.cheapestPostTax).not.toBeNull();
+    expect(o.result.offers.every((x) => x.postTaxCost !== undefined)).toBe(true);
   });
 });
 ```
@@ -1929,7 +1935,7 @@ export function computeCalc(s: CalcState): CalcOutcome {
 
 export type CompareOutcome = { ok: true; result: OfferComparison } | { ok: false; errors: FieldError[] };
 
-export function computeCompare(c: CompareState, firstEmiDate: string): CompareOutcome {
+export function computeCompare(c: CompareState, firstEmiDate: string, tax?: TaxInputWire): CompareOutcome {
   const errors: FieldError[] = [];
   const wires = c.offers.map((o, i): LoanInputWire => {
     const w: LoanInputWire = {
@@ -1939,8 +1945,9 @@ export function computeCompare(c: CompareState, firstEmiDate: string): CompareOu
     for (const e of validateLoanWire(w)) errors.push({ field: `offers.${i}.${e.field}`, message: e.message });
     return w;
   });
+  const taxInput = tax && validateTaxWire(tax).length === 0 ? taxFromWire(tax) : undefined;
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, result: compareLoanOffers(wires.map((w, i) => ({ label: c.offers[i]!.label || `Offer ${i + 1}`, input: loanFromWire(w) }))) };
+  return { ok: true, result: compareLoanOffers(wires.map((w, i) => ({ label: c.offers[i]!.label || `Offer ${i + 1}`, input: loanFromWire(w), tax: taxInput }))) };
 }
 ```
 
@@ -2539,7 +2546,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `CompareState`, `OfferState`, `computeCompare`, `money` (Task 6); `Field`, `errorFor` (Task 7).
-- Produces: `CompareTab(props: { state: CompareState; firstEmiDate: string; onChange: (s: CompareState) => void })`
+- Produces: `CompareTab(props: { state: CompareState; firstEmiDate: string; tax?: TaxInputWire; onChange: (s: CompareState) => void })`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2595,15 +2602,16 @@ Expected: FAIL — module not found.
 ```tsx
 import { useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import type { TaxInputWire } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Field, errorFor } from './CalculateTab';
 import { useDebounced } from './useDebounced';
 import { computeCompare, money, type CompareState, type OfferState } from './emiState';
 
-export function CompareTab({ state, firstEmiDate, onChange }: { state: CompareState; firstEmiDate: string; onChange: (s: CompareState) => void }) {
+export function CompareTab({ state, firstEmiDate, tax, onChange }: { state: CompareState; firstEmiDate: string; tax?: TaxInputWire; onChange: (s: CompareState) => void }) {
   const debounced = useDebounced(state, 150);
-  const outcome = useMemo(() => computeCompare(debounced, firstEmiDate), [debounced, firstEmiDate]);
+  const outcome = useMemo(() => computeCompare(debounced, firstEmiDate, tax), [debounced, firstEmiDate, tax]);
   const errors = outcome.ok ? [] : outcome.errors;
   const setOffer = (i: number, patch: Partial<OfferState>) => onChange({ offers: state.offers.map((o, j) => (j === i ? { ...o, ...patch } : o)) });
 
@@ -2643,11 +2651,13 @@ export function CompareTab({ state, firstEmiDate, onChange }: { state: CompareSt
                   <span className="font-semibold">{o.label}</span>
                   {i === outcome.result.cheapestTotal && <span className="rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">Cheapest overall</span>}
                 </div>
+                {i === outcome.result.cheapestPostTax && <div className="text-xs text-primary">Cheapest after tax</div>}
                 <Row k="EMI" v={money(o.emi)} />
                 <Row k="Total interest" v={money(o.totalInterest)} />
                 <Row k="Fees + GST" v={money(o.fees.total)} />
                 <Row k="Total cost" v={money(o.totalCost)} />
                 <Row k="APR" v={`${o.aprPct.toFixed(2)}%`} />
+                {o.postTaxCost && <Row k="Cost after tax" v={money(o.postTaxCost)} />}
               </CardContent>
             </Card>
           ))}
@@ -2767,8 +2777,9 @@ export const emiApi = {
 
 `apps/web/src/pages/emi/EmiCalculatorPage.tsx`:
 ```tsx
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import type { TaxInputWire } from '@everypaisa/shared';
 import { Download, FileSpreadsheet, Link2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -2803,6 +2814,11 @@ export function EmiCalculatorPage() {
   }, [tab, calc, compare, navigate]);
 
   const onOutcome = useCallback((o: CalcOutcome) => setOutcome(o), []);
+  // Stable identity so CompareTab's memo does not recompute every render.
+  const compareTax = useMemo<TaxInputWire | undefined>(
+    () => (calc.taxOn ? { regime: calc.regime, loanKind: calc.loanKind, slabPct: calc.slabPct, remaining80C: calc.remaining80C } : undefined),
+    [calc.taxOn, calc.regime, calc.loanKind, calc.slabPct, calc.remaining80C],
+  );
 
   async function share() {
     const url = `${window.location.origin}/emi?${encodeEmiUrl(tab, calc, compare)}`;
@@ -2849,7 +2865,7 @@ export function EmiCalculatorPage() {
           <CalculateTab state={calc} onChange={setCalc} onOutcome={onOutcome} />
         </TabsContent>
         <TabsContent value="compare" className="mt-4">
-          <CompareTab state={compare} firstEmiDate={calc.firstEmiDate} onChange={setCompare} />
+          <CompareTab state={compare} firstEmiDate={calc.firstEmiDate} tax={compareTax} onChange={setCompare} />
         </TabsContent>
       </Tabs>
     </div>
