@@ -9,3 +9,4 @@ export * from './apr.js';
 export { loanTaxBenefit } from './emiTax.js';
 export type { TaxRegime, TaxLoanKind, TaxInput, TaxYear, TaxSummary as EmiTaxSummary } from './emiTax.js';
 export * from './summary.js';
+export * from './emiWire.js';
