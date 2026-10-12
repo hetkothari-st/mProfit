@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Clock, Download, Info, ScrollText } from 'lucide-react';
 import { formatDateIST, formatDateOnly, formatINR, WILL_DISCLAIMER, type WillOverviewWire, type WillVersionWire } from '@everypaisa/shared';
@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { apiErrorMessage } from '@/api/client';
-import { willApi, willDraftExistsId } from '@/api/will.api';
+import { willApi, willDraftExists } from '@/api/will.api';
 import { ConfirmDialog } from '@/pages/split/ConfirmDialog';
 import { WillGate } from './WillGuards';
 import { willStepPath } from './willSteps';
@@ -65,9 +65,9 @@ function OverviewBody() {
       navigate(willStepPath(d.id, d.currentStep));
     },
     onError: (err) => {
-      const existing = willDraftExistsId(err);
+      const existing = willDraftExists(err);
       if (existing) {
-        navigate(willStepPath(existing, 2));
+        navigate(willStepPath(existing.id, existing.currentStep));
         return;
       }
       toast.error(apiErrorMessage(err, "Couldn't start your will"));
@@ -131,9 +131,7 @@ function OverviewBody() {
             <div className="space-y-2 rounded-md border border-border/60 p-3 text-sm">
               <p className="text-foreground">Version {latest.versionNo} generated on {formatDateOnly(latest.generatedOn)}</p>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" disabled={download.isPending} onClick={() => download.mutate(latest)}>
-                  <Download className="mr-1 h-4 w-4" />Download PDF
-                </Button>
+                <DownloadButton variant="outline" version={latest} download={download} />
                 {!o.draft && (
                   <Button size="sm" disabled={create.isPending} onClick={() => create.mutate(latest.willId)}>
                     Start a new version
@@ -172,9 +170,7 @@ function OverviewBody() {
                   <span className="text-foreground">
                     Version {v.versionNo} - {VERSION_STATUS[v.status]} - {formatDateOnly(v.generatedOn)}
                   </span>
-                  <Button size="sm" variant="ghost" onClick={() => download.mutate(v)}>
-                    <Download className="mr-1 h-4 w-4" />Download PDF
-                  </Button>
+                  <DownloadButton variant="ghost" version={v} download={download} />
                 </li>
               ))}
             </ul>
@@ -195,6 +191,20 @@ function OverviewBody() {
         </Card>
       </div>
     </div>
+  );
+}
+
+/** One download at a time; the row being fetched says so. */
+function DownloadButton({ version, download, variant }: {
+  version: WillVersionWire;
+  download: UseMutationResult<void, Error, WillVersionWire>;
+  variant: 'outline' | 'ghost';
+}) {
+  const mine = download.isPending && download.variables?.id === version.id;
+  return (
+    <Button size="sm" variant={variant} disabled={download.isPending} onClick={() => download.mutate(version)}>
+      <Download className="mr-1 h-4 w-4" />{mine ? 'Downloading...' : 'Download PDF'}
+    </Button>
   );
 }
 

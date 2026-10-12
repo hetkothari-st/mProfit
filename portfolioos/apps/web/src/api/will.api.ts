@@ -75,9 +75,12 @@ export function isWillRevisionConflict(err: unknown): boolean {
   return errorDetails(err, 409)?.['reason'] === 'WILL_REVISION_CONFLICT';
 }
 
-export function willDraftExistsId(err: unknown): string | null {
+/** The open draft named by a WILL_DRAFT_EXISTS conflict, with the step it was saved at. */
+export function willDraftExists(err: unknown): { id: string; currentStep: number } | null {
   const d = errorDetails(err, 409);
-  return d?.['reason'] === 'WILL_DRAFT_EXISTS' && typeof d['draftId'] === 'string' ? d['draftId'] : null;
+  if (d?.['reason'] !== 'WILL_DRAFT_EXISTS' || typeof d['draftId'] !== 'string') return null;
+  const step = d['currentStep'];
+  return { id: d['draftId'], currentStep: typeof step === 'number' && Number.isInteger(step) ? step : 2 };
 }
 
 export function isWillBlocked(err: unknown): boolean {

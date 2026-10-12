@@ -3,20 +3,24 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { renderWithProviders } from '@/pages/split/testUtils';
 import { useActingAsStore } from '@/stores/actingAs.store';
-import { willApi } from '@/api/will.api';
+import { render } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { willApi, willDraftExists } from '@/api/will.api';
 import { WillOverviewPage } from './WillOverviewPage';
 import { draftWire, overview, resetStores, signIn } from './willTestData';
 
 vi.mock('react-hot-toast', () => ({ default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 vi.mock('@/api/will.api', () => ({
   willApi: { overview: vi.fn(), createDraft: vi.fn(), discard: vi.fn(), downloadPdf: vi.fn() },
-  willDraftExistsId: vi.fn(() => null),
+  willDraftExists: vi.fn(() => null),
 }));
 
 const api = vi.mocked(willApi);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(willDraftExists).mockReturnValue(null);
   signIn('PLUS');
 });
 afterEach(() => {
@@ -69,6 +73,46 @@ describe('WillOverviewPage', () => {
     await waitFor(() => expect(api.downloadPdf).toHaveBeenCalledWith('v1', 1));
     fireEvent.click(screen.getByRole('button', { name: /start a new version/i }));
     await waitFor(() => expect(api.createDraft).toHaveBeenCalledWith('w1'));
+  });
+
+  it('a draft-exists conflict opens that draft at its saved step', async () => {
+    api.overview.mockResolvedValue(overview());
+    api.createDraft.mockRejectedValue(new Error('409'));
+    vi.mocked(willDraftExists).mockReturnValue({ id: 'w5', currentStep: 5 });
+    function Where() {
+      return <div data-testid="where">{useLocation().pathname}</div>;
+    }
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
+        <MemoryRouter initialEntries={['/will']}>
+          <Routes>
+            <Route path="/will" element={<WillOverviewPage />} />
+            <Route path="*" element={<Where />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /create my will/i }));
+    expect((await screen.findByTestId('where')).textContent).toBe('/will/w5/allocation');
+  });
+
+  it('shows which version is downloading and blocks other downloads meanwhile', async () => {
+    api.overview.mockResolvedValue(overview({
+      status: 'GENERATED',
+      versions: [
+        { id: 'v2', willId: 'w2', versionNo: 2, status: 'GENERATED', generatedOn: '2026-10-12', templateId: 'isa-hindu', templateVersion: 1 },
+        { id: 'v1', willId: 'w1', versionNo: 1, status: 'SUPERSEDED', generatedOn: '2026-10-11', templateId: 'isa-hindu', templateVersion: 1 },
+      ],
+    }));
+    api.downloadPdf.mockReturnValue(new Promise<void>(() => undefined));
+    renderWithProviders(<WillOverviewPage />, { route: '/will', path: '/will' });
+    const row = (await screen.findByText(/version 1 - replaced/i)).closest('li')!;
+    fireEvent.click(row.querySelector('button')!);
+    await waitFor(() => expect(row.querySelector('button')!.textContent).toMatch(/downloading/i));
+    expect(row.querySelector('button')!.disabled).toBe(true);
+    const other = screen.getByText(/version 2 - generated/i).closest('li')!.querySelector('button')!;
+    expect(other.disabled).toBe(true);
+    expect(other.textContent).not.toMatch(/downloading/i);
   });
 
   it('is locked on the Free plan and does not call the API', async () => {
