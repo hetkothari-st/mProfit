@@ -32,7 +32,7 @@ describe('rule ids are unique and every rule has a step and title', () => {
 });
 
 it('pins the ruleset version', () => {
-  expect(WILL_RULESET_VERSION).toBe(1);
+  expect(WILL_RULESET_VERSION).toBe(2);
 });
 
 // One golden case per rule: [rule id, expected severity, mutation that must trigger it].
@@ -125,6 +125,14 @@ describe('rule details', () => {
 
   it('an excluded item given away is a blocker', () => {
     expect(ids(mutate((m) => { m.estate.items[1]!.review = 'EXCLUDED'; }))).toContain('GIFT_ON_EXCLUDED_OR_LIABILITY');
+  });
+
+  it('a nominee-only item given away is a blocker that names the policy nominee', () => {
+    const m = mutate((x) => { x.estate.items[1]!.ownership = { type: 'NOMINEE_ONLY', sharePct: '100' }; });
+    const f = runWillRules(m, ctx).find((x) => x.ruleId === 'GIFT_ON_EXCLUDED_OR_LIABILITY');
+    expect(f?.severity).toBe('BLOCKER');
+    expect(f?.refs).toEqual([m.estate.items[1]!.sourceKey]);
+    expect(f?.message).toContain('goes to the policy nominee');
   });
 
   it('findings carry no names and point at ids', () => {

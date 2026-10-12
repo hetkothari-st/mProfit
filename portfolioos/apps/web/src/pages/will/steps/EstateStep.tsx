@@ -108,7 +108,7 @@ function ReviewControl({ item, actions }: { item: WillAssetItem; actions: RowAct
           onValid={(v) => actions.patch(item.sourceKey, { value: v })}
         />
       )}
-      {item.review === 'EXCLUDED' && actions.hasGifts(item.sourceKey) && (
+      {(item.review === 'EXCLUDED' || item.ownership.type === 'NOMINEE_ONLY') && actions.hasGifts(item.sourceKey) && (
         <p className="w-full text-xs text-warning">This item has gifts in step 5 - they will be flagged.</p>
       )}
     </div>

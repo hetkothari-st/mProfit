@@ -126,6 +126,14 @@ describe('EstateStep', () => {
     expect(within(screen.getByTestId('estate-item-holdings:pf1:EQUITY')).getByText(/has gifts in step 5/i)).toBeTruthy();
   });
 
+  it('warns when an item with gifts is set to nominee only', () => {
+    const payload = fullPayload();
+    payload.estate.items[1] = { ...payload.estate.items[1]!, ownership: { type: 'NOMINEE_ONLY', sharePct: '100' } };
+    setup(payload, false);
+    expect(within(screen.getByTestId('estate-item-holdings:pf1:EQUITY')).getByText(/has gifts in step 5/i)).toBeTruthy();
+    expect(within(screen.getByTestId('estate-item-bank:b1')).queryByText(/has gifts in step 5/i)).toBeNull();
+  });
+
   it('edits the value of a manual item, and rejects zero', () => {
     const payload = fullPayload();
     payload.estate.items.push(item({ sourceKey: 'manual:x', kind: 'OTHER_ASSET', label: 'Painting', value: '5000' }));

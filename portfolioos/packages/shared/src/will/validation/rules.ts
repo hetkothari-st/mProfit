@@ -12,7 +12,7 @@ import {
   willEstateTotals, willMinorChildren,
 } from '../estateMath.js';
 
-export const WILL_RULESET_VERSION = 1;
+export const WILL_RULESET_VERSION = 2;
 
 export const MUSLIM_LAW_MESSAGE =
   'Under Muslim personal law a will can generally give away only up to one-third of the estate, and gifts to legal heirs need the consent of the other heirs. Will Maker cannot prepare a will under Muslim personal law - please get legal advice.';
@@ -228,9 +228,22 @@ export const WILL_RULES: readonly WillRule[] = [
           return !i || i.review === 'EXCLUDED' || i.side === 'LIABILITY';
         })
         .map((g) => g.itemId);
-      return bad.length
-        ? hit('A gift names an asset that is excluded, is a liability, or is no longer in your list.', unique(bad))
-        : none();
+      // A nominee-only item (life insurance) is paid to the policy nominee and
+      // does not pass under the will, so it cannot be gifted in it.
+      const nominee = m.allocation.specificGifts
+        .filter((g) => {
+          const i = items.get(g.itemId);
+          return !!i && !bad.includes(g.itemId) && i.ownership.type === 'NOMINEE_ONLY';
+        })
+        .map((g) => g.itemId);
+      return [
+        ...(bad.length
+          ? hit('A gift names an asset that is excluded, is a liability, or is no longer in your list.', unique(bad))
+          : none()),
+        ...(nominee.length
+          ? hit('A gift names an asset that goes to the policy nominee, not through your will - remove the gift.', unique(nominee))
+          : none()),
+      ];
     },
   },
   {
