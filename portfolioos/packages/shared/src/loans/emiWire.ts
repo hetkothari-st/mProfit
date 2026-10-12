@@ -1,5 +1,7 @@
 import { Decimal } from '../decimal.js';
-import type { EmiMode, LoanInput } from './emi.types.js';
+import { EmiError, type EmiMode, type LoanInput } from './emi.types.js';
+import { tenureForEmi } from './emi.js';
+import { loanFees } from './apr.js';
 import type { TaxInput, TaxLoanKind, TaxRegime } from './emiTax.js';
 
 export interface PrepaymentWire { month: number; amount: string; recurrence: 'ONCE' | 'YEARLY'; mode: EmiMode }
@@ -28,7 +30,8 @@ export const EMI_LIMITS = {
   max80C: new Decimal(150000),
 } as const;
 
-const NUMBER = /^\d+(\.\d+)?$/;
+/** Plain non-negative decimal; '.5' and '5.' are accepted (decimal.js parses both). */
+const NUMBER = /^(\d+\.?\d*|\.\d+)$/;
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** "Rs 10,00,000.50" style input to "1000000.50". */
@@ -68,6 +71,15 @@ export function validateLoanWire(w: LoanInputWire): FieldError[] {
   if (w.emiOverride !== undefined) {
     const e = num(w.emiOverride);
     if (!e || e.lte(0)) add('emiOverride', 'Enter an EMI above 0');
+    else if (p && p.gt(0) && p.lte(EMI_LIMITS.maxPrincipal) && r && r.lte(EMI_LIMITS.maxRatePct)) {
+      // The schedule's own length comes from this EMI, so the tenure limit applies to it too.
+      try {
+        if (tenureForEmi(p, e, r) > EMI_LIMITS.maxTenureMonths) add('emi', 'This EMI takes longer than 40 years to repay');
+      } catch (err) {
+        if (!(err instanceof EmiError)) throw err;
+        add('emi', err.message);
+      }
+    }
   }
 
   (w.prepayments ?? []).forEach((pp, i) => {
@@ -76,8 +88,11 @@ export function validateLoanWire(w: LoanInputWire): FieldError[] {
     if (!a || a.lte(0)) add(`prepayments.${i}.amount`, 'Enter an amount above 0');
   });
 
+  const rateChangeMonths = new Set<number>();
   (w.rateChanges ?? []).forEach((rc, i) => {
     if (!isMonth(rc.fromMonth)) add(`rateChanges.${i}.fromMonth`, 'Month must be 1-480');
+    else if (rateChangeMonths.has(rc.fromMonth)) add(`rateChanges.${i}.fromMonth`, 'Only one rate change per month');
+    else rateChangeMonths.add(rc.fromMonth);
     const nr = num(rc.annualRatePct);
     if (!nr || nr.gt(EMI_LIMITS.maxRatePct)) add(`rateChanges.${i}.annualRatePct`, 'Rate must be between 0% and 50%');
   });
@@ -88,7 +103,12 @@ export function validateLoanWire(w: LoanInputWire): FieldError[] {
     else if (w.fees.processingFeeKind === 'PCT' && fv.gt(EMI_LIMITS.maxFeePct)) add('fees.processingFeeValue', 'Fee can be at most 10%');
     const g = num(w.fees.gstPct);
     if (!g || g.gt(EMI_LIMITS.maxGstPct)) add('fees.gstPct', 'GST must be 0-28%');
-    if (!num(w.fees.otherCharges)) add('fees.otherCharges', 'Enter other charges (0 if none)');
+    const oc = num(w.fees.otherCharges);
+    if (!oc) add('fees.otherCharges', 'Enter other charges (0 if none)');
+    if (p && p.gt(0) && fv && g && oc && !errors.some((x) => x.field.startsWith('fees.'))) {
+      const total = loanFees(p, { processingFeeKind: w.fees.processingFeeKind, processingFeeValue: fv, gstPct: g, otherCharges: oc }).total;
+      if (total.gte(p)) add('fees.processingFeeValue', "Fees can't be more than the loan");
+    }
   }
   return errors;
 }

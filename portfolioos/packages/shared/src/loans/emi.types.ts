@@ -55,7 +55,9 @@ export type EmiWarning =
   | 'PREPAYMENT_CAPPED'
   | 'NEGATIVE_AMORTISATION_AVOIDED'
   | 'PREPAYMENT_AFTER_CLOSE'
-  | 'RATE_CHANGE_AFTER_CLOSE';
+  | 'RATE_CHANGE_AFTER_CLOSE'
+  /** A keep-EMI change would run past month 480, so the EMI was raised to finish by then. */
+  | 'TENURE_CAPPED';
 
 export interface ScheduleResult {
   /** Starting EMI. */

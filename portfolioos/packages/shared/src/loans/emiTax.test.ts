@@ -73,3 +73,25 @@ describe('loanTaxBenefit', () => {
     expect(t.totalTaxSaved.toFixed(2)).toBe('0.00');
   });
 });
+
+describe('loanTaxBenefit - more cases', () => {
+  const old30 = { regime: 'OLD' as const, slabPct: D(30), remaining80C: D(150000) };
+  it('let-out: principal is deducted under 80C', () => {
+    const t = loanTaxBenefit(rows('2026-04-05', 12, 10000, 8000), { ...old30, loanKind: 'HOME_LET_OUT' });
+    expect(t.years[0]!.principalDeduction.toFixed(0)).toBe('96000');
+    expect(t.years[0]!.carriedForward.toFixed(0)).toBe('0');
+  });
+  it('a prepayment counts toward 80C', () => {
+    const r = rows('2026-04-05', 12, 1000, 2000);
+    r[5] = { ...r[5]!, prepayment: D(50000) };
+    const t = loanTaxBenefit(r, { ...old30, loanKind: 'HOME_SELF' });
+    expect(t.years[0]!.principal.toFixed(0)).toBe('74000');
+    expect(t.years[0]!.principalDeduction.toFixed(0)).toBe('74000');
+  });
+  it('interest under the 24(b) cap is deducted in full', () => {
+    const t = loanTaxBenefit(rows('2026-04-05', 12, 15000, 0), { ...old30, loanKind: 'HOME_SELF' });
+    expect(t.years[0]!.interestDeduction.toFixed(0)).toBe('180000');
+    // 180000 * 30% * 1.04
+    expect(t.years[0]!.taxSaved.toFixed(2)).toBe('56160.00');
+  });
+});

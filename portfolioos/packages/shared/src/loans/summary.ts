@@ -1,13 +1,15 @@
 import { Decimal } from '../decimal.js';
 import { buildEmiSchedule } from './emi.js';
 import { indianFy } from './emiDates.js';
-import { loanApr, loanFees, type FeeSummary } from './apr.js';
+import { loanFees, loanRates, type FeeSummary } from './apr.js';
 import { loanTaxBenefit, type TaxInput, type TaxSummary } from './emiTax.js';
 import type { LoanInput, ScheduleResult, ScheduleRow } from './emi.types.js';
 
 export interface LoanSummary extends ScheduleResult {
   fees: FeeSummary;
   aprPct: Decimal;
+  /** Nominal yearly rate behind the APR (monthly IRR x 12). */
+  nominalPct: Decimal;
   /** totalPaid + fees */
   totalCost: Decimal;
   tax?: TaxSummary;
@@ -17,9 +19,9 @@ export interface LoanSummary extends ScheduleResult {
 export function summariseLoan(input: LoanInput, tax?: TaxInput): LoanSummary {
   const result = buildEmiSchedule(input);
   const fees = loanFees(input.principal, input.fees);
-  const aprPct = loanApr(input.principal.minus(fees.total), result.schedule);
+  const { aprPct, nominalPct } = loanRates(input.principal.minus(fees.total), result.schedule);
   const totalCost = result.totalPaid.plus(fees.total);
-  const summary: LoanSummary = { ...result, fees, aprPct, totalCost };
+  const summary: LoanSummary = { ...result, fees, aprPct, nominalPct, totalCost };
   if (tax) {
     summary.tax = loanTaxBenefit(result.schedule, tax);
     summary.postTaxCost = totalCost.minus(summary.tax.totalTaxSaved);
@@ -60,20 +62,25 @@ export function groupScheduleByFy(rows: ScheduleRow[]): FyGroup[] {
 export interface OfferInput { label: string; input: LoanInput; tax?: TaxInput }
 export interface OfferComparison {
   offers: (LoanSummary & { label: string })[];
-  /** Index of the lowest total cost (EMIs + prepayments + fees). */
-  cheapestTotal: number;
-  /** Index of the lowest post-tax cost; null unless every offer has tax input. */
-  cheapestPostTax: number | null;
+  /** Indexes of the lowest total cost (EMIs + prepayments + fees); several when tied. */
+  cheapestTotal: number[];
+  /** Indexes of the lowest post-tax cost; null unless every offer has tax input. */
+  cheapestPostTax: number[] | null;
 }
 
-const argMin = (values: Decimal[]) => values.reduce((best, v, i) => (v.lt(values[best]!) ? i : best), 0);
+/** Every index holding the minimum value (ties all count). */
+function argMins(values: Decimal[]): number[] {
+  if (values.length === 0) return [];
+  const min = values.reduce((m, v) => (v.lt(m) ? v : m));
+  return values.flatMap((v, i) => (v.equals(min) ? [i] : []));
+}
 
 export function compareLoanOffers(offers: OfferInput[]): OfferComparison {
   const summaries = offers.map((o) => ({ ...summariseLoan(o.input, o.tax), label: o.label }));
   const allTaxed = summaries.every((s) => s.postTaxCost !== undefined);
   return {
     offers: summaries,
-    cheapestTotal: argMin(summaries.map((s) => s.totalCost)),
-    cheapestPostTax: allTaxed ? argMin(summaries.map((s) => s.postTaxCost!)) : null,
+    cheapestTotal: argMins(summaries.map((s) => s.totalCost)),
+    cheapestPostTax: allTaxed ? argMins(summaries.map((s) => s.postTaxCost!)) : null,
   };
 }

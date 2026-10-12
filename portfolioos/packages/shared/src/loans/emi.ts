@@ -6,8 +6,10 @@ import { EmiError, type EmiWarning, type LoanInput, type RateChange, type Schedu
 const Dec = Decimal.clone({ precision: 40 });
 const ZERO = new Dec(0);
 const ONE = new Dec(1);
-/** Safety cap; inputs are limited to 480 months but rate rises can stretch a loan. */
+/** Safety cap on the loop; a schedule still open after this many rows is an input error. */
 const MAX_ROWS = 1200;
+/** Keep-EMI changes may not stretch the loan past this month (the input tenure limit, 40 years). */
+const MAX_END_MONTH = 480;
 
 const monthlyRate = (annualRatePct: Decimal) => new Dec(annualRatePct).div(1200);
 const paise = (d: Decimal) => d.toDecimalPlaces(2, Dec.ROUND_HALF_UP);
@@ -84,6 +86,12 @@ export function buildEmiSchedule(input: LoanInput): ScheduleResult {
         warnings.add('NEGATIVE_AMORTISATION_AVOIDED');
       } else {
         plannedEnd = m - 1 + tenureForEmi(balance, emi, rate);
+        if (plannedEnd > MAX_END_MONTH) {
+          // This month's EMI is still to be paid, so it counts toward the months left.
+          emi = emiFor(balance, rate, Math.max(MAX_END_MONTH - m + 1, 1));
+          plannedEnd = Math.max(MAX_END_MONTH, m);
+          warnings.add('TENURE_CAPPED');
+        }
       }
     }
 
@@ -110,7 +118,14 @@ export function buildEmiSchedule(input: LoanInput): ScheduleResult {
       prepaid = prepaid.plus(amount);
       if (balance.gt(0)) {
         if (p.mode === 'REDUCE_EMI') emi = emiFor(balance, rate, Math.max(plannedEnd - m, 1));
-        else plannedEnd = m + tenureForEmi(balance, emi, rate);
+        else {
+          plannedEnd = m + tenureForEmi(balance, emi, rate);
+          if (plannedEnd > MAX_END_MONTH) {
+            emi = emiFor(balance, rate, Math.max(MAX_END_MONTH - m, 1));
+            plannedEnd = Math.max(MAX_END_MONTH, m + 1);
+            warnings.add('TENURE_CAPPED');
+          }
+        }
       }
     }
 
@@ -127,6 +142,9 @@ export function buildEmiSchedule(input: LoanInput): ScheduleResult {
     });
   }
 
+  if (balance.gt(0)) {
+    throw new EmiError('INVALID_INPUT', 'This loan would not be repaid within 100 years - check the EMI and rates', 'emi');
+  }
   const months = rows.length;
   if (prepays.some((p) => p.month > months)) warnings.add('PREPAYMENT_AFTER_CLOSE');
   if ((input.rateChanges ?? []).some((c) => c.fromMonth > months)) warnings.add('RATE_CHANGE_AFTER_CLOSE');

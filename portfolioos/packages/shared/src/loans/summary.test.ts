@@ -11,6 +11,7 @@ describe('summariseLoan', () => {
     const s = summariseLoan({ ...base, fees: { processingFeeKind: 'PCT', processingFeeValue: D(2), gstPct: D(18), otherCharges: D(0) } });
     expect(s.fees.total.toFixed(2)).toBe('2360.00');
     expect(s.aprPct.toFixed(2)).toBe('17.88');
+    expect(s.nominalPct.toFixed(2)).toBe('16.56');
     expect(s.totalCost.equals(s.totalPaid.plus(s.fees.total))).toBe(true);
     expect(s.tax).toBeUndefined();
   });
@@ -41,7 +42,17 @@ describe('compareLoanOffers', () => {
       { label: 'C', input: { ...base, annualRatePct: D('11.5') } },
     ]);
     expect(c.offers.map((o) => o.label)).toEqual(['A', 'B', 'C']);
-    expect(c.cheapestTotal).toBe(2);
+    expect(c.cheapestTotal).toEqual([2]);
     expect(c.cheapestPostTax).toBeNull();
+  });
+  it('marks every offer tied at the minimum', () => {
+    const tax = { regime: 'OLD' as const, loanKind: 'HOME_SELF' as const, slabPct: D(30), remaining80C: D(150000) };
+    const c = compareLoanOffers([
+      { label: 'A', input: base, tax },
+      { label: 'B', input: { ...base, annualRatePct: D(13) }, tax },
+      { label: 'C', input: base, tax },
+    ]);
+    expect(c.cheapestTotal).toEqual([0, 2]);
+    expect(c.cheapestPostTax).toEqual([0, 2]);
   });
 });

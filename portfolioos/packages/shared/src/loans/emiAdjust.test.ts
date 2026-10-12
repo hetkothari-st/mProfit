@@ -98,3 +98,17 @@ describe('extreme inputs', () => {
     expect(r.schedule.at(-1)!.emi.lte(r.schedule[0]!.emi)).toBe(true);
   });
 });
+
+describe('40-year cap on keep-EMI rate rises', () => {
+  it('a rise that would stretch past month 480 raises the EMI to finish by then', () => {
+    const principal = D(10000000);
+    const r = buildEmiSchedule({
+      principal, annualRatePct: D(8), tenureMonths: 480, firstEmiDate: '2026-11-05',
+      rateChanges: [{ fromMonth: 2, annualRatePct: D('8.345'), mode: 'REDUCE_TENURE' }],
+    });
+    invariants(r, principal);
+    expect(r.months).toBeLessThanOrEqual(480);
+    expect(r.warnings).toContain('TENURE_CAPPED');
+    expect(r.schedule[5]!.emi.gt(r.schedule[0]!.emi)).toBe(true);
+  });
+});

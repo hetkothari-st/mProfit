@@ -57,3 +57,36 @@ describe('fromWire', () => {
     expect(t.remaining80C.toString()).toBe('150000');
   });
 });
+
+describe('validateLoanWire - derived values and cross-field rules', () => {
+  const errs = (w: LoanInputWire) => validateLoanWire(w);
+  it('rejects an EMI whose derived tenure is over 40 years', () => {
+    const e = errs({ ...ok, principal: '10000000', annualRatePct: '0', emiOverride: '1' });
+    expect(e).toContainEqual({ field: 'emi', message: 'This EMI takes longer than 40 years to repay' });
+  });
+  it('reports an EMI below the monthly interest on the emi field', () => {
+    expect(errs({ ...ok, emiOverride: '5000' }).map((x) => x.field)).toContain('emi');
+  });
+  it('accepts an EMI that repays within 40 years', () => {
+    expect(errs({ ...ok, emiOverride: '10000' })).toEqual([]);
+  });
+  it('rejects fees that are as large as the loan', () => {
+    const e = errs({ ...ok, principal: '10000', fees: { processingFeeKind: 'AMOUNT', processingFeeValue: '9000', gstPct: '18', otherCharges: '0' } });
+    expect(e).toContainEqual({ field: 'fees.processingFeeValue', message: "Fees can't be more than the loan" });
+  });
+  it('accepts numbers written as .5 and 5.', () => {
+    expect(errs({ ...ok, annualRatePct: '.5' })).toEqual([]);
+    expect(errs({ ...ok, annualRatePct: '8.' })).toEqual([]);
+    expect(loanFromWire({ ...ok, annualRatePct: '.5' }).annualRatePct.toString()).toBe('0.5');
+  });
+  it('rejects two rate changes in the same month', () => {
+    const e = errs({
+      ...ok,
+      rateChanges: [
+        { fromMonth: 13, annualRatePct: '9', mode: 'REDUCE_TENURE' },
+        { fromMonth: 13, annualRatePct: '10', mode: 'REDUCE_TENURE' },
+      ],
+    });
+    expect(e).toEqual([{ field: 'rateChanges.1.fromMonth', message: 'Only one rate change per month' }]);
+  });
+});

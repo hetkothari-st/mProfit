@@ -79,3 +79,10 @@ describe('buildEmiSchedule (plain)', () => {
     expect(r.schedule.at(-1)!.closing.toFixed(2)).toBe('0.00');
   });
 });
+
+describe('buildEmiSchedule never returns a non-closing schedule', () => {
+  it('an EMI of Rs 1 on Rs 1 crore at 0% throws instead of stopping part-way', () => {
+    expect(() => buildEmiSchedule({ principal: D(10000000), annualRatePct: D(0), tenureMonths: 12, firstEmiDate: '2026-11-05', emiOverride: D(1) }))
+      .toThrow(/100 years/);
+  });
+});

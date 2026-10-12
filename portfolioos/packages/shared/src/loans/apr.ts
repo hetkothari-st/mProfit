@@ -18,12 +18,19 @@ export function loanFees(principal: Decimal, fees?: Fees): FeeSummary {
   return { processingFee, gst, otherCharges, total: processingFee.plus(gst).plus(otherCharges) };
 }
 
+export interface LoanRates {
+  /** Effective annual rate, (1+i)^12 - 1, as a percentage to 2 dp. */
+  aprPct: Decimal;
+  /** Nominal annual rate, i x 12, as a percentage to 2 dp. */
+  nominalPct: Decimal;
+}
+
 /**
  * APR from actual cash flows: the borrower receives `netReceived` at t0 and
- * pays each row's EMI + prepayment at month k. Monthly IRR by bisection,
- * annualised as (1+i)^12 - 1. Returns a percentage to 2 dp.
+ * pays each row's EMI + prepayment at month k. Monthly IRR `i` by bisection,
+ * reported both annualised as (1+i)^12 - 1 and as the nominal i x 12.
  */
-export function loanApr(netReceived: Decimal, schedule: ScheduleRow[]): Decimal {
+export function loanRates(netReceived: Decimal, schedule: ScheduleRow[]): LoanRates {
   const received = new Dec(netReceived);
   const payments = schedule.map((r) => new Dec(r.emi).plus(r.prepayment));
   const pv = (i: InstanceType<typeof Dec>) => {
@@ -36,8 +43,9 @@ export function loanApr(netReceived: Decimal, schedule: ScheduleRow[]): Decimal 
     }
     return total;
   };
+  const pct = (d: InstanceType<typeof Dec>) => new Decimal(d.times(100).toString()).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
   // Payments never exceed what was received -> no cost of borrowing.
-  if (pv(new Dec(0)).lte(received)) return new Decimal(0).toDecimalPlaces(2);
+  if (pv(new Dec(0)).lte(received)) return { aprPct: new Decimal(0).toDecimalPlaces(2), nominalPct: new Decimal(0).toDecimalPlaces(2) };
   let lo = new Dec(0);
   let hi = new Dec(1); // 100% a month - far above any real loan
   const tolerance = new Dec('1e-12');
@@ -46,5 +54,10 @@ export function loanApr(netReceived: Decimal, schedule: ScheduleRow[]): Decimal 
     if (pv(mid).gt(received)) lo = mid;
     else hi = mid;
   }
-  return new Decimal(lo.plus(1).pow(12).minus(1).times(100).toString()).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+  return { aprPct: pct(lo.plus(1).pow(12).minus(1)), nominalPct: pct(lo.times(12)) };
+}
+
+/** APR only; see `loanRates`. */
+export function loanApr(netReceived: Decimal, schedule: ScheduleRow[]): Decimal {
+  return loanRates(netReceived, schedule).aprPct;
 }
