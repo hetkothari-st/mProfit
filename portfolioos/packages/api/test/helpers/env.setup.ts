@@ -18,6 +18,8 @@ const DEFAULTS: Record<string, string> = {
   // Base64 of 32 bytes. Lets the PII-at-rest paths actually encrypt under test
   // instead of taking the no-key plaintext fallback.
   APP_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
+  // The loan-rates job must never schedule itself inside a test process.
+  ENABLE_LOAN_RATES_CRON: 'false',
 };
 
 for (const [key, value] of Object.entries(DEFAULTS)) {
