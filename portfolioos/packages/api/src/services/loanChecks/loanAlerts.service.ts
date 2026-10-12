@@ -20,6 +20,10 @@ import { loanPosition } from './marketCheck.service.js';
 
 /** Plan ruling 7: a change fetched within this window is still news; the dedup key stops repeats. */
 export const BENCHMARK_LOOKBACK_DAYS = 7;
+/** A net move bigger than this in one window is a misparse or a mistyped override, not news. */
+export const MAX_BENCHMARK_CHANGE_PP = new Decimal('1.00');
+/** A change dated further back than this is history, not news (e.g. a backdated override). */
+export const MAX_BENCHMARK_CHANGE_AGE_DAYS = 30;
 const DAY_MS = 86_400_000;
 
 export interface BenchmarkChange {
@@ -32,7 +36,11 @@ export interface BenchmarkChange {
   fetchedAt: Date;
 }
 
-/** REPO and 1-year MCLR rows fetched in the window whose previous row in the same series has another rate. */
+/**
+ * One change per series (REPO, or one lender's 1-year MCLR): the NET move from the last row fetched before
+ * the window to the latest row fetched in it, so a cut that is reversed within the window is not news. Skipped
+ * when the net move is zero, implausibly large, dated in the future (IST) or more than 30 days ago.
+ */
 export async function findBenchmarkChanges(now: Date): Promise<BenchmarkChange[]> {
   const since = new Date(now.getTime() - BENCHMARK_LOOKBACK_DAYS * DAY_MS);
   const recent = await prisma.benchmarkRate.findMany({
@@ -42,26 +50,36 @@ export async function findBenchmarkChanges(now: Date): Promise<BenchmarkChange[]
     },
     orderBy: [{ effectiveDate: 'asc' }, { fetchedAt: 'asc' }],
   });
+  const latestBySeries = new Map<string, (typeof recent)[number]>();
+  for (const row of recent) latestBySeries.set(`${row.kind}|${row.lender ?? ''}|${row.tenor ?? ''}`, row);
+
+  const today = istDate(now);
+  const oldest = istDate(new Date(now.getTime() - MAX_BENCHMARK_CHANGE_AGE_DAYS * DAY_MS));
   const changes: BenchmarkChange[] = [];
-  for (const row of recent) {
-    const previous = await prisma.benchmarkRate.findFirst({
-      where: {
-        kind: row.kind,
-        lender: row.lender,
-        tenor: row.tenor,
-        id: { not: row.id },
-        OR: [{ effectiveDate: { lt: row.effectiveDate } }, { effectiveDate: row.effectiveDate, fetchedAt: { lt: row.fetchedAt } }],
-      },
+  for (const latest of latestBySeries.values()) {
+    const effectiveDate = isoDate(latest.effectiveDate)!;
+    if (effectiveDate > today || effectiveDate < oldest) continue;
+    const baseline = await prisma.benchmarkRate.findFirst({
+      where: { kind: latest.kind, lender: latest.lender, tenor: latest.tenor, fetchedAt: { lt: since } },
       orderBy: [{ effectiveDate: 'desc' }, { fetchedAt: 'desc' }],
     });
-    if (!previous || previous.ratePct.equals(row.ratePct)) continue;
+    if (!baseline) continue;
+    const delta = new Decimal(latest.ratePct.minus(baseline.ratePct).toString());
+    if (delta.isZero()) continue;
+    if (delta.abs().greaterThan(MAX_BENCHMARK_CHANGE_PP)) {
+      logger.warn(
+        { kind: latest.kind, lender: latest.lender, tenor: latest.tenor, deltaPct: delta.toFixed(2), effectiveDate },
+        '[loanChecks] benchmark change too large to be real; not alerting',
+      );
+      continue;
+    }
     changes.push({
-      kind: row.kind as BenchmarkKind,
-      lender: row.lender,
-      ratePct: new Decimal(row.ratePct.toString()),
-      deltaPct: new Decimal(row.ratePct.minus(previous.ratePct).toString()),
-      effectiveDate: isoDate(row.effectiveDate)!,
-      fetchedAt: row.fetchedAt,
+      kind: latest.kind as BenchmarkKind,
+      lender: latest.lender,
+      ratePct: new Decimal(latest.ratePct.toString()),
+      deltaPct: delta,
+      effectiveDate,
+      fetchedAt: latest.fetchedAt,
     });
   }
   return changes;

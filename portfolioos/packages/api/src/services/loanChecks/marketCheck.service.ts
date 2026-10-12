@@ -12,6 +12,7 @@ import { prisma } from '../../lib/prisma.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { computeLoanSummary, type StoredLoan } from '../loans.service.js';
 import { listLoanRates } from '../loanRates/loanRates.service.js';
+import { MAX_BELIEVABLE_PCT, MIN_BELIEVABLE_PCT } from '../loanRates/sanity.js';
 import { isoDate, pctString } from '../loanRates/store.js';
 import { canonicalLender } from './lenderAlias.js';
 
@@ -31,10 +32,19 @@ export function loanPosition(loan: StoredLoan, asOf: Date): LoanPosition {
   };
 }
 
-/** Plan ruling 4: the lowest effective min rate that is not stale (SUSPECT rows never reach listLoanRates). */
+/** A min rate a retail loan could really carry (spec s5.4 band); guards against a mistyped admin override. */
+function isBelievable(minRatePct: string): boolean {
+  const min = new Decimal(minRatePct);
+  return !min.lessThan(MIN_BELIEVABLE_PCT) && !min.greaterThan(MAX_BELIEVABLE_PCT);
+}
+
+/**
+ * Plan ruling 4: the lowest effective min rate that is not stale (SUSPECT rows never reach listLoanRates).
+ * MANUAL overrides skip the AUTO sanity check, so a rate outside the believable band is ignored here too.
+ */
 export async function bestMarketRate(type: RateLoanType, now: Date): Promise<MarketRateWire | null> {
   const { rows } = await listLoanRates(type, now);
-  const best = rows.find((row) => !row.stale);
+  const best = rows.find((row) => !row.stale && isBelievable(row.minRatePct));
   return best ? { sourceId: best.sourceId, lender: best.lender, minRatePct: best.minRatePct, asOf: best.asOf, sourceUrl: best.sourceUrl } : null;
 }
 
