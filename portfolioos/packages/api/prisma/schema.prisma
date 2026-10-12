@@ -5460,6 +5460,10 @@ model LegacyOutbox {
   tokenEnc     String? // encrypted raw link token, cleared once sent
   sentAt       DateTime?
   attempts     Int        @default(0)
+  /// Retry backoff after a failed send; null = due now.
+  nextAttemptAt DateTime?
+  /// Set while a flusher is sending this row, so two flushers never both send it.
+  claimedAt    DateTime?
   lastError    String?
   createdAt    DateTime   @default(now())
 

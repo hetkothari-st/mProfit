@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
 import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler, validate } from '../middleware/validate.js';
-import { legacyPublicLimiter, piiLimiter } from '../middleware/rateLimit.js';
+import { legacyPublicLimiter, legacyTokenLimiter, piiLimiter } from '../middleware/rateLimit.js';
 import { legacySession } from '../middleware/legacySession.js';
 import {
   legacyNomineeSchema, legacyOtpVerifySchema, legacyPauseSchema, legacyRevokeSchema, legacySettingsSchema,
@@ -40,8 +40,9 @@ legacyPublicRouter.post('/ok/:token', asyncHandler(c.imOkHandler));
 legacyPublicRouter.post('/ack/:token', asyncHandler(c.ackHandler));
 legacyPublicRouter.get('/verify/:token', asyncHandler(c.peekVerifyHandler));
 legacyPublicRouter.post('/verify/:token', validate(legacyVerifyAnswerSchema), asyncHandler(c.answerVerifyHandler));
-legacyPublicRouter.post('/access/:token/otp', asyncHandler(c.accessOtpHandler));
-legacyPublicRouter.post('/access/:token/session', validate(legacyOtpVerifySchema), asyncHandler(c.accessSessionHandler));
+legacyPublicRouter.post('/access/:token/otp', legacyTokenLimiter, asyncHandler(c.accessOtpHandler));
+legacyPublicRouter.post('/access/:token/session', legacyTokenLimiter, validate(legacyOtpVerifySchema), asyncHandler(c.accessSessionHandler));
+legacyPublicRouter.post('/access/:token/reissue', legacyTokenLimiter, asyncHandler(c.reissueHandler));
 
 /** Nominee read-only view, behind X-Legacy-Session only. */
 export const legacyViewRouter = Router();

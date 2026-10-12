@@ -33,6 +33,7 @@ export function LegacyAccessPage() {
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [reissued, setReissued] = useState(false);
 
   useEffect(() => {
     if (!session) return;
@@ -42,6 +43,11 @@ export function LegacyAccessPage() {
   async function sendCode() {
     setBusy(true);
     try { setSent(await legacyPublic.requestOtp(token)); setErr(''); } catch (e) { setErr(apiErrorMessage(e, 'This link is no longer valid.')); }
+    finally { setBusy(false); }
+  }
+  async function reissue() {
+    setBusy(true);
+    try { await legacyPublic.reissue(token); setReissued(true); setErr(''); } catch (e) { setErr(apiErrorMessage(e)); }
     finally { setBusy(false); }
   }
   async function verify() {
@@ -74,6 +80,12 @@ export function LegacyAccessPage() {
             </>
           )}
           {err && <p className="text-sm text-destructive">{err}</p>}
+          {err && !reissued && (
+            <Button variant="outline" disabled={busy} onClick={reissue}>Email me a fresh link</Button>
+          )}
+          {reissued && (
+            <p className="text-sm">If this link was sent to you, a fresh one is on its way to the same email address.</p>
+          )}
         </CardContent></Card>
       </div>
     );

@@ -52,11 +52,12 @@ export async function createLinkToken(
 }
 
 export async function resolveLinkToken(
-  token: string, purpose: LegacyTokenPurpose, now: Date = new Date(),
+  token: string, purpose: LegacyTokenPurpose, now: Date = new Date(), opts: { allowExpired?: boolean } = {},
 ): Promise<(LegacyToken & { plan: LegacyPlan }) | null> {
   const row = await runAsSystem(() =>
     prisma.legacyToken.findUnique({ where: { tokenHash: sha(token) }, include: { plan: true } }));
-  if (!row || row.purpose !== purpose || row.expiresAt <= now) return null;
+  if (!row || row.purpose !== purpose) return null;
+  if (row.expiresAt <= now && !opts.allowExpired) return null;
   return row;
 }
 
@@ -68,8 +69,9 @@ async function putCode(a: {
   const expiresAt = new Date(a.now.getTime() + a.ttl);
   await runAsSystem(() => prisma.legacyCode.upsert({
     where: { subjectId_purpose: { subjectId: a.subjectId, purpose: a.purpose } },
-    // Re-issuing keeps lockedUntil: a fresh code must not reset brute-force protection.
-    update: { codeHash, expiresAt, attempts: 0 },
+    // Re-issuing keeps attempts and lockedUntil: a fresh code must not reset
+    // brute-force protection. Only a correct code (row deleted) clears them.
+    update: { codeHash, expiresAt },
     create: { userId: a.userId, nomineeId: a.nomineeId, subjectId: a.subjectId, purpose: a.purpose, codeHash, expiresAt },
   }));
 }
@@ -83,17 +85,15 @@ async function checkCode(subjectId: string, purpose: LegacyCodePurpose, secret: 
     if (row.lockedUntil && row.lockedUntil > now) return 'locked';
     if (row.expiresAt <= now) return 'expired';
     if (sameHash(row.codeHash, sha(secret.trim()))) {
-      await prisma.legacyCode.delete({ where: { id: row.id } }); // single use
-      return 'ok';
+      // Single use. deleteMany so a concurrent correct submit loses cleanly.
+      const used = await prisma.legacyCode.deleteMany({ where: { id: row.id } });
+      return used.count === 1 ? 'ok' : 'expired';
     }
-    const attempts = row.attempts + 1;
-    await prisma.legacyCode.update({
-      where: { id: row.id },
-      data: {
-        attempts,
-        lockedUntil: attempts >= CODE_MAX_ATTEMPTS ? new Date(now.getTime() + CODE_LOCK) : row.lockedUntil,
-      },
-    });
+    // Atomic increment: parallel wrong guesses must each count.
+    const bumped = await prisma.legacyCode.update({ where: { id: row.id }, data: { attempts: { increment: 1 } } });
+    if (bumped.attempts >= CODE_MAX_ATTEMPTS) {
+      await prisma.legacyCode.update({ where: { id: row.id }, data: { lockedUntil: new Date(now.getTime() + CODE_LOCK) } });
+    }
     return 'bad';
   });
 }

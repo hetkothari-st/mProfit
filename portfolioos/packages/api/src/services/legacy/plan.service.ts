@@ -15,7 +15,7 @@ import {
 } from '../../schemas/legacy.schemas.js';
 import { nextEventText } from './stateMachine.js';
 import { createLinkToken, wipeNomineeAccess } from './tokens.service.js';
-import { enqueue, flushOutbox } from './outbox.service.js';
+import { enqueue, flushOutboxSoon } from './outbox.service.js';
 import { renderPlanChangedEmail } from './emails.js';
 
 /**
@@ -31,7 +31,18 @@ const EDITABLE: ReadonlySet<LegacyPlan['status']> = new Set(['DRAFT', 'ARMED', '
 const PAUSABLE: ReadonlySet<LegacyPlan['status']> = new Set(['ARMED', 'WARNING_1', 'WARNING_2', 'FINAL_WARNING', 'GRACE']);
 
 const dateOnly = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
-const todayIso = () => new Date().toISOString().slice(0, 10);
+/** Today's calendar date in IST — the state machine counts IST days too. */
+const todayIso = () => new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 10);
+
+/**
+ * A release date that has already passed must not survive a re-arm: the next
+ * tick would release again straight away (scheduled release has no grace).
+ * Re-arming falls back to inactivity until the owner picks a new date.
+ */
+function dropPassedSchedule(plan: LegacyPlan): { triggerMode?: 'INACTIVITY'; scheduledFor?: null } {
+  if (plan.triggerMode === 'INACTIVITY' || !plan.scheduledFor) return {};
+  return dateOnly(plan.scheduledFor)! <= todayIso() ? { triggerMode: 'INACTIVITY', scheduledFor: null } : {};
+}
 
 /** Creates the DRAFT row on first touch. */
 function ensurePlan(userId: string): Promise<LegacyPlan> {
@@ -124,7 +135,7 @@ async function inviteIfLive(planId: string, nomineeId: string): Promise<void> {
     }
     return true;
   }));
-  if (queued) await flushOutbox();
+  if (queued) flushOutboxSoon(planId);
 }
 
 export async function addNominee(userId: string, raw: LegacyNomineeInput): Promise<LegacyNomineeDTO> {
@@ -217,7 +228,7 @@ export async function pause(userId: string, until: string): Promise<void> {
       }
     }
   }));
-  if (wasGrace) await flushOutbox();
+  if (wasGrace) flushOutboxSoon(plan.id);
   await writeAuditLog({ userId, action: 'legacy_changed', resource: `LegacyPlan:${plan.id}`, metadata: { what: 'paused', until } });
 }
 
@@ -226,7 +237,7 @@ export async function resume(userId: string): Promise<void> {
   if (plan.status !== 'PAUSED') throw new BadRequestError('The plan is not paused.');
   await prisma.legacyPlan.update({
     where: { id: plan.id },
-    data: { status: 'ARMED', pausedUntil: null, clockResetAt: new Date(), cycle: { increment: 1 } },
+    data: { status: 'ARMED', pausedUntil: null, clockResetAt: new Date(), cycle: { increment: 1 }, ...dropPassedSchedule(plan) },
   });
   await writeAuditLog({ userId, action: 'legacy_changed', resource: `LegacyPlan:${plan.id}`, metadata: { what: 'resumed' } });
 }
@@ -260,13 +271,16 @@ export async function revoke(userId: string, nomineeId?: string): Promise<void> 
       await wipeNomineeAccess(tx, plan.id);
       const p = await tx.legacyPlan.update({
         where: { id: plan.id },
-        data: { status: 'ARMED', releasedAt: null, stageEnteredAt: null, clockResetAt: new Date(), cycle: { increment: 1 } },
+        data: {
+          status: 'ARMED', releasedAt: null, stageEnteredAt: null, clockResetAt: new Date(), cycle: { increment: 1 },
+          ...dropPassedSchedule(plan),
+        },
       });
       cycle = p.cycle;
     }
     for (const n of targets) await enqueue(tx, { planId: plan.id, userId, kind: 'REVOKED_NOMINEE', cycle, recipientKey: n.id });
   }));
-  await flushOutbox();
+  flushOutboxSoon(plan.id);
   await writeAuditLog({ userId, action: 'legacy_revoked', resource: `LegacyPlan:${plan.id}`, metadata: { nomineeId: nomineeId ?? 'all' } });
 }
 

@@ -44,6 +44,9 @@ const ACCOUNT_ROUTE_PREFIXES = [
   '/api/managed-profiles',
   '/api/gmail',
   '/api/mailboxes',
+  // Legacy Transfer is the owner's own will-like setting: a manager must never
+  // read the letter/nominees or arm a plan for someone who can't sign in.
+  '/api/legacy',
 ];
 
 export function isAccountRoute(path: string): boolean {

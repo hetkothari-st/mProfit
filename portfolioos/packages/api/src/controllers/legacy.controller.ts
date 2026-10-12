@@ -136,6 +136,12 @@ export async function accessSessionHandler(req: Request, res: Response) {
   ok(res, { session: await createNomineeSession(n.id, ownerId) });
 }
 
+/** Always the same answer, so the endpoint reveals nothing about the link. */
+export async function reissueHandler(req: Request, res: Response) {
+  await pub.reissueAccessLink(req.params.token!);
+  ok(res, { ok: true });
+}
+
 // ── nominee view (X-Legacy-Session) ──────────────────────────────────
 
 export async function viewHandler(req: Request, res: Response) {

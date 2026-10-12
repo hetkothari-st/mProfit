@@ -39,10 +39,12 @@ describe('legacy outbox', () => {
     const fail = async () => ({ sent: false as const, reason: 'smtp down' });
     expect(await flushOutbox(fail)).toEqual({ sent: 0, failed: 1 });
     const ok = async (i: SendEmailInput) => { sent.push(i); return { sent: true as const, messageId: 'm' }; };
-    expect(await flushOutbox(ok)).toEqual({ sent: 1, failed: 0 });
+    expect(await flushOutbox(ok)).toEqual({ sent: 0, failed: 0 }); // backing off
+    const later = new Date(Date.now() + 11 * 60_000);
+    expect(await flushOutbox(ok, later)).toEqual({ sent: 1, failed: 0 });
     expect(sent[0]!.to).toBe('ravi@test.local');
     expect(sent[0]!.html).toContain('/legacy/ack/tok');
-    expect(await flushOutbox(ok)).toEqual({ sent: 0, failed: 0 });
+    expect(await flushOutbox(ok, later)).toEqual({ sent: 0, failed: 0 });
     const row = await runAsSystem(() => prisma.legacyOutbox.findFirstOrThrow({ where: { planId } }));
     expect(row.tokenEnc).toBeNull();
   });

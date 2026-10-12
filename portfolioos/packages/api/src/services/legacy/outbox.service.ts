@@ -5,6 +5,7 @@ import { encryptSecret, decryptSecret } from '../../lib/secrets.js';
 import { logger } from '../../lib/logger.js';
 import { env } from '../../config/env.js';
 import { sendEmail } from '../notifications/email.service.js';
+import { LEGACY_STAGE_DAYS } from '@everypaisa/shared';
 import { renderLegacyEmail, type OutboxKind } from './emails.js';
 
 /**
@@ -14,8 +15,17 @@ import { renderLegacyEmail, type OutboxKind } from './emails.js';
  * nominee mail silently lost, and a re-run never double-sends.
  */
 
-const MAX_ATTEMPTS = 5;
+const MIN_MS = 60_000;
 const DAY_MS = 86_400_000;
+/** A claim older than this belongs to a flusher that died mid-send. */
+const CLAIM_TTL_MS = 10 * MIN_MS;
+/** Rows keep retrying forever (release mail must not be dropped); past this, every failure is an alert. */
+const ALERT_AFTER_ATTEMPTS = 5;
+
+/** 10 min, 20, 40, … capped at 6 h. */
+export function retryDelayMs(attempts: number): number {
+  return Math.min(5 * MIN_MS * 2 ** attempts, 6 * 60 * MIN_MS);
+}
 
 export const LINK_PATH: Partial<Record<OutboxKind, string>> = {
   INVITE: '/legacy/ack/',
@@ -44,9 +54,17 @@ export async function enqueue(
 const fmtDate = (d: Date) =>
   d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 
-export async function flushOutbox(send: typeof sendEmail = sendEmail): Promise<{ sent: number; failed: number }> {
+export async function flushOutbox(
+  send: typeof sendEmail = sendEmail, now: Date = new Date(), only?: { planId: string },
+): Promise<{ sent: number; failed: number }> {
+  const staleClaim = new Date(now.getTime() - CLAIM_TTL_MS);
   const rows = await runAsSystem(() => prisma.legacyOutbox.findMany({
-    where: { sentAt: null, attempts: { lt: MAX_ATTEMPTS } },
+    where: {
+      ...(only ? { planId: only.planId } : {}),
+      sentAt: null,
+      OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+      AND: [{ OR: [{ claimedAt: null }, { claimedAt: { lt: staleClaim } }] }],
+    },
     include: { plan: { include: { user: { select: { name: true, email: true } } } } },
     orderBy: { createdAt: 'asc' },
     take: 500,
@@ -54,6 +72,12 @@ export async function flushOutbox(send: typeof sendEmail = sendEmail): Promise<{
   let sent = 0;
   let failed = 0;
   for (const row of rows) {
+    // Claim the row; a concurrent flusher that read it too gets count 0 and skips.
+    const claim = await runAsSystem(() => prisma.legacyOutbox.updateMany({
+      where: { id: row.id, sentAt: null, claimedAt: row.claimedAt },
+      data: { claimedAt: now },
+    }));
+    if (claim.count !== 1) continue;
     try {
       const kind = row.kind as OutboxKind;
       const owner = row.plan.user;
@@ -64,7 +88,7 @@ export async function flushOutbox(send: typeof sendEmail = sendEmail): Promise<{
         if (!n) {
           // Nominee removed after enqueue: nothing to send, and the link must not go anywhere.
           await runAsSystem(() => prisma.legacyOutbox.update({
-            where: { id: row.id }, data: { sentAt: new Date(), tokenEnc: null, lastError: 'nominee removed' },
+            where: { id: row.id }, data: { sentAt: now, tokenEnc: null, claimedAt: null, lastError: 'nominee removed' },
           }));
           continue;
         }
@@ -76,21 +100,41 @@ export async function flushOutbox(send: typeof sendEmail = sendEmail): Promise<{
       let date: string | null = null;
       if (kind.startsWith('SCHEDULE_') && row.plan.scheduledFor) date = fmtDate(row.plan.scheduledFor);
       if ((kind === 'GRACE_OWNER' || kind === 'GRACE_NOMINEE') && row.plan.stageEnteredAt) {
-        date = fmtDate(new Date(row.plan.stageEnteredAt.getTime() + 7 * DAY_MS));
+        date = fmtDate(new Date(row.plan.stageEnteredAt.getTime() + LEGACY_STAGE_DAYS * DAY_MS));
       }
       const mail = renderLegacyEmail(kind, { ownerName: owner.name, recipientName, link, date, appUrl: env.FRONTEND_URL });
       const res = await send({ to, ...mail });
       if (!res.sent) throw new Error(res.reason);
-      await runAsSystem(() => prisma.legacyOutbox.update({ where: { id: row.id }, data: { sentAt: new Date(), tokenEnc: null } }));
+      await runAsSystem(() => prisma.legacyOutbox.update({
+        where: { id: row.id }, data: { sentAt: now, tokenEnc: null, claimedAt: null },
+      }));
       sent++;
     } catch (err) {
       failed++;
       const msg = err instanceof Error ? err.message : String(err);
+      const attempts = row.attempts + 1;
       await runAsSystem(() => prisma.legacyOutbox.update({
-        where: { id: row.id }, data: { attempts: { increment: 1 }, lastError: msg.slice(0, 500) },
+        where: { id: row.id },
+        data: {
+          attempts, lastError: msg.slice(0, 500), claimedAt: null,
+          nextAttemptAt: new Date(now.getTime() + retryDelayMs(attempts)),
+        },
       }));
-      logger.error({ outboxId: row.id, kind: row.kind, err: msg }, '[legacy] outbox send failed; will retry');
+      const log = { outboxId: row.id, kind: row.kind, attempts, err: msg };
+      if (attempts >= ALERT_AFTER_ATTEMPTS) logger.error(log, '[legacy] ALERT: outbox mail still failing; retrying with backoff');
+      else logger.warn(log, '[legacy] outbox send failed; will retry');
     }
   }
   return { sent, failed };
+}
+
+/**
+ * For request handlers: send this plan's mail in the background, so a request
+ * never waits on SMTP or sends other owners' mail. The hourly cron covers the rest.
+ */
+export function flushOutboxSoon(planId: string): void {
+  flushOutbox(sendEmail, new Date(), { planId }).catch((err: unknown) => {
+    // Background path: the hourly cron flush retries anything left.
+    logger.error({ err: err instanceof Error ? err.message : String(err) }, '[legacy] background outbox flush failed');
+  });
 }

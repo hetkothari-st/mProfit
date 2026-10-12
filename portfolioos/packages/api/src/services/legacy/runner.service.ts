@@ -82,19 +82,47 @@ function auditFor(step: Step): AuditAction | null {
   return null;
 }
 
-export async function applyStep(planId: string, step: Step, now: Date): Promise<void> {
-  const plan = await runAsSystem(() => runInTransaction(async (tx) => {
-    const p = await tx.legacyPlan.findUniqueOrThrow({ where: { id: planId } });
+/**
+ * Lock a plan row and read it with the owner's current lastActiveAt. Every
+ * writer that decides from plan state (cron step, verifier answer) goes
+ * through this, so a decision is never made on a stale snapshot.
+ */
+export async function lockPlanClock(tx: Tx, planId: string): Promise<{ plan: LegacyPlan; clock: PlanClock } | null> {
+  await tx.$queryRaw`SELECT id FROM "LegacyPlan" WHERE id = ${planId} FOR UPDATE`;
+  const plan = await tx.legacyPlan.findUnique({ where: { id: planId } });
+  if (!plan) return null;
+  const user = await tx.user.findUniqueOrThrow({ where: { id: plan.userId }, select: { lastActiveAt: true } });
+  return { plan, clock: { ...plan, lastActiveAt: user.lastActiveAt } };
+}
+
+/**
+ * Apply one step, but only if it is still what the fresh, locked plan calls
+ * for. The tick computes steps from a snapshot; the owner may have paused,
+ * turned off or signed in since.
+ */
+export async function applyStep(planId: string, step: Step, now: Date): Promise<boolean> {
+  const applied = await runAsSystem(() => runInTransaction(async (tx) => {
+    const locked = await lockPlanClock(tx, planId);
+    if (!locked) return null;
+    const { plan: p, clock } = locked;
+    const still = planSteps(clock, now).some((s) => JSON.stringify(s) === JSON.stringify(step));
+    if (!still) return null;
     switch (step.kind) {
       case 'reset':
         await resetPlan(tx, p, now, step.from === 'GRACE');
         break;
-      case 'resume':
+      case 'resume': {
+        // A release date that passed during the pause is dropped, not acted on.
+        const passed = p.triggerMode !== 'INACTIVITY' && p.scheduledFor !== null && p.scheduledFor <= now;
         await tx.legacyPlan.update({
           where: { id: p.id },
-          data: { status: 'ARMED', pausedUntil: null, clockResetAt: now, cycle: { increment: 1 } },
+          data: {
+            status: 'ARMED', pausedUntil: null, clockResetAt: now, cycle: { increment: 1 },
+            ...(passed ? { triggerMode: 'INACTIVITY' as const, scheduledFor: null } : {}),
+          },
         });
         break;
+      }
       case 'scheduleReminder':
         await ownerMail(tx, p, `SCHEDULE_${step.daysBefore}`, now, false);
         break;
@@ -104,8 +132,10 @@ export async function applyStep(planId: string, step: Step, now: Date): Promise<
     }
     return p;
   }));
+  if (!applied) return false;
   const action = auditFor(step);
-  if (action) await writeAuditLog({ userId: plan.userId, action, resource: `LegacyPlan:${planId}`, metadata: { step } });
+  if (action) await writeAuditLog({ userId: applied.userId, action, resource: `LegacyPlan:${planId}`, metadata: { step } });
+  return true;
 }
 
 export async function runLegacyTick(
@@ -124,14 +154,13 @@ export async function runLegacyTick(
     };
     for (const step of planSteps(clock, now)) {
       try {
-        await applyStep(p.id, step, now);
-        steps++;
+        if (await applyStep(p.id, step, now)) steps++;
       } catch (err) {
         // One bad plan must not stop the others; the next tick retries it.
         logger.error({ planId: p.id, step, err: err instanceof Error ? err.message : String(err) }, '[legacy] step failed');
       }
     }
   }
-  const { sent, failed } = await flushOutbox(send);
+  const { sent, failed } = await flushOutbox(send, now);
   return { plans: plans.length, steps, sent, failed };
 }

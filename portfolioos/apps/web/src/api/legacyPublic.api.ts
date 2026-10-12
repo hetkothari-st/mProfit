@@ -31,6 +31,9 @@ export const legacyPublic = {
   async openSession(token: string, code: string): Promise<string> {
     return unwrap<{ session: string }>((await http.post(`/api/legacy-public/access/${encodeURIComponent(token)}/session`, { code })).data).session;
   },
+  async reissue(token: string): Promise<void> {
+    await http.post(`/api/legacy-public/access/${encodeURIComponent(token)}/reissue`);
+  },
   async view(session: string): Promise<LegacyViewDTO> {
     return unwrap((await http.get('/api/legacy-view', sess(session))).data);
   },
