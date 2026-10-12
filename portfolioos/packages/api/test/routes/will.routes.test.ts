@@ -31,7 +31,8 @@ function call(method: string, path: string, body?: unknown, plan: 'FREE' | 'PLUS
 beforeAll(async () => {
   user = await createTestScope('will-http');
   const app = express();
-  app.use(express.json());
+  // Same body limit as src/index.ts, so the will router's own size guard is what answers.
+  app.use(express.json({ limit: '10mb' }));
   app.use('/api/will', willRouter);
   app.use(errorHandler);
   server = app.listen(0);
@@ -94,6 +95,14 @@ describe('/api/will drafts', () => {
     const text = await res.text();
     expect(text).not.toContain('Zzyzx');
     expect(text).not.toContain('Hidden Lane');
+  });
+
+  it('refuses a body over 512 KB with 413', async () => {
+    const big = { revision: 1, currentStep: 6, data: { text: 'x'.repeat(600 * 1024) } };
+    const res = await call('PUT', `/drafts/${id}/sections/instructions`, big);
+    expect(res.status).toBe(413);
+    expect(((await res.json()) as { code: string }).code).toBe('WILL_BODY_TOO_LARGE');
+    expect((await call('POST', '/drafts', { fromWillId: 'x'.repeat(600 * 1024) })).status).toBe(413);
   });
 
   it('rejects an unknown section', async () => {
