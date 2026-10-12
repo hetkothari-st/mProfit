@@ -166,6 +166,31 @@ export const authLimiter = rateLimit({
   message: { success: false, error: 'Too many auth attempts', code: 'RATE_LIMITED' },
 });
 
+// Legacy Transfer public links + nominee OTP (no login): keyed per IP, tight,
+// so a leaked link can't be used to hammer the OTP endpoint.
+export const legacyPublicLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  passOnStoreError: true,
+  store: makeStore('legacy'),
+  message: { success: false, error: 'Too many attempts', code: 'RATE_LIMITED' },
+});
+
+// Per Legacy link, across IPs (design §7.2): a leaked link spread over many
+// addresses still gets only this many OTP sends/guesses per window.
+export const legacyTokenLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  passOnStoreError: true,
+  keyGenerator: (req) => `tok:${req.params?.token ?? 'none'}`,
+  store: makeStore('legacytok'),
+  message: { success: false, error: 'Too many attempts for this link. Try again later.', code: 'RATE_LIMITED' },
+});
+
 // PII reveal endpoints (§15.7: 5/min/user). Mount after `authenticate` so the
 // bucket is keyed per user rather than per IP.
 export const piiLimiter = rateLimit({

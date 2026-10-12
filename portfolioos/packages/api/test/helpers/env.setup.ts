@@ -20,6 +20,8 @@ const DEFAULTS: Record<string, string> = {
   APP_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
   // The loan-rates job must never schedule itself inside a test process.
   ENABLE_LOAN_RATES_CRON: 'false',
+  // Nor the Legacy Transfer daily tick / outbox retry.
+  ENABLE_LEGACY_CRON: 'false',
 };
 
 for (const [key, value] of Object.entries(DEFAULTS)) {

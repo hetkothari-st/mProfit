@@ -227,6 +227,13 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   // is insert/read for owners and delete for system context only.
   'Will',
   'WillVersion',
+  // Legacy Transfer (20261013120000_legacy_transfer). ENABLE+FORCE RLS on all
+  // five; without these entries every read returns zero rows (see Goal/BankAccount note).
+  'LegacyPlan',
+  'LegacyNominee',
+  'LegacyToken',
+  'LegacyCode',
+  'LegacyOutbox',
 ]);
 
 /**

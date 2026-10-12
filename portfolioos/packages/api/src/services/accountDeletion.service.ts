@@ -317,6 +317,11 @@ export async function purgeUser(userId: string): Promise<void> {
         await tx.providentFundAccount.deleteMany({ where: { userId: id } });
         await tx.familyInvitation.deleteMany({ where: { invitedById: id } });
         await tx.pendingFamilyInvite.deleteMany({ where: { createdById: id } });
+        // Legacy Transfer: the plan cascades to nominees/tokens/outbox and the
+        // nominees' codes, but the owner's step-up rows carry no FK to User.
+        // No nominee notice on deletion (design §9: it would leak about a living person).
+        await tx.legacyCode.deleteMany({ where: { userId: id } });
+        await tx.legacyPlan.deleteMany({ where: { userId: id } });
         await tx.family.deleteMany({ where: { createdById: id } });
         // Split groups outlive a departing member (SplitMember.userId is SET NULL),
         // so a group where nobody else is linked would be orphaned for good.

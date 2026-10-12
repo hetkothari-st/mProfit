@@ -8,6 +8,7 @@ import {
   isAccountRoute,
   resolveActAs,
 } from '../services/family/managedProfile.service.js';
+import { touchActivitySoon } from '../services/legacy/activity.service.js';
 
 export function authenticate(req: Request, _res: Response, next: NextFunction): void {
   try {
@@ -38,6 +39,8 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
     // membership ends the manager's access on their very next click.
     const actAs = req.header(ACT_AS_HEADER)?.trim();
     if (!actAs || actAs === payload.sub) {
+      // Legacy Transfer: only the owner's own session counts as activity.
+      touchActivitySoon(payload.sub);
       next();
       return;
     }

@@ -16,14 +16,14 @@ datasource db {
 // ─── USERS & AUTH ───────────────────────────────────────────────
 
 model User {
-  splitContacts    SplitContact[]   @relation("SplitContactOwner")
-  splitMembers     SplitMember[]    @relation("SplitMemberUser")
-  splitDetections  SplitDetection[] @relation("SplitDetectionUser")
-  splitShareLinks  SplitShareLink[] @relation("SplitShareLinkUser")
-  splitSettings    SplitSettings?
-  splitReminders   SplitReminder[]  @relation("SplitReminderUser")
-  id                    String    @id @default(cuid())
-  email                 String    @unique
+  splitContacts         SplitContact[]   @relation("SplitContactOwner")
+  splitMembers          SplitMember[]    @relation("SplitMemberUser")
+  splitDetections       SplitDetection[] @relation("SplitDetectionUser")
+  splitShareLinks       SplitShareLink[] @relation("SplitShareLinkUser")
+  splitSettings         SplitSettings?
+  splitReminders        SplitReminder[]  @relation("SplitReminderUser")
+  id                    String           @id @default(cuid())
+  email                 String           @unique
   passwordHash          String
   name                  String
   phone                 String?
@@ -38,17 +38,21 @@ model User {
   // PDF/XLSX uploads. Tried automatically on every locked file.
   // See lib/userDocPasswords.ts and lib/decryptIfNeeded.ts.
   savedFilePasswordsEnc String?
-  role                  UserRole  @default(INVESTOR)
-  plan                  PlanTier  @default(FREE)
+  role                  UserRole         @default(INVESTOR)
+  plan                  PlanTier         @default(FREE)
   planExpiresAt         DateTime?
-  isActive              Boolean   @default(true)
+  isActive              Boolean          @default(true)
+  /// Last *real* owner activity (own session request, refresh, Legacy "I'm OK").
+  /// Never touched by system jobs or X-Act-As. Drives Legacy Transfer inactivity.
+  lastActiveAt          DateTime?
+  legacyPlan            LegacyPlan?
   /// A CA-owned client record: a real User row that exists so the client's
   /// books have an owner, but which can NEVER authenticate. Every auth entry
   /// point refuses these outright — see auth.service.ts. Deliberately its own
   /// column rather than an overload of `isActive`, which already means
   /// "deactivated account" in ~60 places and would silently drag this into
   /// gates it was never meant to affect.
-  isShadowClient        Boolean   @default(false)
+  isShadowClient        Boolean          @default(false)
   /// Set on a MANAGED family profile: someone without an email or login (a
   /// grandparent, a child) whose finances a family member keeps for them.
   /// Always paired with `isShadowClient = true`, so every sign-in path refuses
@@ -57,8 +61,8 @@ model User {
   /// active members of a shared family. Kept on the profile rather than the
   /// membership so the profile can later be handed over to its own email.
   managedById           String?
-  managedBy             User?     @relation("ManagedProfiles", fields: [managedById], references: [id])
-  managedProfiles       User[]    @relation("ManagedProfiles")
+  managedBy             User?            @relation("ManagedProfiles", fields: [managedById], references: [id])
+  managedProfiles       User[]           @relation("ManagedProfiles")
   /// Account deletion (30-day grace). While `deletionScheduledFor` is set the
   /// account cannot sign in without explicitly restoring it, and the purge job
   /// erases everything once the date passes. See accountDeletion.service.ts.
@@ -68,9 +72,9 @@ model User {
   /// (Google sign-in). HMAC-hashed, expiring, attempt-capped.
   deletionCodeHash      String?
   deletionCodeExpiresAt DateTime?
-  deletionCodeAttempts  Int       @default(0)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  deletionCodeAttempts  Int              @default(0)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
   portfolios          Portfolio[]
   portfolioGroups     PortfolioGroup[]
@@ -85,17 +89,17 @@ model User {
   mailboxAccounts     MailboxAccount[]
 
   // Phase 4.5 hardening — ingestion + real-asset modules (§4.1–§4.9)
-  canonicalEvents     CanonicalEvent[]
-  monitoredSenders    MonitoredSender[]
-  learnedTemplates    LearnedTemplate[]
-  ingestionFailures   IngestionFailure[]
-  vehicles            Vehicle[]
-  rentalProperties    RentalProperty[]
-  insurancePolicies   InsurancePolicy[]
+  canonicalEvents           CanonicalEvent[]
+  monitoredSenders          MonitoredSender[]
+  learnedTemplates          LearnedTemplate[]
+  ingestionFailures         IngestionFailure[]
+  vehicles                  Vehicle[]
+  rentalProperties          RentalProperty[]
+  insurancePolicies         InsurancePolicy[]
   insuranceImportDismissals InsuranceImportDismissal[]
-  auditLogs           AuditLog[]
-  billingPayments     BillingPayment[]
-  healthScoreSnapshot HealthScoreSnapshot?
+  auditLogs                 AuditLog[]
+  billingPayments           BillingPayment[]
+  healthScoreSnapshot       HealthScoreSnapshot?
 
   // Phase 5-A — per-call LLM spend ledger (§8, §16 gate G5). Every
   // Anthropic API call writes a row here so the monthly budget check
@@ -119,8 +123,8 @@ model User {
 
   // Generic document vault (rental agreements, vehicle RC scans, insurance
   // policy PDFs, …). Reusable across modules via {ownerType, ownerId}.
-  documents Document[]
-  documentBlobs       DocumentBlob[]
+  documents     Document[]
+  documentBlobs DocumentBlob[]
 
   loans        Loan[]
   loansGiven   LoanGiven[]
@@ -164,7 +168,7 @@ model User {
   incomes Income[]
 
   // UI preferences — sidebar asset class order + visibility per user.
-  preferences Json?
+  preferences    Json?
   /// Settings -> Notifications -> Loan rate alerts (EMI plan 3, spec s6.3). Default on.
   loanRateAlerts Boolean @default(true)
 
@@ -217,10 +221,10 @@ model User {
   // CA workspace. `clients` above is the ADVISOR side (rows this user owns as
   // a CA). These two are the other side: the Client rows where this user IS
   // the subject, and both ends of the CA audit trail.
-  clientRecords Client[] @relation("ClientSubject")
+  clientRecords  Client[]        @relation("ClientSubject")
 
   // Wrapped per-user data key (lib/userKeys).
-  dataKey UserDataKey?
+  dataKey      UserDataKey?
   // Will Maker. Personal content is sealed inside Will.payload.
   wills        Will[]
   willVersions WillVersion[]
@@ -560,26 +564,26 @@ enum CaConsentBasis {
 // ─── PORTFOLIOS & GROUPS ─────────────────────────────────────────
 
 model Portfolio {
-  id          String        @id @default(cuid())
+  id          String                 @id @default(cuid())
   userId      String
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Family-shared portfolios (HUF, ancestral pot, joint account) set
   // `familyId` and use `userId` to record the creating owner. Personal
   // portfolios leave `familyId` NULL. Exactly one meaning per row.
   familyId    String?
-  family      Family?       @relation(fields: [familyId], references: [id])
+  family      Family?                @relation(fields: [familyId], references: [id])
   clientId    String?
-  client      Client?       @relation(fields: [clientId], references: [id])
+  client      Client?                @relation(fields: [clientId], references: [id])
   /// Grants that have been narrowed to include this portfolio. Unrelated to
   /// `clientId`, which records the engagement a portfolio was created under.
   caScopes    ClientPortfolioScope[]
   name        String
   description String?
-  type        PortfolioType @default(INVESTMENT)
-  currency    String        @default("INR")
-  isDefault   Boolean       @default(false)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  type        PortfolioType          @default(INVESTMENT)
+  currency    String                 @default("INR")
+  isDefault   Boolean                @default(false)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
 
   groups          PortfolioGroupMember[]
   holdings        Holding[]
@@ -683,28 +687,28 @@ enum Exchange {
 }
 
 model MutualFundMaster {
-  id          String     @id @default(cuid())
-  schemeCode  String     @unique
+  id            String     @id @default(cuid())
+  schemeCode    String     @unique
   /// AMFI's base scheme name, without the plan/option suffix — since the 2026
   /// NAVAll format carries Plan and Option as their own columns. This is the
   /// key AMFI's TER file joins on, because that file carries neither an AMFI
   /// scheme code nor an ISIN.
-  schemeName  String
-  amcName     String
-  category    MFCategory
-  subCategory String?
-  isin        String?
-  isActive    Boolean    @default(true)
+  schemeName    String
+  amcName       String
+  category      MFCategory
+  subCategory   String?
+  isin          String?
+  isActive      Boolean    @default(true)
   /// "Direct Plan" / "Regular Plan" as published, rather than guessed from the
   /// scheme name. Null for rows loaded before the 8-column NAVAll format.
-  planType    String?
+  planType      String?
   /// "Growth Option" / "IDCW ..." as published.
-  optionType  String?
+  optionType    String?
   /// Direct-plan total expense ratio, in percent, from AMFI's published TER
   /// file. Null means we do not have it — never zero, which would rank an
   /// unknown fund as the cheapest in its bucket.
-  terPct      Decimal?   @db.Decimal(8, 4)
-  terAsOf     DateTime?  @db.Date
+  terPct        Decimal?   @db.Decimal(8, 4)
+  terAsOf       DateTime?  @db.Date
   /// How the last TER refresh resolved this scheme: MATCHED, UNMATCHED or
   /// AMBIGUOUS. The TER file has no scheme code and no ISIN, so the join is
   /// made on (AMC, scheme name) and can legitimately fail; recording HOW it
@@ -716,9 +720,9 @@ model MutualFundMaster {
   /// Average AUM in rupees, from AMFI's scheme-wise AAUM data (published in
   /// lakh; converted on ingest so the column is in the same unit as money
   /// everywhere else).
-  aumInr      Decimal?   @db.Decimal(20, 4)
-  aumAsOf     DateTime?  @db.Date
-  updatedAt   DateTime   @updatedAt
+  aumInr        Decimal?   @db.Decimal(20, 4)
+  aumAsOf       DateTime?  @db.Date
+  updatedAt     DateTime   @updatedAt
 
   holdings                Holding[]
   transactions            Transaction[]
@@ -757,12 +761,12 @@ model StockPrice {
 }
 
 model MFNav {
-  id     String           @id @default(cuid())
-  fundId String
-  fund   MutualFundMaster @relation(fields: [fundId], references: [id], onDelete: Cascade)
-  date   DateTime         @db.Date
+  id              String           @id @default(cuid())
+  fundId          String
+  fund            MutualFundMaster @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  date            DateTime         @db.Date
   /// The NAV as published by AMFI. Display uses this; return math does NOT.
-  nav    Decimal          @db.Decimal(18, 4)
+  nav             Decimal          @db.Decimal(18, 4)
   /// Which historical backfill inserted this row, so a reversal is an exact
   /// delete by batch rather than a date range that would also take the
   /// nightly sync's rows. Null on everything the nightly sync wrote, and on
@@ -1128,7 +1132,7 @@ model TransactionPhoto {
   /// Encrypted copy of the file in DocumentBlob (lib/fileStore). The filePath
   /// copy on local disk is temporary: a deploy wipes it, and it is restored
   /// from here when needed. Null on rows from before the store existed.
-  blobKey String?
+  blobKey       String?
   mimeType      String
   sizeBytes     Int
 
@@ -1326,39 +1330,39 @@ model VoucherEntry {
 // ─── IMPORT JOBS ──────────────────────────────────────────────────
 
 model ImportJob {
-  id             String       @id @default(cuid())
-  userId         String
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  portfolioId    String?
-  type           ImportType
-  status         ImportStatus @default(PENDING)
-  fileName       String
-  filePath       String
+  id                    String       @id @default(cuid())
+  userId                String
+  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId           String?
+  type                  ImportType
+  status                ImportStatus @default(PENDING)
+  fileName              String
+  filePath              String
   /// Encrypted copy of the file in DocumentBlob (lib/fileStore). The filePath
   /// copy on local disk is temporary: a deploy wipes it, and it is restored
   /// from here when needed. Null on rows from before the store existed.
-  blobKey String?
-  broker         String?
-  totalRows      Int?
-  successRows    Int?
-  failedRows     Int?
-  errorLog       Json?
+  blobKey               String?
+  broker                String?
+  totalRows             Int?
+  successRows           Int?
+  failedRows            Int?
+  errorLog              Json?
   /// Set when a CA with an asset-class-limited grant uploaded the file: the
   /// classes the job may write (JSON array). Null = not limited.
   caAllowedAssetClasses Json?
   // Phase C: content-hash dedup. SHA-256 of file bytes — replaces the
   // filename-only check that silently dropped same-named PDFs from
   // different emails (e.g. `Contract Note.pdf` daily).
-  contentHash    String?
+  contentHash           String?
   // Source-of-fetch lineage. For Gmail-pulled attachments, the message id
   // these bytes came from. Lets us link Reports / DLQ entries back to the
   // original email and skip re-processing if poller revisits the message.
-  gmailMessageId String?
+  gmailMessageId        String?
   // Phase Gmail-FullInbox — back-reference when this job was promoted
   // from a discovered Gmail attachment. Null for direct uploads.
-  gmailDocId     String?
-  createdAt      DateTime     @default(now())
-  completedAt    DateTime?
+  gmailDocId            String?
+  createdAt             DateTime     @default(now())
+  completedAt           DateTime?
 
   transactions        Transaction[]
   gmailDiscoveredDocs GmailDiscoveredDoc[]
@@ -1463,7 +1467,7 @@ model GmailDiscoveredDoc {
   /// Encrypted copy of the file in DocumentBlob (lib/fileStore). The storagePath
   /// copy on local disk is temporary: a deploy wipes it, and it is restored
   /// from here when needed. Null on rows from before the store existed.
-  blobKey String?
+  blobKey     String?
 
   status GmailDocStatus @default(CLASSIFYING)
 
@@ -1754,30 +1758,30 @@ enum InstitutionKind {
 /// It also carries the baseline the proportionality canary compares against:
 /// "20% fewer rows than last time" needs a last time.
 model FeedRunLog {
-  id         String   @id @default(cuid())
+  id               String    @id @default(cuid())
   /// FEED | SCORING. One table because both answer the same question — did a
   /// scheduled run produce what it should have — and splitting them meant two
   /// tables, two Sentry helpers and an ops page that only knew about one.
-  kind       String   @default("FEED")
+  kind             String    @default("FEED")
   /// The subject: a feed key like "amfi_nav", or "fund_scoring" for a
   /// scoring run.
-  feed       String
+  feed             String
   /// Which check reported, e.g. "canary" or "calendar_integrity". Null on
   /// rows written before the checks were named.
-  check      String?
-  startedAt  DateTime @default(now())
-  finishedAt DateTime?
+  check            String?
+  startedAt        DateTime  @default(now())
+  finishedAt       DateTime?
   /// OK | FAILED | SKIPPED | REFUSED. FAILED covers a thrown error and a
   /// canary trip; REFUSED is a run that declined to write on purpose.
-  status     String
-  rowsParsed   Int?
-  rowsImported Int?
-  parseFailures Int?
+  status           String
+  rowsParsed       Int?
+  rowsImported     Int?
+  parseFailures    Int?
   /// Imported rows on the previous OK run, for the drop check.
   previousImported Int?
   /// Why it failed, in one human sentence.
-  reason     String?
-  details    Json?
+  reason           String?
+  details          Json?
 
   @@index([feed, startedAt])
   @@index([feed, status, startedAt])
@@ -1841,52 +1845,52 @@ model HoldingProjection {
 // ─── §4.6 VEHICLES + CHALLANS ────────────────────────────────────
 
 model Vehicle {
-  id                 String    @id @default(cuid())
-  userId             String
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  portfolioId        String?
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId         String?
   // Legacy plaintext; null once encrypted. Read via piiAtRest.plateOf.
-  registrationNo     String?
+  registrationNo      String?
   /// Encrypted registration (AES-256-GCM). See migration 20260918100000.
   registrationNoEnc   String?
   registrationNoHash  String?
   registrationNoLast4 String?
-  make               String?
-  model              String?
-  variant            String?
-  manufacturingYear  Int?
-  fuelType           String?
-  color              String?
-  chassisLast4       String?
-  rtoCode            String?
-  ownerName          String?
-  purchaseDate       DateTime? @db.Date
-  purchasePrice      Decimal?  @db.Decimal(14, 2)
-  currentValue       Decimal?  @db.Decimal(14, 2)
-  currentValueSource String?
-  insuranceExpiry    DateTime? @db.Date
-  insurancePolicyId  String?
-  pucExpiry          DateTime? @db.Date
-  fitnessExpiry      DateTime? @db.Date
-  roadTaxExpiry      DateTime? @db.Date
-  permitExpiry       DateTime? @db.Date
+  make                String?
+  model               String?
+  variant             String?
+  manufacturingYear   Int?
+  fuelType            String?
+  color               String?
+  chassisLast4        String?
+  rtoCode             String?
+  ownerName           String?
+  purchaseDate        DateTime? @db.Date
+  purchasePrice       Decimal?  @db.Decimal(14, 2)
+  currentValue        Decimal?  @db.Decimal(14, 2)
+  currentValueSource  String?
+  insuranceExpiry     DateTime? @db.Date
+  insurancePolicyId   String?
+  pucExpiry           DateTime? @db.Date
+  fitnessExpiry       DateTime? @db.Date
+  roadTaxExpiry       DateTime? @db.Date
+  permitExpiry        DateTime? @db.Date
   // ── Promoted from metadata blob: surfaced in UI dashboard ──
-  rcStatus           String? // ACTIVE | SUSPENDED | CANCELLED
-  vehicleClass       String? // "M-CYCLE/SCOOTER" | "LMV" | etc.
-  normsType          String? // "BS-VI" | etc.
-  seatingCapacity    Int?
-  unloadedWeight     Int? // kg
-  engineNo           String?
-  engineNoEnc        String?
-  hypothecation      String? // financier name or "NONE"
-  registrationDate   DateTime? @db.Date
+  rcStatus            String? // ACTIVE | SUSPENDED | CANCELLED
+  vehicleClass        String? // "M-CYCLE/SCOOTER" | "LMV" | etc.
+  normsType           String? // "BS-VI" | etc.
+  seatingCapacity     Int?
+  unloadedWeight      Int? // kg
+  engineNo            String?
+  engineNoEnc         String?
+  hypothecation       String? // financier name or "NONE"
+  registrationDate    DateTime? @db.Date
   // ── Stock photo (make+model lookup) ──
-  photoUrl           String?
-  photoSource        String? // "carDekho" | "catalog" | "user-upload" | "stock-generic"
-  lastRefreshedAt    DateTime?
-  refreshSource      String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  photoUrl            String?
+  photoSource         String? // "carDekho" | "catalog" | "user-upload" | "stock-generic"
+  lastRefreshedAt     DateTime?
+  refreshSource       String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   challans          Challan[]
   insurancePolicies InsurancePolicy[]     @relation("VehicleInsurance")
@@ -2056,26 +2060,26 @@ model RentalProperty {
 }
 
 model Tenancy {
-  id              String         @id @default(cuid())
-  propertyId      String
-  property        RentalProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  tenantName      String
+  id               String         @id @default(cuid())
+  propertyId       String
+  property         RentalProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenantName       String
   // Legacy single-line contact (free text). Retained for back-compat with
   // tenancies created before tenantEmail/tenantPhone were split out.
-  tenantContact   String?
+  tenantContact    String?
   tenantContactEnc String?
-  tenantEmail     String?
-  tenantEmailEnc  String?
-  tenantPhone     String?
-  tenantPhoneEnc  String?
-  startDate       DateTime       @db.Date
-  endDate         DateTime?      @db.Date
-  monthlyRent     Decimal        @db.Decimal(12, 2)
-  securityDeposit Decimal?       @db.Decimal(12, 2)
-  rentDueDay      Int            @default(1)
-  isActive        Boolean        @default(true)
-  notes           String?
-  createdAt       DateTime       @default(now())
+  tenantEmail      String?
+  tenantEmailEnc   String?
+  tenantPhone      String?
+  tenantPhoneEnc   String?
+  startDate        DateTime       @db.Date
+  endDate          DateTime?      @db.Date
+  monthlyRent      Decimal        @db.Decimal(12, 2)
+  securityDeposit  Decimal?       @db.Decimal(12, 2)
+  rentDueDay       Int            @default(1)
+  isActive         Boolean        @default(true)
+  notes            String?
+  createdAt        DateTime       @default(now())
 
   // Where this tenant's rent lands. Set on the tenancy so every payment,
   // reminder and Tally receipt knows the account without asking again; null
@@ -2086,8 +2090,8 @@ model Tenancy {
 
   // Derived by rentalLedger.service.recomputeTenancyLedger — never hand-edited.
   // Positive means the tenant owes; negative means they are in advance.
-  balanceDue        Decimal   @db.Decimal(12, 2) @default(0)
-  depositHeld       Decimal   @db.Decimal(12, 2) @default(0)
+  balanceDue        Decimal   @default(0) @db.Decimal(12, 2)
+  depositHeld       Decimal   @default(0) @db.Decimal(12, 2)
   balanceComputedAt DateTime?
 
   rentReceipts  RentReceipt[]
@@ -2211,52 +2215,52 @@ model PropertyExpense {
 // ─── §4.8 INSURANCE ──────────────────────────────────────────────
 
 model InsurancePolicy {
-  id                 String    @id @default(cuid())
-  userId             String
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  portfolioId        String?
-  insurer            String
+  id                        String    @id @default(cuid())
+  userId                    String
+  user                      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId               String?
+  insurer                   String
   // Legacy plaintext — no longer written or read. Kept until every row is
   // encrypted into policyNumberEnc, then dropped in a later migration.
-  policyNumber       String?
+  policyNumber              String?
   // AES-256-GCM via pfCredentials.encryptIdentifier; never serialized.
-  policyNumberEnc    String?
+  policyNumberEnc           String?
   // HMAC fingerprint of the normalised number, for duplicate checks and
   // premium-email matching without decrypting anything.
-  policyNumberHash   String?
-  policyNumberLast4  String?
-  type               String
-  planName           String?
-  policyHolder       String
-  nominees           Json?
-  sumAssured         Decimal   @db.Decimal(14, 2)
-  premiumAmount      Decimal   @db.Decimal(12, 2)
-  premiumFrequency   String
-  startDate          DateTime  @db.Date
-  maturityDate       DateTime? @db.Date
-  nextPremiumDue     DateTime? @db.Date
-  vehicleId          String?
-  vehicle            Vehicle?  @relation("VehicleInsurance", fields: [vehicleId], references: [id])
-  healthCoverDetails Json?
+  policyNumberHash          String?
+  policyNumberLast4         String?
+  type                      String
+  planName                  String?
+  policyHolder              String
+  nominees                  Json?
+  sumAssured                Decimal   @db.Decimal(14, 2)
+  premiumAmount             Decimal   @db.Decimal(12, 2)
+  premiumFrequency          String
+  startDate                 DateTime  @db.Date
+  maturityDate              DateTime? @db.Date
+  nextPremiumDue            DateTime? @db.Date
+  vehicleId                 String?
+  vehicle                   Vehicle?  @relation("VehicleInsurance", fields: [vehicleId], references: [id])
+  healthCoverDetails        Json?
   // Helpline, claim email, TPA, agent — shape in insurance.service (PolicyContacts).
-  contacts            Json?
+  contacts                  Json?
   // Days to pay a missed premium; null = the IRDAI default for the type.
-  gracePeriodDays     Int?
+  gracePeriodDays           Int?
   // Premiums due before this date aren't tracked here (treated as settled).
-  premiumsTrackedFrom DateTime? @db.Date
+  premiumsTrackedFrom       DateTime? @db.Date
   // Health premiums under section 126 (Income-tax Act, 2025): who the cover
   // is for — SELF_FAMILY (you, spouse, dependent children) or PARENTS — and
   // whether the insured is a senior citizen (raises the limit).
-  taxBucket           String?
-  seniorCitizen       Boolean?
+  taxBucket                 String?
+  seniorCitizen             Boolean?
   // Surrender value as quoted by the insurer, entered by the user.
-  surrenderValue      Decimal?  @db.Decimal(14, 2)
-  surrenderValueAsOf  DateTime? @db.Date
+  surrenderValue            Decimal?  @db.Decimal(14, 2)
+  surrenderValueAsOf        DateTime? @db.Date
   // Critical illness cover (rider or benefit): null = not recorded.
   criticalIllnessCover      Boolean?
   criticalIllnessSumAssured Decimal?  @db.Decimal(14, 2)
-  status             String    @default("ACTIVE")
-  createdAt          DateTime  @default(now())
+  status                    String    @default("ACTIVE")
+  createdAt                 DateTime  @default(now())
 
   premiumHistory   PremiumPayment[]
   claims           InsuranceClaim[]
@@ -2269,17 +2273,17 @@ model InsurancePolicy {
 }
 
 model PremiumPayment {
-  id               String          @id @default(cuid())
-  policyId         String
-  policy           InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
-  paidOn           DateTime        @db.Date
-  amount           Decimal         @db.Decimal(12, 2)
-  periodFrom       DateTime        @db.Date
-  periodTo         DateTime        @db.Date
-  canonicalEventId String?
+  id                  String          @id @default(cuid())
+  policyId            String
+  policy              InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  paidOn              DateTime        @db.Date
+  amount              Decimal         @db.Decimal(12, 2)
+  periodFrom          DateTime        @db.Date
+  periodTo            DateTime        @db.Date
+  canonicalEventId    String?
   // The imported Transaction (insurance statement) this payment came from —
   // unique, so a statement premium is linked at most once.
-  sourceTransactionId String? @unique
+  sourceTransactionId String?         @unique
 }
 
 // An imported premium the user said is "not this policy", so it isn't
@@ -2852,10 +2856,10 @@ model LoanGiven {
   borrowerContact String?
   relationship    String? // FRIEND | FAMILY | COLLEAGUE | BUSINESS | OTHER
 
-  principalAmount Decimal  @db.Decimal(14, 2)
-  lentOn          DateTime @db.Date
+  principalAmount Decimal   @db.Decimal(14, 2)
+  lentOn          DateTime  @db.Date
   /// Annual simple interest %, 0 for interest-free.
-  interestRate    Decimal  @default(0) @db.Decimal(6, 4)
+  interestRate    Decimal   @default(0) @db.Decimal(6, 4)
   dueDate         DateTime? @db.Date
 
   repaymentMode String    @default("FLEXIBLE") // FLEXIBLE | EMI
@@ -2863,9 +2867,9 @@ model LoanGiven {
   tenureMonths  Int?
   firstEmiDate  DateTime? @db.Date
 
-  status    String    @default("ACTIVE") // ACTIVE | SETTLED | WRITTEN_OFF
-  closedOn  DateTime? @db.Date
-  notes     String?
+  status   String    @default("ACTIVE") // ACTIVE | SETTLED | WRITTEN_OFF
+  closedOn DateTime? @db.Date
+  notes    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2878,18 +2882,18 @@ model LoanGiven {
 /// One movement on a LoanGiven. No userId: reached only through its loan,
 /// whose ownership the service checks (same shape as LoanPayment).
 model LoanGivenEntry {
-  id     String    @id @default(cuid())
-  loanId String
-  loan   LoanGiven @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  id            String    @id @default(cuid())
+  loanId        String
+  loan          LoanGiven @relation(fields: [loanId], references: [id], onDelete: Cascade)
   /// REPAYMENT (principal back) | INTEREST_RECEIVED | ADDITIONAL_LENT | WAIVER (forgiven)
-  kind   String
-  amount Decimal  @db.Decimal(14, 2)
-  date   DateTime @db.Date
-  notes  String?
+  kind          String
+  amount        Decimal   @db.Decimal(14, 2)
+  date          DateTime  @db.Date
+  notes         String?
   /// EMI loans: the instalment (1-based) this payment or waiver was marked against.
   /// Null = not tied to one; counts toward the schedule oldest instalment first.
   installmentNo Int?
-  createdAt DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   @@index([loanId, date])
   @@index([loanId, installmentNo])
@@ -2901,15 +2905,15 @@ model Loan {
   user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   portfolioId String?
 
-  lenderName    String
+  lenderName         String
   // Legacy plaintext; no longer written when APP_ENCRYPTION_KEY is set and
   // cleared by the PII backfill under PII_BACKFILL_CLEAR_PLAINTEXT=true.
   accountNumber      String?
   // AES-256-GCM via pfCredentials.encryptIdentifier; never serialized.
   accountNumberEnc   String?
   accountNumberLast4 String?
-  loanType      String // HOME | CAR | PERSONAL | EDUCATION | BUSINESS | GOLD | LAS | OTHER
-  borrowerName  String
+  loanType           String // HOME | CAR | PERSONAL | EDUCATION | BUSINESS | GOLD | LAS | OTHER
+  borrowerName       String
 
   principalAmount  Decimal  @db.Decimal(14, 2)
   interestRate     Decimal  @db.Decimal(6, 4)
@@ -3666,8 +3670,8 @@ model FamilyMember {
   // don't require a migration when added.
   visibleCategories   String[]     @default([])
 
-  invitedById String?
-  invitedBy   User?    @relation("FamilyMemberInvitedBy", fields: [invitedById], references: [id])
+  invitedById  String?
+  invitedBy    User?    @relation("FamilyMemberInvitedBy", fields: [invitedById], references: [id])
   /// Where to reach a member who has no login: noted when they are added,
   /// used to pre-fill the hand-over invitation later. Deliberately NOT the
   /// `User.email`, which stays an unroutable placeholder — a real address on
@@ -3676,12 +3680,12 @@ model FamilyMember {
   contactEmail String?
   /// How this person is related to `relatedToId` ("Father" of Akshay).
   /// Shown on the tree; free text because families name themselves.
-  relation    String?
+  relation     String?
   /// The member `relation` is measured against. Not a foreign key: a
   /// relation outlives the person leaving, and the label just drops the name.
-  relatedToId String?
-  joinedAt    DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  relatedToId  String?
+  joinedAt     DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([familyId, userId])
   @@index([userId, status])
@@ -3886,13 +3890,13 @@ enum FmvSource {
 // script) first ran for that user.
 
 model NetWorthSnapshot {
-  id                       String   @id @default(cuid())
+  id                       String    @id @default(cuid())
   userId                   String
-  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  asOf                     DateTime @db.Date
-  totalNetWorth            Decimal  @db.Decimal(18, 4)
-  totalLiabilities         Decimal  @db.Decimal(18, 4)
-  netWorthAfterLiabilities Decimal  @db.Decimal(18, 4)
+  user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asOf                     DateTime  @db.Date
+  totalNetWorth            Decimal   @db.Decimal(18, 4)
+  totalLiabilities         Decimal   @db.Decimal(18, 4)
+  netWorthAfterLiabilities Decimal   @db.Decimal(18, 4)
   // Snapshot of getDashboardNetWorth().allocationBreakdown at asOf — lets a
   // future stacked-by-asset-class chart render without widening this schema.
   breakdownJson            Json
@@ -3913,8 +3917,8 @@ model NetWorthSnapshot {
   dataQualityReason        String?
   // When the flag was applied, so a backfill run can be audited.
   dataQualityAt            DateTime?
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   @@unique([userId, asOf])
   @@index([userId, asOf])
@@ -4078,14 +4082,14 @@ enum AdvisorRunTrigger {
 ///
 /// A row with signedOffAt null must never be used for advice.
 model RankingMethodologyVersion {
-  id          String   @id @default(cuid())
-  version     Int      @unique
+  id          String    @id @default(cuid())
+  version     Int       @unique
   /// Thresholds, weights, hysteresis parameters, category→bucket map.
   config      Json
-  description String   @db.Text
+  description String    @db.Text
   signedOffBy String?
   signedOffAt DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   snapshots       FundScoreSnapshot[]
   recommendations AdvisorRecommendation[]
@@ -5013,12 +5017,14 @@ enum SplitGroupType {
   OTHER
   DIRECT
 }
+
 enum SplitMode {
   EQUAL
   EXACT
   PERCENT
   SHARES
 }
+
 enum SplitSource {
   MANUAL
   RECEIPT_OCR
@@ -5026,17 +5032,20 @@ enum SplitSource {
   SMS
   PASTE
 }
+
 enum SplitSettleMethod {
   CASH
   UPI
   OTHER
 }
+
 enum SplitDetectionSource {
   EMAIL
   SMS
   PASTE
   RECEIPT
 }
+
 enum SplitDetectionStatus {
   NEW
   SPLIT
@@ -5045,11 +5054,11 @@ enum SplitDetectionStatus {
 }
 
 model SplitContact {
-  id           String   @id @default(cuid())
+  id           String        @id @default(cuid())
   ownerUserId  String
-  owner        User     @relation("SplitContactOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  owner        User          @relation("SplitContactOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
   name         String
-  email        String?  // plaintext only when no APP_ENCRYPTION_KEY (dev)
+  email        String? // plaintext only when no APP_ENCRYPTION_KEY (dev)
   emailEnc     String?
   emailHash    String?
   phone        String?
@@ -5057,8 +5066,8 @@ model SplitContact {
   phoneHash    String?
   upiId        String?
   linkedUserId String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   members      SplitMember[]
 
   @@index([ownerUserId])
@@ -5067,15 +5076,15 @@ model SplitContact {
 }
 
 model SplitGroup {
-  id            String         @id @default(cuid())
+  id            String            @id @default(cuid())
   name          String
-  type          SplitGroupType @default(OTHER)
-  baseCurrency  String         @default("INR")
-  simplifyDebts Boolean        @default(true)
-  createdById   String         // plain id: groups outlive their creator's account
+  type          SplitGroupType    @default(OTHER)
+  baseCurrency  String            @default("INR")
+  simplifyDebts Boolean           @default(true)
+  createdById   String // plain id: groups outlive their creator's account
   archivedAt    DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
   members       SplitMember[]
   expenses      SplitExpense[]
   settlements   SplitSettlement[]
@@ -5103,29 +5112,29 @@ model SplitMember {
 }
 
 model SplitExpense {
-  id            String       @id @default(cuid())
-  groupId       String
-  group         SplitGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  description   String
-  date          DateTime     @db.Date
-  amount        Decimal      @db.Decimal(18, 4)
-  currency      String
-  fxRate        Decimal      @db.Decimal(18, 8)
-  baseAmount    Decimal      @db.Decimal(18, 4)
-  splitMode     SplitMode
-  createdById   String
-  receiptBlobId String?
+  id                 String              @id @default(cuid())
+  groupId            String
+  group              SplitGroup          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  description        String
+  date               DateTime            @db.Date
+  amount             Decimal             @db.Decimal(18, 4)
+  currency           String
+  fxRate             Decimal             @db.Decimal(18, 8)
+  baseAmount         Decimal             @db.Decimal(18, 4)
+  splitMode          SplitMode
+  createdById        String
+  receiptBlobId      String?
   receiptOwnerUserId String?
   receiptMime        String?
-  sourceType    SplitSource  @default(MANUAL)
-  detectionId   String?
-  deletedAt     DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  payers        SplitPayer[]
-  shares        SplitShare[]
-  labels        SplitExpenseLabel[]
-  comments      SplitComment[]
+  sourceType         SplitSource         @default(MANUAL)
+  detectionId        String?
+  deletedAt          DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  payers             SplitPayer[]
+  shares             SplitShare[]
+  labels             SplitExpenseLabel[]
+  comments           SplitComment[]
 
   @@index([groupId, date])
 }
@@ -5154,9 +5163,9 @@ model SplitShare {
 }
 
 model SplitLabel {
-  id          String      @id @default(cuid())
+  id          String              @id @default(cuid())
   groupId     String?
-  group       SplitGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group       SplitGroup?         @relation(fields: [groupId], references: [id], onDelete: Cascade)
   ownerUserId String?
   name        String
   color       String
@@ -5221,62 +5230,62 @@ model SplitActivity {
 }
 
 model SplitDetection {
-  id                String               @id @default(cuid())
-  userId            String
-  user              User                 @relation("SplitDetectionUser", fields: [userId], references: [id], onDelete: Cascade)
-  source            SplitDetectionSource
-  sourceHash        String
-  amount            Decimal              @db.Decimal(18, 4)
-  currency          String               @default("INR")
-  direction         String
-  merchant          String?
-  payeeVpa          String?
-  date              DateTime             @db.Date
-  rawRedactedEnc    String?
-  canonicalEventId  String?
-  status            SplitDetectionStatus @default(NEW)
-  expenseId         String?
-  settlementId      String?
-  createdAt         DateTime             @default(now())
+  id               String               @id @default(cuid())
+  userId           String
+  user             User                 @relation("SplitDetectionUser", fields: [userId], references: [id], onDelete: Cascade)
+  source           SplitDetectionSource
+  sourceHash       String
+  amount           Decimal              @db.Decimal(18, 4)
+  currency         String               @default("INR")
+  direction        String
+  merchant         String?
+  payeeVpa         String?
+  date             DateTime             @db.Date
+  rawRedactedEnc   String?
+  canonicalEventId String?
+  status           SplitDetectionStatus @default(NEW)
+  expenseId        String?
+  settlementId     String?
+  createdAt        DateTime             @default(now())
 
   @@unique([userId, sourceHash])
   @@index([userId, status, date])
 }
 
 model SplitShareLink {
-  id         String @id @default(cuid())
-  expenseId  String
-  userId     String
-  user       User   @relation("SplitShareLinkUser", fields: [userId], references: [id], onDelete: Cascade)
-  cashFlowId String
+  id          String @id @default(cuid())
+  expenseId   String
+  userId      String
+  user        User   @relation("SplitShareLinkUser", fields: [userId], references: [id], onDelete: Cascade)
+  cashFlowId  String
   portfolioId String
 
   @@unique([expenseId, userId])
 }
 
 model SplitSettings {
-  userId             String  @id
-  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  upiId              String?
-  homeCurrency       String  @default("INR")
-  defaultPortfolioId String?
-  detectEmail        Boolean @default(false)
-  detectPaste        Boolean @default(true)
-  detectReceipt      Boolean @default(true)
-  detectSms          Boolean @default(false)
-  emailOnActivity    Boolean @default(true)
-  weeklyDigest       Boolean @default(false)
+  userId              String    @id
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upiId               String?
+  homeCurrency        String    @default("INR")
+  defaultPortfolioId  String?
+  detectEmail         Boolean   @default(false)
+  detectPaste         Boolean   @default(true)
+  detectReceipt       Boolean   @default(true)
+  detectSms           Boolean   @default(false)
+  emailOnActivity     Boolean   @default(true)
+  weeklyDigest        Boolean   @default(false)
   lastActivityEmailAt DateTime?
 }
 
 model SplitReminder {
-  id           String   @id @default(cuid())
-  userId       String
-  user         User     @relation("SplitReminderUser", fields: [userId], references: [id], onDelete: Cascade)
-  groupId      String
-  memberId     String
-  sentOn       DateTime @db.Date
-  createdAt    DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("SplitReminderUser", fields: [userId], references: [id], onDelete: Cascade)
+  groupId   String
+  memberId  String
+  sentOn    DateTime @db.Date
+  createdAt DateTime @default(now())
 
   @@unique([userId, memberId, sentOn])
   @@index([userId, createdAt])
@@ -5410,4 +5419,146 @@ model WillVersion {
 
   @@unique([willId, versionNo])
   @@index([userId, createdAt])
+}
+
+// --- Legacy Transfer (docs/legacy-transfer/01-DESIGN.md) --------------------
+
+enum LegacyStatus {
+  DRAFT
+  ARMED
+  WARNING_1
+  WARNING_2
+  FINAL_WARNING
+  GRACE
+  RELEASED
+  PAUSED
+}
+
+enum LegacyTrigger {
+  INACTIVITY
+  SCHEDULED
+  BOTH
+}
+
+enum LegacyTokenPurpose {
+  INVITE // nominee acknowledges they were named
+  ACCESS // nominee opens the released view (then OTP)
+  IM_OK // owner one-click reset
+  VERIFY // verifier answers during GRACE
+}
+
+enum LegacyCodePurpose {
+  NOMINEE_OTP
+  NOMINEE_SESSION
+  OWNER_STEPUP_CODE
+  OWNER_STEPUP_GRANT
+}
+
+model LegacyPlan {
+  id             String          @id @default(cuid())
+  userId         String          @unique
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         LegacyStatus    @default(DRAFT)
+  triggerMode    LegacyTrigger   @default(INACTIVITY)
+  inactivityDays Int             @default(90)
+  scheduledFor   DateTime?       @db.Date
+  pausedUntil    DateTime?       @db.Date
+  stageEnteredAt DateTime?
+  /// Inactivity is measured from max(User.lastActiveAt, clockResetAt).
+  clockResetAt   DateTime?
+  cycle          Int             @default(1)
+  activatedAt    DateTime?
+  releasedAt     DateTime?
+  letterEnc      String?
+  /// Admin-only test mode: 1-minute inactivity and 1-minute stages.
+  testMode       Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  nominees       LegacyNominee[]
+  tokens         LegacyToken[]
+  outbox         LegacyOutbox[]
+
+  @@index([status])
+}
+
+model LegacyNominee {
+  id             String        @id @default(cuid())
+  planId         String
+  plan           LegacyPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId         String // owner (RLS)
+  nameEnc        String
+  emailEnc       String
+  relationship   String
+  priority       Int
+  isVerifier     Boolean       @default(false)
+  categories     String[]
+  documentIds    String[]      @default([])
+  showAmounts    Boolean       @default(false)
+  acknowledgedAt DateTime?
+  createdAt      DateTime      @default(now())
+  tokens         LegacyToken[]
+  codes          LegacyCode[]
+
+  @@index([planId])
+  @@index([userId])
+}
+
+model LegacyToken {
+  id        String             @id @default(cuid())
+  planId    String
+  plan      LegacyPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId    String // owner (RLS)
+  nomineeId String?
+  nominee   LegacyNominee?     @relation(fields: [nomineeId], references: [id], onDelete: Cascade)
+  purpose   LegacyTokenPurpose
+  cycle     Int
+  tokenHash String             @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime           @default(now())
+
+  @@index([planId, purpose])
+}
+
+/// Short-lived secrets: nominee OTP + session, owner step-up code + grant.
+/// One live row per (subjectId, purpose) — subjectId is a nomineeId, an owner
+/// userId, or (for sessions) the session hash.
+model LegacyCode {
+  id          String            @id @default(cuid())
+  userId      String // owner (RLS)
+  nomineeId   String?
+  nominee     LegacyNominee?    @relation(fields: [nomineeId], references: [id], onDelete: Cascade)
+  subjectId   String
+  purpose     LegacyCodePurpose
+  codeHash    String
+  expiresAt   DateTime
+  attempts    Int               @default(0)
+  lockedUntil DateTime?
+  createdAt   DateTime          @default(now())
+
+  @@unique([subjectId, purpose])
+  @@index([nomineeId])
+}
+
+model LegacyOutbox {
+  id            String     @id @default(cuid())
+  planId        String
+  plan          LegacyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId        String // owner (RLS)
+  kind          String // see emails.ts OutboxKind
+  cycle         Int
+  /// 'owner' or a nomineeId — makes (planId, kind, cycle, recipientKey) a send-once key.
+  recipientKey  String
+  tokenEnc      String? // encrypted raw link token, cleared once sent
+  sentAt        DateTime?
+  attempts      Int        @default(0)
+  /// Retry backoff after a failed send; null = due now.
+  nextAttemptAt DateTime?
+  /// Set while a flusher is sending this row, so two flushers never both send it.
+  claimedAt     DateTime?
+  lastError     String?
+  createdAt     DateTime   @default(now())
+
+  @@unique([planId, kind, cycle, recipientKey])
+  @@index([sentAt])
 }

@@ -21,6 +21,11 @@ declare global {
        * person (audit, "who changed this") reads it from here.
        */
       actor?: AuthedUser;
+      /**
+       * Legacy Transfer nominee behind an `X-Legacy-Session` header. Set only
+       * by the legacySession middleware on /api/legacy-view; never a user.
+       */
+      legacyNominee?: { nomineeId: string; userId: string };
     }
   }
 }

@@ -49,6 +49,10 @@ export const FEATURE_MIN_TIER = {
   // Will Maker: a fixed-template will under Indian law from the user's own
   // data (docs/superpowers/specs/2026-10-12-will-maker-design.md).
   WILL_MAKER: 'PLUS',
+  // Legacy Transfer (docs/legacy-transfer): nominees get read-only access on
+  // inactivity or a scheduled date. An armed plan keeps running after a lapse
+  // (see plan.service) — only *configuring* it needs this flag.
+  LEGACY_TRANSFER: 'PLUS',
   ACCOUNTING_MODULE: 'PRO_ADVISOR', // Trial Balance, P&L, Balance Sheet, Chart of Accounts, Tally export
   // The CA workspace: hold client records, keep their books, run their
   // reports. Sits at PRO_ADVISOR beside ACCOUNTING_MODULE because a CA
