@@ -74,7 +74,12 @@ export async function suggestions(req: Request, res: Response): Promise<void> {
   ok(res, { suggestions: await listWillPeopleSuggestions(uid(req)) });
 }
 
-const generateBody = z.object({ revision: z.number().int().min(0), acknowledge: z.boolean() });
+const generateBody = z.object({
+  revision: z.number().int().min(0),
+  acknowledge: z.boolean(),
+  /** The date shown on the preview the user acknowledged (YYYY-MM-DD). */
+  generatedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
 
 export async function preview(req: Request, res: Response): Promise<void> {
   const userId = uid(req);

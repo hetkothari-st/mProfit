@@ -45,8 +45,9 @@ export const willApi = {
     const { data } = await api.get<ApiResponse<WillPreviewWire>>(`${draftPath(id)}/preview`);
     return unwrap(data);
   },
-  async generate(id: string, revision: number): Promise<WillGenerateResultWire> {
-    const { data } = await api.post<ApiResponse<WillGenerateResultWire>>(`${draftPath(id)}/generate`, { revision, acknowledge: true });
+  /** `generatedOn` is the date of the preview the user acknowledged; the API refuses a stale one. */
+  async generate(id: string, revision: number, generatedOn: string): Promise<WillGenerateResultWire> {
+    const { data } = await api.post<ApiResponse<WillGenerateResultWire>>(`${draftPath(id)}/generate`, { revision, acknowledge: true, generatedOn });
     return unwrap(data);
   },
   async downloadPdf(versionId: string, versionNo: number): Promise<void> {
@@ -81,6 +82,10 @@ export function willDraftExists(err: unknown): { id: string; currentStep: number
   if (d?.['reason'] !== 'WILL_DRAFT_EXISTS' || typeof d['draftId'] !== 'string') return null;
   const step = d['currentStep'];
   return { id: d['draftId'], currentStep: typeof step === 'number' && Number.isInteger(step) ? step : 2 };
+}
+
+export function isWillPreviewOutdated(err: unknown): boolean {
+  return errorDetails(err, 409)?.['reason'] === 'WILL_PREVIEW_OUTDATED';
 }
 
 export function isWillBlocked(err: unknown): boolean {

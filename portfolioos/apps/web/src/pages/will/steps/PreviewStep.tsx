@@ -7,7 +7,7 @@ import { formatDateOnly, WILL_ACKNOWLEDGEMENT, type WillVersionWire } from '@eve
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { apiErrorMessage } from '@/api/client';
-import { isWillBlocked, isWillRevisionConflict, willApi } from '@/api/will.api';
+import { isWillBlocked, isWillPreviewOutdated, isWillRevisionConflict, willApi } from '@/api/will.api';
 import { BlocksView } from '../BlocksView';
 import { Notice } from '../parts';
 import { stepBySlug } from '../willSteps';
@@ -40,16 +40,18 @@ export function PreviewStep({ willId, findings, flush, getRevision, reload, goTo
   const previewedRevision = preview.data?.revision;
   const blocked = findings.some((f) => f.severity === 'BLOCKER');
   const generate = useMutation({
-    mutationFn: async (revision: number) => {
+    mutationFn: async ({ revision, generatedOn }: { revision: number; generatedOn: string }) => {
       if (!(await flush())) throw new Error("Couldn't save your latest changes");
-      return willApi.generate(willId, revision);
+      return willApi.generate(willId, revision, generatedOn);
     },
     onSuccess: (r) => {
       setDone(r.version);
       void qc.invalidateQueries({ queryKey: ['will', 'overview'] });
     },
     onError: (err) => {
-      if (!isWillBlocked(err) && !isWillRevisionConflict(err)) toast.error(apiErrorMessage(err, "Couldn't create your will"));
+      if (!isWillBlocked(err) && !isWillRevisionConflict(err) && !isWillPreviewOutdated(err)) {
+        toast.error(apiErrorMessage(err, "Couldn't create your will"));
+      }
     },
   });
   const download = useMutation({
@@ -87,10 +89,15 @@ export function PreviewStep({ willId, findings, flush, getRevision, reload, goTo
   );
 
   if (generate.isError && isWillBlocked(generate.error)) return reviewNotice;
-  if (generate.isError && isWillRevisionConflict(generate.error)) {
+  const outdated = generate.isError && isWillPreviewOutdated(generate.error);
+  if (generate.isError && (outdated || isWillRevisionConflict(generate.error))) {
     return (
       <Notice tone="warning">
-        <p>Your will changed since this preview. Reload the preview to see the latest version before you generate.</p>
+        <p>
+          {outdated
+            ? "Your preview is from yesterday - reload it to see the will with today's date before you generate."
+            : 'Your will changed since this preview. Reload the preview to see the latest version before you generate.'}
+        </p>
         <Button size="sm" variant="outline" className="mt-2" onClick={() => { generate.reset(); setAck(false); void reload().then(() => preview.refetch()); }}>Reload preview</Button>
       </Notice>
     );
@@ -118,7 +125,10 @@ export function PreviewStep({ willId, findings, flush, getRevision, reload, goTo
           <input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={ack} onChange={(e) => setAck(e.target.checked)} />
           <span>{WILL_ACKNOWLEDGEMENT}</span>
         </label>
-        <Button disabled={!ack || blocked || generate.isPending} onClick={() => generate.mutate(previewedRevision ?? getRevision())}>
+        <Button
+          disabled={!ack || blocked || generate.isPending}
+          onClick={() => generate.mutate({ revision: previewedRevision ?? getRevision(), generatedOn: preview.data.generatedOn })}
+        >
           {generate.isPending ? 'Generating...' : 'Generate PDF'}
         </Button>
         {blocked && <p className="text-sm text-negative">Fix the items on the Review step first.</p>}

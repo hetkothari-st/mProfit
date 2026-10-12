@@ -76,12 +76,18 @@ describe('generate', () => {
   it('needs the acknowledgement', async () => {
     const d = await validDraft(a);
     firstWillId = d.id;
-    await expect(a.runAs(() => generateWill(a.userId, d.id, { revision: d.revision, acknowledge: false }, deps)))
+    await expect(a.runAs(() => generateWill(a.userId, d.id, { revision: d.revision, acknowledge: false, generatedOn: TODAY }, deps)))
       .rejects.toMatchObject({ statusCode: 400 });
   });
 
+  it('refuses when the acknowledged preview is from another day, and leaves no PDF behind', async () => {
+    await expect(a.runAs(() => generateWill(a.userId, firstWillId, { revision: 0, acknowledge: true, generatedOn: '2026-10-11' }, deps)))
+      .rejects.toMatchObject({ statusCode: 409, details: { reason: 'WILL_PREVIEW_OUTDATED' } });
+    expect(await willDocs(a.userId)).toBe(0);
+  });
+
   it('refuses a stale revision and leaves no PDF behind', async () => {
-    await expect(a.runAs(() => generateWill(a.userId, firstWillId, { revision: 0, acknowledge: true }, deps)))
+    await expect(a.runAs(() => generateWill(a.userId, firstWillId, { revision: 0, acknowledge: true, generatedOn: TODAY }, deps)))
       .rejects.toMatchObject({ statusCode: 409 });
     expect(await willDocs(a.userId)).toBe(0);
   });
@@ -89,7 +95,7 @@ describe('generate', () => {
   it('a failing PDF render changes nothing', async () => {
     const draft = await a.runAs(() => prisma.will.findUniqueOrThrow({ where: { id: firstWillId } }));
     const failing = { ...deps, renderPdf: async () => { throw new Error('render failed'); } };
-    await expect(a.runAs(() => generateWill(a.userId, firstWillId, { revision: draft.revision, acknowledge: true }, failing)))
+    await expect(a.runAs(() => generateWill(a.userId, firstWillId, { revision: draft.revision, acknowledge: true, generatedOn: TODAY }, failing)))
       .rejects.toThrow('render failed');
     const after = await a.runAs(() => prisma.will.findUniqueOrThrow({ where: { id: firstWillId } }));
     expect(after.status).toBe('DRAFT');
@@ -105,7 +111,7 @@ describe('generate', () => {
         return renderWillPdf(input);
       },
     };
-    await expect(a.runAs(() => generateWill(a.userId, firstWillId, { revision: draft.revision, acknowledge: true }, racing)))
+    await expect(a.runAs(() => generateWill(a.userId, firstWillId, { revision: draft.revision, acknowledge: true, generatedOn: TODAY }, racing)))
       .rejects.toMatchObject({ statusCode: 409 });
     expect(await willDocs(a.userId)).toBe(0);
     expect((await a.runAs(() => prisma.will.findUniqueOrThrow({ where: { id: firstWillId } }))).status).toBe('DRAFT');
@@ -116,7 +122,7 @@ describe('generate', () => {
 
   it('creates the version, the sealed snapshot and the PDF document', async () => {
     const draft = await a.runAs(() => prisma.will.findUniqueOrThrow({ where: { id: firstWillId } }));
-    const res = await a.runAs(() => generateWill(a.userId, firstWillId, { revision: draft.revision, acknowledge: true }, deps));
+    const res = await a.runAs(() => generateWill(a.userId, firstWillId, { revision: draft.revision, acknowledge: true, generatedOn: TODAY }, deps));
     firstVersionId = res.version.id;
     expect(res.version).toMatchObject({ willId: firstWillId, versionNo: 1, status: 'GENERATED', generatedOn: TODAY, templateId: 'isa-hindu' });
 
@@ -144,7 +150,7 @@ describe('generate', () => {
 
   it('a newer generated will supersedes the older one', async () => {
     const d = await validDraft(a, firstWillId);
-    const res = await a.runAs(() => generateWill(a.userId, d.id, { revision: d.revision, acknowledge: true }, deps));
+    const res = await a.runAs(() => generateWill(a.userId, d.id, { revision: d.revision, acknowledge: true, generatedOn: TODAY }, deps));
     expect(res.version.versionNo).toBe(2);
     const first = await a.runAs(() => prisma.will.findUniqueOrThrow({ where: { id: firstWillId } }));
     expect(first).toMatchObject({ status: 'SUPERSEDED', supersededById: d.id });

@@ -5,7 +5,7 @@ import {
   type WillFinding, type WillGenerateResultWire, type WillPayload, type WillPreviewWire,
 } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
-import { AppError, BadRequestError, NotFoundError, ValidationError } from '../../lib/errors.js';
+import { AppError, BadRequestError, ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { sealForUser } from '../../lib/userKeys.js';
 import { readBuffer } from '../../lib/documentStorage.js';
@@ -72,7 +72,7 @@ export async function previewWill(
 export async function generateWill(
   userId: string,
   willId: string,
-  input: { revision: number; acknowledge: boolean },
+  input: { revision: number; acknowledge: boolean; generatedOn: string },
   deps: WillGenerateDeps = defaultDeps,
 ): Promise<WillGenerateResultWire> {
   if (input.acknowledge !== true) {
@@ -80,6 +80,13 @@ export async function generateWill(
   }
   requireWillKeys();
   const today = deps.today();
+  // The user acknowledged a preview dated `generatedOn`; the PDF must carry
+  // that same date, so a preview from before midnight IST is reloaded first.
+  if (input.generatedOn !== today) {
+    throw new ConflictError('Your preview is from an earlier day. Reload it before generating.', {
+      reason: 'WILL_PREVIEW_OUTDATED',
+    });
+  }
   const { will, payload } = await loadDraft(userId, willId);
   if (will.revision !== input.revision) throw revisionConflict(will.revision);
   const findings = assertNoBlockers(payload, today);

@@ -4,7 +4,7 @@ import { screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { AxiosError, type AxiosResponse } from 'axios';
 import { renderWillSummary, runWillRules, selectWillTemplate } from '@everypaisa/shared';
 import { renderWithProviders } from '@/pages/split/testUtils';
-import { isWillBlocked, isWillRevisionConflict, willApi } from '@/api/will.api';
+import { isWillBlocked, isWillPreviewOutdated, isWillRevisionConflict, willApi } from '@/api/will.api';
 import { PreviewStep } from './PreviewStep';
 import type { WillStepProps } from './types';
 import { fullPayload, TODAY } from '../willTestData';
@@ -14,6 +14,7 @@ vi.mock('@/api/will.api', () => ({
   willApi: { preview: vi.fn(), generate: vi.fn(), downloadPdf: vi.fn() },
   isWillBlocked: vi.fn(() => false),
   isWillRevisionConflict: vi.fn(() => false),
+  isWillPreviewOutdated: vi.fn(() => false),
 }));
 
 const m = fullPayload();
@@ -70,7 +71,7 @@ describe('PreviewStep', () => {
     fireEvent.click(screen.getByRole('checkbox'));
     expect(button.disabled).toBe(false);
     fireEvent.click(button);
-    await waitFor(() => expect(willApi.generate).toHaveBeenCalledWith('w1', 7));
+    await waitFor(() => expect(willApi.generate).toHaveBeenCalledWith('w1', 7, TODAY));
     expect(await screen.findByText(/version 1 is ready/i)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /download pdf/i }));
     await waitFor(() => expect(willApi.downloadPdf).toHaveBeenCalledWith('v1', 1));
@@ -107,7 +108,7 @@ describe('PreviewStep', () => {
     revision = 9;
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: /generate pdf/i }));
-    await waitFor(() => expect(willApi.generate).toHaveBeenCalledWith('w1', 7));
+    await waitFor(() => expect(willApi.generate).toHaveBeenCalledWith('w1', 7, TODAY));
   });
 
   it('saves pending edits before generating', async () => {
@@ -155,6 +156,22 @@ describe('PreviewStep', () => {
     expect(await screen.findByTestId('will-document')).toBeTruthy();
   });
 
+  it('sends the date of the preview the user acknowledged, and asks for a reload when that day has passed', async () => {
+    vi.mocked(willApi.preview).mockResolvedValueOnce({ ...previewWire, generatedOn: '2026-10-11' });
+    vi.mocked(willApi.generate).mockRejectedValueOnce(new Error('outdated'));
+    vi.mocked(isWillPreviewOutdated).mockImplementation((e) => e instanceof Error && e.message === 'outdated');
+    setup();
+    await screen.findByTestId('will-document');
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: /generate pdf/i }));
+    await waitFor(() => expect(willApi.generate).toHaveBeenCalledWith('w1', 7, '2026-10-11'));
+    expect(await screen.findByText(/your preview is from yesterday - reload it/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+    await waitFor(() => expect(willApi.preview).toHaveBeenCalledTimes(2));
+    expect(await screen.findByTestId('will-document')).toBeTruthy();
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+  });
+
   it('offers a retry on a generic preview error', async () => {
     vi.mocked(willApi.preview).mockRejectedValueOnce(new Error('boom'));
     setup();
@@ -178,7 +195,7 @@ describe('PreviewStep', () => {
     vi.mocked(willApi.generate).mockRejectedValue(new Error('x'));
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: /generate pdf/i }));
-    await waitFor(() => expect(willApi.generate).toHaveBeenLastCalledWith('w1', 12));
+    await waitFor(() => expect(willApi.generate).toHaveBeenLastCalledWith('w1', 12, TODAY));
   });
 
   it('clears the acknowledgement when the preview is refetched', async () => {

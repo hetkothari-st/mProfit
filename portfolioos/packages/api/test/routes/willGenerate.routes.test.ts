@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { WILL_SECTIONS, willSectionData } from '@everypaisa/shared';
+import { istCalendarDate, WILL_SECTIONS, willSectionData } from '@everypaisa/shared';
 import { willRouter } from '../../src/routes/will.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
 import { signAccessToken } from '../../src/services/jwt.service.js';
@@ -46,6 +46,8 @@ afterAll(async () => {
   await other.cleanup();
 });
 
+const today = () => istCalendarDate(new Date());
+
 describe('preview, generate, download over HTTP', () => {
   let willId = '';
   let revision = 0;
@@ -79,14 +81,14 @@ describe('preview, generate, download over HTTP', () => {
   it('generate answers 409 to a stale revision and 503 when the keys are missing', async () => {
     const post = (body: unknown) =>
       fetch(`${base}/api/will/drafts/${willId}/generate`, { method: 'POST', headers: { ...auth(user), 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    const stale = await post({ revision: revision - 1, acknowledge: true });
+    const stale = await post({ revision: revision - 1, acknowledge: true, generatedOn: today() });
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as { details: { reason: string } }).details.reason).toBe('WILL_REVISION_CONFLICT');
 
     const key = process.env.APP_ENCRYPTION_KEY;
     delete process.env.APP_ENCRYPTION_KEY;
     try {
-      const res = await post({ revision, acknowledge: true });
+      const res = await post({ revision, acknowledge: true, generatedOn: today() });
       expect(res.status).toBe(503);
       expect(((await res.json()) as { code: string }).code).toBe('WILL_KEYS_UNAVAILABLE');
     } finally {
@@ -97,8 +99,12 @@ describe('preview, generate, download over HTTP', () => {
   it('generate needs the acknowledgement, then returns 201 and audits it', async () => {
     const post = (body: unknown) =>
       fetch(`${base}/api/will/drafts/${willId}/generate`, { method: 'POST', headers: { ...auth(user), 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    expect((await post({ revision, acknowledge: false })).status).toBe(400);
-    const res = await post({ revision, acknowledge: true });
+    expect((await post({ revision, acknowledge: false, generatedOn: today() })).status).toBe(400);
+    expect((await post({ revision, acknowledge: true })).status).toBe(422);
+    const outdated = await post({ revision, acknowledge: true, generatedOn: '2000-01-01' });
+    expect(outdated.status).toBe(409);
+    expect(((await outdated.json()) as { details: { reason: string } }).details.reason).toBe('WILL_PREVIEW_OUTDATED');
+    const res = await post({ revision, acknowledge: true, generatedOn: today() });
     expect(res.status).toBe(201);
     versionId = ((await res.json()) as { data: { version: { id: string } } }).data.version.id;
     const row = await audit('will_generated');
