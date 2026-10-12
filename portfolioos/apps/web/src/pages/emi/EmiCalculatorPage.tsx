@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import type { TaxInputWire } from '@everypaisa/shared';
+import type { LoanRateRowWire, TaxInputWire } from '@everypaisa/shared';
 import { Download, FileSpreadsheet, Link2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -11,6 +11,8 @@ import { copyText } from '@/pages/split/clipboard';
 import { apiErrorMessage } from '@/api/client';
 import { CalculateTab } from './CalculateTab';
 import { CompareTab } from './CompareTab';
+import { LiveRatesTab } from './LiveRatesTab';
+import { loanKindForRate } from './liveRates';
 import { defaultCalcState, defaultCompareState, type CalcOutcome, type CalcState, type CompareState } from './emiState';
 import { decodeEmiUrl, encodeEmiUrl, type EmiTab } from './emiUrl';
 
@@ -36,6 +38,12 @@ export function EmiCalculatorPage() {
   }, [tab, calc, compare, navigate]);
 
   const onOutcome = useCallback((o: CalcOutcome) => setOutcome(o), []);
+  // Live rates -> Calculate: take the lender's lowest rate and the tax defaults for its loan type.
+  const applyRate = useCallback((row: LoanRateRowWire) => {
+    setCalc((c) => ({ ...c, ratePct: row.minRatePct, loanKind: loanKindForRate(row.loanType, c.loanKind) }));
+    setTab('calculate');
+    toast.success(`Using ${row.lender} ${row.minRatePct}% - check it against your own offer`);
+  }, []);
   // Stable identity so CompareTab's memo does not recompute every render.
   const compareTax = useMemo<TaxInputWire | undefined>(
     () => (calc.taxOn ? { regime: calc.regime, loanKind: calc.loanKind, slabPct: calc.slabPct, remaining80C: calc.remaining80C } : undefined),
@@ -83,12 +91,16 @@ export function EmiCalculatorPage() {
         <TabsList>
           <TabsTrigger value="calculate">Calculate</TabsTrigger>
           <TabsTrigger value="compare">Compare</TabsTrigger>
+          <TabsTrigger value="rates">Live rates</TabsTrigger>
         </TabsList>
         <TabsContent value="calculate" className="mt-4">
           <CalculateTab state={calc} onChange={setCalc} onOutcome={onOutcome} />
         </TabsContent>
         <TabsContent value="compare" className="mt-4">
           <CompareTab state={compare} firstEmiDate={calc.firstEmiDate} tax={compareTax} onChange={setCompare} />
+        </TabsContent>
+        <TabsContent value="rates" className="mt-4">
+          <LiveRatesTab onUseRate={applyRate} />
         </TabsContent>
       </Tabs>
     </div>

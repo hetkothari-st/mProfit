@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { CalcState, CompareState } from './emiState';
 
-export type EmiTab = 'calculate' | 'compare';
+export type EmiTab = 'calculate' | 'compare' | 'rates';
 const VERSION = '1';
 
 const mode = z.enum(['REDUCE_EMI', 'REDUCE_TENURE']);
@@ -41,7 +41,8 @@ export function encodeEmiUrl(tab: EmiTab, calc: CalcState, compare: CompareState
 
 export function decodeEmiUrl(search: string): { tab: EmiTab; calc?: CalcState; compare?: CompareState; error?: string } {
   const p = new URLSearchParams(search);
-  const tab: EmiTab = p.get('tab') === 'compare' ? 'compare' : 'calculate';
+  const rawTab = p.get('tab');
+  const tab: EmiTab = rawTab === 'compare' || rawTab === 'rates' ? rawTab : 'calculate';
   if (!p.has('s') && !p.has('c')) return { tab };
   const error = "This calculator link couldn't be opened - showing the default loan instead";
   if (p.get('v') !== VERSION) return { tab, error };
