@@ -27,6 +27,13 @@ export function istDate(at: Date): string {
   return new Date(at.getTime() + 330 * 60_000).toISOString().slice(0, 10);
 }
 
+/** Strict YYYY-MM-DD that round-trips (rejects 2026-02-30, which Date.parse would roll to 2 March). */
+export function isRealDate(iso: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  const d = new Date(`${iso}T00:00:00Z`);
+  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === iso;
+}
+
 function daysBetween(fromIso: string, toIso: string): number {
   return Math.round((Date.parse(`${toIso}T00:00:00Z`) - Date.parse(`${fromIso}T00:00:00Z`)) / DAY_MS);
 }
@@ -45,7 +52,7 @@ export function checkReading(reading: RateReading, lastActiveMinPct: string | nu
     if (max.lessThan(min) || max.greaterThan(MAX_CEILING_PCT)) reasons.push('BAD_MAX');
   }
   if (lastActiveMinPct !== null && min.minus(lastActiveMinPct).abs().greaterThan(MAX_JUMP_PP)) reasons.push('JUMP');
-  if (reading.effectiveDate !== null && !Number.isFinite(Date.parse(`${reading.effectiveDate}T00:00:00Z`))) {
+  if (reading.effectiveDate !== null && !isRealDate(reading.effectiveDate)) {
     reasons.push('BAD_DATE');
   } else if (reading.effectiveDate !== null) {
     const age = daysBetween(reading.effectiveDate, today);

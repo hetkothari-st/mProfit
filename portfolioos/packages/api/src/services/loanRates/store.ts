@@ -82,7 +82,8 @@ export async function recordReading(
         ? latest
         : await tx.loanRate.findFirst({ where: { ...key, status: 'ACTIVE' }, orderBy: { fetchedAt: 'desc' } });
     const verdict = checkReading(reading, lastActive ? lastActive.minRatePct.toString() : null, istDate(now));
-    const note = [reading.note, ...verdict.reasons].filter((x): x is string => Boolean(x)).join('; ') || null;
+    const badDate = verdict.reasons.includes('BAD_DATE') && reading.effectiveDate !== null;
+    const note = [reading.note, ...verdict.reasons, badDate ? `bad as-of date: ${reading.effectiveDate?.slice(0, 40)}` : null].filter((x): x is string => Boolean(x)).join('; ') || null;
     const created = await tx.loanRate.create({
       data: {
         sourceId: source.id,
@@ -90,7 +91,7 @@ export async function recordReading(
         tenor: reading.tenor,
         minRatePct: reading.minRatePct,
         maxRatePct: reading.maxRatePct,
-        effectiveDate: reading.effectiveDate === null ? null : dateOnly(reading.effectiveDate),
+        effectiveDate: reading.effectiveDate === null || badDate ? null : dateOnly(reading.effectiveDate),
         fetchedAt: now,
         origin: 'AUTO',
         status: verdict.status,
@@ -126,12 +127,12 @@ export async function activateSuspect(id: string, now: Date): Promise<LoanRate |
     await lockKey(tx, rateKey(head.sourceId, head.tenor));
     const row = await tx.loanRate.findUnique({ where: { id }, include: { source: true } });
     if (!row || row.status !== 'SUSPECT' || row.origin !== 'AUTO') return null;
-    await tx.loanRate.updateMany({
-      where: { sourceId: row.sourceId, tenor: row.tenor, origin: 'AUTO', status: 'ACTIVE' },
-      data: { status: 'SUPERSEDED' },
-    });
     const flipped = await tx.loanRate.updateMany({ where: { id, status: 'SUSPECT' }, data: { status: 'ACTIVE' } });
     if (flipped.count === 0) return null;
+    await tx.loanRate.updateMany({
+      where: { sourceId: row.sourceId, tenor: row.tenor, origin: 'AUTO', status: 'ACTIVE', id: { not: id } },
+      data: { status: 'SUPERSEDED' },
+    });
     await writeBenchmark(row.source, row.tenor, row.minRatePct.toString(), isoDate(row.effectiveDate), now, tx);
     return tx.loanRate.findUniqueOrThrow({ where: { id } });
   });

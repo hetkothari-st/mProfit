@@ -38,6 +38,9 @@ describe('checkReading', () => {
   it('an unparseable as-of date is SUSPECT, not silently accepted', () => {
     expect(verdict(r({ effectiveDate: 'not-a-date' })).reasons).toEqual(['BAD_DATE']);
   });
+  it.each(['2026-02-30', '2026-13-01'])('impossible date %s is BAD_DATE', (d) => {
+    expect(verdict(r({ effectiveDate: d })).reasons).toEqual(['BAD_DATE']);
+  });
   it('reasons accumulate', () => {
     expect(verdict(r({ minRatePct: '2.00', effectiveDate: '2027-01-01' }), '8.50').reasons).toEqual(['OUT_OF_RANGE', 'JUMP', 'ASOF_FUTURE']);
   });

@@ -118,6 +118,16 @@ describe('effectiveRates', () => {
   });
 });
 
+describe('bad dates', () => {
+  it('an impossible as-of date is stored SUSPECT with a null date and the raw text in the note', async () => {
+    const res = await sys(() => recordReading(HOME, { ...home('8.00'), effectiveDate: '2026-13-45' }, READER, NOW));
+    expect(res).toMatchObject({ outcome: 'SUSPECT', reasons: ['BAD_DATE'] });
+    const row = await prisma.loanRate.findUniqueOrThrow({ where: { id: res.rowId } });
+    expect(row.effectiveDate).toBeNull();
+    expect(row.note).toContain('bad as-of date: 2026-13-45');
+  });
+});
+
 describe('concurrency', () => {
   it('two concurrent recordReading calls for one key leave exactly one ACTIVE AUTO row', async () => {
     await Promise.all([
