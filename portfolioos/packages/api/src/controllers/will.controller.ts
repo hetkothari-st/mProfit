@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { isWillSection } from '@everypaisa/shared';
+import { isWillSection, WILL_RULESET_VERSION } from '@everypaisa/shared';
+import { generateWill, getWillVersionPdf, previewWill } from '../services/will/willGenerate.service.js';
 import { BadRequestError, UnauthorizedError, ValidationError } from '../lib/errors.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { writeAuditLog } from '../lib/audit.js';
@@ -71,4 +72,40 @@ export async function discardDraft(req: Request, res: Response): Promise<void> {
 
 export async function suggestions(req: Request, res: Response): Promise<void> {
   ok(res, { suggestions: await listWillPeopleSuggestions(uid(req)) });
+}
+
+const generateBody = z.object({ revision: z.number().int().min(0), acknowledge: z.boolean() });
+
+export async function preview(req: Request, res: Response): Promise<void> {
+  const userId = uid(req);
+  const willId = idOf(req, 'id');
+  const result = await previewWill(userId, willId);
+  await writeAuditLog({ userId, action: 'will_viewed', resource: `Will:${willId}`, req });
+  ok(res, result);
+}
+
+export async function generate(req: Request, res: Response): Promise<void> {
+  const userId = uid(req);
+  const willId = idOf(req, 'id');
+  const body = parseOr422(generateBody, req.body);
+  const result = await generateWill(userId, willId, body);
+  await writeAuditLog({
+    userId, action: 'will_generated', resource: `Will:${willId}`, req,
+    metadata: {
+      versionId: result.version.id, versionNo: result.version.versionNo, templateId: result.version.templateId,
+      templateVersion: result.version.templateVersion, rulesetVersion: WILL_RULESET_VERSION, acknowledged: true,
+    },
+  });
+  created(res, result);
+}
+
+export async function downloadPdf(req: Request, res: Response): Promise<void> {
+  const userId = uid(req);
+  const versionId = idOf(req, 'vid');
+  const file = await getWillVersionPdf(userId, versionId);
+  await writeAuditLog({ userId, action: 'will_downloaded', resource: `WillVersion:${versionId}`, metadata: { versionNo: file.versionNo }, req });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(file.buffer);
 }

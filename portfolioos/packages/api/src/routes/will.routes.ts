@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { authenticate } from '../middleware/authenticate.js';
 import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
+import { costlyOperationLimiter } from '../middleware/rateLimit.js';
 import { ForbiddenError } from '../lib/errors.js';
 import * as will from '../controllers/will.controller.js';
 
@@ -27,3 +28,6 @@ willRouter.put('/drafts/:id/sections/:section', asyncHandler(will.saveSection));
 willRouter.post('/drafts/:id/estate/refresh', asyncHandler(will.refreshEstate));
 willRouter.delete('/drafts/:id', asyncHandler(will.discardDraft));
 willRouter.get('/people/suggestions', asyncHandler(will.suggestions));
+willRouter.get('/drafts/:id/preview', asyncHandler(will.preview));
+willRouter.post('/drafts/:id/generate', costlyOperationLimiter, asyncHandler(will.generate));
+willRouter.get('/versions/:vid/pdf', asyncHandler(will.downloadPdf));
