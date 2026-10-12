@@ -6,13 +6,17 @@ import type {
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { AppError, BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.js';
-import { runLoanRates, runLoanRatesJob, type LoanRatesRunResult } from '../../jobs/loanRatesJob.js';
-import { isSourceStale } from './sanity.js';
+import { isLoanRatesRunning, runLoanRates, runLoanRatesJob, type LoanRatesRunResult } from '../../jobs/loanRatesJob.js';
+import { istDate, isSourceStale } from './sanity.js';
 import { ensureLoanRateSources } from './sourceList.js';
-import { activateSuspect, dateOnly, isoDate, rateKey, toReadingWire, writeBenchmark } from './store.js';
+import {
+  activateSuspect, dateOnly, isoDate, lockKey, rateKey, restoreBenchmarkAfterClear, toReadingWire, writeBenchmark,
+} from './store.js';
 
 const MANUAL_MIN = new Decimal('0.01');
 const MANUAL_MAX = new Decimal(50);
+/** Same future slack the sanity rules give a page's as-of date. */
+const MANUAL_FUTURE_DAYS = 7;
 
 /** 'YYYY-MM-DD' that names a real calendar day (no Feb 30 rolling into March). */
 function isRealDate(iso: string): boolean {
@@ -102,16 +106,31 @@ export async function setManualRate(
       throw new BadRequestError('Upper rate must be at least the lower rate and at most 50', { field: 'maxRatePct' });
     }
   }
+  // Basis is an attribute of the rate, but a benchmark source has exactly one: MCLR rows are MCLR, and the
+  // RBI repo row is stored as OTHER (that is what the reader writes). Product sources may be on any basis
+  // (an MCLR-linked personal loan is real), so they are not restricted.
+  if (source.loanType === 'MCLR' && input.basis !== 'MCLR') {
+    throw new BadRequestError('An MCLR source takes the MCLR basis', { field: 'basis' });
+  }
+  if (source.loanType === 'REPO' && input.basis !== 'OTHER') {
+    throw new BadRequestError('The repo rate takes the Other basis', { field: 'basis' });
+  }
   const effectiveDate = input.effectiveDate ?? null;
   // The body schema only checks the shape; 2026-02-30 must be a 400, not a database error.
   if (effectiveDate !== null && !isRealDate(effectiveDate)) {
     throw new BadRequestError('Not a real date', { field: 'effectiveDate' });
   }
+  if (effectiveDate !== null) {
+    const limit = istDate(new Date(now.getTime() + MANUAL_FUTURE_DAYS * 86_400_000));
+    if (effectiveDate > limit) {
+      throw new BadRequestError(`The date can be at most ${MANUAL_FUTURE_DAYS} days ahead`, { field: 'effectiveDate' });
+    }
+  }
 
   // One transaction for the override and its benchmark row, under the same per-key advisory lock the store
   // takes, so two admins (or an admin and the job) cannot leave two ACTIVE MANUAL rows or a half-applied set.
   const row = await runInTransaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${rateKey(sourceId, tenor)}))`;
+    await lockKey(tx, rateKey(sourceId, tenor));
     await tx.loanRate.updateMany({
       where: { sourceId, tenor, origin: 'MANUAL', status: 'ACTIVE' },
       data: { status: 'SUPERSEDED' },
@@ -137,25 +156,57 @@ export async function setManualRate(
   return toReadingWire(row);
 }
 
-/** Clear the override for a source (optionally one tenor). Returns how many MANUAL rows were retired. */
-export async function clearManualRate(sourceId: string, tenor: MclrTenor | null | undefined): Promise<number> {
+/**
+ * Clear the override for a source (optionally one tenor). Returns how many MANUAL rows were retired. Runs
+ * under the same per-key advisory locks as setManualRate and the store, and on a REPO or MCLR source puts
+ * the benchmark series back on the effective AUTO rate (the override had written its own value there).
+ */
+export async function clearManualRate(
+  sourceId: string,
+  tenor: MclrTenor | null | undefined,
+  now: Date = new Date(),
+): Promise<number> {
   const source = await prisma.loanRateSource.findUnique({ where: { id: sourceId } });
   if (!source) throw new NotFoundError(`Unknown loan-rate source ${sourceId}`);
-  const { count } = await prisma.loanRate.updateMany({
-    where: { sourceId, origin: 'MANUAL', status: 'ACTIVE', ...(tenor === undefined ? {} : { tenor }) },
-    data: { status: 'SUPERSEDED' },
+  const where = { sourceId, origin: 'MANUAL', status: 'ACTIVE', ...(tenor === undefined ? {} : { tenor }) };
+  const count = await runInTransaction(async (tx) => {
+    // Which keys to lock: read outside the locks, then re-read each key under its lock. Sorted, so two
+    // clears of the same source take the locks in the same order.
+    const keys = [...new Set((await tx.loanRate.findMany({ where, select: { tenor: true } })).map((r) => r.tenor))].sort(
+      (a, b) => (a ?? '').localeCompare(b ?? ''),
+    );
+    let retired = 0;
+    for (const key of keys) {
+      await lockKey(tx, rateKey(sourceId, key));
+      const rows = await tx.loanRate.findMany({ where: { ...where, tenor: key } });
+      if (rows.length === 0) continue;
+      const { count: n } = await tx.loanRate.updateMany({
+        where: { id: { in: rows.map((r) => r.id) }, status: 'ACTIVE' },
+        data: { status: 'SUPERSEDED' },
+      });
+      retired += n;
+      await restoreBenchmarkAfterClear(tx, source, key, rows, now);
+    }
+    return retired;
   });
   if (count === 0) throw new NotFoundError('No manual rate to clear');
   return count;
 }
 
+async function assertReadingExists(id: string): Promise<void> {
+  const found = await prisma.loanRate.findUnique({ where: { id }, select: { id: true } });
+  if (!found) throw new NotFoundError('No such reading');
+}
+
 export async function approveSuspect(id: string, now: Date = new Date()): Promise<LoanRateReadingWire> {
+  await assertReadingExists(id);
   const row = await activateSuspect(id, now);
   if (!row) throw new ConflictError('Only a SUSPECT reading can be approved');
   return toReadingWire(row);
 }
 
 export async function rejectSuspect(id: string): Promise<LoanRateReadingWire> {
+  await assertReadingExists(id);
   const { count } = await prisma.loanRate.updateMany({ where: { id, status: 'SUSPECT' }, data: { status: 'REJECTED' } });
   if (count === 0) throw new ConflictError('Only a SUSPECT reading can be rejected');
   return toReadingWire(await prisma.loanRate.findUniqueOrThrow({ where: { id } }));
@@ -169,6 +220,7 @@ export type RunNowResult = { started: 'one'; result: LoanRatesRunResult } | { st
  */
 export async function runNow(sourceId: string | undefined): Promise<RunNowResult> {
   if (sourceId === undefined) {
+    if (isLoanRatesRunning()) throw new AppError('A rates run is already in progress', 409, 'LOAN_RATES_BUSY');
     runLoanRatesJob().catch((err: unknown) => logger.error({ err }, '[loanRates] run-now (all) failed'));
     return { started: 'all' };
   }

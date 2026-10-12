@@ -39,7 +39,10 @@ export async function listLoanRates(loanType: RateLoanType, now: Date = new Date
   return { loanType, rows, repo: await repoSummary() };
 }
 
-/** Latest RBI repo rate and, once there are two, the signed size and date of the last change. */
+/**
+ * Latest RBI repo rate and, once there are two, the signed size and date of the last change. Two rows with
+ * the same rate (possible after an override is cleared) are not a change: lastChange is null.
+ */
 export async function repoSummary(): Promise<RepoRateWire | null> {
   const [current, previous] = await prisma.benchmarkRate.findMany({
     where: { kind: 'REPO', lender: null, tenor: null },
@@ -51,6 +54,9 @@ export async function repoSummary(): Promise<RepoRateWire | null> {
   return {
     ratePct: pctString(current.ratePct),
     effectiveDate: date,
-    lastChange: previous ? { deltaPct: pctString(current.ratePct.minus(previous.ratePct)), date } : null,
+    lastChange:
+      previous && !previous.ratePct.equals(current.ratePct)
+        ? { deltaPct: pctString(current.ratePct.minus(previous.ratePct)), date }
+        : null,
   };
 }

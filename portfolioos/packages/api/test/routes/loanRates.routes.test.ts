@@ -77,6 +77,8 @@ describe('GET /api/loan-rates', () => {
     await rate('axis.home', { min: '5.00', status: 'SUSPECT' });
     await rate('kotak.home', { min: '7.70', max: '13.05' });
     await rate('sbi.home', { min: '7.25', basis: 'REPO_LINKED', status: 'SUPERSEDED' });
+    await rate('pnb.home', { min: '7.10', basis: 'REPO_LINKED', status: 'REJECTED' });
+    await rate('lic.home', { min: '7.00', origin: 'MANUAL', status: 'REJECTED' });
     await rate('canara.car', { min: '7.70', max: '15.25', basis: 'OTHER' });
 
     const body = (await (await get('?loanType=HOME')).json()).data as LoanRatesWire;
@@ -97,5 +99,12 @@ describe('GET /api/loan-rates', () => {
     await sys(() => prisma.benchmarkRate.create({ data: { kind: 'REPO', ratePct: '5.50', effectiveDate: new Date('2026-10-08T00:00:00Z') } }));
     body = (await (await get('')).json()).data as LoanRatesWire;
     expect(body.repo).toEqual({ ratePct: '5.50', effectiveDate: '2026-10-08', lastChange: { deltaPct: '-0.25', date: '2026-10-08' } });
+  });
+
+  it('repo: two rows with the same rate are not a change (no 0.00 delta)', async () => {
+    await sys(() => prisma.benchmarkRate.create({ data: { kind: 'REPO', ratePct: '5.50', effectiveDate: new Date('2026-06-06T00:00:00Z') } }));
+    await sys(() => prisma.benchmarkRate.create({ data: { kind: 'REPO', ratePct: '5.50', effectiveDate: new Date('2026-10-08T00:00:00Z') } }));
+    const body = (await (await get('')).json()).data as LoanRatesWire;
+    expect(body.repo).toEqual({ ratePct: '5.50', effectiveDate: '2026-10-08', lastChange: null });
   });
 });

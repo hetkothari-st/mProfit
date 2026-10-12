@@ -26,7 +26,10 @@ const manualBody = z.object({
   note: z.string().trim().min(3).max(500),
 });
 const clearQuery = z.object({ tenor: z.enum(MCLR_TENORS).optional() });
-const runBody = z.object({ sourceId: z.string().min(1).max(64).optional() });
+const sourceIdSchema = z.string().min(1).max(64);
+const runBody = z.object({ sourceId: sourceIdSchema.optional() });
+const sourceParams = z.object({ sourceId: sourceIdSchema });
+const readingParams = z.object({ id: z.string().min(1).max(64) });
 
 /** The person at the keyboard: under X-Act-As the manager, otherwise the signed-in admin. */
 function actorId(req: Request): string {
@@ -41,7 +44,7 @@ export async function adminListHandler(_req: Request, res: Response): Promise<vo
 /** POST /api/admin/loan-rates/:sourceId/manual */
 export async function adminSetManualHandler(req: Request, res: Response): Promise<void> {
   const input = manualBody.parse(req.body);
-  const sourceId = String(req.params.sourceId);
+  const { sourceId } = sourceParams.parse(req.params);
   const row = await setManualRate(actorId(req), sourceId, input);
   await writeAuditLog({
     userId: actorId(req),
@@ -56,7 +59,7 @@ export async function adminSetManualHandler(req: Request, res: Response): Promis
 /** DELETE /api/admin/loan-rates/:sourceId/manual?tenor=1Y */
 export async function adminClearManualHandler(req: Request, res: Response): Promise<void> {
   const { tenor } = clearQuery.parse(req.query);
-  const sourceId = String(req.params.sourceId);
+  const { sourceId } = sourceParams.parse(req.params);
   const cleared = await clearManualRate(sourceId, tenor);
   await writeAuditLog({
     userId: actorId(req),
@@ -70,7 +73,7 @@ export async function adminClearManualHandler(req: Request, res: Response): Prom
 
 /** POST /api/admin/loan-rates/readings/:id/approve */
 export async function adminApproveHandler(req: Request, res: Response): Promise<void> {
-  const row = await approveSuspect(String(req.params.id));
+  const row = await approveSuspect(readingParams.parse(req.params).id);
   await writeAuditLog({
     userId: actorId(req),
     action: 'loan_rate_suspect_approved',
@@ -83,7 +86,7 @@ export async function adminApproveHandler(req: Request, res: Response): Promise<
 
 /** POST /api/admin/loan-rates/readings/:id/reject */
 export async function adminRejectHandler(req: Request, res: Response): Promise<void> {
-  const row = await rejectSuspect(String(req.params.id));
+  const row = await rejectSuspect(readingParams.parse(req.params).id);
   await writeAuditLog({
     userId: actorId(req),
     action: 'loan_rate_suspect_rejected',
