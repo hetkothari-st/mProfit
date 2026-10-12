@@ -93,7 +93,7 @@ describe('fetchPage', () => {
   it('follows a same-host redirect but not one to another host', async () => {
     let n = 0;
     const same: HttpGet = async (url) => (n++ === 0 ? res(null, 302, { location: '/interest-rate/' }) : res(`at ${url}`));
-    expect(await fetchPage(PAGE, { robotsCache: noRobots(), get: same })).toBe('at https://www.icici.bank.in/interest-rate/');
+    expect(await fetchPage(PAGE, { allowList: new Set([PAGE, 'https://www.icici.bank.in/interest-rate/']), robotsCache: noRobots(), get: same })).toBe('at https://www.icici.bank.in/interest-rate/');
     const away: HttpGet = async () => res(null, 301, { location: 'https://evil.example/' });
     expect(await codeOf(fetchPage(PAGE, { robotsCache: noRobots(), get: away }))).toBe('NOT_ALLOWED');
   });
@@ -104,5 +104,27 @@ describe('fetchPage', () => {
     expect(await codeOf(fetchPage(PAGE, { robotsCache: noRobots(), timeoutMs: 50, get: hang }))).toBe('TIMEOUT');
     expect(await codeOf(fetchPage(PAGE, { robotsCache: noRobots(), get: async () => res('gone', 404) }))).toBe('HTTP_STATUS');
     expect(await codeOf(fetchPage(PAGE, { robotsCache: noRobots(), get: async () => { throw new Error('ECONNRESET'); } }))).toBe('NETWORK');
+  });
+
+  it('re-checks every redirect hop: allow-list, robots, and a hop limit', async () => {
+    const redirect = (to: string): HttpGet => async (url) => (url.endsWith('/robots.txt') ? res('User-agent: *\nDisallow: /secret') : res(null, 302, { location: to }));
+    expect(await codeOf(fetchPage(PAGE, { robotsCache: noRobots(), get: redirect('/other-page') }))).toBe('NOT_ALLOWED');
+    const allow = new Set([PAGE, 'https://www.icici.bank.in/secret']);
+    expect(await codeOf(fetchPage(PAGE, { allowList: allow, get: redirect('/secret') }))).toBe('ROBOTS_DISALLOWED');
+    let hits = 0;
+    const loop: HttpGet = async () => {
+      hits++;
+      return res(null, 302, { location: PAGE });
+    };
+    expect(await codeOf(fetchPage(PAGE, { robotsCache: noRobots(), get: loop }))).toBe('TOO_MANY_REDIRECTS');
+    expect(hits).toBe(6);
+  });
+
+  it('times out while the body stalls, and cancels the stream', async () => {
+    let cancelled = false;
+    const stalled: HttpGet = async () =>
+      new Response(new ReadableStream({ start: (c) => c.enqueue(new TextEncoder().encode('<ht')), cancel: () => { cancelled = true; } }), { status: 200 });
+    expect(await codeOf(fetchPage(PAGE, { robotsCache: noRobots(), timeoutMs: 50, get: stalled }))).toBe('TIMEOUT');
+    expect(cancelled).toBe(true);
   });
 });
