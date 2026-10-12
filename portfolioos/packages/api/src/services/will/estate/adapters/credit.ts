@@ -1,7 +1,7 @@
 import { Decimal, toAmount2 } from '@everypaisa/shared';
 import { prisma } from '../../../../lib/prisma.js';
 import { loanGivenOutstanding } from '../../../loansGiven.service.js';
-import { loanPosition, type StoredLoan } from '../../../loans.service.js';
+import { loanPosition, type LoanPosition, type StoredLoan } from '../../../loans.service.js';
 import { computeCardSummary } from '../../../creditCards.service.js';
 import { clip, SOLE, type EstateAdapter, type EstateCandidate } from '../types.js';
 
@@ -32,6 +32,23 @@ export const loansGivenAdapter: EstateAdapter = {
   },
 };
 
+type LoanFields = { id: string; loanType: string; lenderName: string; accountNumberLast4: string | null };
+
+export const LOAN_SCHEDULE_FAILED_NOTE =
+  'The repayment schedule could not be worked out, so the full amount borrowed is shown - check the balance.';
+
+/** One loan as an estate liability. Pure, so the schedule-failed path is testable. */
+export function loanCandidate(l: LoanFields, position: Pick<LoanPosition, 'outstanding' | 'scheduleFailed'>): EstateCandidate {
+  return {
+    sourceKey: `loan:${l.id}`, side: 'LIABILITY', kind: 'LOAN',
+    label: clip(`${LOAN_WORDS[l.loanType] ?? 'Other'} loan - ${l.lenderName}`, 160),
+    ref: l.accountNumberLast4 ? `XXXX${l.accountNumberLast4}` : null,
+    value: toAmount2(Decimal.max(position.outstanding, 0)), valueAsOf: null, ownership: SOLE,
+    review: position.scheduleFailed ? 'NEEDS_REVIEW' : 'CONFIRMED',
+    note: position.scheduleFailed ? LOAN_SCHEDULE_FAILED_NOTE : null,
+  };
+}
+
 export const loansAdapter: EstateAdapter = {
   id: 'loans',
   version: '1',
@@ -41,15 +58,7 @@ export const loansAdapter: EstateAdapter = {
       include: { payments: { orderBy: { paidOn: 'asc' } } },
       orderBy: { createdAt: 'asc' },
     });
-    return rows.map((l): EstateCandidate => {
-      const { outstanding } = loanPosition(l as unknown as StoredLoan);
-      return {
-        sourceKey: `loan:${l.id}`, side: 'LIABILITY', kind: 'LOAN',
-        label: clip(`${LOAN_WORDS[l.loanType] ?? 'Other'} loan - ${l.lenderName}`, 160),
-        ref: l.accountNumberLast4 ? `XXXX${l.accountNumberLast4}` : null,
-        value: toAmount2(Decimal.max(outstanding, 0)), valueAsOf: null, ownership: SOLE, review: 'CONFIRMED', note: null,
-      };
-    });
+    return rows.map((l) => loanCandidate(l, loanPosition(l as unknown as StoredLoan)));
   },
 };
 

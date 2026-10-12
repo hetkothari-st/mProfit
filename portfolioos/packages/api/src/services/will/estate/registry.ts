@@ -6,12 +6,14 @@
  * reported once, by the PF adapter; rental properties linked from an owned
  * property are skipped (no double count); inactive rentals are skipped; a
  * property without a current value falls back to its purchase price;
- * zero-balance cards and fully repaid loans given are skipped. Holdings,
+ * zero-balance cards, fully repaid loans given and overdraft accounts are
+ * skipped; CASH holdings are EXCLUDED (not counted) when an active bank account
+ * has a balance, because a statement import mirrors the account as CASH. Holdings,
  * vehicles, rental, loans given, loans and cards otherwise match the dashboard
  * (test/will/estateAdapters.db.test.ts).
  */
 import { logger } from '../../../lib/logger.js';
-import type { EstateAdapter, EstateCandidate, EstateContext } from './types.js';
+import { ESTATE_TRUNCATED, type EstateAdapter, type EstateCandidate, type EstateContext } from './types.js';
 import { bankAccountsAdapter, holdingsAdapter, pfAccountsAdapter } from './adapters/financial.js';
 import { ownedPropertyAdapter, rentalPropertyAdapter, vehiclesAdapter } from './adapters/property.js';
 import { insuranceAdapter } from './adapters/protection.js';
@@ -35,7 +37,7 @@ export const MAX_ESTATE_CANDIDATES = 400;
 
 export interface EstateCollection {
   candidates: EstateCandidate[];
-  /** Ids of adapters that threw. Surfaced to the user, never swallowed. */
+  /** Ids of adapters that threw, plus 'truncated' when the list was cut. Surfaced to the user, never swallowed. */
   failed: string[];
 }
 
@@ -43,7 +45,7 @@ export async function collectEstate(
   ctx: EstateContext,
   adapters: readonly EstateAdapter[] = DEFAULT_ESTATE_ADAPTERS,
 ): Promise<EstateCollection> {
-  const results = await Promise.allSettled(adapters.map((a) => a.collect(ctx)));
+  const results = await Promise.allSettled(adapters.map((a) => Promise.resolve().then(() => a.collect(ctx))));
   const candidates: EstateCandidate[] = [];
   const failed: string[] = [];
   results.forEach((r, i) => {
@@ -62,6 +64,7 @@ export async function collectEstate(
   if (candidates.length > MAX_ESTATE_CANDIDATES) {
     logger.warn({ count: candidates.length }, 'will.estate.truncated');
     candidates.length = MAX_ESTATE_CANDIDATES;
+    failed.push(ESTATE_TRUNCATED);
   }
   return { candidates, failed };
 }

@@ -58,4 +58,40 @@ describe('reconcileEstate', () => {
     const out = reconcileEstate([manual], [cand({ sourceKey: 'bank:1' })]);
     expect(out).toEqual([{ ...cand({ sourceKey: 'bank:1' }), userEdited: false }, manual]);
   });
+
+  it('leaves the items of a failed adapter untouched, and a later good refresh keeps the confirmation', () => {
+    const confirmed = existing({ sourceKey: 'bank:1', value: '100.00', review: 'CONFIRMED' });
+    const lent = existing({ sourceKey: 'loanGiven:9' });
+    const afterFail = reconcileEstate([confirmed, lent], [], { failedAdapterIds: ['bankAccounts', 'loans'] });
+    // 'loans' owns the loan: prefix only, so loanGiven:9 still goes STALE.
+    expect(afterFail).toEqual([confirmed, { ...lent, review: 'STALE' }]);
+    const afterOk = reconcileEstate(afterFail, [cand({ sourceKey: 'bank:1', value: '300.00', review: 'NEEDS_REVIEW' })]);
+    expect(afterOk[0]).toMatchObject({ sourceKey: 'bank:1', value: '300.00', review: 'CONFIRMED' });
+  });
+
+  it('marks nothing STALE when the fetch was truncated', () => {
+    const out = reconcileEstate([existing({ sourceKey: 'bank:cut' })], [], { failedAdapterIds: ['truncated'] });
+    expect(out[0]!.review).toBe('CONFIRMED');
+  });
+
+  it('asks for review again when the source ownership changes on an unedited item', () => {
+    const out = reconcileEstate(
+      [existing({ sourceKey: 'prop:1', ownership: { type: 'SOLE', sharePct: '100' }, review: 'CONFIRMED' })],
+      [cand({ sourceKey: 'prop:1', ownership: { type: 'JOINT', sharePct: '50.00' }, review: 'CONFIRMED' })],
+    );
+    expect(out[0]).toMatchObject({ ownership: { type: 'JOINT', sharePct: '50.00' }, review: 'NEEDS_REVIEW' });
+  });
+
+  it('treats an equal share written differently as unchanged', () => {
+    const out = reconcileEstate(
+      [existing({ sourceKey: 'prop:1', ownership: { type: 'JOINT', sharePct: '50' }, review: 'CONFIRMED' })],
+      [cand({ sourceKey: 'prop:1', ownership: { type: 'JOINT', sharePct: '50.00' } })],
+    );
+    expect(out[0]!.review).toBe('CONFIRMED');
+  });
+
+  it('a NEEDS_REVIEW item follows the suggestion', () => {
+    const out = reconcileEstate([existing({ sourceKey: 'bank:1', review: 'NEEDS_REVIEW' })], [cand({ sourceKey: 'bank:1', review: 'CONFIRMED' })]);
+    expect(out[0]!.review).toBe('CONFIRMED');
+  });
 });

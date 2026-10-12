@@ -4,6 +4,8 @@ import { ASSET_CLASS_LABELS } from '../../../dashboard.service.js';
 import { clip, SOLE, type EstateAdapter, type EstateCandidate } from '../types.js';
 
 const ZERO = new Decimal(0);
+
+export const CASH_MAY_DUPLICATE_NOTE = 'May duplicate your bank accounts - include it only if it is separate cash';
 const dec = (v: { toString(): string } | null | undefined): Decimal | null => (v == null ? null : new Decimal(v.toString()));
 
 /** One item per (portfolio, asset class); PF-backed holdings are left to the PF adapter. */
@@ -12,6 +14,12 @@ export const holdingsAdapter: EstateAdapter = {
   version: '1',
   async collect({ userId, today }) {
     const pf = await prisma.providentFundAccount.findMany({ where: { userId }, select: { assetKey: true } });
+    // A bank statement import mirrors each account as a CASH holding (see healthScore liquidParts),
+    // so with a funded bank account on file the CASH groups are offered but left out by default.
+    const fundedBank = await prisma.bankAccount.findFirst({
+      where: { userId, status: 'ACTIVE', accountType: { not: 'OD' }, currentBalance: { gt: 0 } },
+      select: { id: true },
+    });
     const pfKeys = new Set(pf.map((p) => p.assetKey));
     const rows = await prisma.holdingProjection.findMany({
       where: { portfolio: { userId } },
@@ -20,14 +28,14 @@ export const holdingsAdapter: EstateAdapter = {
         portfolio: { select: { name: true } },
       },
     });
-    const groups = new Map<string, { label: string; value: Decimal }>();
+    const groups = new Map<string, { label: string; value: Decimal; cash: boolean }>();
     for (const r of rows) {
       if (pfKeys.has(r.assetKey)) continue;
       // Same effective value as the dashboard: live value, else cost.
       const value = dec(r.currentValue) ?? dec(r.totalCost) ?? ZERO;
       if (value.isZero() && new Decimal(r.quantity.toString()).isZero()) continue;
       const key = `holdings:${r.portfolioId}:${r.assetClass}`;
-      const g = groups.get(key) ?? { label: `${ASSET_CLASS_LABELS[r.assetClass] ?? r.assetClass} - ${r.portfolio.name}`, value: ZERO };
+      const g = groups.get(key) ?? { label: `${ASSET_CLASS_LABELS[r.assetClass] ?? r.assetClass} - ${r.portfolio.name}`, value: ZERO, cash: r.assetClass === 'CASH' };
       g.value = g.value.plus(value);
       groups.set(key, g);
     }
@@ -35,9 +43,15 @@ export const holdingsAdapter: EstateAdapter = {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([sourceKey, g]): EstateCandidate => {
         const negative = g.value.isNegative();
-        return {
-          sourceKey, side: 'ASSET', kind: 'HOLDING', label: clip(g.label, 160), ref: null,
+        const base = {
+          sourceKey, side: 'ASSET' as const, kind: 'HOLDING' as const, label: clip(g.label, 160), ref: null,
           value: toAmount2(negative ? ZERO : g.value), valueAsOf: today, ownership: SOLE,
+        };
+        if (g.cash && fundedBank) {
+          return { ...base, review: 'EXCLUDED', note: CASH_MAY_DUPLICATE_NOTE };
+        }
+        return {
+          ...base,
           review: negative ? 'NEEDS_REVIEW' : 'CONFIRMED',
           note: negative ? 'These positions are worth less than nothing today (for example open derivatives). Check them.' : null,
         };
@@ -45,12 +59,13 @@ export const holdingsAdapter: EstateAdapter = {
   },
 };
 
+/** Open accounts; an overdraft is a debt, not an asset, so it is skipped. */
 export const bankAccountsAdapter: EstateAdapter = {
   id: 'bankAccounts',
   version: '1',
   async collect({ userId }) {
     const rows = await prisma.bankAccount.findMany({
-      where: { userId, status: { not: 'CLOSED' } },
+      where: { userId, status: { not: 'CLOSED' }, accountType: { not: 'OD' } },
       orderBy: [{ bankName: 'asc' }, { last4: 'asc' }],
       select: { id: true, bankName: true, accountType: true, last4: true, currentBalance: true, balanceAsOf: true, jointHolders: true, nomineeName: true },
     });

@@ -42,7 +42,7 @@ export const rentalPropertyAdapter: EstateAdapter = {
   version: '1',
   async collect({ userId }) {
     const linked = await prisma.ownedProperty.findMany({
-      where: { userId, status: { not: 'SOLD' }, rentalPropertyId: { not: null } },
+      where: { userId, isActive: true, status: { not: 'SOLD' }, rentalPropertyId: { not: null } },
       select: { rentalPropertyId: true },
     });
     const skip = linked.map((l) => l.rentalPropertyId).filter((x): x is string => !!x);
