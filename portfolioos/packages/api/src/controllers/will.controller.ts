@@ -1,0 +1,74 @@
+import type { Request, Response } from 'express';
+import { z } from 'zod';
+import { isWillSection } from '@everypaisa/shared';
+import { BadRequestError, UnauthorizedError, ValidationError } from '../lib/errors.js';
+import { created, noContent, ok } from '../lib/response.js';
+import { writeAuditLog } from '../lib/audit.js';
+import { zodIssues } from '../services/will/willStore.js';
+import {
+  createWillDraft, discardWillDraft, getWillDraft, getWillOverview, listWillPeopleSuggestions,
+  refreshWillEstate, saveWillSection,
+} from '../services/will/will.service.js';
+
+export function uid(req: Request): string {
+  if (!req.user) throw new UnauthorizedError();
+  return req.user.id;
+}
+
+export function parseOr422<T>(schema: z.ZodType<T>, data: unknown): T {
+  const r = schema.safeParse(data);
+  if (!r.success) throw new ValidationError('Some will details are not valid', { issues: zodIssues(r.error) });
+  return r.data;
+}
+
+const id = z.string().min(1).max(64);
+export function idOf(req: Request, name: string): string {
+  return parseOr422(id, req.params[name]);
+}
+
+const createBody = z.object({ fromWillId: z.string().min(1).max(64).optional() });
+const saveBody = z.object({ revision: z.number().int().min(0), currentStep: z.number().int().min(2).max(8), data: z.unknown() });
+const revisionBody = z.object({ revision: z.number().int().min(0) });
+
+export async function overview(req: Request, res: Response): Promise<void> {
+  ok(res, await getWillOverview(uid(req)));
+}
+
+export async function createDraft(req: Request, res: Response): Promise<void> {
+  const userId = uid(req);
+  const body = parseOr422(createBody, req.body ?? {});
+  const draft = await createWillDraft(userId, body.fromWillId ?? null);
+  await writeAuditLog({
+    userId, action: 'will_created', resource: `Will:${draft.id}`,
+    metadata: { version: draft.version, cloned: Boolean(body.fromWillId) }, req,
+  });
+  created(res, draft);
+}
+
+export async function getDraft(req: Request, res: Response): Promise<void> {
+  ok(res, await getWillDraft(uid(req), idOf(req, 'id')));
+}
+
+export async function saveSection(req: Request, res: Response): Promise<void> {
+  const section = String(req.params['section'] ?? '');
+  if (!isWillSection(section)) throw new BadRequestError('Unknown will section', { field: 'section' });
+  const body = parseOr422(saveBody, req.body);
+  ok(res, await saveWillSection(uid(req), idOf(req, 'id'), section, { revision: body.revision, currentStep: body.currentStep, data: body.data }));
+}
+
+export async function refreshEstate(req: Request, res: Response): Promise<void> {
+  const body = parseOr422(revisionBody, req.body);
+  ok(res, await refreshWillEstate(uid(req), idOf(req, 'id'), body.revision));
+}
+
+export async function discardDraft(req: Request, res: Response): Promise<void> {
+  const userId = uid(req);
+  const willId = idOf(req, 'id');
+  await discardWillDraft(userId, willId);
+  await writeAuditLog({ userId, action: 'will_discarded', resource: `Will:${willId}`, req });
+  noContent(res);
+}
+
+export async function suggestions(req: Request, res: Response): Promise<void> {
+  ok(res, { suggestions: await listWillPeopleSuggestions(uid(req)) });
+}
