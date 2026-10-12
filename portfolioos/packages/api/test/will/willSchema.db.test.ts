@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import type { WillStatus } from '@prisma/client';
+import { PrismaClient, type WillStatus } from '@prisma/client';
 import { hasFeature } from '@everypaisa/shared';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
@@ -81,12 +81,48 @@ describe('Will tables', () => {
   it('WillVersion rows cannot be updated, and users cannot delete them', async () => {
     const w = await insertWill(a.userId, 'GENERATED', 20);
     const v = await insertVersion(a.userId, w.id);
+    // The app role has no UPDATE grant on WillVersion, so the privilege check
+    // refuses it before the trigger runs.
     await expect(
       runAsSystem(() => prisma.willVersion.update({ where: { id: v.id }, data: { textHash: 'd'.repeat(64) } })),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/permission denied for table WillVersion/);
     const del = await a.runAs(() => prisma.willVersion.deleteMany({ where: { id: v.id } }));
     expect(del.count).toBe(0);
     expect(await a.runAs(() => prisma.willVersion.count({ where: { id: v.id } }))).toBe(1);
+    await wipeWills(a.userId);
+  });
+
+  it('the trigger refuses UPDATE even for a superuser that bypasses the grant', async () => {
+    const SU_URL = process.env.DIRECT_URL ?? '';
+    if (!/localhost|127\.0\.0\.1/.test(SU_URL)) throw new Error('Refusing to run: DIRECT_URL must point at a local database');
+    const w = await insertWill(a.userId, 'GENERATED', 21);
+    const v = await insertVersion(a.userId, w.id);
+    const su = new PrismaClient({ datasources: { db: { url: SU_URL } } });
+    try {
+      await expect(
+        su.$executeRaw`UPDATE "WillVersion" SET "textHash" = ${'e'.repeat(64)} WHERE "id" = ${v.id}`,
+      ).rejects.toThrow(/WillVersion rows are immutable/);
+    } finally {
+      await su.$disconnect();
+    }
+    await wipeWills(a.userId);
+  });
+
+  it('a user cannot insert a will for someone else', async () => {
+    await expect(
+      b.runAs(() =>
+        prisma.will.create({ data: { userId: a.userId, version: 40, status: 'GENERATED', payload: Buffer.from('x') } }),
+      ),
+    ).rejects.toThrow(/row-level security/);
+    expect(await runAsSystem(() => prisma.will.count({ where: { userId: a.userId, version: 40 } }))).toBe(0);
+  });
+
+  it('an owner cannot delete a will that has a generated version', async () => {
+    const w = await insertWill(a.userId, 'GENERATED', 22);
+    const v = await insertVersion(a.userId, w.id);
+    await expect(a.runAs(() => prisma.will.delete({ where: { id: w.id } }))).rejects.toMatchObject({ code: 'P2003' });
+    expect(await a.runAs(() => prisma.willVersion.count({ where: { id: v.id } }))).toBe(1);
+    expect(await a.runAs(() => prisma.will.count({ where: { id: w.id } }))).toBe(1);
     await wipeWills(a.userId);
   });
 

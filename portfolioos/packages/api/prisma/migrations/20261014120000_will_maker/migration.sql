@@ -48,8 +48,10 @@ CREATE INDEX "WillVersion_userId_createdAt_idx" ON "WillVersion"("userId", "crea
 
 ALTER TABLE "Will" ADD CONSTRAINT "Will_userId_fkey"
   FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- RESTRICT, not CASCADE: a cascade skips RLS, so an owner deleting their
+-- Will would wipe the immutable versions. Purge deletes versions first.
 ALTER TABLE "WillVersion" ADD CONSTRAINT "WillVersion_willId_fkey"
-  FOREIGN KEY ("willId") REFERENCES "Will"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY ("willId") REFERENCES "Will"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "WillVersion" ADD CONSTRAINT "WillVersion_userId_fkey"
   FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

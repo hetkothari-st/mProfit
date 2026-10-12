@@ -5386,7 +5386,7 @@ model Will {
 model WillVersion {
   id              String   @id @default(cuid())
   willId          String
-  will            Will     @relation(fields: [willId], references: [id], onDelete: Cascade)
+  will            Will     @relation(fields: [willId], references: [id], onDelete: Restrict)
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   versionNo       Int
