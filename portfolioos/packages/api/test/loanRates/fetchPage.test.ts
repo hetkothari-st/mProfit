@@ -1,7 +1,8 @@
+import { createServer } from 'node:http';
 import { describe, it, expect } from 'vitest';
 import { robotsAllows } from '../../src/services/loanRates/robots.js';
 import {
-  FetchPageError, LOAN_RATES_USER_AGENT, fetchPage, type HttpGet,
+  FetchPageError, LOAN_RATES_USER_AGENT, fetchPage, isPrivateAddress, type HttpGet,
 } from '../../src/services/loanRates/fetchPage.js';
 import { fixture } from './readerFixtures.js';
 
@@ -126,5 +127,73 @@ describe('fetchPage', () => {
       new Response(new ReadableStream({ start: (c) => c.enqueue(new TextEncoder().encode('<ht')), cancel: () => { cancelled = true; } }), { status: 200 });
     expect(await codeOf(fetchPage(PAGE, { robotsCache: noRobots(), timeoutMs: 50, get: stalled }))).toBe('TIMEOUT');
     expect(cancelled).toBe(true);
+  });
+});
+
+describe('fetchPage hardening', () => {
+  const HOST = 'https://www.icici.bank.in';
+  it('follows a same-host robots.txt redirect to /robots.txt and honours its Disallow', async () => {
+    const get: HttpGet = async (url) => {
+      if (url === `${HOST}/robots.txt`) return res(null, 301, { location: `${HOST}/robots.txt?x=1` });
+      if (url.includes('/robots.txt')) return res('User-agent: *\nDisallow: /interest-rate');
+      return res('page');
+    };
+    expect(await codeOf(fetchPage(PAGE, { get }))).toBe('ROBOTS_DISALLOWED');
+  });
+
+  it('treats an off-list, off-path, http or looping robots.txt redirect as ROBOTS_UNAVAILABLE', async () => {
+    const to = (loc: string): HttpGet => async () => res(null, 301, { location: loc });
+    expect(await codeOf(fetchPage(PAGE, { get: to('https://evil.example/robots.txt') }))).toBe('ROBOTS_UNAVAILABLE');
+    expect(await codeOf(fetchPage(PAGE, { get: to('/other.txt') }))).toBe('ROBOTS_UNAVAILABLE');
+    expect(await codeOf(fetchPage(PAGE, { get: to('http://www.icici.bank.in/robots.txt') }))).toBe('ROBOTS_UNAVAILABLE');
+    let hits = 0;
+    const loop: HttpGet = async () => {
+      hits++;
+      return res(null, 301, { location: '/robots.txt' });
+    };
+    expect(await codeOf(fetchPage(PAGE, { get: loop }))).toBe('ROBOTS_UNAVAILABLE');
+    expect(hits).toBe(6);
+  });
+
+  it('refuses page redirects to another allow-listed host, even when the target is on the list', async () => {
+    const other = 'https://www.sbi.bank.in/x';
+    const get: HttpGet = async (url) => (url.endsWith('/robots.txt') ? res('') : res(null, 302, { location: other }));
+    expect(await codeOf(fetchPage(PAGE, { allowList: new Set([PAGE, other]), get }))).toBe('NOT_ALLOWED');
+  });
+
+  it.each([
+    ['http downgrade', 'http://www.icici.bank.in/interest-rate/'],
+    ['credentials', 'https://user:pw@www.icici.bank.in/interest-rate/'],
+    ['odd port', 'https://www.icici.bank.in:8443/interest-rate/'],
+    ['IP literal', 'https://203.0.113.9/interest-rate/'],
+  ])('refuses a redirect with %s even if listed', async (_name, location) => {
+    const get: HttpGet = async (url) => (url.endsWith('/robots.txt') ? res('') : res(null, 302, { location }));
+    const err = await fetchPage(PAGE, { allowList: new Set([PAGE, location]), get }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(FetchPageError);
+    expect((err as FetchPageError).code).toBe('NOT_ALLOWED');
+    expect((err as FetchPageError).message).not.toMatch(/user:pw|pw@/);
+  });
+
+  it('classifies private, loopback, link-local and mapped addresses', () => {
+    for (const ip of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '0.0.0.0', '::1', '::', 'fc00::1', 'fd12::1', 'fe80::1', '::ffff:127.0.0.1', '::ffff:7f00:1', '::ffff:10.0.0.1']) {
+      expect(isPrivateAddress(ip), ip).toBe(true);
+    }
+    for (const ip of ['8.8.8.8', '172.32.0.1', '172.15.0.1', '203.0.113.9', '2606:4700::1111', '::ffff:8.8.8.8']) {
+      expect(isPrivateAddress(ip), ip).toBe(false);
+    }
+  });
+
+  it('the default transport refuses a private address; allowPrivateHosts is the test-only escape', async () => {
+    const server = createServer((req, r) => r.end(req.url === '/robots.txt' ? '' : 'local page'));
+    await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
+    try {
+      const { port } = server.address() as { port: number };
+      const local = `http://localhost:${port}/rates`;
+      const allowList = new Set([local]);
+      expect(await codeOf(fetchPage(local, { allowList }))).toBe('NOT_ALLOWED');
+      expect(await fetchPage(local, { allowList, allowPrivateHosts: true })).toBe('local page');
+    } finally {
+      await new Promise((ok) => server.close(ok));
+    }
   });
 });
