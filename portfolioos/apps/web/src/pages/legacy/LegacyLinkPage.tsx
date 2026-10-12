@@ -42,7 +42,7 @@ export function LegacyLinkPage({ kind }: { kind: Kind }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md"><CardContent className="space-y-4 p-6">
-        <h1 className="text-lg font-semibold">EveryPaisa Legacy Transfer</h1>
+        <h1 className="text-lg font-semibold">EveryPaisa Succession</h1>
         {state === 'done' || state === 'error' ? (
           <p className={state === 'error' ? 'text-sm text-destructive' : 'text-sm'}>{msg}</p>
         ) : (
