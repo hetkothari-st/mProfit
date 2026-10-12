@@ -35,7 +35,12 @@ export type AuditAction =
   | 'security_alert'
   | 'two_factor_enabled'
   | 'two_factor_disabled'
-  | 'two_factor_codes_regenerated';
+  | 'two_factor_codes_regenerated'
+  | 'loan_rate_manual_set'
+  | 'loan_rate_override_cleared'
+  | 'loan_rate_suspect_approved'
+  | 'loan_rate_suspect_rejected'
+  | 'loan_rate_run_now';
 
 export interface AuditInput {
   userId?: string | null;

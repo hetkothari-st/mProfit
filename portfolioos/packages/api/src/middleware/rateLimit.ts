@@ -202,6 +202,18 @@ export const emiExportLimiter = rateLimit({
   message: { success: false, error: 'Too many exports - please wait a minute', code: 'RATE_LIMITED' },
 });
 
+/** Admin "Run now" on live loan rates: every call fetches bank pages. 3 a minute per admin. */
+export const loanRatesRunLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  passOnStoreError: true,
+  keyGenerator: (req) => req.user?.id ?? 'anonymous',
+  store: makeStore('loan-rates-run'),
+  message: { success: false, error: 'Too many runs - please wait a minute', code: 'RATE_LIMITED' },
+});
+
 export const importLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
