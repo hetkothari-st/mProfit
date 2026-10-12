@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useNextPath } from '@/hooks/useNextPath';
+import { fromLocationPath } from './loginRedirect';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -83,8 +84,7 @@ export function LoginPage() {
       nextPath ??
       (isOnboardingUnfinished(data.user.id)
         ? '/onboarding'
-        : ((location.state as { from?: { pathname?: string } } | null)?.from?.pathname ??
-          '/dashboard'));
+        : (fromLocationPath(location.state) ?? '/dashboard'));
     navigate(to, { replace: true });
   }
 
