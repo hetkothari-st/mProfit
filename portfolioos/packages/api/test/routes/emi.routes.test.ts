@@ -64,3 +64,24 @@ describe('POST /api/emi/export', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('POST /api/emi/export rate limit', () => {
+  it('the 11th export in a minute from one user returns 429', async () => {
+    // A fresh user so earlier tests' requests do not count toward this window.
+    const limited = await createTestScope('emi-limit');
+    try {
+      const auth = signAccessToken({ sub: limited.userId, email: `${limited.userId}@test.local`, role: 'INVESTOR', plan: 'PLUS' }).token;
+      const send = () => fetch(`${base}/api/emi/export?format=xlsx`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${auth}` },
+        body: JSON.stringify({ input }),
+      });
+      const statuses: number[] = [];
+      for (let i = 0; i < 11; i++) statuses.push((await send()).status);
+      expect(statuses.slice(0, 10).every((s) => s === 200)).toBe(true);
+      expect(statuses[10]).toBe(429);
+    } finally {
+      await limited.cleanup();
+    }
+  });
+});

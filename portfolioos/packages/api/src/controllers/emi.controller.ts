@@ -52,7 +52,7 @@ export async function exportHandler(req: Request, res: Response): Promise<void> 
     throw err;
   }
   const f = FORMATS[format];
-  const file = await f.build(summary, { title: parsed.data.title || 'Loan', input });
+  const file = await f.build(summary, { title: parsed.data.title || 'Loan', input, tax });
   res.setHeader('Content-Type', f.type);
   res.setHeader('Content-Disposition', `attachment; filename="emi-schedule.${format}"`);
   res.send(file);
