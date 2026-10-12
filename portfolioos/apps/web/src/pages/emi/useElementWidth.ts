@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 
 /**
- * Width of an element, kept current with ResizeObserver. Returns 0 until
- * measured and where ResizeObserver is missing (jsdom), so callers fall back
+ * Width of an element, kept current with ResizeObserver. Measured once in a
+ * layout effect as soon as the element mounts, so the first paint already uses
+ * the right layout (no narrow-then-wide flicker when data is cached). Returns 0
+ * until measured and where layout is unavailable (jsdom), so callers fall back
  * to their narrow layout.
  */
 export function useElementWidth<T extends HTMLElement>(): [(el: T | null) => void, number] {
   const [el, setEl] = useState<T | null>(null);
   const [width, setWidth] = useState(0);
   const ref = useCallback((node: T | null) => setEl(node), []);
-  useEffect(() => {
-    if (!el || typeof ResizeObserver === 'undefined') return;
+  useLayoutEffect(() => {
+    if (!el) return;
+    setWidth(el.getBoundingClientRect().width);
+    if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver((entries) => {
       for (const e of entries) setWidth(e.contentRect.width);
     });

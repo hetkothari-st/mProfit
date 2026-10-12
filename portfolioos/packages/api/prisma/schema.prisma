@@ -5268,3 +5268,61 @@ model SplitReminder {
   @@unique([userId, memberId, sentOn])
   @@index([userId, createdAt])
 }
+
+// --- EMI calculator plan 2: live loan rates (spec s5.3) ---------------------
+//
+// Global reference data: no userId, no RLS, not in USER_SCOPED_MODELS
+// (asserted by test/invariants/loan-rates-not-user-scoped.test.ts).
+// Rows in LoanRate are append-only history: a reading inserts a row, an
+// ACTIVE AUTO row supersedes the previous ACTIVE AUTO row for the same
+// (source, tenor), and the effective rate is the latest MANUAL ACTIVE row
+// if any, else the latest AUTO ACTIVE row.
+
+model LoanRateSource {
+  id            String     @id // e.g. "sbi.home"
+  lender        String // "SBI"
+  loanType      String // HOME | CAR | ... | MCLR | REPO
+  url           String
+  mode          String // AUTO | MANUAL
+  adapter       String? // page reader id for AUTO sources
+  adapterVer    String?
+  lastSuccessAt DateTime?  @db.Timestamptz(3)
+  lastErrorAt   DateTime?  @db.Timestamptz(3)
+  lastError     String?
+  createdAt     DateTime   @default(now()) @db.Timestamptz(3)
+  rates         LoanRate[]
+
+  @@index([loanType])
+}
+
+model LoanRate {
+  id               String         @id @default(cuid())
+  sourceId         String
+  source           LoanRateSource @relation(fields: [sourceId], references: [id])
+  basis            String // REPO_LINKED | MCLR | FIXED | OTHER
+  tenor            String? // MCLR tenor: ON | 1M | 3M | 6M | 1Y
+  minRatePct       Decimal        @db.Decimal(6, 3)
+  maxRatePct       Decimal?       @db.Decimal(6, 3)
+  effectiveDate    DateTime?      @db.Date
+  fetchedAt        DateTime       @default(now()) @db.Timestamptz(3)
+  origin           String // AUTO | MANUAL
+  status           String // ACTIVE | SUSPECT | REJECTED | SUPERSEDED
+  note             String?
+  createdById      String? // admin for MANUAL
+  sourceAdapter    String? // page reader id that produced an AUTO row
+  sourceAdapterVer String?
+
+  @@index([sourceId, status, fetchedAt])
+}
+
+model BenchmarkRate {
+  id            String   @id @default(cuid())
+  kind          String // REPO | MCLR
+  lender        String? // null for REPO
+  tenor         String?
+  ratePct       Decimal  @db.Decimal(6, 3)
+  effectiveDate DateTime @db.Date
+  fetchedAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([kind, lender, tenor, effectiveDate])
+}

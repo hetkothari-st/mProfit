@@ -160,6 +160,20 @@ export function SettingsPage() {
         <NotificationsSection />
 
         <DesktopAppSection />
+
+        {user?.role === 'ADMIN' && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Loan rates</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Review and correct the lender rates shown on the EMI calculator's Live rates tab.{' '}
+              <Link to="/settings/loan-rates" className="underline underline-offset-2 hover:text-foreground">
+                Open loan rates
+              </Link>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="mt-6">

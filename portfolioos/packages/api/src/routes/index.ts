@@ -28,6 +28,7 @@ import { mfCasparserRouter } from './mfCasparser.routes.js';
 import { mfAnalyticsRouter } from './mfAnalytics.routes.js';
 import { mfPortfolioRouter } from './mfPortfolio.routes.js';
 import { mfQualitativeFactsRouter } from './mfQualitativeFacts.routes.js';
+import { adminLoanRatesRouter } from './adminLoanRates.routes.js';
 import { foRouter } from './fo.routes.js';
 import { catalogRouter, valuationRouter } from './valuation.routes.js';
 import { documentsRouter } from './documents.routes.js';
@@ -35,6 +36,7 @@ import { loansRouter } from './loans.routes.js';
 import { loansGivenRouter } from './loansGiven.routes.js';
 import { splitRouter } from './split.routes.js';
 import { emiRouter } from './emi.routes.js';
+import { loanRatesRouter } from './loanRates.routes.js';
 import { creditCardsRouter } from './creditCards.routes.js';
 import { bankAccountsRouter } from './bankAccounts.routes.js';
 import { realEstateRouter } from './realEstate.routes.js';
@@ -97,6 +99,7 @@ export function registerRoutes(app: Express): void {
   // the MF_ANALYTICS plan entitlement. See the router header for why the two
   // gates must not be conflated.
   app.use('/api/admin/mf-qualitative-facts', mfQualitativeFactsRouter);
+  app.use('/api/admin/loan-rates', adminLoanRatesRouter);
   app.use('/api/fo', foRouter);
   app.use('/api/catalog', catalogRouter);
   app.use('/api/valuations', valuationRouter);
@@ -105,6 +108,7 @@ export function registerRoutes(app: Express): void {
   app.use('/api/loans-given', loansGivenRouter);
   app.use('/api/split', splitRouter);
   app.use('/api/emi', emiRouter);
+  app.use('/api/loan-rates', loanRatesRouter);
   app.use('/api/credit-cards', creditCardsRouter);
   app.use('/api/bank-accounts', bankAccountsRouter);
   app.use('/api/real-estate', realEstateRouter);

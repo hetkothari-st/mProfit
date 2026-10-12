@@ -6,6 +6,12 @@ const calc = { ...defaultCalcState(new Date(2026, 9, 12)), principal: '25,00,000
 const compare = defaultCompareState();
 
 describe('emi share URL', () => {
+  it('keeps the Live rates tab', () => {
+    expect(decodeEmiUrl('?tab=rates')).toEqual({ tab: 'rates' });
+    expect(decodeEmiUrl(`?${encodeEmiUrl('rates', calc, compare)}`).tab).toBe('rates');
+    expect(decodeEmiUrl('?tab=bogus').tab).toBe('calculate');
+  });
+
   it('round-trips state and tab', () => {
     const q = encodeEmiUrl('compare', calc, compare);
     expect(q.startsWith('v=1&')).toBe(true);
