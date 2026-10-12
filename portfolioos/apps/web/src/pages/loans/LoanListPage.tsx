@@ -321,7 +321,7 @@ function calcEmi(principal: string, rate: string, tenure: string): string {
   }
 }
 
-function CreateLoanDialog({
+export function CreateLoanDialog({
   open,
   onOpenChange,
   initial,
