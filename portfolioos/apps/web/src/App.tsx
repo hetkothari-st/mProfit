@@ -65,6 +65,7 @@ import { ExpenseDetailPage } from './pages/split/ExpenseDetailPage';
 import { FriendPage } from './pages/split/FriendPage';
 import { SplitSettingsPage } from './pages/split/SplitSettingsPage';
 import { EmiCalculatorPage } from './pages/emi/EmiCalculatorPage';
+import { LegacyPage } from './pages/legacy/LegacyPage';
 import { GoalsPage } from './pages/goals/GoalsPage';
 import { IncomePage } from './pages/income/IncomePage';
 import { HealthScorePage } from './pages/intelligence/HealthScorePage';
@@ -209,6 +210,7 @@ export function App() {
         <Route path="/loans/:id" element={<LoanDetailPage />} />
         <Route path="/split" element={<SplitHomePage />} />
         <Route path="/emi" element={<EmiCalculatorPage />} />
+        <Route path="/legacy" element={<LegacyPage />} />
         <Route path="/split/settings" element={<SplitSettingsPage />} />
         <Route path="/split/groups/:id" element={<GroupPage />} />
         <Route path="/split/expenses/:id" element={<ExpenseDetailPage />} />

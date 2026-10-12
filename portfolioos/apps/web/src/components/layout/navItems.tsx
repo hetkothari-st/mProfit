@@ -41,6 +41,7 @@ import {
   ShieldCheck,
   Compass,
   Percent,
+  HeartHandshake,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -104,6 +105,7 @@ export const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Accounting', to: '/accounting', icon: BookOpenCheck },
       { label: 'Split Expenses', to: '/split', icon: UsersRound },
       { label: 'EMI Calculator', to: '/emi', icon: Percent },
+      { label: 'Legacy Transfer', to: '/legacy', icon: HeartHandshake },
       { label: 'Alerts', to: '/alerts', icon: BellRing },
       // Hidden for now — page still reachable at /import/failures.
       // { label: 'Failures (DLQ)', to: '/import/failures', icon: Bug },
