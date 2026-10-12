@@ -42,13 +42,13 @@ interface LoanInput {
 }
 interface Prepayment { month: number; amount: Decimal; recurrence: 'ONCE' | 'YEARLY'; mode: EmiMode; }
 interface RateChange { fromMonth: number; annualRatePct: Decimal; mode: EmiMode; } // default REDUCE_TENURE = keep EMI, tenure moves
-interface Fees { processingFee: { kind: 'PCT' | 'AMOUNT'; value: Decimal }; gstPct: Decimal /* default 18 */; otherCharges: Decimal; }
+interface Fees { processingFeeKind: 'PCT' | 'AMOUNT'; processingFeeValue: Decimal; gstPct: Decimal /* default 18 */; otherCharges: Decimal; }
 ```
 
 ### 3.2 Rules
 
 - Monthly rate `r = annualRatePct / 1200`. EMI = `P·r·(1+r)^n / ((1+r)^n − 1)`; `r = 0` → `P / n`.
-- EMI rounded to the nearest rupee (half-up), as banks quote it. Interest per month rounded to the paisa (half-up). The final instalment is adjusted so the closing balance is exactly ₹0.00. Schedule invariant (tested): Σ principal + Σ prepayments = P, and the closing balance reaches exactly 0.00 and is never negative.
+- EMI rounded UP to the next rupee, so the final instalment is never larger than the EMI (rounding down would push up to ~₹150 of residual onto the last instalment over 20 years). Interest per month rounded to the paisa (half-up). The final instalment is adjusted so the closing balance is exactly ₹0.00. Schedule invariant (tested): Σ principal + Σ prepayments = P, and the closing balance reaches exactly 0.00 and is never negative.
 - **Reverse — max loan:** given EMI, rate, tenure → `P = EMI·((1+r)^n − 1)/(r·(1+r)^n)`, rounded down to the rupee.
 - **Reverse — tenure:** given P, EMI, rate → `n = ceil(log(EMI/(EMI − P·r)) / log(1+r))`. If `EMI ≤ P·r` → error `EMI_TOO_LOW` ("EMI never pays off the loan").
 - **Prepayments:** applied after that month's EMI. `REDUCE_EMI` recomputes the EMI over remaining months; `REDUCE_TENURE` keeps EMI and shortens. A prepayment larger than the balance closes the loan (capped, flagged `PREPAYMENT_CAPPED`). Recurring yearly = same month every 12 months until closure.
@@ -68,7 +68,7 @@ interface Fees { processingFee: { kind: 'PCT' | 'AMOUNT'; value: Decimal }; gstP
 
 ## 4. Calculator page — `/emi`
 
-- Nav: Tools → **EMI Calculator** (lucide icon `Landmark`; Tax already uses `Calculator`).
+- Nav: Tools → **EMI Calculator** (lucide icon `Percent`; Tax uses `Calculator`, Bonds uses `Landmark`).
 - Tabs: **Calculate**, **Compare**, **Live rates** (Live rates added in Plan 2; in Plan 1 the tab is absent).
 - **Calculate:** inputs with sliders (amount, rate, tenure years/months toggle, first EMI date default next month's 5th); mode switch Normal / Max loan / Tenure; "Advanced" collapsible for prepayments, rate changes, fees, tax. Results: EMI, total interest, total paid, APR, principal-vs-interest donut, balance-over-time area chart, schedule grouped by year (expandable to months). Live recompute as the user types (debounced 150 ms).
 - **Compare:** 2–3 offer columns (each a compact input set), result table, cheapest highlighted.
