@@ -21,6 +21,7 @@ import { ClientBooksPage } from './pages/ca/ClientBooksPage';
 import { AcceptCaInvitationPage } from './pages/ca/AcceptCaInvitationPage';
 import { AcceptProfessionalInvitePage } from './pages/ca/AcceptProfessionalInvitePage';
 import { ProfessionalAccessPage } from './pages/settings/ProfessionalAccessPage';
+import { LoanRatesAdminPage } from './pages/settings/LoanRatesAdminPage';
 import { FamilyMemberPage } from './pages/family/FamilyMemberPage';
 import { TransactionsPage } from './pages/transactions/TransactionsPage';
 import { StocksPage } from './pages/assetClasses/StocksPage';
@@ -148,6 +149,7 @@ export function App() {
         <Route path="/ca/clients/:clientId" element={<ProfessionalTwoFactorGate><ClientBooksPage /></ProfessionalTwoFactorGate>} />
         <Route path="/ca/invitations/:token/accept" element={<AcceptCaInvitationPage />} />
         <Route path="/settings/professional-access" element={<ProfessionalAccessPage />} />
+        <Route path="/settings/loan-rates" element={<LoanRatesAdminPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/stocks" element={<StocksPage />} />
         <Route path="/mutual-funds" element={<MutualFundsPage />} />
