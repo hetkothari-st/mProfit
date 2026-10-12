@@ -394,6 +394,33 @@ export function buildAmortizationSchedule(
   return rows;
 }
 
+export interface LoanPosition {
+  /** Opening balance of the first unpaid EMI; principal if the schedule cannot be built. */
+  outstanding: Decimal;
+  firstUnpaid: AmortizationRow | null;
+  scheduleFailed: boolean;
+}
+
+/** Where a loan stands today. Shared by the dashboard and the will estate list. */
+export function loanPosition(loan: StoredLoan): LoanPosition {
+  let schedule: AmortizationRow[];
+  try {
+    schedule = buildAmortizationSchedule(loan);
+  } catch (err) {
+    logger.warn(
+      { loanId: loan.id, errName: err instanceof Error ? err.name : 'unknown' },
+      '[loans] schedule failed; principal used as outstanding',
+    );
+    return { outstanding: new Decimal(loan.principalAmount.toString()), firstUnpaid: null, scheduleFailed: true };
+  }
+  const firstUnpaid = schedule.find((r) => !r.isPaid) ?? null;
+  return {
+    outstanding: firstUnpaid ? new Decimal(firstUnpaid.openingBalance) : new Decimal(0),
+    firstUnpaid,
+    scheduleFailed: false,
+  };
+}
+
 /**
  * Principal and interest in one payment. The split is optional when a payment
  * is recorded, so a payment saved without one takes it from the schedule: an

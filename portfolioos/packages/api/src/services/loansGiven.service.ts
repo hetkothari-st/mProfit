@@ -364,7 +364,8 @@ export function computeLoanGivenSummary(
 
 // ── persistence ──────────────────────────────────────────────────────
 
-type LoanRow = Prisma.LoanGivenGetPayload<{ include: { entries: true } }>;
+export type LoanGivenRow = Prisma.LoanGivenGetPayload<{ include: { entries: true } }>;
+type LoanRow = LoanGivenRow;
 
 function termsOf(loan: LoanRow): LoanTerms {
   return {
@@ -669,16 +670,17 @@ export async function reopenLoanGiven(userId: string, id: string) {
   return getLoanGiven(userId, loan.id);
 }
 
-/** Principal still owed on ACTIVE loans — the asset side for net worth. */
+/** Principal still owed on one loan given - what the dashboard and the will estate count. */
+export function loanGivenOutstanding(loan: LoanGivenRow): Decimal {
+  return new Decimal(computeLoanGivenSummary(termsOf(loan), entriesOf(loan)).outstandingPrincipal);
+}
+
 export async function outstandingLoansGiven(userId: string): Promise<{ count: number; total: Decimal }> {
   const loans = await prisma.loanGiven.findMany({
     where: { userId, status: 'ACTIVE' },
     include: { entries: true },
   });
-  const total = loans.reduce(
-    (s, l) => s.plus(computeLoanGivenSummary(termsOf(l), entriesOf(l)).outstandingPrincipal),
-    ZERO,
-  );
+  const total = loans.reduce((s, l) => s.plus(loanGivenOutstanding(l)), ZERO);
   return { count: loans.length, total };
 }
 
