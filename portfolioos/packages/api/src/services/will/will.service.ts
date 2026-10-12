@@ -148,7 +148,7 @@ export async function refreshWillEstate(
   const collection = await (deps.collect ?? collectEstate)({ userId, today });
   const estate = {
     asOf: today,
-    items: reconcileEstate(payload.estate.items, collection.candidates),
+    items: reconcileEstate(payload.estate.items, collection.candidates, { failedAdapterIds: collection.failed }),
     failedSources: collection.failed,
   };
   const saved = await writeDraft(userId, will, { ...payload, estate }, will.currentStep);
