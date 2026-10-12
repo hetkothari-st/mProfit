@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { amountInWords } from '../../src/services/receipts/amountInWords.js';
+import { amountInWords } from './amountInWords.js';
 
 describe('the amount spelled out on a receipt', () => {
   it('uses Indian groups, not millions', () => {

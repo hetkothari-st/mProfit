@@ -23,7 +23,7 @@
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { toDecimal, formatDateIST } from '@everypaisa/shared';
-import { amountInWords } from './amountInWords.js';
+import { amountInWords } from '@everypaisa/shared';
 import { inr } from './format.js';
 
 export type ReceiptKind = 'RENT' | 'PREMIUM' | 'LOAN_PAYMENT' | 'LOAN_DISBURSEMENT' | 'VOUCHER';
