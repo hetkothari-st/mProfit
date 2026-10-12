@@ -67,6 +67,7 @@ import { SplitSettingsPage } from './pages/split/SplitSettingsPage';
 import { EmiCalculatorPage } from './pages/emi/EmiCalculatorPage';
 import { GoalsPage } from './pages/goals/GoalsPage';
 import { WillOverviewPage } from './pages/will/WillOverviewPage';
+import { WillWizardPage } from './pages/will/WillWizardPage';
 import { IncomePage } from './pages/income/IncomePage';
 import { HealthScorePage } from './pages/intelligence/HealthScorePage';
 import { AdvisorPage } from './pages/advisor/AdvisorPage';
@@ -216,6 +217,7 @@ export function App() {
         <Route path="/split/friends/:key" element={<FriendPage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/will" element={<WillOverviewPage />} />
+        <Route path="/will/:id/:step" element={<WillWizardPage />} />
         <Route path="/income" element={<IncomePage />} />
         <Route path="/health-score" element={<HealthScorePage />} />
         <Route path="/advisor" element={<AdvisorPage />} />
