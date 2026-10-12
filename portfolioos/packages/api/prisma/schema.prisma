@@ -221,6 +221,9 @@ model User {
 
   // Wrapped per-user data key (lib/userKeys).
   dataKey UserDataKey?
+  // Will Maker. Personal content is sealed inside Will.payload.
+  wills        Will[]
+  willVersions WillVersion[]
 
   // Two-factor sign-in (services/twoFactor.service.ts). The TOTP secret is
   // encrypted under SECRETS_KEY; set only once a code has confirmed it.
@@ -2827,6 +2830,7 @@ enum DocumentOwnerType {
   PORTFOLIO
   OWNED_PROPERTY
   LOAN_GIVEN
+  WILL
   OTHER
 }
 
@@ -5334,4 +5338,76 @@ model BenchmarkRate {
   fetchedAt     DateTime @default(now()) @db.Timestamptz(3)
 
   @@unique([kind, lender, tenor, effectiveDate])
+}
+
+// --- WILL MAKER ---
+// Spec: docs/superpowers/specs/2026-10-12-will-maker-design.md.
+// Everything personal lives in the sealed `payload` (lib/userKeys, slot
+// "will:<id>"); plain columns hold only status, numbering, revision and dates.
+// Raw SQL in 20261014120000_will_maker adds what Prisma cannot express:
+// one DRAFT per user (partial unique index) and the WillVersion
+// immutability trigger.
+
+enum WillStatus {
+  DRAFT
+  GENERATED
+  EXECUTED
+  SUPERSEDED
+  DISCARDED
+}
+
+model Will {
+  id               String        @id @default(cuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Per-user number shown as "Version N".
+  version          Int
+  status           WillStatus    @default(DRAFT)
+  /// Optimistic lock: every save must name the revision it read.
+  revision         Int           @default(0)
+  /// Wizard step to resume at (2-8; step 1 is the overview).
+  currentStep      Int           @default(2)
+  payload          Bytes
+  payloadSchemaVer Int           @default(1)
+  supersededById   String?
+  generatedAt      DateTime?     @db.Timestamptz(3)
+  executedAt       DateTime?     @db.Date
+  nextReviewAt     DateTime?     @db.Date
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
+  versions         WillVersion[]
+
+  @@unique([userId, version])
+  @@index([userId, status])
+}
+
+/// The generated, immutable copy of a will. UPDATE is refused by a trigger;
+/// DELETE only under system context (account purge).
+model WillVersion {
+  id              String   @id @default(cuid())
+  willId          String
+  will            Will     @relation(fields: [willId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versionNo       Int
+  regime          String
+  templateId      String
+  templateVersion Int
+  rulesetVersion  Int
+  /// sha256 of the canonical payload JSON.
+  inputHash       String
+  /// sha256 of renderWillText(blocks).
+  textHash        String
+  /// Canonical payload sealed under slot "willversion:<id>".
+  snapshotSealed  Bytes
+  /// Document (ownerType WILL) holding the PDF.
+  documentId      String
+  pdfSha256       String
+  /// Rule ids and severities only - never messages or names.
+  findingsJson    Json
+  generatedOn     DateTime @db.Date
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([willId, versionNo])
+  @@index([userId, createdAt])
 }

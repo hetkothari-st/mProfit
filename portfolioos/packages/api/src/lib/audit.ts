@@ -40,7 +40,12 @@ export type AuditAction =
   | 'loan_rate_override_cleared'
   | 'loan_rate_suspect_approved'
   | 'loan_rate_suspect_rejected'
-  | 'loan_rate_run_now';
+  | 'loan_rate_run_now'
+  | 'will_created'
+  | 'will_viewed'
+  | 'will_generated'
+  | 'will_downloaded'
+  | 'will_discarded';
 
 export interface AuditInput {
   userId?: string | null;

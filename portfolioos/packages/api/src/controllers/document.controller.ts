@@ -55,6 +55,9 @@ const uploadBodySchema = z.object({
 export async function upload(req: Request, res: Response) {
   if (!req.file) throw new BadRequestError('file required');
   const body = uploadBodySchema.parse(req.body);
+  if (body.ownerType === 'WILL') {
+    throw new BadRequestError('Will documents are created by Will Maker', { field: 'ownerType' });
+  }
 
   // Magic-byte sniff guards against extension-spoofed uploads (a .pdf
   // file that's actually an executable). Vault is storage-only — we

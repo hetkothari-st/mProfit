@@ -46,6 +46,9 @@ export const FEATURE_MIN_TIER = {
   // alone can never expose advice — that separation is the whole point of
   // having two gates.
   MF_ANALYTICS: 'PLUS',
+  // Will Maker: a fixed-template will under Indian law from the user's own
+  // data (docs/superpowers/specs/2026-10-12-will-maker-design.md).
+  WILL_MAKER: 'PLUS',
   ACCOUNTING_MODULE: 'PRO_ADVISOR', // Trial Balance, P&L, Balance Sheet, Chart of Accounts, Tally export
   // The CA workspace: hold client records, keep their books, run their
   // reports. Sits at PRO_ADVISOR beside ACCOUNTING_MODULE because a CA

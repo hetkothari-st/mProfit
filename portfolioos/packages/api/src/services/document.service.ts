@@ -96,6 +96,14 @@ async function assertOwnerAccessible(
       if (!row) throw new ForbiddenError('Loan not owned by user');
       return;
     }
+    case 'WILL': {
+      const row = await prisma.will.findFirst({
+        where: { id: ownerId, userId },
+        select: { id: true },
+      });
+      if (!row) throw new ForbiddenError('Will not owned by user');
+      return;
+    }
     case 'OTHER':
       // free-form; userId on Document is the only guard
       return;
@@ -115,6 +123,18 @@ function toDocumentDTO(d: Document) {
     createdAt: d.createdAt.toISOString(),
     updatedAt: d.updatedAt.toISOString(),
   };
+}
+
+/**
+ * A will PDF is the record of what was generated (its sha256 is on the
+ * WillVersion row). The vault may list and download it, but renaming,
+ * replacing or deleting it there would break that record. Only Will Maker
+ * removes one, and only to undo a generate that failed half-way.
+ */
+function assertNotWillDocument(doc: Document): void {
+  if (doc.ownerType === 'WILL') {
+    throw new ForbiddenError('Will documents are managed by Will Maker');
+  }
 }
 
 export async function createDocument(input: CreateDocumentInput) {
@@ -174,7 +194,8 @@ export async function updateDocumentMeta(
   id: string,
   patch: { fileName?: string; category?: string | null },
 ) {
-  await loadOwnedDocument(userId, id);
+  const doc = await loadOwnedDocument(userId, id);
+  assertNotWillDocument(doc);
   const data: Prisma.DocumentUpdateInput = {};
   if (patch.fileName !== undefined) data.fileName = patch.fileName.trim().slice(0, 200);
   if (patch.category !== undefined) data.category = patch.category;
@@ -189,6 +210,7 @@ export async function replaceDocumentBytes(
   mimeType?: string,
 ) {
   const doc = await loadOwnedDocument(userId, id);
+  assertNotWillDocument(doc);
   // Overwrite same storageKey so we don't leak a stale file
   await saveBuffer(userId, doc.storageKey, buffer);
   const sz = await fileSize(userId, doc.storageKey);
@@ -203,8 +225,13 @@ export async function replaceDocumentBytes(
   return toDocumentDTO(updated);
 }
 
-export async function deleteDocument(userId: string, id: string): Promise<void> {
+export async function deleteDocument(
+  userId: string,
+  id: string,
+  opts: { allowWill?: boolean } = {},
+): Promise<void> {
   const doc = await loadOwnedDocument(userId, id);
+  if (!opts.allowWill) assertNotWillDocument(doc);
   await prisma.document.delete({ where: { id } });
   await deleteFile(userId, doc.storageKey);
 }

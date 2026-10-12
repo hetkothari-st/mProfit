@@ -327,6 +327,11 @@ export async function purgeUser(userId: string): Promise<void> {
             NOT: { members: { some: { userId: { not: null, notIn: [id] } } } },
           },
         });
+        // Will Maker: versions first (they reference the will). Both would
+        // cascade from User, but the purge names every user table it relies
+        // on. Will PDFs are Document rows and cascade with the user.
+        await tx.willVersion.deleteMany({ where: { userId: id } });
+        await tx.will.deleteMany({ where: { userId: id } });
       }
       // Shadow clients first: their Client rows reference the CA.
       for (const id of userIds.slice(1)) await tx.user.delete({ where: { id } });
