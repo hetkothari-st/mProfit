@@ -26,7 +26,7 @@ export const SUMMARY_V1 = {
     }
     for (const x of gifts.specific) {
       const share = new Decimal(x.pct).equals(100) ? '' : ` (${pctText(x.pct)})`;
-      out.push({ t: 'para', text: `${itemText(x.item)} goes to ${personName(x.who)}${share}.` });
+      out.push({ t: 'para', text: `${itemText(x.item)} will go to ${personName(x.who)}${share}.` });
     }
     for (const x of gifts.fixed) out.push({ t: 'para', text: `${personName(x.who)} receives ${inrFigure(x.amount)}.` });
     if (gifts.residuary.length) {

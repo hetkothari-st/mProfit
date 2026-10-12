@@ -122,11 +122,20 @@ describe('optional clauses and determinism', () => {
   });
 });
 
+describe('debts clause', () => {
+  it('points at the Schedule without dating the liabilities to the will', () => {
+    const text = docText(validWillPayload());
+    expect(text).toContain('My known liabilities are listed in the Schedule.');
+    expect(text).not.toContain('on the date of this Will');
+  });
+});
+
 describe('summary v1', () => {
   it('describes the same choices in plain words', () => {
     const text = renderWillText(renderWillSummary(validWillPayload(), ctx));
     expect(text).toContain('Sunita Verma will carry out your will as executor, with Arjun Verma as back-up.');
-    expect(text).toContain('Equity - My Portfolio goes to Arjun Verma.');
+    expect(text).toContain('Equity - My Portfolio will go to Arjun Verma.');
+    expect(text).not.toContain(' goes to ');
     expect(text).toContain('Pune Animal Trust receives ₹50,000.');
     expect(text).toContain('Everything else is shared: Arjun Verma 40%, Sunita Verma 60%.');
     expect(text).toContain('If Arjun Verma dies before you or within thirty days of you, their gifts go to Sunita Verma.');

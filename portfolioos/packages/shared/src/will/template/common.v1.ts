@@ -260,7 +260,7 @@ export function willDocumentBlocks(m: WillPayload, ctx: WillRenderContext, stand
 
   clause('Debts and expenses', [
     'My Executor shall pay my debts, funeral and testamentary expenses, and any taxes due from my estate out of my residuary estate, before any gift in this Will is paid or transferred and before the residue is divided.',
-    ...(liabilities.length ? ['My known liabilities on the date of this Will are listed in the Schedule.'] : []),
+    ...(liabilities.length ? ['My known liabilities are listed in the Schedule.'] : []),
   ]);
 
   const hasJoint = live.some((i) => i.ownership.type === 'JOINT');
