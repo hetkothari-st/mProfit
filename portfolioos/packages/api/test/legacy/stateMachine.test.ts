@@ -4,7 +4,7 @@ import { planSteps, nextEventText, type PlanClock } from '../../src/services/leg
 const D = (s: string) => new Date(`${s}T04:30:00Z`); // 10:00 IST
 const base: PlanClock = {
   status: 'ARMED', triggerMode: 'INACTIVITY', inactivityDays: 90, scheduledFor: null, pausedUntil: null,
-  stageEnteredAt: null, clockResetAt: D('2027-01-01'), lastActiveAt: D('2027-01-01'),
+  stageEnteredAt: null, clockResetAt: D('2027-01-01'), lastActiveAt: D('2027-01-01'), testMode: false,
 };
 
 describe('planSteps', () => {

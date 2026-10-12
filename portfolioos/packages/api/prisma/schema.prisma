@@ -5389,6 +5389,8 @@ model LegacyPlan {
   activatedAt    DateTime?
   releasedAt     DateTime?
   letterEnc      String?
+  /// Admin-only test mode: 1-minute inactivity and 1-minute stages.
+  testMode       Boolean         @default(false)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   nominees       LegacyNominee[]

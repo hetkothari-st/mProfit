@@ -10,8 +10,10 @@ export const legacySettingsSchema = z.object({
     .max(LEGACY_MAX_INACTIVITY_DAYS),
   scheduledFor: isoDate.nullable(),
   letter: z.string().max(20_000).nullable(),
+  /** Admin-only (plan.service enforces). */
+  testMode: z.boolean().optional().default(false),
 });
-export type LegacySettingsInput = z.infer<typeof legacySettingsSchema>;
+export type LegacySettingsInput = z.input<typeof legacySettingsSchema>;
 
 export const legacyNomineeSchema = z.object({
   name: z.string().trim().min(1).max(120),

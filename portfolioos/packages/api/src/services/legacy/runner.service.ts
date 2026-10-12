@@ -139,10 +139,10 @@ export async function applyStep(planId: string, step: Step, now: Date): Promise<
 }
 
 export async function runLegacyTick(
-  now: Date = new Date(), send?: typeof sendEmail,
+  now: Date = new Date(), send?: typeof sendEmail, opts: { testOnly?: boolean } = {},
 ): Promise<{ plans: number; steps: number; sent: number; failed: number }> {
   const plans = await runAsSystem(() => prisma.legacyPlan.findMany({
-    where: { status: { notIn: ['DRAFT', 'RELEASED'] } },
+    where: { status: { notIn: ['DRAFT', 'RELEASED'] }, ...(opts.testOnly ? { testMode: true } : {}) },
     include: { user: { select: { lastActiveAt: true } } },
   }));
   let steps = 0;
@@ -150,7 +150,7 @@ export async function runLegacyTick(
     const clock: PlanClock = {
       status: p.status, triggerMode: p.triggerMode, inactivityDays: p.inactivityDays, scheduledFor: p.scheduledFor,
       pausedUntil: p.pausedUntil, stageEnteredAt: p.stageEnteredAt, clockResetAt: p.clockResetAt,
-      lastActiveAt: p.user.lastActiveAt,
+      lastActiveAt: p.user.lastActiveAt, testMode: p.testMode,
     };
     for (const step of planSteps(clock, now)) {
       try {
