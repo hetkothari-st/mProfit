@@ -15,9 +15,9 @@ const WARNING_TEXT: Record<EmiWarning, string> = {
 
 function Tile({ label, value, testId, strong }: { label: string; value: string; testId?: string; strong?: boolean }) {
   return (
-    <div className="rounded-lg border p-3">
+    <div className="min-w-0 rounded-lg border p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div data-testid={testId} className={strong ? 'text-2xl font-semibold tabular-nums' : 'text-base font-medium tabular-nums'}>{value}</div>
+      <div data-testid={testId} className={strong ? 'break-words text-xl font-semibold tabular-nums sm:text-2xl' : 'break-words text-base font-medium tabular-nums'}>{value}</div>
     </div>
   );
 }

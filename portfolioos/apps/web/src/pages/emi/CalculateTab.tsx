@@ -19,13 +19,28 @@ export function CalculateTab({ state, onChange, onOutcome }: { state: CalcState;
   const [advanced, setAdvanced] = useState(state.prepayments.length > 0 || state.rateChanges.length > 0 || state.feesOn || state.taxOn);
   const debounced = useDebounced(state, 150);
   const outcome = useMemo(() => computeCalc(debounced), [debounced]);
-  // Same inputs without prepayments/rate changes, for "interest saved".
+  // Same inputs without prepayments (rate changes kept), for "interest saved".
   const baseline = useMemo(
-    () => (debounced.prepayments.length > 0 ? computeCalc({ ...debounced, prepayments: [], rateChanges: [] }) : null),
+    () => (debounced.prepayments.length > 0 ? computeCalc({ ...debounced, prepayments: [] }) : null),
     [debounced],
   );
   useEffect(() => { onOutcome?.(outcome); }, [outcome, onOutcome]);
   const errors = outcome.ok ? [] : outcome.errors;
+  const ADVANCED_PREFIXES = ['prepayments.', 'rateChanges.', 'fees.', 'tax.'];
+  const needsAdvanced = errors.some((e) => ADVANCED_PREFIXES.some((p) => e.field.startsWith(p)));
+  useEffect(() => { if (needsAdvanced) setAdvanced(true); }, [needsAdvanced]);
+  const isShown = (field: string): boolean => {
+    if (field === 'principal') return state.mode !== 'MAX_LOAN';
+    if (field === 'emi') return state.mode !== 'EMI';
+    if (field === 'tenureMonths') return state.mode !== 'TENURE';
+    if (field === 'annualRatePct' || field === 'firstEmiDate') return true;
+    return advanced && ADVANCED_PREFIXES.some((p) => field.startsWith(p));
+  };
+  const hiddenMessages = errors.filter((e) => !isShown(e.field)).map((e) => {
+    if (e.field === 'principal' && state.mode === 'MAX_LOAN') return `The EMI gives a loan above the limit: ${e.message}`;
+    if (e.field === 'tenureMonths' && state.mode === 'TENURE') return `That EMI gives a tenure outside the allowed range: ${e.message}`;
+    return e.message;
+  });
   const set = <K extends keyof CalcState>(k: K, v: CalcState[K]) => onChange({ ...state, [k]: v });
 
   return (
@@ -84,7 +99,7 @@ export function CalculateTab({ state, onChange, onOutcome }: { state: CalcState;
             <ScheduleTable summary={outcome.summary} />
           </>
         ) : (
-          <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Fix the highlighted fields to see your EMI.</CardContent></Card>
+          <Card><CardContent className="py-10 text-center text-sm text-muted-foreground"><p>Fix the highlighted fields to see your EMI.</p>{hiddenMessages.map((m) => <p key={m} className="mt-2 text-destructive">{m}</p>)}</CardContent></Card>
         )}
       </div>
     </div>

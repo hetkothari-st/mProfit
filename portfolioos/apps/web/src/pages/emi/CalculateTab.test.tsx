@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { useState } from 'react';
 import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
 import { CalculateTab } from './CalculateTab';
-import { defaultCalcState, type CalcState } from './emiState';
+import { computeCalc, defaultCalcState, money, type CalcState } from './emiState';
 
 vi.mock('recharts', async (orig) => {
   const actual = await orig<typeof import('recharts')>();
@@ -56,5 +56,42 @@ describe('CalculateTab', () => {
     const fy = await screen.findByRole('button', { name: /FY 2026-27/ });
     fireEvent.click(fy);
     expect(await screen.findByText('05/11/2026')).toBeTruthy();
+  });
+});
+
+describe('CalculateTab error surfacing and baseline', () => {
+  it('shows a visible message for a hidden tenure error in TENURE mode', async () => {
+    render(<Harness initial={{ mode: 'TENURE', emi: '7,200' }} />);
+    await waitFor(() => expect(screen.getByText(/tenure outside the allowed range/i)).toBeTruthy());
+  });
+
+  it('opens Advanced and shows a prepayment error raised while collapsed', async () => {
+    function Injector() {
+      const [s, setS] = useState<CalcState>({ ...defaultCalcState(new Date(2026, 9, 12)), principal: '10,00,000', ratePct: '8.5', tenure: '20' });
+      return (
+        <>
+          <button type="button" onClick={() => setS({ ...s, prepayments: [{ id: 'x1', month: '0', amount: '1000', recurrence: 'ONCE', mode: 'REDUCE_TENURE' }] })}>inject</button>
+          <CalculateTab state={s} onChange={setS} />
+        </>
+      );
+    }
+    render(<Injector />);
+    expect(screen.queryByTestId('prepayment-0')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'inject' }));
+    await waitFor(() => expect(screen.getByTestId('prepayment-0')).toBeTruthy());
+    const row = screen.getByTestId('prepayment-0');
+    expect(row.querySelector('p.text-destructive')).not.toBeNull();
+  });
+
+  it('interest saved is measured against the baseline that keeps rate changes', async () => {
+    const base = { ...defaultCalcState(new Date(2026, 9, 12)), principal: '10,00,000', ratePct: '8.5', tenure: '20' };
+    const rateChanges = [{ id: 'r1', fromMonth: '13', ratePct: '10', mode: 'REDUCE_TENURE' as const }];
+    const prepayments = [{ id: 'p1', month: '24', amount: '1,00,000', recurrence: 'ONCE' as const, mode: 'REDUCE_TENURE' as const }];
+    const withBoth = computeCalc({ ...base, rateChanges, prepayments });
+    const rcOnly = computeCalc({ ...base, rateChanges });
+    if (!withBoth.ok || !rcOnly.ok) throw new Error('fixture invalid');
+    const expected = money(rcOnly.summary.totalInterest.minus(withBoth.summary.totalInterest));
+    render(<Harness initial={{ rateChanges, prepayments }} />);
+    await waitFor(() => expect(screen.getByTestId('interest-saved').textContent).toBe(expected));
   });
 });
