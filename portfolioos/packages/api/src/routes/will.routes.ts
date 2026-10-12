@@ -23,7 +23,7 @@ export function rejectActAs(req: Request, _res: Response, next: NextFunction): v
 export const WILL_MAX_BODY_BYTES = 512 * 1024;
 
 export function limitWillBody(req: Request, _res: Response, next: NextFunction): void {
-  const length = Number(req.headers['content-length'] ?? 0);
+  const length = Number.parseInt(req.headers['content-length'] ?? '0', 10);
   if ((req.method === 'PUT' || req.method === 'POST') && length > WILL_MAX_BODY_BYTES) {
     next(new AppError('This request is too large.', 413, 'WILL_BODY_TOO_LARGE'));
     return;
