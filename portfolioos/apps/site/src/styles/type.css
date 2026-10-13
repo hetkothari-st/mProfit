@@ -1,0 +1,41 @@
+/* Headline face: Bebas Neue, a tall condensed all-caps display font, on
+   every major heading and big figure. Being condensed, it needs larger
+   sizes and tighter leading than the serif it replaces. Body copy stays in
+   Schibsted Grotesk; Young Serif remains for small subheads and the wordmark. */
+
+:root { --f-head: "Bebas Neue", "Arial Narrow", sans-serif; }
+
+h1, h2,
+.display, .h2, .h3,
+.aud h3, .chap h3, .folio-card h3, .plans thead h3,
+.scatter-foot strong, .steps li::before, .steps li h3,
+.plans .price, .plat-list li strong, .seal .back-text,
+.ruled h4, .feat-block .h2, .sent-note .h3 {
+  font-family: var(--f-head);
+  font-weight: 400;
+  letter-spacing: .01em;
+}
+
+.display { font-size: clamp(56px, 7.4vw, 112px); line-height: .9; }
+.h2 { font-size: clamp(46px, 6vw, 86px); line-height: .92; }
+.h3 { font-size: clamp(32px, 3vw, 42px); line-height: 1; }
+.feat-block .h2 { font-size: clamp(42px, 4.8vw, 66px); }
+
+.chap h3 { font-size: clamp(40px, 4.4vw, 60px); line-height: .95; }
+.aud h3 { font-size: 44px; line-height: 1; }
+.folio-card h3 { font-size: 56px; line-height: 1; }
+.plans thead h3 { font-size: 36px; line-height: 1; }
+.plans .price { font-size: 32px; line-height: 1.05; }
+.plat-list li strong { font-size: 30px; line-height: 1; }
+.scatter-foot strong { font-size: 64px; line-height: 1; }
+.steps li::before { font-size: 52px; }
+.steps li h3 { font-size: 30px; line-height: 1.05; }
+.seal .back-text { font-size: 38px; line-height: 1; }
+.ruled h4 { font-size: 34px; line-height: 1; }
+
+.cta .h2 { font-size: clamp(54px, 7vw, 104px); }
+
+@media (max-width: 560px) {
+  .ruled h4 { font-size: 24px; }
+  .folio-card h3 { font-size: 46px; }
+}

@@ -1,3 +1,4 @@
+import '@fontsource/bebas-neue/400.css';
 import '@fontsource/young-serif/400.css';
 import '@fontsource/schibsted-grotesk/400.css';
 import '@fontsource/schibsted-grotesk/400-italic.css';
@@ -13,3 +14,4 @@ import './site.css';
 import './screens.css';
 import './ledger.css';
 import './react.css';
+import './type.css';
