@@ -13,7 +13,7 @@
  *   npx tsx scripts/willTemplateLock.ts --rebless common.v1.ts --rebless will/ast.ts
  */
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -98,9 +98,13 @@ export function parseRebless(argv: readonly string[]): string[] {
 const isMain = !!process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 if (isMain) {
   const lockPath = join(WILL_TEMPLATE_DIR, 'LOCK.json');
-  const existing = existsSync(lockPath)
-    ? (JSON.parse(readFileSync(lockPath, 'utf8')) as Record<string, string>)
-    : {};
+  let existing: Record<string, string> = {};
+  try {
+    existing = JSON.parse(readFileSync(lockPath, 'utf8')) as Record<string, string>;
+  } catch (err) {
+    // No lock yet is the first run; anything else (bad JSON, permissions) must stop the script.
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
   const { lock, errors } = planLock(templateHashes(), existing, parseRebless(process.argv.slice(2)));
   if (errors.length) {
     process.stderr.write(`LOCK.json not written:\n${errors.map((e) => `  ${e}`).join('\n')}\n`);
