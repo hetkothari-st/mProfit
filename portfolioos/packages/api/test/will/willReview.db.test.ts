@@ -7,7 +7,8 @@ import {
   dueWillReviewUserIds, markWillReviewed, syncWillReviewAlerts, willReviewKey,
 } from '../../src/services/will/willReview.service.js';
 import { runWillReviewChecks } from '../../src/jobs/willReviewJob.js';
-import { makeGeneratedWill, markExecuted, wipeWills } from './willExecuteFixtures.js';
+import { recordWillExecution } from '../../src/services/will/willExecute.service.js';
+import { FAKE_PDF, makeGeneratedWill, markExecuted, wipeWills } from './willExecuteFixtures.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';
 if (!/localhost|127\.0\.0\.1/.test(DB_URL)) throw new Error('Refusing to run: DATABASE_URL must point at a local database');
@@ -21,15 +22,19 @@ let a: TestScope;
 let b: TestScope;
 let c: TestScope;
 let d: TestScope;
+let e: TestScope;
+let f: TestScope;
 
 beforeAll(async () => {
+  e = await createTestScope('will-review-e');
+  f = await createTestScope('will-review-f');
   a = await createTestScope('will-review-a');
   b = await createTestScope('will-review-b');
   c = await createTestScope('will-review-c');
   d = await createTestScope('will-review-d');
 });
 afterAll(async () => {
-  for (const s of [a, b, c, d]) {
+  for (const s of [a, b, c, d, e, f]) {
     await wipeWills(s.userId);
     await s.cleanup();
   }
@@ -126,5 +131,31 @@ describe('the daily job', () => {
     const [x, y] = await Promise.all([runWillReviewChecks(opts), runWillReviewChecks(opts)]);
     expect([x, y].filter((r) => r === null)).toHaveLength(1);
     expect(await reviewAlerts(c.userId)).toHaveLength(1);
+  });
+});
+
+const signedLater = { today: () => '2026-11-02' };
+const witnesses = (w2: string) => ['Asha Rao', w2];
+const dueNow = (willId: string, on = '2026-10-01') =>
+  runAsSystem(() => prisma.will.update({ where: { id: willId }, data: { nextReviewAt: new Date(`${on}T00:00:00Z`) } }));
+const reviewDay = async (willId: string) => (await willRow(willId)).nextReviewAt?.toISOString().slice(0, 10);
+
+describe('re-recording a signed will', () => {
+  let willId = '';
+
+  it('a witness name correction keeps the review date and the open reminder', async () => {
+    ({ willId } = await makeGeneratedWill(e));
+    await e.runAs(() => recordWillExecution(e.userId, willId, { fields: { executedOn: '2026-10-12', witnesses: witnesses('Vikram Shah') }, file: { buffer: FAKE_PDF } }, signedLater));
+    await dueNow(willId);
+    expect(await e.runAs(() => syncWillReviewAlerts(e.userId, TODAY))).toEqual({ created: 1, resolved: 0 });
+    await e.runAs(() => recordWillExecution(e.userId, willId, { fields: { executedOn: '2026-10-12', witnesses: witnesses('Vikram K Shah') }, file: null }, signedLater));
+    expect(await reviewDay(willId)).toBe('2026-10-01');
+    expect((await reviewAlerts(e.userId)).filter((x) => x.isActive)).toHaveLength(1);
+  });
+
+  it('a new signing date sets a new review date and closes the open reminder', async () => {
+    await e.runAs(() => recordWillExecution(e.userId, willId, { fields: { executedOn: '2026-10-13', witnesses: witnesses('Vikram K Shah') }, file: null }, signedLater));
+    expect(await reviewDay(willId)).toBe('2028-10-13');
+    expect((await reviewAlerts(e.userId)).filter((x) => x.isActive)).toHaveLength(0);
   });
 });

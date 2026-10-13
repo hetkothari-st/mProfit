@@ -145,6 +145,9 @@ export async function recordWillExecution(
   const record: WillExecutionRecord = { executedOn, witnesses, recordedAt: new Date().toISOString() };
   const sealed = await sealForUser(userId, execSlot(will.id), Buffer.from(JSON.stringify(record), 'utf8'));
   const previousDocId = will.executedDocumentId;
+  // Correcting witness names (same signing date) keeps the review date and any reminder; only a new date resets them.
+  const sameSigningDate =
+    will.status === 'EXECUTED' && will.executedAt !== null && will.nextReviewAt !== null && isoDay(will.executedAt) === executedOn;
   const newDoc =
     input.file && mime
       ? await createDocument({
@@ -161,7 +164,7 @@ export async function recordWillExecution(
         data: {
           status: 'EXECUTED',
           executedAt: dayOf(executedOn),
-          nextReviewAt: dayOf(willNextReviewDate(executedOn)),
+          ...(sameSigningDate ? {} : { nextReviewAt: dayOf(willNextReviewDate(executedOn)) }),
           executionSealed: sealed,
           executedDocumentId: newDoc?.id ?? previousDocId,
         },
@@ -184,11 +187,13 @@ export async function recordWillExecution(
           });
         }
       }
-      // A new signing date means a new review date: close any reminder for the old one.
-      await tx.alert.updateMany({
-        where: { userId, type: 'WILL_REVIEW_DUE', isActive: true, metadata: { path: ['willId'], equals: will.id } },
-        data: { isActive: false },
-      });
+      if (!sameSigningDate) {
+        // A new signing date means a new review date: close any reminder for the old one.
+        await tx.alert.updateMany({
+          where: { userId, type: 'WILL_REVIEW_DUE', isActive: true, metadata: { path: ['willId'], equals: will.id } },
+          data: { isActive: false },
+        });
+      }
     });
   } catch (err) {
     if (newDoc) await removeDocument(userId, newDoc.id, 'will.execute.new_copy_cleanup_failed');
