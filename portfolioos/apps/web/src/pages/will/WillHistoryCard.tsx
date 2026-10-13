@@ -18,19 +18,22 @@ export function historyLine(h: WillHistoryEntryWire): string {
 
 export function WillHistoryCard({
   history,
-  downloading,
+  downloadingId,
   onDownload,
 }: {
   history: WillHistoryEntryWire[];
-  downloading: boolean;
-  onDownload: (h: WillHistoryEntryWire) => void;
+  /** Version id being fetched now, or null. Every PDF button waits; only that row says so. */
+  downloadingId: string | null;
+  onDownload: (h: WillHistoryEntryWire & { versionId: string }) => void;
 }) {
   if (history.length === 0) return null;
   return (
     <Card className="space-y-2 p-4 sm:p-5" data-testid="will-history">
       <h2 className="text-base font-semibold text-foreground">History</h2>
       <ul className="divide-y divide-border/60">
-        {history.map((h) => (
+        {history.map((h) => {
+          const versionId = h.versionId;
+          return (
           <li key={h.willId} className="min-w-0 space-y-1.5 py-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium text-foreground">Version {h.version}</span>
@@ -39,15 +42,15 @@ export function WillHistoryCard({
             <p className="break-words text-xs text-muted-foreground">{historyLine(h)}</p>
             {(h.versionId || h.hasSignedCopy) && (
               <div className="flex flex-wrap gap-2">
-                {h.versionId && (
+                {versionId && (
                   <Button
                     size="sm"
                     variant="ghost"
                     aria-label={`Download version ${h.version} PDF`}
-                    disabled={downloading}
-                    onClick={() => onDownload(h)}
+                    disabled={downloadingId !== null}
+                    onClick={() => onDownload({ ...h, versionId })}
                   >
-                    <Download className="mr-1 h-4 w-4" />PDF
+                    <Download className="mr-1 h-4 w-4" />{downloadingId === versionId ? 'Downloading...' : 'PDF'}
                   </Button>
                 )}
                 {h.hasSignedCopy && (
@@ -60,7 +63,8 @@ export function WillHistoryCard({
               </div>
             )}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </Card>
   );

@@ -117,6 +117,8 @@ describe('WillOverviewPage', () => {
     await waitFor(() => expect(api.downloadPdf).toHaveBeenCalledWith('v1', 1));
     await waitFor(() => expect(two.disabled).toBe(true));
     expect(one.disabled).toBe(true);
+    expect(one.textContent).toMatch(/downloading/i);
+    expect(two.textContent).not.toMatch(/downloading/i);
   });
 
   it('shows the nominee-only amount like the tiles, and drops the time estimate once a will is generated', async () => {

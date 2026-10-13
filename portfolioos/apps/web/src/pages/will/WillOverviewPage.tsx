@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Clock, Download, Info, PenLine, ScrollText } from 'lucide-react';
-import { formatDateIST, formatDateOnly, formatINR, WILL_DISCLAIMER, type WillHistoryEntryWire, type WillOverviewWire, type WillVersionWire } from '@everypaisa/shared';
+import { formatDateIST, formatDateOnly, formatINR, WILL_DISCLAIMER, type WillOverviewWire, type WillVersionWire } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -80,7 +80,7 @@ function OverviewBody() {
     onError: (err) => toast.error(apiErrorMessage(err, "Couldn't discard the draft")),
   });
   const download = useMutation({
-    mutationFn: (v: WillVersionWire) => willApi.downloadPdf(v.id, v.versionNo),
+    mutationFn: (v: { versionId: string; versionNo: number }) => willApi.downloadPdf(v.versionId, v.versionNo),
     onError: (err) => toast.error(apiErrorMessage(err, "Couldn't download the PDF")),
   });
   const changed = useMutation({
@@ -105,10 +105,6 @@ function OverviewBody() {
       void qc.invalidateQueries({ queryKey: ['will'] });
     },
     onError: (err) => toast.error(apiErrorMessage(err, "Couldn't save your review")),
-  });
-  const downloadEntry = useMutation({
-    mutationFn: (h: WillHistoryEntryWire) => willApi.downloadPdf(h.versionId ?? '', h.version),
-    onError: (err) => toast.error(apiErrorMessage(err, "Couldn't download the PDF")),
   });
 
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Loading...</p>;
@@ -216,7 +212,7 @@ function OverviewBody() {
           </p>
         </Card>
 
-        <WillHistoryCard history={o.history} downloading={downloadEntry.isPending} onDownload={(h) => downloadEntry.mutate(h)} />
+        <WillHistoryCard history={o.history} downloadingId={download.isPending ? download.variables?.versionId ?? null : null} onDownload={(h) => download.mutate({ versionId: h.versionId, versionNo: h.version })} />
       </div>
 
       <div className="min-w-0 space-y-4">
@@ -238,12 +234,12 @@ function OverviewBody() {
 /** One download at a time; the row being fetched says so. */
 function DownloadButton({ version, download, variant }: {
   version: WillVersionWire;
-  download: UseMutationResult<void, Error, WillVersionWire>;
+  download: UseMutationResult<void, Error, { versionId: string; versionNo: number }>;
   variant: 'outline' | 'ghost';
 }) {
-  const mine = download.isPending && download.variables?.id === version.id;
+  const mine = download.isPending && download.variables?.versionId === version.id;
   return (
-    <Button size="sm" variant={variant} disabled={download.isPending} onClick={() => download.mutate(version)}>
+    <Button size="sm" variant={variant} disabled={download.isPending} onClick={() => download.mutate({ versionId: version.id, versionNo: version.versionNo })}>
       <Download className="mr-1 h-4 w-4" />{mine ? 'Downloading...' : 'Download PDF'}
     </Button>
   );
