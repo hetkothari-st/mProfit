@@ -116,17 +116,30 @@ export async function saveSettings(userId: string, raw: LegacySettingsInput, opt
   await writeAuditLog({ userId, action: 'legacy_changed', resource: `LegacyPlan:${plan.id}`, metadata: { what: 'settings' } });
 }
 
-async function validateNominee(userId: string, planId: string, input: LegacyNomineeInput, selfId?: string): Promise<void> {
+/**
+ * The documents a nominee keeps. An id that no longer exists (a file deleted, a
+ * will's signed copy replaced) is dropped so the owner can still save; an id
+ * that belongs to another user is refused.
+ */
+async function keptDocumentIds(userId: string, ids: string[]): Promise<string[]> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return [];
+  const found = await runAsSystem(() =>
+    prisma.document.findMany({ where: { id: { in: unique } }, select: { id: true, userId: true } }),
+  );
+  if (found.some((d) => d.userId !== userId)) throw new BadRequestError('One of the documents was not found.');
+  const existing = new Set(found.map((d) => d.id));
+  return unique.filter((id) => existing.has(id));
+}
+
+/** Checks the nominee and returns the document ids to store. */
+async function validateNominee(userId: string, planId: string, input: LegacyNomineeInput, selfId?: string): Promise<string[]> {
   const others = await prisma.legacyNominee.findMany({ where: { planId, ...(selfId ? { id: { not: selfId } } : {}) } });
   if (!selfId && others.length >= MAX_NOMINEES) throw new BadRequestError(`You can add up to ${MAX_NOMINEES} nominees.`);
   if (others.some((n) => decryptSecret(n.emailEnc).toLowerCase() === input.email)) {
     throw new BadRequestError('This email is already a nominee.');
   }
-  const docIds = [...new Set(input.documentIds)];
-  if (docIds.length > 0) {
-    const owned = await prisma.document.count({ where: { userId, id: { in: docIds } } });
-    if (owned !== docIds.length) throw new BadRequestError('One of the documents was not found.');
-  }
+  return keptDocumentIds(userId, input.documentIds);
 }
 
 /** Invite a nominee on a live plan; on an already-released plan, also hand them access. */
@@ -149,14 +162,14 @@ async function inviteIfLive(planId: string, nomineeId: string): Promise<void> {
 export async function addNominee(userId: string, raw: LegacyNomineeInput): Promise<LegacyNomineeDTO> {
   const input = legacyNomineeSchema.parse(raw);
   const plan = await ensurePlan(userId);
-  await validateNominee(userId, plan.id, input);
+  const documentIds = await validateNominee(userId, plan.id, input);
   if (input.isVerifier) await prisma.legacyNominee.updateMany({ where: { planId: plan.id }, data: { isVerifier: false } });
   const n = await prisma.legacyNominee.create({
     data: {
       planId: plan.id, userId,
       nameEnc: encryptSecret(input.name), emailEnc: encryptSecret(input.email),
       relationship: input.relationship, priority: input.priority, isVerifier: input.isVerifier,
-      categories: input.categories, documentIds: [...new Set(input.documentIds)], showAmounts: input.showAmounts,
+      categories: input.categories, documentIds, showAmounts: input.showAmounts,
     },
   });
   await inviteIfLive(plan.id, n.id);
@@ -169,7 +182,7 @@ export async function updateNominee(userId: string, nomineeId: string, raw: Lega
   const plan = await ensurePlan(userId);
   const existing = await prisma.legacyNominee.findFirst({ where: { id: nomineeId, planId: plan.id } });
   if (!existing) throw new NotFoundError('Nominee not found');
-  await validateNominee(userId, plan.id, input, nomineeId);
+  const documentIds = await validateNominee(userId, plan.id, input, nomineeId);
   if (input.isVerifier) {
     await prisma.legacyNominee.updateMany({ where: { planId: plan.id, id: { not: nomineeId } }, data: { isVerifier: false } });
   }
@@ -179,7 +192,7 @@ export async function updateNominee(userId: string, nomineeId: string, raw: Lega
     data: {
       nameEnc: encryptSecret(input.name), emailEnc: encryptSecret(input.email), relationship: input.relationship,
       priority: input.priority, isVerifier: input.isVerifier, categories: input.categories,
-      documentIds: [...new Set(input.documentIds)], showAmounts: input.showAmounts,
+      documentIds, showAmounts: input.showAmounts,
       ...(emailChanged ? { acknowledgedAt: null } : {}),
     },
   });

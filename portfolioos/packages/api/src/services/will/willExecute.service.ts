@@ -171,6 +171,19 @@ export async function recordWillExecution(
           reason: 'WILL_EXECUTION_CONFLICT',
         });
       }
+      if (newDoc && previousDocId) {
+        // Succession nominees share files by id: hand them the new copy, not a deleted one.
+        const holders = await tx.legacyNominee.findMany({
+          where: { userId, documentIds: { has: previousDocId } },
+          select: { id: true, documentIds: true },
+        });
+        for (const n of holders) {
+          await tx.legacyNominee.update({
+            where: { id: n.id },
+            data: { documentIds: [...new Set(n.documentIds.map((d) => (d === previousDocId ? newDoc.id : d)))] },
+          });
+        }
+      }
       // A new signing date means a new review date: close any reminder for the old one.
       await tx.alert.updateMany({
         where: { userId, type: 'WILL_REVIEW_DUE', isActive: true, metadata: { path: ['willId'], equals: will.id } },
