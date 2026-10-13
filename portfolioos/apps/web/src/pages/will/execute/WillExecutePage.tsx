@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { apiErrorMessage } from '@/api/client';
-import { isWillNotExecutable, willApi, type WillSignedCopyInput } from '@/api/will.api';
+import { isWillNotExecutable, willApi, willExecutionIssues, type WillSignedCopyInput } from '@/api/will.api';
 import { WillGate } from '../WillGuards';
 import { WILL_STATUS_LABEL } from '../willStatusLabels';
 import { ExecutionGuide, FindALawyer } from './ExecutionGuide';
@@ -46,8 +46,17 @@ function ExecuteBody() {
       setEditing(false);
       toast.success('Your signed will is stored');
     },
-    onError: (err) => toast.error(apiErrorMessage(err, "Couldn't store the signed copy")),
+    onError: (err) => {
+      if (isWillNotExecutable(err)) {
+        // The will changed state under us: reload so the page turns read-only.
+        void qc.invalidateQueries({ queryKey: key });
+        toast.error("This will can't be signed and stored any more");
+      } else if (willExecutionIssues(err).length === 0) {
+        toast.error(apiErrorMessage(err, "Couldn't store the signed copy"));
+      }
+    },
   });
+  const serverIssues = useMemo(() => willExecutionIssues(record.error), [record.error]);
   const pdf = useMutation({
     mutationFn: (e: WillExecutionWire) => willApi.downloadPdf(e.versionId, e.version),
     onError: (err) => toast.error(apiErrorMessage(err, "Couldn't download the PDF")),
@@ -142,6 +151,7 @@ function ExecuteBody() {
               initial={e.executedOn ? { executedOn: e.executedOn, witnesses: [e.witnesses[0] ?? '', e.witnesses[1] ?? ''] } : undefined}
               ctx={{ today: istCalendarDate(new Date()), generatedOn: e.generatedOn, requireFile: e.signedCopy === null }}
               pending={record.isPending}
+              serverIssues={serverIssues}
               onSubmit={(input) => record.mutate(input)}
               onCancel={e.executedOn ? () => setEditing(false) : undefined}
             />

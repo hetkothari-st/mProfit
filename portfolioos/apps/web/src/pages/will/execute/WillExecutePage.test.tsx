@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { renderWithProviders } from '@/pages/split/testUtils';
-import { isWillNotExecutable, willApi } from '@/api/will.api';
+import { isWillNotExecutable, willApi, willExecutionIssues } from '@/api/will.api';
 import { WillExecutePage } from './WillExecutePage';
 import { executionWire, resetStores, signIn } from '../willTestData';
 
@@ -10,6 +10,7 @@ vi.mock('react-hot-toast', () => ({ default: Object.assign(vi.fn(), { success: v
 vi.mock('@/api/will.api', () => ({
   willApi: { execution: vi.fn(), recordExecution: vi.fn(), downloadPdf: vi.fn(), downloadSignedCopy: vi.fn() },
   isWillNotExecutable: vi.fn(() => false),
+  willExecutionIssues: vi.fn(() => []),
 }));
 
 const api = vi.mocked(willApi);
@@ -21,7 +22,9 @@ const executed = executionWire({
 });
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+  vi.mocked(isWillNotExecutable).mockReturnValue(false);
+  vi.mocked(willExecutionIssues).mockReturnValue([]);
   signIn('PLUS');
 });
 afterEach(() => {
@@ -95,6 +98,41 @@ describe('WillExecutePage', () => {
     render();
     expect(await screen.findByText(/can't be signed and stored here/i)).toBeTruthy();
     expect(screen.getByRole('link', { name: /back to will maker/i }).getAttribute('href')).toBe('/will');
+  });
+
+  function fillValid() {
+    fireEvent.change(screen.getByLabelText('Date you signed'), { target: { value: '2026-10-12' } });
+    fireEvent.change(screen.getByLabelText('Witness 1 - full name'), { target: { value: 'Asha Rao' } });
+    fireEvent.change(screen.getByLabelText('Witness 2 - full name'), { target: { value: 'Vikram Shah' } });
+    fireEvent.change(screen.getByLabelText(/^Signed copy/), {
+      target: { files: [new File(['%PDF-1.7'], 'scan.pdf', { type: 'application/pdf' })] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Store signed copy' }));
+  }
+
+  it('explains a 422 witness issue next to the form and clears it when that witness is edited', async () => {
+    api.execution.mockResolvedValue(executionWire());
+    api.recordExecution.mockRejectedValue(new Error('422'));
+    vi.mocked(willExecutionIssues).mockImplementation((e) =>
+      e instanceof Error ? [{ path: 'witnesses.0', code: 'witness_is_testator' }] : [],
+    );
+    render();
+    await screen.findByLabelText('Date you signed');
+    fillValid();
+    expect(await screen.findByText('You cannot be a witness to your own will. Choose someone else.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Witness 1 - full name'), { target: { value: 'Meera Rao' } });
+    expect(screen.queryByText('You cannot be a witness to your own will. Choose someone else.')).toBeNull();
+  });
+
+  it('turns read-only when storing finds the will is no longer signable', async () => {
+    api.execution.mockResolvedValueOnce(executionWire()).mockRejectedValueOnce(new Error('409'));
+    api.recordExecution.mockRejectedValue(new Error('409'));
+    vi.mocked(isWillNotExecutable).mockReturnValue(true);
+    render();
+    await screen.findByLabelText('Date you signed');
+    fillValid();
+    expect(await screen.findByText(/can't be signed and stored here/i)).toBeTruthy();
+    expect(api.execution).toHaveBeenCalledTimes(2);
   });
 
   it('is locked on the Free plan and does not call the API', () => {

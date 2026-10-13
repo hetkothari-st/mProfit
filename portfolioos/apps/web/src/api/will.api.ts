@@ -74,12 +74,7 @@ export const willApi = {
     } catch (err) {
       throw await decodeBlobError(err);
     }
-    const url = URL.createObjectURL(res.data as Blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `will-v${versionNo}.pdf`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    saveBlob(res.data as Blob, `will-v${versionNo}.pdf`);
   },
   async execution(willId: string): Promise<WillExecutionWire> {
     const { data } = await api.get<ApiResponse<WillExecutionWire>>(`${willPath(willId)}/execution`);
@@ -135,4 +130,15 @@ export function isWillBlocked(err: unknown): boolean {
 
 export function isWillNotExecutable(err: unknown): boolean {
   return errorDetails(err, 409)?.['reason'] === 'WILL_NOT_EXECUTABLE';
+}
+
+/** The {path, code} pairs of a 422 from the signing endpoint. Codes and paths only, never submitted values. */
+export function willExecutionIssues(err: unknown): Array<{ path: string; code: string }> {
+  if (!axios.isAxiosError(err) || err.response?.status !== 422) return [];
+  const issues = (err.response.data as { details?: { issues?: unknown } } | undefined)?.details?.issues;
+  if (!Array.isArray(issues)) return [];
+  return issues.flatMap((i: unknown) => {
+    const o = i as { path?: unknown; code?: unknown };
+    return typeof o?.path === 'string' && typeof o.code === 'string' ? [{ path: o.path, code: o.code }] : [];
+  });
 }

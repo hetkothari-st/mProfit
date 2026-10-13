@@ -32,6 +32,9 @@ describe('signedCopyProblems', () => {
     const gif = new File(['GIF89a'], 'scan.gif', { type: 'image/gif' });
     const heic = new File(['x'], 'scan.heic', { type: '' });
     const ok = { executedOn: '2026-10-15', witnesses: ['Asha Rao', 'Vikram Shah'] as [string, string] };
+    const noType = (name: string) => new File(['x'], name, { type: '' });
+    expect(signedCopyProblems({ ...ok, file: noType('Scan.JPG') }, ctx)).toEqual([]);
+    expect(signedCopyProblems({ ...ok, file: noType('scan.pdf') }, ctx)).toEqual([]);
     expect(signedCopyProblems({ ...ok, file: gif }, ctx)).toEqual(['Upload the signed will as a PDF or a photo (JPEG, PNG or WebP).']);
     expect(signedCopyProblems({ ...ok, file: heic }, ctx)).toEqual(['Upload the signed will as a PDF or a photo (JPEG, PNG or WebP).']);
     const big = new File([new Uint8Array(20 * 1024 * 1024 + 1)], 'scan.pdf', { type: 'application/pdf' });
@@ -59,6 +62,23 @@ describe('SignedCopyForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Store signed copy' }));
     expect(screen.getByRole('alert').textContent).toContain('Enter the date you signed.');
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('clears a problem once its field is edited', () => {
+    render(<SignedCopyForm ctx={ctx} pending={false} onSubmit={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Store signed copy' }));
+    expect(screen.getByRole('alert').textContent).toContain('Enter the date you signed.');
+    fireEvent.change(screen.getByLabelText('Date you signed'), { target: { value: '2026-10-15' } });
+    const text = screen.getByRole('alert').textContent ?? '';
+    expect(text).not.toContain('Enter the date you signed.');
+    expect(text).toContain('Attach the signed copy.');
+  });
+
+  it('shows server issues in words', () => {
+    render(
+      <SignedCopyForm ctx={ctx} pending={false} onSubmit={vi.fn()} serverIssues={[{ path: 'witnesses.1', code: 'duplicate_witness' }]} />,
+    );
+    expect(screen.getByRole('alert').textContent).toContain('Your two witnesses must be two different people.');
   });
 
   it('starts from the stored record when correcting it', () => {

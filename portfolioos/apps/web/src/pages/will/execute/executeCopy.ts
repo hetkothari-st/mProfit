@@ -51,3 +51,31 @@ export const WILL_BAR_COUNCIL_NOTE =
 
 export const WILL_WITNESS_BENEFICIARY_WARNING =
   'One of your witnesses has the same name as a beneficiary. Under Indian law a gift to a witness, or to a witness\'s husband or wife, can fail, although the rest of the will stands. Speak to a lawyer; you may want to sign again with two other witnesses.';
+
+/** Which form field a server issue path belongs to. */
+export type SignedCopyField = 'date' | 'w1' | 'w2' | 'file';
+
+export function issueField(path: string): SignedCopyField {
+  if (path === 'witnesses.0') return 'w1';
+  if (path.startsWith('witnesses')) return 'w2';
+  if (path === 'executedOn') return 'date';
+  return 'file';
+}
+
+/** Plain sentences for the 422 codes of POST /api/will/wills/:id/execution. */
+export function issueMessage(issue: { path: string; code: string }): string {
+  switch (issue.code) {
+    case 'witness_is_testator':
+      return 'You cannot be a witness to your own will. Choose someone else.';
+    case 'duplicate_witness':
+      return 'Your two witnesses must be two different people.';
+    case 'in_future':
+      return 'The signing date cannot be in the future.';
+    case 'before_generated':
+      return 'The signing date cannot be before the will was generated.';
+    default:
+      if (issue.path === 'executedOn') return 'Enter a valid signing date.';
+      if (issue.path.startsWith('witnesses')) return 'Enter the full name of both witnesses.';
+      return 'Some signing details are not valid. Check them and try again.';
+  }
+}
