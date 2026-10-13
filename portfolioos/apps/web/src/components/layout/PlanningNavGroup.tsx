@@ -23,9 +23,9 @@ export function readPlanningOpen(): boolean {
 }
 
 function writePlanningOpen(open: boolean): void {
-  // eslint-disable-next-line everypaisa/no-silent-catch -- view preference only; blocked storage is fine
   try {
     localStorage.setItem(PLANNING_OPEN_KEY, open ? '1' : '0');
+    // eslint-disable-next-line everypaisa/no-silent-catch -- view preference only; blocked storage is fine
   } catch {
     // Storage blocked: the choice lasts for this page view only, which is fine for a view preference.
   }
