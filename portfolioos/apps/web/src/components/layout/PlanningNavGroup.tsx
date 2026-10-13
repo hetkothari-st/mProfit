@@ -50,14 +50,17 @@ export function PlanningNavGroup({ collapsed }: { collapsed: boolean }) {
         type="button"
         onClick={toggle}
         aria-expanded={open}
-        aria-controls="nav-planning-items"
+        aria-controls={open ? 'nav-planning-items' : undefined}
         className="group/plan mb-2 flex w-full items-center gap-2 rounded-md px-2 py-0.5 text-left focus-ring"
       >
         <span className="text-[10.5px] font-medium uppercase tracking-kerned text-sidebar-foreground/50 group-hover/plan:text-sidebar-foreground/80">
           Planning
         </span>
         {!open && activeInside && (
-          <span aria-hidden="true" data-testid="planning-active-dot" className="h-1.5 w-1.5 rounded-full bg-accent" />
+          <>
+            <span aria-hidden="true" data-testid="planning-active-dot" className="h-1.5 w-1.5 rounded-full bg-accent" />
+            <span className="sr-only">(current page is in this group)</span>
+          </>
         )}
         <span aria-hidden="true" className="h-px flex-1 bg-sidebar-border/60" />
         <ChevronRight

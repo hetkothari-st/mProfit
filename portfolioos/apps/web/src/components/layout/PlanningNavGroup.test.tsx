@@ -45,10 +45,21 @@ describe('PlanningNavGroup', () => {
     expect(localStorage.getItem(PLANNING_OPEN_KEY)).toBe('1');
   });
 
+  it('points aria-controls only at a rendered list', () => {
+    renderGroup();
+    const header = screen.getByRole('button', { name: 'Planning' });
+    expect(header.getAttribute('aria-controls')).toBe('nav-planning-items');
+    expect(document.getElementById('nav-planning-items')).toBeTruthy();
+    fireEvent.click(header);
+    expect(header.getAttribute('aria-controls')).toBeNull();
+    expect(document.getElementById('nav-planning-items')).toBeNull();
+  });
+
   it('while closed, marks the header when the current page is inside the group', () => {
     localStorage.setItem(PLANNING_OPEN_KEY, '0');
     renderGroup(false, '/will/w1/execute');
     expect(screen.queryByTestId('planning-active-dot')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /planning.*current page is in this group/i })).toBeTruthy();
     cleanup();
     renderGroup(false, '/dashboard');
     expect(screen.queryByTestId('planning-active-dot')).toBeNull();
