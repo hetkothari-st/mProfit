@@ -2,8 +2,9 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { authenticate } from '../middleware/authenticate.js';
 import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
-import { costlyOperationLimiter } from '../middleware/rateLimit.js';
+import { costlyOperationLimiter, importLimiter } from '../middleware/rateLimit.js';
 import { AppError, ForbiddenError } from '../lib/errors.js';
+import { uploadWillSignedCopy } from '../middleware/willUpload.js';
 import * as will from '../controllers/will.controller.js';
 
 /**
@@ -43,3 +44,8 @@ willRouter.get('/people/suggestions', asyncHandler(will.suggestions));
 willRouter.get('/drafts/:id/preview', asyncHandler(will.preview));
 willRouter.post('/drafts/:id/generate', costlyOperationLimiter, asyncHandler(will.generate));
 willRouter.get('/versions/:vid/pdf', asyncHandler(will.downloadPdf));
+
+// Step 9 (Part 2): signing record and signed copy of a generated will.
+willRouter.get('/wills/:id/execution', asyncHandler(will.getExecution));
+willRouter.post('/wills/:id/execution', importLimiter, uploadWillSignedCopy, asyncHandler(will.recordExecution));
+willRouter.get('/wills/:id/signed-copy', asyncHandler(will.downloadSignedCopy));

@@ -5,6 +5,8 @@ import { generateWill, getWillVersionPdf, previewWill } from '../services/will/w
 import { BadRequestError, UnauthorizedError, ValidationError } from '../lib/errors.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { writeAuditLog } from '../lib/audit.js';
+import { downloadHeaders } from '../lib/documentMime.js';
+import { getSignedCopy, getWillExecution, recordWillExecution } from '../services/will/willExecute.service.js';
 import { zodIssues } from '../services/will/willStore.js';
 import {
   createWillDraft, discardWillDraft, getWillDraft, getWillOverview, listWillPeopleSuggestions,
@@ -111,6 +113,48 @@ export async function downloadPdf(req: Request, res: Response): Promise<void> {
   await writeAuditLog({ userId, action: 'will_downloaded', resource: `WillVersion:${versionId}`, metadata: { versionNo: file.versionNo }, req });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(file.buffer);
+}
+
+function formField(body: unknown, name: string): unknown {
+  return body !== null && typeof body === 'object' ? (body as Record<string, unknown>)[name] : undefined;
+}
+
+export async function getExecution(req: Request, res: Response): Promise<void> {
+  ok(res, await getWillExecution(uid(req), idOf(req, 'id')));
+}
+
+export async function recordExecution(req: Request, res: Response): Promise<void> {
+  const userId = uid(req);
+  const willId = idOf(req, 'id');
+  const fields = {
+    executedOn: formField(req.body, 'executedOn'),
+    witnesses: [formField(req.body, 'witness1'), formField(req.body, 'witness2')],
+  };
+  const result = await recordWillExecution(userId, willId, { fields, file: req.file ? { buffer: req.file.buffer } : null });
+  await writeAuditLog({
+    userId, action: 'will_execute_upload', resource: `Will:${willId}`, req,
+    metadata: {
+      versionNo: result.execution.version,
+      newCopy: result.newCopy,
+      replacedCopy: result.replacedCopy,
+      mimeType: result.execution.signedCopy?.mimeType ?? null,
+      sizeBytes: result.execution.signedCopy?.sizeBytes ?? null,
+      warnings: result.execution.warnings,
+    },
+  });
+  ok(res, result.execution);
+}
+
+export async function downloadSignedCopy(req: Request, res: Response): Promise<void> {
+  const userId = uid(req);
+  const willId = idOf(req, 'id');
+  const file = await getSignedCopy(userId, willId);
+  await writeAuditLog({
+    userId, action: 'will_downloaded', resource: `Will:${willId}`, metadata: { kind: 'signed_copy', versionNo: file.versionNo }, req,
+  });
+  res.set(downloadHeaders(file.mimeType, file.fileName));
   res.setHeader('Cache-Control', 'no-store');
   res.send(file.buffer);
 }
