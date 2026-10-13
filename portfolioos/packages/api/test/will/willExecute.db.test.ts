@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { createWillDraft } from '../../src/services/will/will.service.js';
+import { createWillDraft, discardWillDraft } from '../../src/services/will/will.service.js';
 import {
   getSignedCopy, getWillExecution, recordWillExecution, signedCopyMime,
 } from '../../src/services/will/willExecute.service.js';
@@ -25,16 +25,20 @@ const willRow = (id: string) => runAsSystem(() => prisma.will.findUniqueOrThrow(
 
 let a: TestScope;
 let b: TestScope;
+let c: TestScope;
 
 beforeAll(async () => {
   a = await createTestScope('will-exec-a');
   b = await createTestScope('will-exec-b');
+  c = await createTestScope('will-exec-c');
 });
 afterAll(async () => {
   await wipeWills(a.userId);
   await wipeWills(b.userId);
+  await wipeWills(c.userId);
   await a.cleanup();
   await b.cleanup();
+  await c.cleanup();
 });
 
 describe('signedCopyMime', () => {
@@ -184,5 +188,46 @@ describe('refusals that store nothing', () => {
     expect(await signedDocs(b.userId)).toBe(0);
     const row = await willRow(willId);
     expect(row).toMatchObject({ status: 'GENERATED', executionSealed: null });
+  });
+});
+
+describe('failed replacement and unusable statuses', () => {
+  it('a replacement that fails at commit leaves the old copy intact', async () => {
+    const { willId } = await makeGeneratedWill(c);
+    await c.runAs(() => recordWillExecution(c.userId, willId, { fields: fields(), file: { buffer: FAKE_PDF } }, deps));
+    const oldDocId = (await willRow(willId)).executedDocumentId;
+    const boom = { today: () => LATER, beforeCommit: async () => { throw new Error('boom'); } };
+    await expect(
+      c.runAs(() => recordWillExecution(c.userId, willId, { fields: fields(), file: { buffer: PNG_BYTES } }, boom)),
+    ).rejects.toThrow('boom');
+    const racing = {
+      today: () => LATER,
+      beforeCommit: () => runAsSystem(async () => {
+        await prisma.will.update({ where: { id: willId }, data: { executedDocumentId: 'saved-by-another-tab' } });
+      }),
+    };
+    await expect(
+      c.runAs(() => recordWillExecution(c.userId, willId, { fields: fields(), file: { buffer: PNG_BYTES } }, racing)),
+    ).rejects.toMatchObject({ statusCode: 409, details: { reason: 'WILL_EXECUTION_CONFLICT' } });
+    await runAsSystem(() => prisma.will.update({ where: { id: willId }, data: { executedDocumentId: oldDocId } }));
+    expect(await signedDocs(c.userId)).toBe(1);
+    const file = await c.runAs(() => getSignedCopy(c.userId, willId));
+    expect(file.buffer.equals(FAKE_PDF)).toBe(true);
+    expect(file.mimeType).toBe('application/pdf');
+  });
+
+  it('draft and discarded wills are not executable', async () => {
+    const draft = await c.runAs(() => createWillDraft(c.userId, null));
+    const notExec = { statusCode: 409, details: { reason: 'WILL_NOT_EXECUTABLE' } };
+    await expect(
+      c.runAs(() => recordWillExecution(c.userId, draft.id, { fields: fields(), file: { buffer: FAKE_PDF } }, deps)),
+    ).rejects.toMatchObject(notExec);
+    await expect(c.runAs(() => getSignedCopy(c.userId, draft.id))).rejects.toMatchObject(notExec);
+    await c.runAs(() => discardWillDraft(c.userId, draft.id));
+    await expect(c.runAs(() => getWillExecution(c.userId, draft.id))).rejects.toMatchObject(notExec);
+    await expect(
+      c.runAs(() => recordWillExecution(c.userId, draft.id, { fields: fields(), file: { buffer: FAKE_PDF } }, deps)),
+    ).rejects.toMatchObject(notExec);
+    await expect(c.runAs(() => getSignedCopy(c.userId, draft.id))).rejects.toMatchObject(notExec);
   });
 });

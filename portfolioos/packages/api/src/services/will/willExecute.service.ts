@@ -194,7 +194,11 @@ export async function getSignedCopy(
   userId: string,
   willId: string,
 ): Promise<{ buffer: Buffer; mimeType: string; fileName: string; versionNo: number }> {
+  requireWillKeys();
   const will = await loadOwnedWill(userId, willId);
+  if (will.status !== 'GENERATED' && will.status !== 'EXECUTED' && will.status !== 'SUPERSEDED') {
+    throw notExecutable(will.status);
+  }
   const doc = will.executedDocumentId
     ? await prisma.document.findFirst({ where: { id: will.executedDocumentId, userId, ownerType: 'WILL' } })
     : null;
