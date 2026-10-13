@@ -112,6 +112,11 @@ export async function generateWill(
         where: { userId, id: { not: will.id }, status: { in: ['GENERATED', 'EXECUTED'] } },
         data: { status: 'SUPERSEDED', supersededById: will.id },
       });
+      // The new will is not signed yet, so every open review reminder belongs to a will it just replaced.
+      await tx.alert.updateMany({
+        where: { userId, type: 'WILL_REVIEW_DUE', isActive: true },
+        data: { isActive: false },
+      });
       return tx.willVersion.create({
         data: {
           id: versionId,

@@ -85,6 +85,9 @@ describe('review alerts for one user', () => {
     await markExecuted(id, '2024-09-01', '2026-09-01');
     expect(await b.runAs(() => syncWillReviewAlerts(b.userId, TODAY))).toEqual({ created: 1, resolved: 0 });
     await makeGeneratedWill(b);
+    // Generate closes it at once; the daily sync still closes one left open (e.g. by older code).
+    expect((await reviewAlerts(b.userId)).every((x) => !x.isActive)).toBe(true);
+    await runAsSystem(() => prisma.alert.updateMany({ where: { userId: b.userId, type: 'WILL_REVIEW_DUE' }, data: { isActive: true } }));
     expect(await b.runAs(() => syncWillReviewAlerts(b.userId, TODAY))).toEqual({ created: 0, resolved: 1 });
     expect((await reviewAlerts(b.userId)).every((x) => !x.isActive)).toBe(true);
   });
@@ -156,6 +159,14 @@ describe('re-recording a signed will', () => {
   it('a new signing date sets a new review date and closes the open reminder', async () => {
     await e.runAs(() => recordWillExecution(e.userId, willId, { fields: { executedOn: '2026-10-13', witnesses: witnesses('Vikram K Shah') }, file: null }, signedLater));
     expect(await reviewDay(willId)).toBe('2028-10-13');
+    expect((await reviewAlerts(e.userId)).filter((x) => x.isActive)).toHaveLength(0);
+  });
+
+  it('generating a new version closes the reminder of the replaced will at once', async () => {
+    await dueNow(willId, '2026-10-02');
+    expect(await e.runAs(() => syncWillReviewAlerts(e.userId, TODAY))).toEqual({ created: 1, resolved: 0 });
+    await makeGeneratedWill(e);
+    expect((await willRow(willId)).status).toBe('SUPERSEDED');
     expect((await reviewAlerts(e.userId)).filter((x) => x.isActive)).toHaveLength(0);
   });
 });
