@@ -170,3 +170,17 @@ describe('re-recording a signed will', () => {
     expect((await reviewAlerts(e.userId)).filter((x) => x.isActive)).toHaveLength(0);
   });
 });
+
+describe('users who should not get reminders', () => {
+  it('an inactive or deletion-scheduled user gets no new reminder', async () => {
+    const { willId } = await makeGeneratedWill(f);
+    await markExecuted(willId, '2024-10-01', '2026-10-01');
+    await runAsSystem(() => prisma.user.update({ where: { id: f.userId }, data: { isActive: false } }));
+    expect(await f.runAs(() => syncWillReviewAlerts(f.userId, TODAY))).toEqual({ created: 0, resolved: 0 });
+    await runAsSystem(() => prisma.user.update({ where: { id: f.userId }, data: { isActive: true, deletionScheduledFor: new Date('2026-11-01T00:00:00Z') } }));
+    expect(await f.runAs(() => syncWillReviewAlerts(f.userId, TODAY))).toEqual({ created: 0, resolved: 0 });
+    expect(await reviewAlerts(f.userId)).toHaveLength(0);
+    await runAsSystem(() => prisma.user.update({ where: { id: f.userId }, data: { deletionScheduledFor: null } }));
+    expect(await f.runAs(() => syncWillReviewAlerts(f.userId, TODAY))).toEqual({ created: 1, resolved: 0 });
+  });
+});

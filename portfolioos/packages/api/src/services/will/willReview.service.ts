@@ -16,6 +16,9 @@ export function willReviewKey(willId: string, dueOn: string): string {
   return `will_review:${willId}:${dueOn}`;
 }
 
+/** Only active accounts not scheduled for deletion get reminders. */
+const REMINDABLE_USER = { isActive: true, deletionScheduledFor: null } as const;
+
 /** Users with a signed will due for review, plus users holding an open reminder that may need closing. */
 export async function dueWillReviewUserIds(today: string, only?: string[]): Promise<string[]> {
   const scope = only ? { userId: { in: only } } : {};
@@ -25,7 +28,7 @@ export async function dueWillReviewUserIds(today: string, only?: string[]): Prom
         ...scope,
         status: 'EXECUTED',
         nextReviewAt: { lte: dayOf(today) },
-        user: { isActive: true, deletionScheduledFor: null },
+        user: REMINDABLE_USER,
       },
       select: { userId: true },
       distinct: ['userId'],
@@ -51,7 +54,7 @@ export interface WillReviewSyncResult {
  */
 export async function syncWillReviewAlerts(userId: string, today: string): Promise<WillReviewSyncResult> {
   const due = await prisma.will.findMany({
-    where: { userId, status: 'EXECUTED', nextReviewAt: { lte: dayOf(today) } },
+    where: { userId, status: 'EXECUTED', nextReviewAt: { lte: dayOf(today) }, user: REMINDABLE_USER },
     select: { id: true, version: true, executedAt: true, nextReviewAt: true },
   });
   const keep = new Set<string>();
