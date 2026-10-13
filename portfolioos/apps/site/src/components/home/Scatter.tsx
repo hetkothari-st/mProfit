@@ -66,7 +66,6 @@ export function Scatter() {
           <div className="scatter-ledger board ledger-mini">
             <div className="lc-title">Family<br /><em>Ledger</em></div>
             <div className="lc-cols">Everything, in one book</div>
-            <div className="band" />
           </div>
         </div>
         <div className="scatter-foot">

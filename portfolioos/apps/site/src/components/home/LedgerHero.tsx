@@ -18,7 +18,6 @@ export function LedgerHero() {
     const scaler = el.querySelector<HTMLElement>('.book-scaler')!;
     const book = el.querySelector<HTMLElement>('.book')!;
     const cover = el.querySelector<HTMLElement>('.cover')!;
-    const band = el.querySelector<HTMLElement>('.band')!;
     const floor = el.querySelector<HTMLElement>('.book-floor')!;
     const leaves = [1, 2, 3].map((n) => el.querySelector<HTMLElement>(`[data-leaf="${n}"]`)!);
     const narrow = window.matchMedia('(max-width: 960px)').matches;
@@ -45,7 +44,6 @@ export function LedgerHero() {
       if (prefersReducedMotion()) {
         gsap.set(book, openPose());
         gsap.set(cover, { z: 0.5, rotationY: -180, transformOrigin: 'left center' });
-        gsap.set(band, { autoAlpha: 0 });
         gsap.set(floor, { scaleX: 1.9 });
         leaves.forEach((l, i) => gsap.set(l, { z: 3 - i, transformOrigin: 'left center' }));
         setCaption(1);
@@ -81,7 +79,6 @@ export function LedgerHero() {
       });
       tl.to(book, { ...openPose(), duration: 1 }, 0)
         .to(cover, { rotationY: -180, z: 0.5, duration: 1 }, 0.1)
-        .to(band, { autoAlpha: 0, duration: 0.25 }, 0.05)
         .to(floor, { scaleX: narrow ? 1.9 : () => 1.9 * openScale(), scaleY: narrow ? 1 : openScale, y: narrow ? 0 : () => (openScale() - 1) * cssNum('--ph', 490) * 0.5, opacity: 0.9, duration: 1 }, 0);
       if (!narrow) {
         // As it opens, the headline steps aside and the ledger moves to the
@@ -171,7 +168,6 @@ export function LedgerHero() {
                         </svg>
                       </div>
                       <div className="cf-foot"><span>Assets · Liabilities · Net worth</span><span>FY 2026–27</span></div>
-                      <div className="band" />
                     </div>
                     <div className="face back board">
                       <div className="endpaper">

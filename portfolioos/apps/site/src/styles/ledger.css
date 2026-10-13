@@ -39,7 +39,7 @@
 /* ---------- front cover ---------- */
 .cover .face.front.cover-front {
   border-radius: 4px 14px 14px 4px; overflow: hidden;
-  padding: 10% 19% 9% 15%;
+  padding: 10% 11% 9% 15%;
   display: flex; flex-direction: column; justify-content: space-between;
   color: #f5f5f5; font-family: var(--f-app);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06), inset -1px 0 0 rgba(255, 255, 255, .1), inset 12px 0 20px -10px rgba(0, 0, 0, .9);
@@ -71,12 +71,7 @@
 .cf-spark { width: 100%; height: calc(var(--pw) * .08); color: var(--lime); margin-top: 4px; }
 .cf-foot { display: flex; justify-content: space-between; gap: 8px; color: #9e9e9e; font-size: calc(var(--pw) * .028); }
 
-/* elastic band and ribbon, notebook style */
-.band {
-  position: absolute; top: 0; bottom: 0; right: 7%; width: calc(var(--pw) * .028);
-  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .14) 0 1px, transparent 1px 3px), linear-gradient(90deg, var(--lime-deep), var(--lime) 45%, var(--lime-deep));
-  box-shadow: -3px 0 5px rgba(0, 0, 0, .55), 3px 0 4px rgba(0, 0, 0, .4);
-}
+/* ribbon bookmark */
 .book > .ribbon {
   inset: auto; left: 44%; bottom: -46px; width: calc(var(--pw) * .04); height: 72px;
   background: repeating-linear-gradient(90deg, rgba(0, 0, 0, .1) 0 1px, transparent 1px 3px), var(--lime);
@@ -146,7 +141,6 @@
 .ledger-mini .lc-title { font-family: var(--f-app-display); font-weight: 600; font-size: 46px; line-height: .95; letter-spacing: -.02em; position: relative; }
 .ledger-mini .lc-title em { color: var(--lime); font-style: italic; font-weight: 500; }
 .ledger-mini .lc-cols { font-size: 13px; color: #9e9e9e; position: relative; }
-.ledger-mini .band { right: 14%; width: 9px; }
 
 @media (max-width: 560px) {
   .bookplate small { display: none; }
