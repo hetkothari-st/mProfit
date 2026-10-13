@@ -81,6 +81,7 @@ describe('POST /api/will/wills/:id/execution', () => {
     const big = Buffer.concat([FAKE_PDF, Buffer.alloc(21 * 1024 * 1024)]);
     const res = await upload(okFields, { bytes: big, name: 'scan.pdf', type: 'application/pdf' });
     expect(res.status).toBe(413);
+    expect(((await res.json()) as { code: string }).code).toBe('WILL_UPLOAD_TOO_LARGE');
   });
 
   it('stores the signed copy and audits it without names', async () => {
@@ -116,5 +117,15 @@ describe('reading it back', () => {
       prisma.auditLog.findFirst({ where: { userId: user.userId, action: 'will_downloaded', resource: `Will:${willId}` } }),
     );
     expect(audit?.metadata).toMatchObject({ kind: 'signed_copy', versionNo: 1 });
+  });
+});
+
+describe('real-sized signed copies (over the 512 KB JSON cap)', () => {
+  it('accepts a ~2 MB PDF', async () => {
+    const twoMb = Buffer.concat([FAKE_PDF, Buffer.alloc(2 * 1024 * 1024)]);
+    const res = await upload(okFields, { bytes: twoMb, name: 'scan.pdf', type: 'application/pdf' });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: { signedCopy: { sizeBytes: number } } };
+    expect(json.data.signedCopy.sizeBytes).toBe(twoMb.length);
   });
 });

@@ -23,7 +23,14 @@ export function rejectActAs(req: Request, _res: Response, next: NextFunction): v
 /** A whole will payload is far smaller than this; anything bigger is refused before any will code runs. */
 export const WILL_MAX_BODY_BYTES = 512 * 1024;
 
+/** The signed-copy upload (step 9) is multipart; multer's own limit (WILL_SIGNED_COPY_MAX_MB) governs it. */
+const SIGNED_COPY_UPLOAD_PATH = /^\/wills\/[^/]+\/execution\/?$/;
+
 export function limitWillBody(req: Request, _res: Response, next: NextFunction): void {
+  if (req.method === 'POST' && SIGNED_COPY_UPLOAD_PATH.test(req.path) && req.is('multipart/form-data')) {
+    next();
+    return;
+  }
   const length = Number.parseInt(req.headers['content-length'] ?? '0', 10);
   if ((req.method === 'PUT' || req.method === 'POST') && length > WILL_MAX_BODY_BYTES) {
     next(new AppError('This request is too large.', 413, 'WILL_BODY_TOO_LARGE'));
