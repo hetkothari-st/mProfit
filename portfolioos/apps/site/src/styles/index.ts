@@ -1,0 +1,14 @@
+import '@fontsource/young-serif/400.css';
+import '@fontsource/schibsted-grotesk/400.css';
+import '@fontsource/schibsted-grotesk/400-italic.css';
+import '@fontsource/schibsted-grotesk/500.css';
+import '@fontsource/schibsted-grotesk/600.css';
+import '@fontsource/schibsted-grotesk/700.css';
+import '@fontsource/tiro-devanagari-hindi/400.css';
+import '@fontsource/inter-tight/400.css';
+import '@fontsource/inter-tight/600.css';
+import '@fontsource/fraunces/600.css';
+import '@fontsource/fraunces/500-italic.css';
+import './site.css';
+import './screens.css';
+import './react.css';

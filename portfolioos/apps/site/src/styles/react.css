@@ -1,0 +1,51 @@
+/* Additions for the React build: things that were inline styles or
+   page-level <style> blocks in the static prototype. */
+
+.skip-link { position: absolute; left: 12px; top: -60px; z-index: 100; background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 8px; text-decoration: none; }
+.skip-link:focus { top: 12px; }
+
+.nav-signin { text-decoration: none; font-size: 15px; color: var(--ink-2); }
+.nav-signin:hover { color: var(--ink); }
+.nav-links a.active { color: var(--ink); border-bottom-color: var(--ink); }
+@media (max-width: 960px) { .nav-signin { display: none; } }
+
+.btn-line-light { border: 1px solid rgba(255, 244, 228, .5); color: #fff4e4; background: transparent; }
+.btn-line-light:hover { border-color: #fff4e4; }
+.btn[disabled] { opacity: .6; cursor: progress; transform: none; }
+
+.section-flush { padding-top: 0; }
+.page-actions { margin-top: 30px; }
+.tour-more { margin: 40px 0 0; }
+.vault-more { margin: 34px 0 0; }
+.vault .lede { margin-top: 20px; }
+.foot-blurb { max-width: 22em; }
+.cta-lede { color: #efd9c6; margin-top: 18px; }
+.cta .hero-actions { justify-content: flex-start; }
+.not-found { min-height: 60vh; }
+
+/* film */
+.f-nw { font-size: 30px; }
+.f-spark { margin-top: 12px; }
+.f-donut-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+
+/* features fan */
+.fan-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: center; }
+.feat-block .h2 { font-size: clamp(30px, 3.4vw, 46px); }
+.fan { position: relative; height: 460px; perspective: 1600px; }
+.fan-inner { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .6s var(--ease); }
+.fan-card { position: absolute; left: 50%; top: 50%; width: 300px; height: 380px; margin: -190px 0 0 -150px; border-radius: 14px; background: #1b1b1b; padding: 8px; box-shadow: 0 30px 50px -30px rgba(16, 32, 25, .7); transform-style: preserve-3d; }
+.fan-card .scr { border-radius: 8px; }
+@media (max-width: 900px) { .fan-hero { grid-template-columns: 1fr; } .fan { height: 400px; overflow: hidden; margin: 0 calc(var(--gutter) * -1); } }
+@media (max-width: 520px) { .fan { height: 360px; } .fan-card { width: 230px; height: 300px; margin: -150px 0 0 -115px; } }
+
+/* contact */
+.contact-hero { padding-bottom: clamp(80px, 10vw, 140px); }
+.letter-stage { perspective: 1600px; }
+.contact-form { transform-origin: center top; transition: transform .6s var(--ease), opacity .4s; }
+.contact-form.is-sending { transform: rotateX(18deg) scale(.98); opacity: .8; }
+.sent-note { text-align: center; padding: 60px 20px; background: #f7f3e8; border-radius: 8px; box-shadow: 0 30px 60px -40px rgba(16, 32, 25, .55); animation: folioIn .6s var(--ease); display: grid; gap: 10px; justify-items: center; }
+.sent-note .stamp { width: 96px; height: 96px; margin-bottom: 10px; border-radius: 50%; display: grid; place-items: center; color: var(--gold-soft); font-family: var(--f-deva); font-size: 22px; box-shadow: inset 0 -8px 18px rgba(0, 0, 0, .4); }
+.field .hint { font-size: 13px; color: var(--ink-3); }
+.err { font-size: 13px; color: var(--madder); min-height: 1em; margin: 0; }
+.field input[aria-invalid="true"], .field textarea[aria-invalid="true"] { border-color: var(--madder); }
+.contact-ways a { text-decoration-color: var(--rule-strong); }

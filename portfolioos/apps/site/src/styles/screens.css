@@ -74,3 +74,18 @@
 .s-find { line-height: 1.5; }
 .s-rates { gap: 3px; }
 @container (min-width: 440px) { .s-wide { display: block; } .s-rates { display: grid; } .s-find { grid-column: 1 / -1; } }
+
+/* small helpers used by the screen components */
+.s-mb { margin-bottom: 4px; }
+.s-mt { margin-top: 4px; }
+.ivory { color: var(--app-ivory); }
+.amber { color: var(--app-amber); }
+.s-barline { margin: 6px 0 4px; }
+.s-stack { display: grid; gap: 6px; }
+.s-banner-actions { justify-content: flex-start; gap: 6px; margin-top: 6px; }
+.s-dot-lg { width: 22px; height: 22px; border-radius: 6px; }
+.s-row-donut { display: flex; gap: 10px; align-items: center; }
+.donut-sm { width: 64px; height: 64px; }
+.donut-sm::after { inset: 12px; }
+.s-mobile .scr-body { padding-top: 40px; }
+.scr-dot { background: url(/assets/everypaisa-mark.png) center/cover; }

@@ -265,7 +265,7 @@ p { margin: 0 0 1em; }
 }
 .scr-top { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--app-line); }
 .scr-top b { font-weight: 600; font-size: 12px; }
-.scr-top .scr-dot { width: 18px; height: 18px; border-radius: 5px; background: url(../assets/everypaisa-mark.png) center/cover; }
+.scr-top .scr-dot { width: 18px; height: 18px; border-radius: 5px; background: url(/assets/everypaisa-mark.png) center/cover; }
 .scr-top .scr-pill { margin-left: auto; font-size: 10px; color: var(--app-muted); border: 1px solid var(--app-line); border-radius: 99px; padding: 2px 8px; }
 .scr-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
 .scr-h { font-family: var(--f-app-display); font-size: 17px; line-height: 1.15; font-weight: 600; letter-spacing: -0.01em; }
@@ -437,8 +437,9 @@ p { margin: 0 0 1em; }
 .chap-device .laptop { transform: rotateY(-9deg) rotateX(4deg); transform-style: preserve-3d; transition: transform .8s var(--ease); }
 .chap-device .laptop:hover { transform: rotateY(-3deg) rotateX(2deg); }
 .screen-stack { position: absolute; inset: 0; }
-.screen-stack .scr { position: absolute; inset: 0; border-radius: 0; opacity: 0; transform: scale(1.02); transition: opacity .6s var(--ease), transform .8s var(--ease); }
-.screen-stack .scr.on { opacity: 1; transform: none; }
+.screen-stack .stack-item { position: absolute; inset: 0; opacity: 0; transform: scale(1.02); transition: opacity .6s var(--ease), transform .8s var(--ease); }
+.screen-stack .stack-item.on { opacity: 1; transform: none; }
+.screen-stack .scr { border-radius: 0; }
 @media (max-width: 960px) {
   .chap-grid { grid-template-columns: 1fr; }
   .chap-device { display: none; }
@@ -559,7 +560,7 @@ p { margin: 0 0 1em; }
 .feat-block-head p { color: var(--ink-2); margin: 0; }
 .feat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 40px; }
 .feat { padding: 22px 0; border-top: 1px solid var(--rule); }
-.feat h4 { font-family: var(--f-display); font-size: 21px; margin-bottom: 8px; line-height: 1.2; }
+.feat h3 { font-family: var(--f-display); font-size: 21px; margin-bottom: 8px; line-height: 1.2; }
 .feat p { color: var(--ink-2); font-size: 15.5px; margin: 0; }
 @media (max-width: 960px) { .feat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .feat-block-head { grid-template-columns: 1fr; gap: 14px; } }
 @media (max-width: 600px) { .feat-grid { grid-template-columns: 1fr; } }
