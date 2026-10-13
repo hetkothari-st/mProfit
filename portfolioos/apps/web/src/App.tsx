@@ -70,6 +70,7 @@ import { LegacyLinkPage } from './pages/legacy/LegacyLinkPage';
 import { LegacyAccessPage } from './pages/legacy/LegacyAccessPage';
 import { GoalsPage } from './pages/goals/GoalsPage';
 import { WillOverviewPage } from './pages/will/WillOverviewPage';
+import { WillExecutePage } from './pages/will/execute/WillExecutePage';
 import { WillWizardPage } from './pages/will/WillWizardPage';
 import { IncomePage } from './pages/income/IncomePage';
 import { HealthScorePage } from './pages/intelligence/HealthScorePage';
@@ -227,6 +228,7 @@ export function App() {
         <Route path="/split/friends/:key" element={<FriendPage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/will" element={<WillOverviewPage />} />
+        <Route path="/will/:id/execute" element={<WillExecutePage />} />
         <Route path="/will/:id/:step" element={<WillWizardPage />} />
         <Route path="/income" element={<IncomePage />} />
         <Route path="/health-score" element={<HealthScorePage />} />

@@ -75,7 +75,10 @@ export function PreviewStep({ willId, findings, flush, getRevision, reload, goTo
           <Button disabled={download.isPending} onClick={() => download.mutate(done)}>
             <Download className="mr-1 h-4 w-4" />Download PDF
           </Button>
-          <Button variant="outline" asChild><Link to="/will">Back to Will Maker</Link></Button>
+          <Button variant="outline" asChild>
+            <Link to={`/will/${encodeURIComponent(done.willId)}/execute`}>Next: sign and store</Link>
+          </Button>
+          <Button variant="ghost" asChild><Link to="/will">Back to Will Maker</Link></Button>
         </div>
       </Card>
     );

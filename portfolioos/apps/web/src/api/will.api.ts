@@ -1,12 +1,29 @@
 import axios from 'axios';
 import type {
-  ApiResponse, WillDraftWire, WillEstateRefreshWire, WillGenerateResultWire, WillOverviewWire, WillPreviewWire,
+  ApiResponse, WillDraftWire, WillExecutionWire, WillEstateRefreshWire, WillGenerateResultWire, WillOverviewWire, WillPreviewWire,
   WillSaveResultWire, WillSection, WillSectionData, WillSuggestionWire,
 } from '@everypaisa/shared';
 import { api, decodeBlobError, unwrap } from './client';
 
 const BASE = '/api/will';
 const draftPath = (id: string) => `${BASE}/drafts/${encodeURIComponent(id)}`;
+const willPath = (id: string) => `${BASE}/wills/${encodeURIComponent(id)}`;
+
+/** Step 9 form values. `file` may be null only when correcting a record that already has a copy. */
+export interface WillSignedCopyInput {
+  executedOn: string;
+  witnesses: [string, string];
+  file: File | null;
+}
+
+function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
 
 /** Will Maker. Money and percentages stay decimal strings end to end. */
 export const willApi = {
@@ -64,6 +81,30 @@ export const willApi = {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   },
+  async execution(willId: string): Promise<WillExecutionWire> {
+    const { data } = await api.get<ApiResponse<WillExecutionWire>>(`${willPath(willId)}/execution`);
+    return unwrap(data);
+  },
+  async recordExecution(willId: string, input: WillSignedCopyInput): Promise<WillExecutionWire> {
+    const fd = new FormData();
+    fd.append('executedOn', input.executedOn);
+    fd.append('witness1', input.witnesses[0]);
+    fd.append('witness2', input.witnesses[1]);
+    if (input.file) fd.append('file', input.file);
+    const { data } = await api.post<ApiResponse<WillExecutionWire>>(`${willPath(willId)}/execution`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return unwrap(data);
+  },
+  async downloadSignedCopy(willId: string, fileName: string): Promise<void> {
+    let res;
+    try {
+      res = await api.get(`${willPath(willId)}/signed-copy`, { responseType: 'blob' });
+    } catch (err) {
+      throw await decodeBlobError(err);
+    }
+    saveBlob(res.data as Blob, fileName);
+  },
 };
 
 function errorDetails(err: unknown, status: number): Record<string, unknown> | null {
@@ -90,4 +131,8 @@ export function isWillPreviewOutdated(err: unknown): boolean {
 
 export function isWillBlocked(err: unknown): boolean {
   return errorDetails(err, 422)?.['reason'] === 'WILL_BLOCKED';
+}
+
+export function isWillNotExecutable(err: unknown): boolean {
+  return errorDetails(err, 409)?.['reason'] === 'WILL_NOT_EXECUTABLE';
 }
