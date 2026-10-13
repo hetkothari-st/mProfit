@@ -128,3 +128,16 @@ export function willDocumentTag(status: WillStatusWire, category: string | null,
   }
   return { current: false, label: WILL_DOCUMENT_REPLACED_LABEL };
 }
+
+/**
+ * GET /api/will/documents: the live will's files, reachable on any plan (a
+ * downgraded user keeps their own will). No personal data. Null when there
+ * is no generated or signed will.
+ */
+export interface WillLiveDocumentsWire {
+  willId: string;
+  version: number;
+  status: 'GENERATED' | 'EXECUTED';
+  versionId: string;
+  hasSignedCopy: boolean;
+}

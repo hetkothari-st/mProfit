@@ -8,7 +8,7 @@ import type { Will } from '@prisma/client';
 import {
   willExecutionInputSchema, willExecutionRecordSchema, willNextReviewDate, willWitnessIssues, willWitnessWarnings,
   WILL_SIGNED_COPY_MIME_TYPES,
-  type WillExecutionRecord, type WillExecutionWire, type WillSignedCopyMime,
+  type WillExecutionRecord, type WillExecutionWire, type WillLiveDocumentsWire, type WillSignedCopyMime,
 } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { BadRequestError, ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
@@ -217,4 +217,19 @@ export async function getSignedCopy(
     : null;
   if (!doc) throw new NotFoundError('No signed copy is stored for this will');
   return { buffer: await readBuffer(userId, doc.storageKey), mimeType: doc.mimeType, fileName: doc.fileName, versionNo: will.version };
+}
+
+/** The live will's files for the ungated "Your will documents" list. Ids, version and flags only. */
+export async function getLiveWillDocuments(userId: string): Promise<WillLiveDocumentsWire | null> {
+  const will = await prisma.will.findFirst({
+    where: { userId, status: { in: ['GENERATED', 'EXECUTED'] } },
+    orderBy: { version: 'desc' },
+    select: { id: true, version: true, status: true, executedDocumentId: true },
+  });
+  if (!will || (will.status !== 'GENERATED' && will.status !== 'EXECUTED')) return null;
+  const version = await latestVersion(userId, will.id);
+  const doc = will.executedDocumentId
+    ? await prisma.document.findFirst({ where: { id: will.executedDocumentId, userId, ownerType: 'WILL' }, select: { id: true } })
+    : null;
+  return { willId: will.id, version: will.version, status: will.status, versionId: version.id, hasSignedCopy: doc !== null };
 }

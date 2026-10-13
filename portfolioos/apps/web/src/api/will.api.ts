@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type {
-  ApiResponse, WillDraftWire, WillExecutionWire, WillEstateRefreshWire, WillGenerateResultWire, WillOverviewWire, WillPreviewWire, WillReviewedWire,
+  ApiResponse, WillDraftWire, WillExecutionWire, WillEstateRefreshWire, WillGenerateResultWire, WillLiveDocumentsWire, WillOverviewWire,
+  WillPreviewWire, WillReviewedWire,
   WillSaveResultWire, WillSection, WillSectionData, WillSuggestionWire,
 } from '@everypaisa/shared';
 import { api, decodeBlobError, unwrap } from './client';
@@ -15,6 +16,10 @@ export interface WillSignedCopyInput {
   witnesses: [string, string];
   file: File | null;
 }
+
+const SIGNED_COPY_EXT: Record<string, string> = {
+  'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+};
 
 function saveBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
@@ -100,6 +105,22 @@ export const willApi = {
       throw await decodeBlobError(err);
     }
     saveBlob(res.data as Blob, fileName);
+  },
+  /** The live will's files; reachable on any plan (a downgraded user keeps their will). Null when there is none. */
+  async documents(): Promise<WillLiveDocumentsWire | null> {
+    const { data } = await api.get<ApiResponse<WillLiveDocumentsWire | null>>(`${BASE}/documents`);
+    return unwrap(data);
+  },
+  /** The signed copy when only the version is known: the file type comes from the response. */
+  async downloadOwnSignedCopy(willId: string, version: number): Promise<void> {
+    let res;
+    try {
+      res = await api.get(`${willPath(willId)}/signed-copy`, { responseType: 'blob' });
+    } catch (err) {
+      throw await decodeBlobError(err);
+    }
+    const blob = res.data as Blob;
+    saveBlob(blob, `will-v${version}-signed.${SIGNED_COPY_EXT[blob.type] ?? 'pdf'}`);
   },
   async markReviewed(willId: string): Promise<WillReviewedWire> {
     const { data } = await api.post<ApiResponse<WillReviewedWire>>(`${willPath(willId)}/reviewed`, {});

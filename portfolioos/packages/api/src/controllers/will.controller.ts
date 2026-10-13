@@ -6,7 +6,7 @@ import { BadRequestError, UnauthorizedError, ValidationError } from '../lib/erro
 import { created, noContent, ok } from '../lib/response.js';
 import { writeAuditLog } from '../lib/audit.js';
 import { downloadHeaders } from '../lib/documentMime.js';
-import { getSignedCopy, getWillExecution, recordWillExecution } from '../services/will/willExecute.service.js';
+import { getLiveWillDocuments, getSignedCopy, getWillExecution, recordWillExecution } from '../services/will/willExecute.service.js';
 import { zodIssues } from '../services/will/willStore.js';
 import { markWillReviewed } from '../services/will/willReview.service.js';
 import {
@@ -172,4 +172,8 @@ export async function reviewed(req: Request, res: Response): Promise<void> {
   const result = await markWillReviewed(userId, willId);
   await writeAuditLog({ userId, action: 'will_reviewed', resource: `Will:${willId}`, metadata: { nextReviewAt: result.nextReviewAt }, req });
   ok(res, result);
+}
+
+export async function liveDocuments(req: Request, res: Response): Promise<void> {
+  ok(res, await getLiveWillDocuments(uid(req)));
 }

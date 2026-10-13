@@ -40,6 +40,14 @@ export function limitWillBody(req: Request, _res: Response, next: NextFunction):
 }
 
 export const willRouter = Router();
+
+// A user always reaches their own existing will documents, whatever their plan
+// (a downgraded user keeps their will). Owner-scoped and audited in the service
+// and controller; everything below the gate needs WILL_MAKER.
+willRouter.get('/documents', authenticate, rejectActAs, asyncHandler(will.liveDocuments));
+willRouter.get('/versions/:vid/pdf', authenticate, rejectActAs, asyncHandler(will.downloadPdf));
+willRouter.get('/wills/:id/signed-copy', authenticate, rejectActAs, asyncHandler(will.downloadSignedCopy));
+
 willRouter.use(authenticate, rejectActAs, requireFeature('WILL_MAKER'), limitWillBody);
 willRouter.get('/', asyncHandler(will.overview));
 willRouter.post('/drafts', asyncHandler(will.createDraft));
@@ -50,10 +58,8 @@ willRouter.delete('/drafts/:id', asyncHandler(will.discardDraft));
 willRouter.get('/people/suggestions', asyncHandler(will.suggestions));
 willRouter.get('/drafts/:id/preview', asyncHandler(will.preview));
 willRouter.post('/drafts/:id/generate', costlyOperationLimiter, asyncHandler(will.generate));
-willRouter.get('/versions/:vid/pdf', asyncHandler(will.downloadPdf));
 
 // Step 9 (Part 2): signing record and signed copy of a generated will.
 willRouter.get('/wills/:id/execution', asyncHandler(will.getExecution));
 willRouter.post('/wills/:id/execution', importLimiter, uploadWillSignedCopy, asyncHandler(will.recordExecution));
-willRouter.get('/wills/:id/signed-copy', asyncHandler(will.downloadSignedCopy));
 willRouter.post('/wills/:id/reviewed', asyncHandler(will.reviewed));
