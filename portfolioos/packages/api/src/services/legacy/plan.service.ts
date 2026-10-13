@@ -117,19 +117,16 @@ export async function saveSettings(userId: string, raw: LegacySettingsInput, opt
 }
 
 /**
- * The documents a nominee keeps. An id that no longer exists (a file deleted, a
- * will's signed copy replaced) is dropped so the owner can still save; an id
- * that belongs to another user is refused.
+ * The documents a nominee keeps: only ids of the owner's own documents, read
+ * in the owner's context. Any other id (a file deleted, a will's signed copy
+ * replaced, or not the owner's) is dropped and never stored.
  */
 async function keptDocumentIds(userId: string, ids: string[]): Promise<string[]> {
   const unique = [...new Set(ids)];
   if (unique.length === 0) return [];
-  const found = await runAsSystem(() =>
-    prisma.document.findMany({ where: { id: { in: unique } }, select: { id: true, userId: true } }),
-  );
-  if (found.some((d) => d.userId !== userId)) throw new BadRequestError('One of the documents was not found.');
-  const existing = new Set(found.map((d) => d.id));
-  return unique.filter((id) => existing.has(id));
+  const owned = await prisma.document.findMany({ where: { userId, id: { in: unique } }, select: { id: true } });
+  const keep = new Set(owned.map((d) => d.id));
+  return unique.filter((id) => keep.has(id));
 }
 
 /** Checks the nominee and returns the document ids to store. */

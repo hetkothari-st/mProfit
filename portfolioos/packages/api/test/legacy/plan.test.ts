@@ -49,7 +49,7 @@ describe('legacy plan service', () => {
     expect(o.nominees.find((n) => n.isVerifier)!.name).toBe('B');
   });
 
-  it('a nominee save drops document ids that no longer exist, but refuses another user ids', async () => {
+  it('a nominee save keeps only the owner document ids: missing and foreign ids are dropped, never stored', async () => {
     const pdf = Buffer.from('%PDF-1.7\n%%EOF\n');
     const docs = { ...nominee, categories: ['DOCUMENTS' as const] };
     const doc = await s.runAs(() => createDocument({ userId: s.userId, ownerType: 'OTHER', ownerId: s.userId, fileName: 'deed.pdf', mimeType: 'application/pdf', buffer: pdf }));
@@ -61,8 +61,13 @@ describe('legacy plan service', () => {
     const other = await createTestScope('legacy-plan-other');
     try {
       const theirs = await other.runAs(() => createDocument({ userId: other.userId, ownerType: 'OTHER', ownerId: other.userId, fileName: 'x.pdf', mimeType: 'application/pdf', buffer: pdf }));
-      await expect(s.runAs(() => updateNominee(s.userId, n.id, { ...docs, documentIds: [theirs.id] }))).rejects.toThrow(/not found/i);
-      await expect(s.runAs(() => addNominee(s.userId, { ...docs, email: 'c@test.local', documentIds: [theirs.id] }))).rejects.toThrow(/not found/i);
+      const updated = await s.runAs(() => updateNominee(s.userId, n.id, { ...docs, documentIds: [theirs.id] }));
+      expect(updated.documentIds).toEqual([]);
+      const added = await s.runAs(() => addNominee(s.userId, { ...docs, email: 'c@test.local', documentIds: [theirs.id] }));
+      expect(added.documentIds).toEqual([]);
+      const stored = await runAsSystem(() => prisma.legacyNominee.findMany({ where: { userId: s.userId }, select: { documentIds: true } }));
+      expect(stored.flatMap((r) => r.documentIds)).not.toContain(theirs.id);
+      expect(JSON.stringify([updated, added])).not.toContain(theirs.id);
     } finally {
       await other.cleanup();
     }
