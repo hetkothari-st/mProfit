@@ -1,6 +1,6 @@
 import axios from 'axios';
 import type {
-  ApiResponse, WillDraftWire, WillExecutionWire, WillEstateRefreshWire, WillGenerateResultWire, WillOverviewWire, WillPreviewWire,
+  ApiResponse, WillDraftWire, WillExecutionWire, WillEstateRefreshWire, WillGenerateResultWire, WillOverviewWire, WillPreviewWire, WillReviewedWire,
   WillSaveResultWire, WillSection, WillSectionData, WillSuggestionWire,
 } from '@everypaisa/shared';
 import { api, decodeBlobError, unwrap } from './client';
@@ -31,8 +31,9 @@ export const willApi = {
     const { data } = await api.get<ApiResponse<WillOverviewWire>>(BASE);
     return unwrap(data);
   },
-  async createDraft(fromWillId?: string): Promise<WillDraftWire> {
-    const { data } = await api.post<ApiResponse<WillDraftWire>>(`${BASE}/drafts`, fromWillId ? { fromWillId } : {});
+  async createDraft(fromWillId?: string, reason?: 'CIRCUMSTANCES_CHANGED'): Promise<WillDraftWire> {
+    const body = fromWillId ? { fromWillId, ...(reason ? { reason } : {}) } : {};
+    const { data } = await api.post<ApiResponse<WillDraftWire>>(`${BASE}/drafts`, body);
     return unwrap(data);
   },
   async getDraft(id: string): Promise<WillDraftWire> {
@@ -99,6 +100,10 @@ export const willApi = {
       throw await decodeBlobError(err);
     }
     saveBlob(res.data as Blob, fileName);
+  },
+  async markReviewed(willId: string): Promise<WillReviewedWire> {
+    const { data } = await api.post<ApiResponse<WillReviewedWire>>(`${willPath(willId)}/reviewed`, {});
+    return unwrap(data);
   },
 };
 

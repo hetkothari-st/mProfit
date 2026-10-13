@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import { renderWithProviders } from '@/pages/split/testUtils';
 import { useActingAsStore } from '@/stores/actingAs.store';
 import { render } from '@testing-library/react';
@@ -8,7 +8,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { willApi, willDraftExists } from '@/api/will.api';
 import { WillOverviewPage } from './WillOverviewPage';
-import { draftWire, overview, resetStores, signIn } from './willTestData';
+import { draftWire, historyEntry, overview, resetStores, signIn } from './willTestData';
 
 vi.mock('react-hot-toast', () => ({ default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 vi.mock('@/api/will.api', () => ({
@@ -96,23 +96,27 @@ describe('WillOverviewPage', () => {
     expect((await screen.findByTestId('where')).textContent).toBe('/will/w5/allocation');
   });
 
-  it('shows which version is downloading and blocks other downloads meanwhile', async () => {
+  it('blocks other history downloads while one version is downloading', async () => {
     api.overview.mockResolvedValue(overview({
       status: 'GENERATED',
       versions: [
         { id: 'v2', willId: 'w2', versionNo: 2, status: 'GENERATED', generatedOn: '2026-10-12', templateId: 'isa-hindu', templateVersion: 1 },
         { id: 'v1', willId: 'w1', versionNo: 1, status: 'SUPERSEDED', generatedOn: '2026-10-11', templateId: 'isa-hindu', templateVersion: 1 },
       ],
+      history: [
+        historyEntry({ willId: 'w2', version: 2, versionId: 'v2' }),
+        historyEntry({ willId: 'w1', version: 1, status: 'SUPERSEDED', versionId: 'v1', supersededByVersion: 2 }),
+      ],
     }));
     api.downloadPdf.mockReturnValue(new Promise<void>(() => undefined));
     renderWithProviders(<WillOverviewPage />, { route: '/will', path: '/will' });
-    const row = (await screen.findByText(/version 1 - replaced/i)).closest('li')!;
-    fireEvent.click(row.querySelector('button')!);
-    await waitFor(() => expect(row.querySelector('button')!.textContent).toMatch(/downloading/i));
-    expect(row.querySelector('button')!.disabled).toBe(true);
-    const other = screen.getByText(/version 2 - generated/i).closest('li')!.querySelector('button')!;
-    expect(other.disabled).toBe(true);
-    expect(other.textContent).not.toMatch(/downloading/i);
+    const card = await screen.findByTestId('will-history');
+    const one = within(card).getByRole('button', { name: 'Download version 1 PDF' }) as HTMLButtonElement;
+    const two = within(card).getByRole('button', { name: 'Download version 2 PDF' }) as HTMLButtonElement;
+    fireEvent.click(one);
+    await waitFor(() => expect(api.downloadPdf).toHaveBeenCalledWith('v1', 1));
+    await waitFor(() => expect(two.disabled).toBe(true));
+    expect(one.disabled).toBe(true);
   });
 
   it('shows the nominee-only amount like the tiles, and drops the time estimate once a will is generated', async () => {

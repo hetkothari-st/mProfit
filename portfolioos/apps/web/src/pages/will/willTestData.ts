@@ -1,5 +1,5 @@
 import {
-  emptyWillPayload, type AuthUser, type WillAssetItem, type WillDraftWire, type WillExecutionWire, type WillOverviewWire, type WillPayload, type WillPerson,
+  emptyWillPayload, type AuthUser, type WillAssetItem, type WillDraftWire, type WillExecutionWire, type WillHistoryEntryWire, type WillOverviewWire, type WillPayload, type WillPerson,
 } from '@everypaisa/shared';
 import { useAuthStore } from '@/stores/auth.store';
 import { useActingAsStore } from '@/stores/actingAs.store';
@@ -83,5 +83,12 @@ export function executionWire(p: Partial<WillExecutionWire> = {}): WillExecution
   return {
     willId: 'w1', version: 1, status: 'GENERATED', versionId: 'v1', generatedOn: TODAY, executedOn: null,
     witnesses: [], nextReviewAt: null, signedCopy: null, warnings: [], ...p,
+  };
+}
+
+export function historyEntry(p: Partial<WillHistoryEntryWire> & { willId: string; version: number }): WillHistoryEntryWire {
+  return {
+    status: 'GENERATED', createdOn: TODAY, generatedOn: TODAY, executedOn: null, nextReviewAt: null,
+    supersededByVersion: null, versionId: null, hasSignedCopy: false, ...p,
   };
 }

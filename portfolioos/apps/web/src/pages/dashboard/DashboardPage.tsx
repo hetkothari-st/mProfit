@@ -68,6 +68,8 @@ function alertHref(type: string): string {
       return '/loans';
     case 'LOAN_GIVEN_DUE':
       return '/loans?view=given';
+    case 'WILL_REVIEW_DUE':
+      return '/will';
     default:
       return '/alerts';
   }

@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Clock, Download, Info, ScrollText } from 'lucide-react';
-import { formatDateIST, formatDateOnly, formatINR, WILL_DISCLAIMER, type WillOverviewWire, type WillVersionWire } from '@everypaisa/shared';
+import { Clock, Download, Info, PenLine, ScrollText } from 'lucide-react';
+import { formatDateIST, formatDateOnly, formatINR, WILL_DISCLAIMER, type WillHistoryEntryWire, type WillOverviewWire, type WillVersionWire } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,16 +13,14 @@ import { willApi, willDraftExists } from '@/api/will.api';
 import { ConfirmDialog } from '@/pages/split/ConfirmDialog';
 import { WillGate } from './WillGuards';
 import { willStepPath } from './willSteps';
+import { WillHistoryCard } from './WillHistoryCard';
+import { WillReviewBanner } from './WillReviewBanner';
 
 const STATUS_LABEL: Record<WillOverviewWire['status'], string> = {
   NOT_CREATED: 'Not created',
   DRAFT: 'Draft',
   GENERATED: 'Generated',
   EXECUTED: 'Executed',
-};
-
-const VERSION_STATUS: Record<WillVersionWire['status'], string> = {
-  DRAFT: 'Draft', GENERATED: 'Generated', EXECUTED: 'Executed', SUPERSEDED: 'Replaced', DISCARDED: 'Discarded',
 };
 
 const PREPARE = [
@@ -85,6 +83,33 @@ function OverviewBody() {
     mutationFn: (v: WillVersionWire) => willApi.downloadPdf(v.id, v.versionNo),
     onError: (err) => toast.error(apiErrorMessage(err, "Couldn't download the PDF")),
   });
+  const changed = useMutation({
+    mutationFn: (willId: string) => willApi.createDraft(willId, 'CIRCUMSTANCES_CHANGED'),
+    onSuccess: (d) => {
+      void qc.invalidateQueries({ queryKey: ['will'] });
+      navigate(willStepPath(d.id, d.currentStep));
+    },
+    onError: (err) => {
+      const existing = willDraftExists(err);
+      if (existing) {
+        navigate(willStepPath(existing.id, existing.currentStep));
+        return;
+      }
+      toast.error(apiErrorMessage(err, "Couldn't start a new version"));
+    },
+  });
+  const reviewed = useMutation({
+    mutationFn: (willId: string) => willApi.markReviewed(willId),
+    onSuccess: (r) => {
+      toast.success(`Thanks. We'll remind you again on ${formatDateOnly(r.nextReviewAt)}.`);
+      void qc.invalidateQueries({ queryKey: ['will'] });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, "Couldn't save your review")),
+  });
+  const downloadEntry = useMutation({
+    mutationFn: (h: WillHistoryEntryWire) => willApi.downloadPdf(h.versionId ?? '', h.version),
+    onError: (err) => toast.error(apiErrorMessage(err, "Couldn't download the PDF")),
+  });
 
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Loading...</p>;
   if (q.isError || !q.data) {
@@ -93,12 +118,22 @@ function OverviewBody() {
   const o = q.data;
   const latest = o.versions.find((v) => v.status === 'GENERATED' || v.status === 'EXECUTED') ?? null;
   const nominee = money(o.estate.nomineeOnly);
+  const liveEntry = latest ? o.history.find((h) => h.willId === latest.willId) ?? null : null;
+  const executed = liveEntry?.status === 'EXECUTED';
   // 'truncated' marks a cut-off list, not a source that failed.
   const unreadSources = o.estateFailedSources.filter((s) => s !== 'truncated').length;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-4">
+        {o.review?.due && (
+          <WillReviewBanner
+            review={o.review}
+            busy={reviewed.isPending || changed.isPending}
+            onReviewed={() => reviewed.mutate(o.review!.willId)}
+            onChanged={() => changed.mutate(o.review!.willId)}
+          />
+        )}
         <Card className="space-y-3 p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -132,11 +167,27 @@ function OverviewBody() {
           {latest && (
             <div className="space-y-2 rounded-md border border-border/60 p-3 text-sm">
               <p className="text-foreground">Version {latest.versionNo} generated on {formatDateOnly(latest.generatedOn)}</p>
+              {executed && liveEntry?.executedOn && (
+                <p className="text-muted-foreground" data-testid="will-executed-line">
+                  Signed on {formatDateOnly(liveEntry.executedOn)}
+                  {liveEntry.nextReviewAt ? ` - next review ${formatDateOnly(liveEntry.nextReviewAt)}` : ''}
+                </p>
+              )}
               <div className="flex flex-wrap gap-2">
                 <DownloadButton variant="outline" version={latest} download={download} />
-                {!o.draft && (
-                  <Button size="sm" disabled={create.isPending} onClick={() => create.mutate(latest.willId)}>
+                <Button size="sm" variant={executed ? 'outline' : 'default'} asChild>
+                  <Link to={`/will/${encodeURIComponent(latest.willId)}/execute`}>
+                    <PenLine className="mr-1 h-4 w-4" />{executed ? 'Signed copy' : 'Sign and store'}
+                  </Link>
+                </Button>
+                {!o.draft && !executed && (
+                  <Button size="sm" variant="outline" disabled={create.isPending} onClick={() => create.mutate(latest.willId)}>
                     Start a new version
+                  </Button>
+                )}
+                {!o.draft && executed && (
+                  <Button size="sm" variant="outline" disabled={changed.isPending} onClick={() => changed.mutate(latest.willId)}>
+                    My circumstances changed
                   </Button>
                 )}
               </div>
@@ -165,21 +216,7 @@ function OverviewBody() {
           </p>
         </Card>
 
-        {o.versions.length > 0 && (
-          <Card className="space-y-2 p-4 sm:p-5">
-            <h2 className="text-base font-semibold text-foreground">Versions</h2>
-            <ul className="divide-y divide-border/60">
-              {o.versions.map((v) => (
-                <li key={v.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-                  <span className="text-foreground">
-                    Version {v.versionNo} - {VERSION_STATUS[v.status]} - {formatDateOnly(v.generatedOn)}
-                  </span>
-                  <DownloadButton variant="ghost" version={v} download={download} />
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
+        <WillHistoryCard history={o.history} downloading={downloadEntry.isPending} onDownload={(h) => downloadEntry.mutate(h)} />
       </div>
 
       <div className="min-w-0 space-y-4">
