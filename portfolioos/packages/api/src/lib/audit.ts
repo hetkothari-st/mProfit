@@ -46,6 +46,8 @@ export type AuditAction =
   | 'will_generated'
   | 'will_downloaded'
   | 'will_discarded'
+  | 'will_execute_upload'
+  | 'will_reviewed'
   | 'legacy_activated'
   | 'legacy_changed'
   | 'legacy_warning'

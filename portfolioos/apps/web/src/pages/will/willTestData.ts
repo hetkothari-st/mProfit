@@ -66,6 +66,8 @@ export function overview(p: Partial<WillOverviewWire> = {}): WillOverviewWire {
     versions: [],
     estate: { assets: '1750000.0000', liabilities: '400000.0000', net: '1350000.0000', nomineeOnly: '0.0000' },
     estateFailedSources: [],
+    history: [],
+    review: null,
     ...p,
   };
 }

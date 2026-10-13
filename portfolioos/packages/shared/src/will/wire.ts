@@ -41,12 +41,37 @@ export interface WillDraftSummaryWire {
   updatedAt: string;
 }
 
+/** One will in the overview's history (every status except DISCARDED). */
+export interface WillHistoryEntryWire {
+  willId: string;
+  version: number;
+  status: WillStatusWire;
+  createdOn: string;
+  generatedOn: string | null;
+  executedOn: string | null;
+  /** Only for the EXECUTED will. */
+  nextReviewAt: string | null;
+  supersededByVersion: number | null;
+  versionId: string | null;
+  hasSignedCopy: boolean;
+}
+
+/** The executed will's review date; `due` once it is today or past. */
+export interface WillReviewWire {
+  willId: string;
+  version: number;
+  nextReviewAt: string;
+  due: boolean;
+}
+
 export interface WillOverviewWire {
   status: WillOverallStatus;
   draft: WillDraftSummaryWire | null;
   versions: WillVersionWire[];
   estate: WillEstateTotalsWire;
   estateFailedSources: string[];
+  history: WillHistoryEntryWire[];
+  review: WillReviewWire | null;
 }
 
 export interface WillDraftWire {

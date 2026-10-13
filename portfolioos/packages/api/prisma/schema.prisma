@@ -1557,6 +1557,7 @@ enum AlertType {
   PF_REFRESH_DUE
   LOAN_REFINANCE
   LOAN_BENCHMARK_CHANGE
+  WILL_REVIEW_DUE
   CUSTOM
 }
 
@@ -5382,12 +5383,17 @@ model Will {
   generatedAt      DateTime?     @db.Timestamptz(3)
   executedAt       DateTime?     @db.Date
   nextReviewAt     DateTime?     @db.Date
+  /// Part 2: signing date + witness names, sealed under slot "willexec:<id>".
+  executionSealed    Bytes?
+  /// Part 2: Document (ownerType WILL, category "executed") holding the signed copy.
+  executedDocumentId String?
   createdAt        DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
   versions         WillVersion[]
 
   @@unique([userId, version])
   @@index([userId, status])
+  @@index([status, nextReviewAt])
 }
 
 /// The generated, immutable copy of a will. UPDATE is refused by a trigger;

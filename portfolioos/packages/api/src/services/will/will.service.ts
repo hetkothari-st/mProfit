@@ -1,10 +1,10 @@
 import { Prisma, type Will, type WillVersion } from '@prisma/client';
 import {
-  applyWillSection, emptyWillPayload, runWillRules, serializeMoney, willEstateTotals,
+  applyWillSection, emptyWillPayload, istCalendarDate, runWillRules, serializeMoney, willEstateTotals,
   WILL_PAYLOAD_SCHEMA_VER, WILL_SECTION_SCHEMAS,
   type WillDraftWire, type WillEstateRefreshWire, type WillOverviewWire, type WillPayload, type WillRelationship,
   type WillSaveResultWire, type WillSection, type WillSectionData, type WillStatusWire, type WillSuggestionWire,
-  type WillVersionWire,
+  type WillHistoryEntryWire, type WillReviewWire, type WillVersionWire,
 } from '@everypaisa/shared';
 import { prisma } from '../../lib/prisma.js';
 import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
@@ -12,7 +12,7 @@ import { collectEstate, type EstateCollection } from './estate/registry.js';
 import { candidatesToItems, reconcileEstate } from './estate/reconcile.js';
 import type { EstateContext } from './estate/types.js';
 import {
-  loadDraft, loadOwnedWill, newWillId, notDraft, openWillPayload, revisionConflict, sealWillPayload, todayIst, zodIssues,
+  isoDay, loadDraft, loadOwnedWill, newWillId, notDraft, openWillPayload, revisionConflict, sealWillPayload, todayIst, zodIssues,
 } from './willStore.js';
 
 export interface WillServiceDeps {
@@ -44,7 +44,32 @@ function toDraftWire(will: Will, payload: WillPayload, today: string): WillDraft
   };
 }
 
-const DRAFT_EXISTS = 'You already have a draft will. Continue it or discard it first.';
+/** One row of the overview's history. `versionOfWill` maps Will id -> version number. */
+export function toHistoryWire(w: Will & { versions: WillVersion[] }, versionOfWill: Map<string, number>): WillHistoryEntryWire {
+  const v = w.versions[0] ?? null;
+  return {
+    willId: w.id,
+    version: w.version,
+    status: w.status,
+    createdOn: istCalendarDate(w.createdAt),
+    generatedOn: v ? isoDay(v.generatedOn) : null,
+    executedOn: w.executedAt ? isoDay(w.executedAt) : null,
+    nextReviewAt: w.status === 'EXECUTED' && w.nextReviewAt ? isoDay(w.nextReviewAt) : null,
+    supersededByVersion: w.supersededById ? versionOfWill.get(w.supersededById) ?? null : null,
+    versionId: v?.id ?? null,
+    hasSignedCopy: w.executedDocumentId !== null,
+  };
+}
+
+/** The executed will's review date. At most one will is EXECUTED (generate supersedes the rest). */
+export function willReviewOf(wills: readonly Will[], today: string): WillReviewWire | null {
+  const w = wills.find((x) => x.status === 'EXECUTED' && x.nextReviewAt !== null);
+  if (!w || !w.nextReviewAt) return null;
+  const nextReviewAt = isoDay(w.nextReviewAt);
+  return { willId: w.id, version: w.version, nextReviewAt, due: nextReviewAt <= today };
+}
+
+const DRAFT_EXISTS ='You already have a draft will. Continue it or discard it first.';
 
 function findOpenDraft(userId: string): Promise<{ id: string; currentStep: number } | null> {
   return prisma.will.findFirst({ where: { userId, status: 'DRAFT' }, select: { id: true, currentStep: true } });
@@ -65,6 +90,7 @@ export async function getWillOverview(userId: string, deps: WillServiceDeps = {}
   const draft = wills.find((w) => w.status === 'DRAFT') ?? null;
   const live = wills.find((w) => w.status === 'GENERATED' || w.status === 'EXECUTED') ?? null;
   const versions = wills.flatMap((w) => w.versions.map((v) => toVersionWire(w.status, v)));
+  const versionOfWill = new Map(wills.map((w) => [w.id, w.version]));
   const collection = await (deps.collect ?? collectEstate)({ userId, today });
   const totals = willEstateTotals(candidatesToItems(collection.candidates));
   return {
@@ -80,6 +106,8 @@ export async function getWillOverview(userId: string, deps: WillServiceDeps = {}
       nomineeOnly: serializeMoney(totals.nomineeOnly),
     },
     estateFailedSources: collection.failed,
+    history: wills.map((w) => toHistoryWire(w, versionOfWill)),
+    review: willReviewOf(wills, today),
   };
 }
 

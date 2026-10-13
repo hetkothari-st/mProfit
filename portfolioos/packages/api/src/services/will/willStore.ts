@@ -72,3 +72,13 @@ export function zodIssues(err: ZodError): Array<{ path: string; code: string }> 
 export function todayIst(): string {
   return istCalendarDate(new Date());
 }
+
+/** A @db.Date column as YYYY-MM-DD. */
+export function isoDay(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** YYYY-MM-DD as the Date Prisma writes to a @db.Date column. */
+export function dayOf(iso: string): Date {
+  return new Date(`${iso}T00:00:00Z`);
+}
