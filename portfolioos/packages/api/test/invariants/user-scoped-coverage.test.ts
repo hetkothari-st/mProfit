@@ -65,6 +65,9 @@ const MUST_BE_PROTECTED_BY_NAME = [
   'MfAnalysisRun',
   'MfFinding',
   'MfFundVerdict',
+  // Will Maker: a will's whole content, sealed or not, is one person's.
+  'Will',
+  'WillVersion',
 ] as const;
 
 describe('USER_SCOPED_MODELS covers every RLS-protected table', () => {

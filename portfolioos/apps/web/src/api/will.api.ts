@@ -1,0 +1,170 @@
+import axios from 'axios';
+import type {
+  ApiResponse, WillDraftWire, WillExecutionWire, WillEstateRefreshWire, WillGenerateResultWire, WillLiveDocumentsWire, WillOverviewWire,
+  WillPreviewWire, WillReviewedWire,
+  WillSaveResultWire, WillSection, WillSectionData, WillSuggestionWire,
+} from '@everypaisa/shared';
+import { api, decodeBlobError, unwrap } from './client';
+
+const BASE = '/api/will';
+const draftPath = (id: string) => `${BASE}/drafts/${encodeURIComponent(id)}`;
+const willPath = (id: string) => `${BASE}/wills/${encodeURIComponent(id)}`;
+
+/** Step 9 form values. `file` may be null only when correcting a record that already has a copy. */
+export interface WillSignedCopyInput {
+  executedOn: string;
+  witnesses: [string, string];
+  file: File | null;
+}
+
+const SIGNED_COPY_EXT: Record<string, string> = {
+  'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+};
+
+function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** Will Maker. Money and percentages stay decimal strings end to end. */
+export const willApi = {
+  async overview(): Promise<WillOverviewWire> {
+    const { data } = await api.get<ApiResponse<WillOverviewWire>>(BASE);
+    return unwrap(data);
+  },
+  async createDraft(fromWillId?: string, reason?: 'CIRCUMSTANCES_CHANGED'): Promise<WillDraftWire> {
+    const body = fromWillId ? { fromWillId, ...(reason ? { reason } : {}) } : {};
+    const { data } = await api.post<ApiResponse<WillDraftWire>>(`${BASE}/drafts`, body);
+    return unwrap(data);
+  },
+  async getDraft(id: string): Promise<WillDraftWire> {
+    const { data } = await api.get<ApiResponse<WillDraftWire>>(draftPath(id));
+    return unwrap(data);
+  },
+  async saveSection<S extends WillSection>(
+    id: string,
+    section: S,
+    body: { revision: number; currentStep: number; data: WillSectionData[S] },
+  ): Promise<WillSaveResultWire> {
+    const { data } = await api.put<ApiResponse<WillSaveResultWire>>(`${draftPath(id)}/sections/${section}`, body);
+    return unwrap(data);
+  },
+  async refreshEstate(id: string, revision: number): Promise<WillEstateRefreshWire> {
+    const { data } = await api.post<ApiResponse<WillEstateRefreshWire>>(`${draftPath(id)}/estate/refresh`, { revision });
+    return unwrap(data);
+  },
+  async discard(id: string): Promise<void> {
+    await api.delete(draftPath(id));
+  },
+  async suggestions(): Promise<WillSuggestionWire[]> {
+    const { data } = await api.get<ApiResponse<{ suggestions: WillSuggestionWire[] }>>(`${BASE}/people/suggestions`);
+    return unwrap(data).suggestions;
+  },
+  async preview(id: string): Promise<WillPreviewWire> {
+    const { data } = await api.get<ApiResponse<WillPreviewWire>>(`${draftPath(id)}/preview`);
+    return unwrap(data);
+  },
+  /** `generatedOn` is the date of the preview the user acknowledged; the API refuses a stale one. */
+  async generate(id: string, revision: number, generatedOn: string): Promise<WillGenerateResultWire> {
+    const { data } = await api.post<ApiResponse<WillGenerateResultWire>>(`${draftPath(id)}/generate`, { revision, acknowledge: true, generatedOn });
+    return unwrap(data);
+  },
+  async downloadPdf(versionId: string, versionNo: number): Promise<void> {
+    let res;
+    try {
+      res = await api.get(`${BASE}/versions/${encodeURIComponent(versionId)}/pdf`, { responseType: 'blob' });
+    } catch (err) {
+      throw await decodeBlobError(err);
+    }
+    saveBlob(res.data as Blob, `will-v${versionNo}.pdf`);
+  },
+  async execution(willId: string): Promise<WillExecutionWire> {
+    const { data } = await api.get<ApiResponse<WillExecutionWire>>(`${willPath(willId)}/execution`);
+    return unwrap(data);
+  },
+  async recordExecution(willId: string, input: WillSignedCopyInput): Promise<WillExecutionWire> {
+    const fd = new FormData();
+    fd.append('executedOn', input.executedOn);
+    fd.append('witness1', input.witnesses[0]);
+    fd.append('witness2', input.witnesses[1]);
+    if (input.file) fd.append('file', input.file);
+    const { data } = await api.post<ApiResponse<WillExecutionWire>>(`${willPath(willId)}/execution`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return unwrap(data);
+  },
+  async downloadSignedCopy(willId: string, fileName: string): Promise<void> {
+    let res;
+    try {
+      res = await api.get(`${willPath(willId)}/signed-copy`, { responseType: 'blob' });
+    } catch (err) {
+      throw await decodeBlobError(err);
+    }
+    saveBlob(res.data as Blob, fileName);
+  },
+  /** The live will's files; reachable on any plan (a downgraded user keeps their will). Null when there is none. */
+  async documents(): Promise<WillLiveDocumentsWire | null> {
+    const { data } = await api.get<ApiResponse<WillLiveDocumentsWire | null>>(`${BASE}/documents`);
+    return unwrap(data);
+  },
+  /** The signed copy when only the version is known: the file type comes from the response. */
+  async downloadOwnSignedCopy(willId: string, version: number): Promise<void> {
+    let res;
+    try {
+      res = await api.get(`${willPath(willId)}/signed-copy`, { responseType: 'blob' });
+    } catch (err) {
+      throw await decodeBlobError(err);
+    }
+    const blob = res.data as Blob;
+    saveBlob(blob, `will-v${version}-signed.${SIGNED_COPY_EXT[blob.type] ?? 'pdf'}`);
+  },
+  async markReviewed(willId: string): Promise<WillReviewedWire> {
+    const { data } = await api.post<ApiResponse<WillReviewedWire>>(`${willPath(willId)}/reviewed`, {});
+    return unwrap(data);
+  },
+};
+
+function errorDetails(err: unknown, status: number): Record<string, unknown> | null {
+  if (!axios.isAxiosError(err) || err.response?.status !== status) return null;
+  const details = (err.response.data as { details?: unknown } | undefined)?.details;
+  return details && typeof details === 'object' ? (details as Record<string, unknown>) : null;
+}
+
+export function isWillRevisionConflict(err: unknown): boolean {
+  return errorDetails(err, 409)?.['reason'] === 'WILL_REVISION_CONFLICT';
+}
+
+/** The open draft named by a WILL_DRAFT_EXISTS conflict, with the step it was saved at. */
+export function willDraftExists(err: unknown): { id: string; currentStep: number } | null {
+  const d = errorDetails(err, 409);
+  if (d?.['reason'] !== 'WILL_DRAFT_EXISTS' || typeof d['draftId'] !== 'string') return null;
+  const step = d['currentStep'];
+  return { id: d['draftId'], currentStep: typeof step === 'number' && Number.isInteger(step) ? step : 2 };
+}
+
+export function isWillPreviewOutdated(err: unknown): boolean {
+  return errorDetails(err, 409)?.['reason'] === 'WILL_PREVIEW_OUTDATED';
+}
+
+export function isWillBlocked(err: unknown): boolean {
+  return errorDetails(err, 422)?.['reason'] === 'WILL_BLOCKED';
+}
+
+export function isWillNotExecutable(err: unknown): boolean {
+  return errorDetails(err, 409)?.['reason'] === 'WILL_NOT_EXECUTABLE';
+}
+
+/** The {path, code} pairs of a 422 from the signing endpoint. Codes and paths only, never submitted values. */
+export function willExecutionIssues(err: unknown): Array<{ path: string; code: string }> {
+  if (!axios.isAxiosError(err) || err.response?.status !== 422) return [];
+  const issues = (err.response.data as { details?: { issues?: unknown } } | undefined)?.details?.issues;
+  if (!Array.isArray(issues)) return [];
+  return issues.flatMap((i: unknown) => {
+    const o = i as { path?: unknown; code?: unknown };
+    return typeof o?.path === 'string' && typeof o.code === 'string' ? [{ path: o.path, code: o.code }] : [];
+  });
+}

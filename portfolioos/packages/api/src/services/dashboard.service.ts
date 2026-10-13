@@ -3,7 +3,7 @@ import type { AssetClass } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { financialYearOf, financialYearRange } from '@everypaisa/shared';
 import { serializeMoney, financialYearFromDate, toDecimal, premiumToAnnual } from '@everypaisa/shared';
-import { buildAmortizationSchedule, type StoredLoan } from './loans.service.js';
+import { loanPosition, type StoredLoan } from './loans.service.js';
 import { outstandingLoansGiven } from './loansGiven.service.js';
 import { computeCardSummary } from './creditCards.service.js';
 import { getEffectiveScope, type EffectiveScope } from './familyScope.service.js';
@@ -13,7 +13,7 @@ import { plateOf } from './piiAtRest.service.js';
 // Human-readable labels for the AssetClass enum — used in dashboard breakdown.
 // Mirrors the per-class labels in apps/web/src/pages/assetClasses/SimpleAssetPage.tsx
 // (kept inline rather than imported because the API package cannot pull from /apps).
-const ASSET_CLASS_LABELS: Record<string, string> = {
+export const ASSET_CLASS_LABELS: Record<string, string> = {
   EQUITY: 'Equity', MUTUAL_FUND: 'Mutual Fund', ETF: 'ETF',
   FUTURES: 'Futures', OPTIONS: 'Options',
   BOND: 'Bond', GOVT_BOND: 'Govt Bond', CORPORATE_BOND: 'Corp Bond',
@@ -267,41 +267,30 @@ export async function getDashboardNetWorth(
   for (const loan of activeLoans) {
     monthlyEmiTotal = monthlyEmiTotal.plus(d(loan.emiAmount));
 
-    let schedule: ReturnType<typeof buildAmortizationSchedule>;
-    try {
-      schedule = buildAmortizationSchedule(loan as unknown as StoredLoan);
-    } catch {
-      // If schedule fails (e.g. bad data), use principal as outstanding
-      totalOutstanding = totalOutstanding.plus(d(loan.principalAmount));
-      continue;
-    }
+    // Outstanding balance: opening balance of the first unpaid EMI (principal
+    // when the schedule cannot be built) - see loanPosition.
+    const position = loanPosition(loan as unknown as StoredLoan);
+    totalOutstanding = totalOutstanding.plus(position.outstanding);
+    const firstUnpaid = position.firstUnpaid;
+    if (!firstUnpaid) continue;
 
-    // Outstanding balance: opening balance of first unpaid EMI
-    const firstUnpaid = schedule.find((r) => !r.isPaid);
-    if (firstUnpaid) {
-      totalOutstanding = totalOutstanding.plus(new Decimal(firstUnpaid.openingBalance));
+    const emiDateMs = new Date(firstUnpaid.date + 'T00:00:00Z').getTime();
+    const daysDiff = Math.ceil((emiDateMs - today.getTime()) / 86_400_000);
 
-      const emiDateMs = new Date(firstUnpaid.date + 'T00:00:00Z').getTime();
-      const daysDiff = Math.ceil((emiDateMs - today.getTime()) / 86_400_000);
-
-      if (daysDiff < 0) {
-        overdueEmis.push({
-          loanId: loan.id,
-          lenderName: loan.lenderName,
-          daysOverdue: Math.abs(daysDiff),
-        });
-      } else if (daysDiff <= 30) {
-        upcomingEmis.push({
-          loanId: loan.id,
-          lenderName: loan.lenderName,
-          emiDate: firstUnpaid.date,
-          emiAmount: firstUnpaid.emiAmount,
-          daysUntil: daysDiff,
-        });
-      }
-    } else {
-      // All EMIs paid — loan effectively zero outstanding
-      // (status should be CLOSED but handle gracefully)
+    if (daysDiff < 0) {
+      overdueEmis.push({
+        loanId: loan.id,
+        lenderName: loan.lenderName,
+        daysOverdue: Math.abs(daysDiff),
+      });
+    } else if (daysDiff <= 30) {
+      upcomingEmis.push({
+        loanId: loan.id,
+        lenderName: loan.lenderName,
+        emiDate: firstUnpaid.date,
+        emiAmount: firstUnpaid.emiAmount,
+        daysUntil: daysDiff,
+      });
     }
   }
 

@@ -46,6 +46,9 @@ export const FEATURE_MIN_TIER = {
   // alone can never expose advice — that separation is the whole point of
   // having two gates.
   MF_ANALYTICS: 'PLUS',
+  // Will Maker: a fixed-template will under Indian law from the user's own
+  // data (docs/superpowers/specs/2026-10-12-will-maker-design.md).
+  WILL_MAKER: 'PLUS',
   // Legacy Transfer (docs/legacy-transfer): nominees get read-only access on
   // inactivity or a scheduled date. An armed plan keeps running after a lapse
   // (see plan.service) — only *configuring* it needs this flag.

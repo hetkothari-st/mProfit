@@ -37,6 +37,8 @@ COPY --from=build /app/packages/api/node_modules ./packages/api/node_modules
 COPY --from=build /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=build /app/packages/api/dist ./packages/api/dist
 COPY --from=build /app/packages/api/prisma ./packages/api/prisma
+# Fonts for generated PDFs (Will Maker). Read at runtime relative to dist/.
+COPY --from=build /app/packages/api/assets ./packages/api/assets
 COPY --from=build /app/packages/api/package.json ./packages/api/package.json
 COPY --from=build /app/packages/shared ./packages/shared
 COPY packages/api/start.sh ./start.sh

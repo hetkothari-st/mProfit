@@ -1,0 +1,402 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`fully loaded golden wills > isa-general v1, every clause 1`] = `
+"LAST WILL AND TESTAMENT
+
+of Ramesh Kumar Verma
+
+1. Declaration
+I, Ramesh Kumar Verma, born on 15/05/1970, residing at 12 MG Road, Pune 411001, a Christian by religion, making this Will under the Indian Succession Act, 1925, make this my last Will and Testament on the date written below.
+I revoke all Wills, codicils and other testamentary writings made by me before this Will.
+
+2. Sound mind and free will
+I make this Will of my own free will, while of sound mind and memory, and without any coercion, fraud or undue influence from anyone.
+
+3. My family
+I am married.
+The members of my family named in this Will are: my son Arjun Verma, born on 10/02/1998; my daughter Meera Verma, born on 03/03/2016; my spouse Sunita Verma, born on 01/08/1972; my brother Vikas Verma, born on 20/11/1968.
+
+4. Executor
+I appoint my spouse Sunita Verma, born on 01/08/1972, as the Executor of this Will.
+If Sunita Verma dies before me, or is unable or unwilling to act, I appoint my son Arjun Verma, born on 10/02/1998, as Executor in their place.
+My Executor may collect my assets, pay my debts and expenses, sell or transfer any asset where needed, and distribute my estate as this Will directs.
+
+5. Guardian of my minor children
+If any of my children is under eighteen years of age at my death, I appoint my spouse Sunita Verma, born on 01/08/1972, as the guardian of the person and property of that child.
+If Sunita Verma is unable or unwilling to act, I appoint my brother Vikas Verma, born on 20/11/1968, as guardian in their place.
+
+6. Specific gifts
+I give each asset listed below to the person named against it. Where a percentage is shown, that person receives that share of the asset.
+
+- Equity - My Portfolio: Arjun Verma (son)
+- Flat 4B, Shanti Apartments, Pune: Sunita Verma (spouse)
+- Honda City (MH12AB1234): Meera Verma (daughter) - 50%
+- Honda City (MH12AB1234): Vikas Verma (brother) - 50%
+
+7. Gifts of money
+I give my friend Anil Shah the sum of ₹25,000.75 (Twenty-five thousand rupees and seventy-five paise only).
+I give Pune Animal Trust the sum of ₹50,000 (Fifty thousand rupees only).
+These sums shall be paid out of my estate before the residue is divided.
+
+8. Residuary estate
+I give all the rest and residue of my estate - including any asset not given above, any gift that fails, and anything I acquire after signing this Will - to the following persons in the shares shown:
+
+- Arjun Verma (son): 40%
+- Sunita Verma (spouse): 60%
+
+9. If a beneficiary dies before me
+A person must survive me by thirty days to receive anything under this Will.
+If Arjun Verma does not survive me by thirty days, everything given to Arjun Verma under this Will shall go to my spouse Sunita Verma, born on 01/08/1972.
+If Meera Verma does not survive me by thirty days, everything given to Meera Verma under this Will shall go to my son Arjun Verma, born on 10/02/1998.
+Any other gift that fails shall fall into my residuary estate. If a share of my residuary estate fails, it shall be divided among the other residuary beneficiaries in proportion to their shares.
+
+10. Debts and expenses
+My Executor shall pay my debts, funeral and testamentary expenses, and any taxes due from my estate out of my residuary estate, before any gift in this Will is paid or transferred and before the residue is divided.
+My known liabilities are listed in the Schedule.
+
+11. Joint assets and nominations
+Where I hold an asset jointly with another person, only my share of it passes under this Will.
+A person registered as my nominee for any bank account, deposit, insurance policy, provident fund or investment shall hold what they receive for the persons entitled under this Will, except where the law makes the nominee its owner.
+My interest in any Hindu Undivided Family property passes under this Will only to the extent the law allows me to dispose of it.
+
+12. Additional wishes
+The following are my wishes. They do not alter or revoke any gift made above in this Will, and if anything below conflicts with those gifts, the gifts above prevail.
+I wish my books to go to the Pune public library.
+Please keep the family home for my children.
+
+Schedule
+
+Assets and liabilities known to me on 12/10/2026. Values are estimates for identification only; this list does not limit my residuary estate.
+
+Assets
+- HDFC Bank savings account (XXXX1234): ₹2,50,000
+- Equity - My Portfolio: ₹15,00,000
+- Ancestral land, Satara: ₹20,00,000 (my share 25%)
+- Flat 4B, Shanti Apartments, Pune: ₹85,00,000 (my share 50%)
+- Honda City (MH12AB1234): ₹6,50,000
+- LIC term policy (XXXX9876): ₹1,00,00,000 (paid to the nominee)
+
+Liabilities
+- Home loan - SBI: ₹4,00,000
+
+In witness whereof I have signed this Will on the date and at the place written below.
+
+Place: ____________________
+Date: ____________________
+
+Signature of the Testator: ____________________
+(Ramesh Kumar Verma)
+
+Signed by the Testator as the last Will in our presence, both of us being present at the same time, and signed by us in the presence of the Testator and of each other. Neither of us is a beneficiary under this Will or the spouse of a beneficiary.
+Witness 1
+Signature: ____________________
+Full name: ____________________
+Address: ____________________
+Date: ____________________
+Witness 2
+Signature: ____________________
+Full name: ____________________
+Address: ____________________
+Date: ____________________
+"
+`;
+
+exports[`fully loaded golden wills > isa-hindu v1, every clause 1`] = `
+"LAST WILL AND TESTAMENT
+
+of Ramesh Kumar Verma
+
+1. Declaration
+I, Ramesh Kumar Verma, born on 15/05/1970, residing at 12 MG Road, Pune 411001, a Hindu by religion, to whom Part VI of the Indian Succession Act, 1925 applies in terms of section 57 of that Act, make this my last Will and Testament on the date written below.
+I revoke all Wills, codicils and other testamentary writings made by me before this Will.
+
+2. Sound mind and free will
+I make this Will of my own free will, while of sound mind and memory, and without any coercion, fraud or undue influence from anyone.
+
+3. My family
+I am married.
+The members of my family named in this Will are: my son Arjun Verma, born on 10/02/1998; my daughter Meera Verma, born on 03/03/2016; my spouse Sunita Verma, born on 01/08/1972; my brother Vikas Verma, born on 20/11/1968.
+
+4. Executor
+I appoint my spouse Sunita Verma, born on 01/08/1972, as the Executor of this Will.
+If Sunita Verma dies before me, or is unable or unwilling to act, I appoint my son Arjun Verma, born on 10/02/1998, as Executor in their place.
+My Executor may collect my assets, pay my debts and expenses, sell or transfer any asset where needed, and distribute my estate as this Will directs.
+
+5. Guardian of my minor children
+If any of my children is under eighteen years of age at my death, I appoint my spouse Sunita Verma, born on 01/08/1972, as the guardian of the person and property of that child.
+If Sunita Verma is unable or unwilling to act, I appoint my brother Vikas Verma, born on 20/11/1968, as guardian in their place.
+
+6. Specific gifts
+I give each asset listed below to the person named against it. Where a percentage is shown, that person receives that share of the asset.
+
+- Equity - My Portfolio: Arjun Verma (son)
+- Flat 4B, Shanti Apartments, Pune: Sunita Verma (spouse)
+- Honda City (MH12AB1234): Meera Verma (daughter) - 50%
+- Honda City (MH12AB1234): Vikas Verma (brother) - 50%
+
+7. Gifts of money
+I give my friend Anil Shah the sum of ₹25,000.75 (Twenty-five thousand rupees and seventy-five paise only).
+I give Pune Animal Trust the sum of ₹50,000 (Fifty thousand rupees only).
+These sums shall be paid out of my estate before the residue is divided.
+
+8. Residuary estate
+I give all the rest and residue of my estate - including any asset not given above, any gift that fails, and anything I acquire after signing this Will - to the following persons in the shares shown:
+
+- Arjun Verma (son): 40%
+- Sunita Verma (spouse): 60%
+
+9. If a beneficiary dies before me
+A person must survive me by thirty days to receive anything under this Will.
+If Arjun Verma does not survive me by thirty days, everything given to Arjun Verma under this Will shall go to my spouse Sunita Verma, born on 01/08/1972.
+If Meera Verma does not survive me by thirty days, everything given to Meera Verma under this Will shall go to my son Arjun Verma, born on 10/02/1998.
+Any other gift that fails shall fall into my residuary estate. If a share of my residuary estate fails, it shall be divided among the other residuary beneficiaries in proportion to their shares.
+
+10. Debts and expenses
+My Executor shall pay my debts, funeral and testamentary expenses, and any taxes due from my estate out of my residuary estate, before any gift in this Will is paid or transferred and before the residue is divided.
+My known liabilities are listed in the Schedule.
+
+11. Joint assets and nominations
+Where I hold an asset jointly with another person, only my share of it passes under this Will.
+A person registered as my nominee for any bank account, deposit, insurance policy, provident fund or investment shall hold what they receive for the persons entitled under this Will, except where the law makes the nominee its owner.
+My interest in any Hindu Undivided Family property passes under this Will only to the extent the law allows me to dispose of it.
+
+12. Additional wishes
+The following are my wishes. They do not alter or revoke any gift made above in this Will, and if anything below conflicts with those gifts, the gifts above prevail.
+I wish my books to go to the Pune public library.
+Please keep the family home for my children.
+
+Schedule
+
+Assets and liabilities known to me on 12/10/2026. Values are estimates for identification only; this list does not limit my residuary estate.
+
+Assets
+- HDFC Bank savings account (XXXX1234): ₹2,50,000
+- Equity - My Portfolio: ₹15,00,000
+- Ancestral land, Satara: ₹20,00,000 (my share 25%)
+- Flat 4B, Shanti Apartments, Pune: ₹85,00,000 (my share 50%)
+- Honda City (MH12AB1234): ₹6,50,000
+- LIC term policy (XXXX9876): ₹1,00,00,000 (paid to the nominee)
+
+Liabilities
+- Home loan - SBI: ₹4,00,000
+
+In witness whereof I have signed this Will on the date and at the place written below.
+
+Place: ____________________
+Date: ____________________
+
+Signature of the Testator: ____________________
+(Ramesh Kumar Verma)
+
+Signed by the Testator as the last Will in our presence, both of us being present at the same time, and signed by us in the presence of the Testator and of each other. Neither of us is a beneficiary under this Will or the spouse of a beneficiary.
+Witness 1
+Signature: ____________________
+Full name: ____________________
+Address: ____________________
+Date: ____________________
+Witness 2
+Signature: ____________________
+Full name: ____________________
+Address: ____________________
+Date: ____________________
+"
+`;
+
+exports[`fully loaded golden wills > summary v1, every line 1`] = `
+"Your will in plain words
+
+This summary helps you check your choices. The will below is the legal document.
+
+Sunita Verma will carry out your will as executor, with Arjun Verma as back-up.
+
+Sunita Verma will look after your children under 18, with Vikas Verma as back-up.
+
+Equity - My Portfolio will go to Arjun Verma.
+
+Flat 4B, Shanti Apartments, Pune will go to Sunita Verma.
+
+Honda City (MH12AB1234) will go to Meera Verma (50%).
+
+Honda City (MH12AB1234) will go to Vikas Verma (50%).
+
+Anil Shah receives ₹25,000.75.
+
+Pune Animal Trust receives ₹50,000.
+
+Everything else is shared: Arjun Verma 40%, Sunita Verma 60%.
+
+If Arjun Verma dies before you or within thirty days of you, their gifts go to Sunita Verma.
+
+If Meera Verma dies before you or within thirty days of you, their gifts go to Arjun Verma.
+
+Only your share of jointly held assets passes under the will.
+
+Insurance and nominated accounts are paid to the nominee first.
+
+Your will counts only once you sign it in front of two adult witnesses who are not beneficiaries (or the spouse of one), and they sign it too. Registration is optional.
+"
+`;
+
+exports[`isa-general v1 > uses the general Indian Succession Act declaration 1`] = `
+"LAST WILL AND TESTAMENT
+
+of Ramesh Kumar Verma
+
+1. Declaration
+I, Ramesh Kumar Verma, born on 15/05/1970, residing at 12 MG Road, Pune 411001, a Christian by religion, making this Will under the Indian Succession Act, 1925, make this my last Will and Testament on the date written below.
+I revoke all Wills, codicils and other testamentary writings made by me before this Will.
+
+2. Sound mind and free will
+I make this Will of my own free will, while of sound mind and memory, and without any coercion, fraud or undue influence from anyone.
+
+3. My family
+I am married.
+The members of my family named in this Will are: my son Arjun Verma, born on 10/02/1998; my spouse Sunita Verma, born on 01/08/1972.
+
+4. Executor
+I appoint my spouse Sunita Verma, born on 01/08/1972, as the Executor of this Will.
+If Sunita Verma dies before me, or is unable or unwilling to act, I appoint my son Arjun Verma, born on 10/02/1998, as Executor in their place.
+My Executor may collect my assets, pay my debts and expenses, sell or transfer any asset where needed, and distribute my estate as this Will directs.
+
+5. Specific gifts
+I give each asset listed below to the person named against it. Where a percentage is shown, that person receives that share of the asset.
+
+- Equity - My Portfolio: Arjun Verma (son)
+
+6. Gifts of money
+I give Pune Animal Trust the sum of ₹50,000 (Fifty thousand rupees only).
+These sums shall be paid out of my estate before the residue is divided.
+
+7. Residuary estate
+I give all the rest and residue of my estate - including any asset not given above, any gift that fails, and anything I acquire after signing this Will - to the following persons in the shares shown:
+
+- Arjun Verma (son): 40%
+- Sunita Verma (spouse): 60%
+
+8. If a beneficiary dies before me
+A person must survive me by thirty days to receive anything under this Will.
+If Arjun Verma does not survive me by thirty days, everything given to Arjun Verma under this Will shall go to my spouse Sunita Verma, born on 01/08/1972.
+Any other gift that fails shall fall into my residuary estate. If a share of my residuary estate fails, it shall be divided among the other residuary beneficiaries in proportion to their shares.
+
+9. Debts and expenses
+My Executor shall pay my debts, funeral and testamentary expenses, and any taxes due from my estate out of my residuary estate, before any gift in this Will is paid or transferred and before the residue is divided.
+My known liabilities are listed in the Schedule.
+
+10. Additional wishes
+The following are my wishes. They do not alter or revoke any gift made above in this Will, and if anything below conflicts with those gifts, the gifts above prevail.
+I wish my books to go to the Pune public library.
+
+Schedule
+
+Assets and liabilities known to me on 12/10/2026. Values are estimates for identification only; this list does not limit my residuary estate.
+
+Assets
+- HDFC Bank savings account (XXXX1234): ₹2,50,000
+- Equity - My Portfolio: ₹15,00,000
+
+Liabilities
+- Home loan - SBI: ₹4,00,000
+
+In witness whereof I have signed this Will on the date and at the place written below.
+
+Place: ____________________
+Date: ____________________
+
+Signature of the Testator: ____________________
+(Ramesh Kumar Verma)
+
+Signed by the Testator as the last Will in our presence, both of us being present at the same time, and signed by us in the presence of the Testator and of each other. Neither of us is a beneficiary under this Will or the spouse of a beneficiary.
+Witness 1
+Signature: ____________________
+Full name: ____________________
+Address: ____________________
+Date: ____________________
+Witness 2
+Signature: ____________________
+Full name: ____________________
+Address: ____________________
+Date: ____________________
+"
+`;
+
+exports[`isa-hindu v1 > matches the golden snapshot 1`] = `
+"LAST WILL AND TESTAMENT
+
+of Ramesh Kumar Verma
+
+1. Declaration
+I, Ramesh Kumar Verma, born on 15/05/1970, residing at 12 MG Road, Pune 411001, a Hindu by religion, to whom Part VI of the Indian Succession Act, 1925 applies in terms of section 57 of that Act, make this my last Will and Testament on the date written below.
+I revoke all Wills, codicils and other testamentary writings made by me before this Will.
+
+2. Sound mind and free will
+I make this Will of my own free will, while of sound mind and memory, and without any coercion, fraud or undue influence from anyone.
+
+3. My family
+I am married.
+The members of my family named in this Will are: my son Arjun Verma, born on 10/02/1998; my spouse Sunita Verma, born on 01/08/1972.
+
+4. Executor
+I appoint my spouse Sunita Verma, born on 01/08/1972, as the Executor of this Will.
+If Sunita Verma dies before me, or is unable or unwilling to act, I appoint my son Arjun Verma, born on 10/02/1998, as Executor in their place.
+My Executor may collect my assets, pay my debts and expenses, sell or transfer any asset where needed, and distribute my estate as this Will directs.
+
+5. Specific gifts
+I give each asset listed below to the person named against it. Where a percentage is shown, that person receives that share of the asset.
+
+- Equity - My Portfolio: Arjun Verma (son)
+
+6. Gifts of money
+I give Pune Animal Trust the sum of ₹50,000 (Fifty thousand rupees only).
+These sums shall be paid out of my estate before the residue is divided.
+
+7. Residuary estate
+I give all the rest and residue of my estate - including any asset not given above, any gift that fails, and anything I acquire after signing this Will - to the following persons in the shares shown:
+
+- Arjun Verma (son): 40%
+- Sunita Verma (spouse): 60%
+
+8. If a beneficiary dies before me
+A person must survive me by thirty days to receive anything under this Will.
+If Arjun Verma does not survive me by thirty days, everything given to Arjun Verma under this Will shall go to my spouse Sunita Verma, born on 01/08/1972.
+Any other gift that fails shall fall into my residuary estate. If a share of my residuary estate fails, it shall be divided among the other residuary beneficiaries in proportion to their shares.
+
+9. Debts and expenses
+My Executor shall pay my debts, funeral and testamentary expenses, and any taxes due from my estate out of my residuary estate, before any gift in this Will is paid or transferred and before the residue is divided.
+My known liabilities are listed in the Schedule.
+
+10. Additional wishes
+The following are my wishes. They do not alter or revoke any gift made above in this Will, and if anything below conflicts with those gifts, the gifts above prevail.
+I wish my books to go to the Pune public library.
+
+Schedule
+
+Assets and liabilities known to me on 12/10/2026. Values are estimates for identification only; this list does not limit my residuary estate.
+
+Assets
+- HDFC Bank savings account (XXXX1234): ₹2,50,000
+- Equity - My Portfolio: ₹15,00,000
+
+Liabilities
+- Home loan - SBI: ₹4,00,000
+
+In witness whereof I have signed this Will on the date and at the place written below.
+
+Place: ____________________
+Date: ____________________
+
+Signature of the Testator: ____________________
+(Ramesh Kumar Verma)
+
+Signed by the Testator as the last Will in our presence, both of us being present at the same time, and signed by us in the presence of the Testator and of each other. Neither of us is a beneficiary under this Will or the spouse of a beneficiary.
+Witness 1
+Signature: ____________________
+Full name: ____________________
+Address: ____________________
+Date: ____________________
+Witness 2
+Signature: ____________________
+Full name: ____________________
+Address: ____________________
+Date: ____________________
+"
+`;

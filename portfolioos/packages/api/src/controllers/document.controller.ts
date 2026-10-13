@@ -55,6 +55,9 @@ const uploadBodySchema = z.object({
 export async function upload(req: Request, res: Response) {
   if (!req.file) throw new BadRequestError('file required');
   const body = uploadBodySchema.parse(req.body);
+  if (body.ownerType === 'WILL') {
+    throw new BadRequestError('Will documents are created by Will Maker', { field: 'ownerType' });
+  }
 
   // Magic-byte sniff guards against extension-spoofed uploads (a .pdf
   // file that's actually an executable). Vault is storage-only — we
@@ -374,10 +377,15 @@ export async function listAllDocumentsHandler(req: Request, res: Response) {
   const toStr = (req.query.to as string | undefined)?.trim();
 
   const rows = await runForSubject(resolved.via, subject.userId, () =>
-    listAllDocuments(subject.userId, {
-      from: fromStr ? new Date(fromStr) : undefined,
-      to: toStr ? new Date(toStr) : undefined,
-    }),
+    listAllDocuments(
+      subject.userId,
+      {
+        from: fromStr ? new Date(fromStr) : undefined,
+        to: toStr ? new Date(toStr) : undefined,
+      },
+      // A will is shown to its owner only, never to a CA or family viewer.
+      { excludeWill: resolved.via !== 'SELF' },
+    ),
   );
   ok(res, rows);
 }
@@ -400,7 +408,7 @@ export async function bulkDownloadDocumentsHandler(req: Request, res: Response) 
   if (cleanIds.length > 200) throw new BadRequestError('Select at most 200 documents at a time');
 
   const zip = await runForSubject(resolved.via, subject.userId, () =>
-    zipDocuments(subject.userId, cleanIds),
+    zipDocuments(subject.userId, cleanIds, { excludeWill: resolved.via !== 'SELF' }),
   );
 
   const stem = subject.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

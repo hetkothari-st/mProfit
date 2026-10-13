@@ -1,0 +1,243 @@
+import { useState } from 'react';
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { Decimal, formatINR, sumPercents, type WillAllocation } from '@everypaisa/shared';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { cn } from '@/lib/cn';
+import { DecimalField } from '../DecimalField';
+import { equalShares } from '../allocationMath';
+import { Field, FindingList } from '../parts';
+import type { WillStepProps } from './types';
+
+const TOOLTIP_PROPS = {
+  contentStyle: { background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: 12, padding: '10px 12px' },
+  labelStyle: { color: 'hsl(var(--muted-foreground))', fontSize: 10 },
+  itemStyle: { color: 'hsl(var(--foreground))' },
+};
+
+/** Chart palette tokens: distinct hues in both themes (chart-2 is grey, kept for "not shared"). */
+const SLICE_COLOURS = [
+  'hsl(var(--chart-1))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))', 'hsl(var(--chart-6))',
+  'hsl(var(--chart-7))', 'hsl(var(--chart-8))', 'hsl(var(--chart-3))',
+];
+const UNSHARED_COLOUR = 'hsl(var(--muted))';
+
+export function AllocationStep({ payload, update, findings, wide }: WillStepProps) {
+  const [tab, setTab] = useState('percent');
+  const [giftItem, setGiftItem] = useState('');
+  const [giftPerson, setGiftPerson] = useState('');
+  const [fixedPerson, setFixedPerson] = useState('');
+  const [fixedAmount, setFixedAmount] = useState('');
+  const a = payload.allocation;
+  const set = (patch: Partial<WillAllocation>) => update('allocation', { ...a, ...patch });
+  const people = [...payload.people].sort((x, y) => x.name.localeCompare(y.name, 'en'));
+  const nameOf = (id: string) => payload.people.find((p) => p.id === id)?.name ?? 'Removed person';
+  const itemOf = (id: string) => payload.estate.items.find((i) => i.sourceKey === id);
+  const total = sumPercents(a.residuary.map((r) => r.sharePct));
+  const remaining = new Decimal(100).minus(total);
+  const notInSplit = people.filter((p) => !a.residuary.some((r) => r.personId === p.id));
+  // Nominee-only money passes by nomination, so it cannot be gifted by will.
+  const giftable = payload.estate.items.filter((i) => i.side === 'ASSET' && i.review !== 'EXCLUDED' && i.ownership.type !== 'NOMINEE_ONLY');
+  const remainingOf = (key: string) =>
+    Decimal.max(0, new Decimal(100).minus(sumPercents(a.specificGifts.filter((g) => g.itemId === key).map((g) => g.sharePct))));
+  const duplicateGift = a.specificGifts.some((g) => g.itemId === giftItem && g.personId === giftPerson);
+  // toNumber only for drawing the donut; the legend shows the exact decimals.
+  const slices = [
+    ...a.residuary.map((r, i) => ({
+      id: r.personId, name: nameOf(r.personId), pct: new Decimal(r.sharePct).toFixed(2),
+      value: new Decimal(r.sharePct).toNumber(), colour: SLICE_COLOURS[i % SLICE_COLOURS.length]!,
+    })),
+    ...(remaining.greaterThan(0)
+      ? [{ id: 'unshared', name: 'Not shared yet', pct: remaining.toFixed(2), value: remaining.toNumber(), colour: UNSHARED_COLOUR }]
+      : []),
+  ];
+
+  return (
+    <div className="min-w-0 space-y-4">
+      <FindingList findings={findings.filter((f) => f.step === 5)} />
+      <Tabs value={tab} onValueChange={setTab}>
+        {/* Wraps rather than scrolls, so no tab is hidden off the edge at 375 px. */}
+        <TabsList className="h-auto flex-wrap">
+          <TabsTrigger value="percent">By percentage</TabsTrigger>
+          <TabsTrigger value="specific">Specific gifts</TabsTrigger>
+          <TabsTrigger value="fixed">Fixed amounts</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="percent" className="pt-3">
+          <Card className={cn('grid min-w-0 gap-4 p-4 sm:p-5', wide && 'grid-cols-[minmax(0,1fr)_200px]')}>
+            <div className="min-w-0 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Everything not given away as a specific gift or a fixed amount is shared in these percentages.
+              </p>
+              <ul className="space-y-2">
+                {a.residuary.map((r, i) => (
+                  <li key={r.personId} className="flex flex-wrap items-start gap-2">
+                    <span className="min-w-0 flex-1 break-words pt-2 text-sm text-foreground">{nameOf(r.personId)}</span>
+                    <DecimalField
+                      className="w-28"
+                      kind="percent"
+                      label={`Share for ${nameOf(r.personId)}`}
+                      value={r.sharePct}
+                      onValid={(v) => set({ residuary: a.residuary.map((x, j) => (j === i ? { ...x, sharePct: v } : x)) })}
+                    />
+                    <Button size="sm" variant="ghost" onClick={() => set({ residuary: a.residuary.filter((_, j) => j !== i) })}>Remove</Button>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex flex-wrap items-end gap-2">
+                {notInSplit.length > 0 && (
+                  <Field id="will-add-residuary" label="Add someone to the split" hint={remaining.greaterThan(0) ? undefined : "Lower someone's share first."}>
+                    <Select
+                      id="will-add-residuary"
+                      disabled={!remaining.greaterThan(0)}
+                      value=""
+                      onChange={(e) => {
+                        if (!e.target.value) return;
+                        set({ residuary: [...a.residuary, { personId: e.target.value, sharePct: remaining.toFixed(2) }] });
+                      }}
+                    >
+                      <option value="">Choose a person...</option>
+                      {notInSplit.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </Select>
+                  </Field>
+                )}
+                {a.residuary.length > 1 && (
+                  <Button size="sm" variant="outline" onClick={() => {
+                    const shares = equalShares(a.residuary.length);
+                    set({ residuary: a.residuary.map((r, i) => ({ ...r, sharePct: shares[i]! })) });
+                  }}>
+                    Split equally
+                  </Button>
+                )}
+              </div>
+              <p data-testid="residuary-total" className={cn('text-sm font-medium tabular-nums', total.equals(100) ? 'text-positive' : 'text-negative')}>
+                Total {total.toFixed(2)}%
+                {!total.equals(100) && ` - ${remaining.abs().toFixed(2)}% ${remaining.isNegative() ? 'too much' : 'left to share'}`}
+              </p>
+            </div>
+            <div className="min-w-0 space-y-2">
+            <div className="h-40 min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={slices} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="85%" stroke="none">
+                    {slices.map((s) => <Cell key={s.id} fill={s.colour} />)}
+                  </Pie>
+                  <Tooltip {...TOOLTIP_PROPS} formatter={(v: number) => `${v.toFixed(2)}%`} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <ul data-testid="donut-legend" className="space-y-1 text-xs">
+              {slices.map((s) => (
+                <li key={s.id} className="flex min-w-0 items-center gap-2">
+                  <span data-colour={s.colour} className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.colour }} aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate text-foreground">{s.name}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">{s.pct}%</span>
+                </li>
+              ))}
+            </ul>
+            </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="specific" className="pt-3">
+          <Card className="min-w-0 space-y-3 p-4 sm:p-5">
+            <ul className="space-y-2">
+              {a.specificGifts.map((g, i) => (
+                <li key={`${g.itemId}|${g.personId}`} className="flex flex-wrap items-start gap-2 rounded-md border border-border/60 p-2">
+                  <span className="min-w-0 flex-1 break-words pt-2 text-sm text-foreground">
+                    {itemOf(g.itemId)?.label ?? 'Item no longer in your list'} - {nameOf(g.personId)}
+                  </span>
+                  <DecimalField
+                    className="w-24"
+                    kind="percent"
+                    label={`Share of ${itemOf(g.itemId)?.label ?? 'item'} for ${nameOf(g.personId)}`}
+                    value={g.sharePct}
+                    onValid={(v) => set({ specificGifts: a.specificGifts.map((x, j) => (j === i ? { ...x, sharePct: v } : x)) })}
+                  />
+                  <Button size="sm" variant="ghost" onClick={() => set({ specificGifts: a.specificGifts.filter((_, j) => j !== i) })}>Remove</Button>
+                </li>
+              ))}
+            </ul>
+            <div className={cn('grid gap-3', wide && 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end')}>
+              <Field id="will-gift-item" label="Asset">
+                <Select id="will-gift-item" value={giftItem} onChange={(e) => setGiftItem(e.target.value)}>
+                  <option value="">Choose an asset...</option>
+                  {giftable.map((i) => {
+                    const left = remainingOf(i.sourceKey);
+                    const name = `${i.ref ? `${i.label} (${i.ref})` : i.label}${i.review === 'STALE' ? ' (not found in latest refresh)' : ''}`;
+                    return <option key={i.sourceKey} value={i.sourceKey} disabled={left.lte(0)}>{name} - {left.toFixed(left.isInteger() ? 0 : 2)}% left</option>;
+                  })}
+                </Select>
+              </Field>
+              <Field id="will-gift-person" label="To">
+                <Select id="will-gift-person" value={giftPerson} onChange={(e) => setGiftPerson(e.target.value)}>
+                  <option value="">Choose a person...</option>
+                  {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </Select>
+              </Field>
+              <Button
+                size="sm"
+                disabled={!giftItem || !giftPerson || duplicateGift || remainingOf(giftItem).lte(0)}
+                onClick={() => {
+                  set({ specificGifts: [...a.specificGifts, { itemId: giftItem, personId: giftPerson, sharePct: remainingOf(giftItem).toFixed(2) }] });
+                  setGiftItem('');
+                  setGiftPerson('');
+                }}
+              >
+                Add gift
+              </Button>
+            </div>
+            {duplicateGift && (
+              <p className="text-xs text-muted-foreground">{nameOf(giftPerson)} already has a share of this asset. Change that share above instead.</p>
+            )}
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="fixed" className="pt-3">
+          <Card className="min-w-0 space-y-3 p-4 sm:p-5">
+            <ul className="space-y-2">
+              {a.fixedGifts.map((g, i) => (
+                <li key={`${g.personId}-${i}`} className="flex flex-wrap items-start gap-2 rounded-md border border-border/60 p-2">
+                  <span className="min-w-0 flex-1 break-words pt-2 text-sm text-foreground">{nameOf(g.personId)}</span>
+                  <DecimalField
+                    className="w-36"
+                    kind="amount"
+                    label={`Amount for ${nameOf(g.personId)}`}
+                    value={g.amount}
+                    onValid={(v) => set({ fixedGifts: a.fixedGifts.map((x, j) => (j === i ? { ...x, amount: v } : x)) })}
+                  />
+                  <span className="pt-2 text-xs text-muted-foreground tabular-nums">{formatINR(g.amount, { fractionDigits: new Decimal(g.amount).isInteger() ? 0 : 2 })}</span>
+                  <Button size="sm" variant="ghost" onClick={() => set({ fixedGifts: a.fixedGifts.filter((_, j) => j !== i) })}>Remove</Button>
+                </li>
+              ))}
+            </ul>
+            <div className={cn('grid gap-3', wide && 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end')}>
+              <Field id="will-fixed-person" label="Person">
+                <Select id="will-fixed-person" value={fixedPerson} onChange={(e) => setFixedPerson(e.target.value)}>
+                  <option value="">Choose a person...</option>
+                  {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </Select>
+              </Field>
+              <Field id="will-fixed-amount" label="Amount">
+                <DecimalField id="will-fixed-amount" label="Amount" kind="amount" value={fixedAmount} onValid={setFixedAmount} onInvalid={() => setFixedAmount('')} />
+              </Field>
+              <Button
+                size="sm"
+                disabled={!fixedPerson || fixedAmount === ''}
+                onClick={() => {
+                  set({ fixedGifts: [...a.fixedGifts, { personId: fixedPerson, amount: fixedAmount }] });
+                  setFixedPerson('');
+                  setFixedAmount('');
+                }}
+              >
+                Add amount
+              </Button>
+            </div>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

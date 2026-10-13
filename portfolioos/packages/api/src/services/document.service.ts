@@ -23,6 +23,7 @@ import {
   readBuffer,
 } from '../lib/documentStorage.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
+import { willDocumentTag, type WillDocumentTag } from '@everypaisa/shared';
 
 export interface CreateDocumentInput {
   userId: string;
@@ -96,6 +97,14 @@ async function assertOwnerAccessible(
       if (!row) throw new ForbiddenError('Loan not owned by user');
       return;
     }
+    case 'WILL': {
+      const row = await prisma.will.findFirst({
+        where: { id: ownerId, userId },
+        select: { id: true },
+      });
+      if (!row) throw new ForbiddenError('Will not owned by user');
+      return;
+    }
     case 'OTHER':
       // free-form; userId on Document is the only guard
       return;
@@ -115,6 +124,18 @@ function toDocumentDTO(d: Document) {
     createdAt: d.createdAt.toISOString(),
     updatedAt: d.updatedAt.toISOString(),
   };
+}
+
+/**
+ * A will PDF is the record of what was generated (its sha256 is on the
+ * WillVersion row). The vault may list and download it, but renaming,
+ * replacing or deleting it there would break that record. Only Will Maker
+ * removes one, and only to undo a generate that failed half-way.
+ */
+function assertNotWillDocument(doc: Document): void {
+  if (doc.ownerType === 'WILL') {
+    throw new ForbiddenError('Will documents are managed by Will Maker');
+  }
 }
 
 export async function createDocument(input: CreateDocumentInput) {
@@ -150,7 +171,32 @@ export async function listDocuments(
     where,
     orderBy: { createdAt: 'desc' },
   });
-  return rows.map(toDocumentDTO);
+  const tags = await willDocumentTags(userId, rows);
+  return rows.map((d) => ({ ...toDocumentDTO(d), ...(d.ownerType === 'WILL' ? { will: tags.get(d.id) ?? null } : {}) }));
+}
+
+/**
+ * Will Maker files carry their will's status, so a picker or a nominee's view
+ * can hide or label a will that a later one replaced. Keyed by document id.
+ */
+export async function willDocumentTags(
+  userId: string,
+  docs: ReadonlyArray<Pick<Document, 'id' | 'ownerType' | 'ownerId' | 'category'>>,
+): Promise<Map<string, WillDocumentTag>> {
+  const willDocs = docs.filter((d) => d.ownerType === 'WILL');
+  if (willDocs.length === 0) return new Map();
+  const wills = await prisma.will.findMany({
+    where: { userId, id: { in: [...new Set(willDocs.map((d) => d.ownerId))] } },
+    select: { id: true, status: true, version: true },
+  });
+  const byId = new Map(wills.map((w) => [w.id, w]));
+  return new Map(
+    willDocs.map((d) => {
+      const w = byId.get(d.ownerId);
+      // A file whose will row is gone is never shown as the live will.
+      return [d.id, w ? willDocumentTag(w.status, d.category, w.version) : willDocumentTag('DISCARDED', d.category, 0)];
+    }),
+  );
 }
 
 async function loadOwnedDocument(userId: string, id: string): Promise<Document> {
@@ -174,7 +220,8 @@ export async function updateDocumentMeta(
   id: string,
   patch: { fileName?: string; category?: string | null },
 ) {
-  await loadOwnedDocument(userId, id);
+  const doc = await loadOwnedDocument(userId, id);
+  assertNotWillDocument(doc);
   const data: Prisma.DocumentUpdateInput = {};
   if (patch.fileName !== undefined) data.fileName = patch.fileName.trim().slice(0, 200);
   if (patch.category !== undefined) data.category = patch.category;
@@ -189,6 +236,7 @@ export async function replaceDocumentBytes(
   mimeType?: string,
 ) {
   const doc = await loadOwnedDocument(userId, id);
+  assertNotWillDocument(doc);
   // Overwrite same storageKey so we don't leak a stale file
   await saveBuffer(userId, doc.storageKey, buffer);
   const sz = await fileSize(userId, doc.storageKey);
@@ -203,8 +251,13 @@ export async function replaceDocumentBytes(
   return toDocumentDTO(updated);
 }
 
-export async function deleteDocument(userId: string, id: string): Promise<void> {
+export async function deleteDocument(
+  userId: string,
+  id: string,
+  opts: { allowWill?: boolean } = {},
+): Promise<void> {
   const doc = await loadOwnedDocument(userId, id);
+  if (!opts.allowWill) assertNotWillDocument(doc);
   await prisma.document.delete({ where: { id } });
   await deleteFile(userId, doc.storageKey);
 }
@@ -220,8 +273,12 @@ export async function deleteDocument(userId: string, id: string): Promise<void> 
 export async function listAllDocuments(
   userId: string,
   filter?: { from?: Date; to?: Date },
+  opts: { excludeWill?: boolean } = {},
 ) {
   const where: Prisma.DocumentWhereInput = { userId };
+  // A will is its owner's alone: a CA or a family member reaching this
+  // person's vault never sees it.
+  if (opts.excludeWill) where.ownerType = { not: 'WILL' };
   if (filter?.from || filter?.to) {
     where.createdAt = {
       ...(filter.from ? { gte: filter.from } : {}),
@@ -244,9 +301,18 @@ export async function listAllDocuments(
  * agreements called "agreement.pdf" would otherwise overwrite each other
  * inside the archive and the zip would quietly contain less than it claims.
  */
-export async function zipDocuments(userId: string, ids: string[]): Promise<Buffer> {
+export async function zipDocuments(
+  userId: string,
+  ids: string[],
+  opts: { excludeWill?: boolean } = {},
+): Promise<Buffer> {
   const rows = await prisma.document.findMany({
-    where: { userId, id: { in: ids } },
+    where: {
+      userId,
+      id: { in: ids },
+      // Same rule as listAllDocuments: a will never leaves through someone else.
+      ...(opts.excludeWill ? { ownerType: { not: 'WILL' as const } } : {}),
+    },
     orderBy: { createdAt: 'asc' },
   });
 

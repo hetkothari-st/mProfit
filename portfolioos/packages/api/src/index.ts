@@ -23,6 +23,7 @@ import { startPiiAtRestJobs } from './jobs/piiAtRestJobs.js';
 import { startKeyRotationJobs } from './jobs/keyRotationJobs.js';
 import { startSecretRotationJobs } from './jobs/secretRotationJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
+import { startWillReviewJob } from './jobs/willReviewJob.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
 import { startFundScoringJob } from './jobs/fundScoring.job.js';
 import { assertNamedFundReleaseGate } from './services/advisor/fundRanking/releaseGate.js';
@@ -49,6 +50,7 @@ import { apiSandbox } from './lib/apiSandbox.js';
 import { redactUrl } from './lib/redactUrl.js';
 import { auditDownloads } from './lib/auditDownloads.js';
 import { startSecurityAlertJobs } from './jobs/securityAlertJobs.js';
+import { sweepOrphanWillDocuments } from './services/will/willOrphanSweep.js';
 
 // Initialise Sentry BEFORE building the Express app so auto-instrumentation
 // wraps all request handling. No-ops if SENTRY_DSN is not set.
@@ -206,6 +208,7 @@ const server = app.listen(env.PORT, '::', () => {
   startPiiAtRestJobs();
   startSecretRotationJobs();
   startAlertJobs();
+  startWillReviewJob();
   startNetWorthSnapshotJob();
   startFoExpiryJob();
   /**
@@ -277,6 +280,10 @@ const server = app.listen(env.PORT, '::', () => {
   startMfScoreJob();
   // Daily 07:30 IST live loan rates (EMI calculator, spec s5.4). ENABLE_LOAN_RATES_CRON=false disables it.
   startLoanRatesJob();
+  // Best effort: will PDFs left behind by an interrupted generate (ids only in the logs).
+  sweepOrphanWillDocuments()
+    .then((r) => logger.info(r, 'will.orphan_sweep'))
+    .catch((err: unknown) => logger.error({ errName: err instanceof Error ? err.name : 'unknown' }, 'will.orphan_sweep_failed'));
   // Fire-and-forget: run initial data sync in background so server stays responsive
   runStartupSync().catch((err) => logger.error({ err }, 'Startup sync failed'));
 });

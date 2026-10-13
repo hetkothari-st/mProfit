@@ -223,6 +223,10 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'SplitShareLink',
   'SplitSettings',
   'SplitReminder',
+  // Will Maker (20261014120000_will_maker). Owner-only policies; WillVersion
+  // is insert/read for owners and delete for system context only.
+  'Will',
+  'WillVersion',
   // Legacy Transfer (20261013120000_legacy_transfer). ENABLE+FORCE RLS on all
   // five; without these entries every read returns zero rows (see Goal/BankAccount note).
   'LegacyPlan',

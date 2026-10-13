@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { runInTransaction } from '../../src/lib/prisma.js';
-import { getOverview, saveSettings, addNominee, activate, pause, revoke, removeNominee } from '../../src/services/legacy/plan.service.js';
+import { getOverview, saveSettings, addNominee, updateNominee, activate, pause, revoke, removeNominee } from '../../src/services/legacy/plan.service.js';
+import { createDocument, deleteDocument } from '../../src/services/document.service.js';
 import { imOk, answerVerify } from '../../src/services/legacy/publicLinks.service.js';
 import { createLinkToken, createNomineeSession, resolveNomineeSession } from '../../src/services/legacy/tokens.service.js';
 
@@ -46,6 +47,30 @@ describe('legacy plan service', () => {
     const o = await s.runAs(() => getOverview(s.userId, true));
     expect(o.nominees.filter((n) => n.isVerifier)).toHaveLength(1);
     expect(o.nominees.find((n) => n.isVerifier)!.name).toBe('B');
+  });
+
+  it('a nominee save keeps only the owner document ids: missing and foreign ids are dropped, never stored', async () => {
+    const pdf = Buffer.from('%PDF-1.7\n%%EOF\n');
+    const docs = { ...nominee, categories: ['DOCUMENTS' as const] };
+    const doc = await s.runAs(() => createDocument({ userId: s.userId, ownerType: 'OTHER', ownerId: s.userId, fileName: 'deed.pdf', mimeType: 'application/pdf', buffer: pdf }));
+    const n = await s.runAs(() => addNominee(s.userId, { ...docs, documentIds: [doc.id, 'gone-document-id'] }));
+    expect(n.documentIds).toEqual([doc.id]);
+    await s.runAs(() => deleteDocument(s.userId, doc.id));
+    const saved = await s.runAs(() => updateNominee(s.userId, n.id, { ...docs, documentIds: n.documentIds }));
+    expect(saved.documentIds).toEqual([]);
+    const other = await createTestScope('legacy-plan-other');
+    try {
+      const theirs = await other.runAs(() => createDocument({ userId: other.userId, ownerType: 'OTHER', ownerId: other.userId, fileName: 'x.pdf', mimeType: 'application/pdf', buffer: pdf }));
+      const updated = await s.runAs(() => updateNominee(s.userId, n.id, { ...docs, documentIds: [theirs.id] }));
+      expect(updated.documentIds).toEqual([]);
+      const added = await s.runAs(() => addNominee(s.userId, { ...docs, email: 'c@test.local', documentIds: [theirs.id] }));
+      expect(added.documentIds).toEqual([]);
+      const stored = await runAsSystem(() => prisma.legacyNominee.findMany({ where: { userId: s.userId }, select: { documentIds: true } }));
+      expect(stored.flatMap((r) => r.documentIds)).not.toContain(theirs.id);
+      expect(JSON.stringify([updated, added])).not.toContain(theirs.id);
+    } finally {
+      await other.cleanup();
+    }
   });
 
   it('pause is capped at 180 days', async () => {
