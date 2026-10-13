@@ -23,6 +23,7 @@ import {
   readBuffer,
 } from '../lib/documentStorage.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
+import { willDocumentTag, type WillDocumentTag } from '@everypaisa/shared';
 
 export interface CreateDocumentInput {
   userId: string;
@@ -170,7 +171,32 @@ export async function listDocuments(
     where,
     orderBy: { createdAt: 'desc' },
   });
-  return rows.map(toDocumentDTO);
+  const tags = await willDocumentTags(userId, rows);
+  return rows.map((d) => ({ ...toDocumentDTO(d), ...(d.ownerType === 'WILL' ? { will: tags.get(d.id) ?? null } : {}) }));
+}
+
+/**
+ * Will Maker files carry their will's status, so a picker or a nominee's view
+ * can hide or label a will that a later one replaced. Keyed by document id.
+ */
+export async function willDocumentTags(
+  userId: string,
+  docs: ReadonlyArray<Pick<Document, 'id' | 'ownerType' | 'ownerId' | 'category'>>,
+): Promise<Map<string, WillDocumentTag>> {
+  const willDocs = docs.filter((d) => d.ownerType === 'WILL');
+  if (willDocs.length === 0) return new Map();
+  const wills = await prisma.will.findMany({
+    where: { userId, id: { in: [...new Set(willDocs.map((d) => d.ownerId))] } },
+    select: { id: true, status: true, version: true },
+  });
+  const byId = new Map(wills.map((w) => [w.id, w]));
+  return new Map(
+    willDocs.map((d) => {
+      const w = byId.get(d.ownerId);
+      // A file whose will row is gone is never shown as the live will.
+      return [d.id, w ? willDocumentTag(w.status, d.category, w.version) : willDocumentTag('DISCARDED', d.category, 0)];
+    }),
+  );
 }
 
 async function loadOwnedDocument(userId: string, id: string): Promise<Document> {

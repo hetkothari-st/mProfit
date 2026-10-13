@@ -7,6 +7,7 @@ import { runAsSystem, runAsUser } from '../../lib/requestContext.js';
 import { decryptSecret } from '../../lib/secrets.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { readBuffer } from '../../lib/documentStorage.js';
+import { willDocumentTags } from '../document.service.js';
 
 /**
  * The nominee's read-only view. Owner data is read under runAsUser(owner) so
@@ -124,10 +125,15 @@ export async function buildLegacyView(ownerId: string, nomineeId: string): Promi
       sections.push({ category: c, title: LEGACY_CATEGORY_LABELS[c], items, checklist: LEGACY_CLAIM_CHECKLIST[c] });
     }
     if (!cats.includes('DOCUMENTS') || nominee.documentIds.length === 0) return [];
-    return prisma.document.findMany({
+    const docs = await prisma.document.findMany({
       where: { userId: ownerId, id: { in: nominee.documentIds } },
-      select: { id: true, fileName: true, category: true },
+      select: { id: true, fileName: true, category: true, ownerType: true, ownerId: true },
     });
+    const tags = await willDocumentTags(ownerId, docs);
+    return docs.map((d) => ({
+      id: d.id, fileName: d.fileName, category: d.category,
+      ...(d.ownerType === 'WILL' ? { will: tags.get(d.id) ?? null } : {}),
+    }));
   });
   return {
     ownerName: owner.name,

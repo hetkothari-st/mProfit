@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  addYearsIso, isIsoDay, normaliseWillName, willExecutionInputSchema, willNextReviewDate, willWitnessIssues,
+  addYearsIso, isIsoDay, normaliseWillName, willDocumentTag, willExecutionInputSchema, willNextReviewDate, willWitnessIssues,
   willWitnessWarnings,
 } from './execution.js';
 import { validWillPayload } from './__tests__/fixtures.js';
@@ -70,5 +70,17 @@ describe('witness checks', () => {
     expect(willWitnessIssues(p, ['Ramesh Kumar Verma', 'Asha Rao'])).toEqual([{ path: 'witnesses.0', code: 'witness_is_testator' }]);
     expect(willWitnessIssues(p, ['Asha Rao', 'asha  rao'])).toEqual([{ path: 'witnesses.1', code: 'duplicate_witness' }]);
     expect(willWitnessIssues(p, ['Asha Rao', 'Vikram Shah'])).toEqual([]);
+  });
+});
+
+describe('willDocumentTag', () => {
+  it('labels a live will and its signed copy with the version', () => {
+    expect(willDocumentTag('GENERATED', 'will', 3)).toEqual({ current: true, label: 'Your will (version 3)' });
+    expect(willDocumentTag('EXECUTED', 'executed', 3)).toEqual({ current: true, label: 'Signed copy (version 3)' });
+  });
+
+  it('marks every file of a replaced will as replaced', () => {
+    expect(willDocumentTag('SUPERSEDED', 'will', 2)).toEqual({ current: false, label: 'Replaced by a later will' });
+    expect(willDocumentTag('SUPERSEDED', 'executed', 2)).toEqual({ current: false, label: 'Replaced by a later will' });
   });
 });

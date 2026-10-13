@@ -1,5 +1,6 @@
 // Legacy Transfer (docs/legacy-transfer/01-DESIGN.md): constants and wire DTOs
 // shared by the API and the web app.
+import type { WillDocumentTag } from './will/execution.js';
 
 export const LEGACY_CATEGORIES = [
   'INVESTMENTS', 'BANK_ACCOUNTS', 'INSURANCE', 'LIABILITIES',
@@ -124,5 +125,6 @@ export interface LegacyViewDTO {
   netWorth: string | null;
   sections: LegacySectionDTO[];
   letter: string | null;
-  documents: Array<{ id: string; fileName: string; category: string | null }>;
+  /** `will` is set for Will Maker files: a replaced will is labelled as such. */
+  documents: Array<{ id: string; fileName: string; category: string | null; will?: WillDocumentTag | null }>;
 }

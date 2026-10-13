@@ -1,3 +1,5 @@
+import type { WillDocumentTag } from '../will/execution.js';
+
 export type DocumentOwnerType =
   | 'RENTAL_PROPERTY'
   | 'TENANCY'
@@ -20,6 +22,8 @@ export interface DocumentDTO {
   externalEditKey: string;
   createdAt: string;
   updatedAt: string;
+  /** WILL documents only: whether the will is still the live one, and how to label the file. */
+  will?: WillDocumentTag | null;
 }
 
 export interface UpdateDocumentRequest {

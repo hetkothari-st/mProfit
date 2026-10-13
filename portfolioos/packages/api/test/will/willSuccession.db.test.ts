@@ -3,9 +3,10 @@ import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { encryptSecret } from '../../src/lib/secrets.js';
-import { createDocument } from '../../src/services/document.service.js';
+import { createDocument, listDocuments } from '../../src/services/document.service.js';
 import { recordWillExecution } from '../../src/services/will/willExecute.service.js';
 import { buildLegacyView } from '../../src/services/legacy/view.service.js';
+import { legacyDocumentLine } from '../../src/services/legacy/viewPdf.js';
 import { FAKE_PDF, PNG_BYTES, makeGeneratedWill, wipeWills } from './willExecuteFixtures.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';
@@ -57,5 +58,48 @@ describe('replacing a signed copy that a Succession nominee shares', () => {
 
     const view = await buildLegacyView(a.userId, executor);
     expect(view.documents.map((d) => d.id).sort()).toEqual([newId, otherDocId].sort());
+    executorId = executor;
+    firstWillId = willId;
+  });
+});
+
+let executorId = '';
+let firstWillId = '';
+
+const tagsByFile = async () =>
+  Object.fromEntries((await a.runAs(() => listDocuments(a.userId))).map((d) => [d.fileName, d.will ?? null]));
+
+describe('will documents carry their will status', () => {
+  it('labels the live will and its signed copy, and leaves other files alone', async () => {
+    expect(await tagsByFile()).toEqual({
+      'will-v1.pdf': { current: true, label: 'Your will (version 1)' },
+      'will-v1-signed.png': { current: true, label: 'Signed copy (version 1)' },
+      'deed.pdf': null,
+    });
+  });
+
+  it('a later will marks every file of the replaced one, in the list and in the released view', async () => {
+    await makeGeneratedWill(a);
+    expect((await willRow(firstWillId)).status).toBe('SUPERSEDED');
+    expect(await tagsByFile()).toEqual({
+      'will-v1.pdf': { current: false, label: 'Replaced by a later will' },
+      'will-v1-signed.png': { current: false, label: 'Replaced by a later will' },
+      'will-v2.pdf': { current: true, label: 'Your will (version 2)' },
+      'deed.pdf': null,
+    });
+    const view = await buildLegacyView(a.userId, executorId);
+    const byName = Object.fromEntries(view.documents.map((d) => [d.fileName, d.will ?? null]));
+    expect(byName).toEqual({
+      'will-v1-signed.png': { current: false, label: 'Replaced by a later will' },
+      'deed.pdf': null,
+    });
+  });
+});
+
+describe('the nominee PDF', () => {
+  it('lists a replaced will with its label', () => {
+    expect(legacyDocumentLine({ id: 'd', fileName: 'will-v1-signed.png', category: 'executed', will: { current: false, label: 'Replaced by a later will' } }))
+      .toBe('- will-v1-signed.png (Replaced by a later will)');
+    expect(legacyDocumentLine({ id: 'd', fileName: 'deed.pdf', category: null })).toBe('- deed.pdf');
   });
 });

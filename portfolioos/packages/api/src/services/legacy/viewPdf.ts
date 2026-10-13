@@ -2,6 +2,11 @@ import PDFDocument from 'pdfkit';
 import { formatINR, type LegacyViewDTO } from '@everypaisa/shared';
 import { pdfSafe } from '../charts/pdfCharts.js';
 
+/** One line of the shared-documents list; a will's file carries its label (a replaced will says so). */
+export function legacyDocumentLine(d: LegacyViewDTO['documents'][number]): string {
+  return `- ${d.fileName}${d.will ? ` (${d.will.label})` : ''}`;
+}
+
 /** Printable copy of the nominee view: same content, same scope, nothing extra. */
 export function renderLegacyPdf(v: LegacyViewDTO): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -34,7 +39,7 @@ export function renderLegacyPdf(v: LegacyViewDTO): Promise<Buffer> {
     }
     if (v.documents.length) {
       doc.moveDown(1).fillColor('#000').fontSize(14).text('Documents shared');
-      for (const d of v.documents) doc.fontSize(10).fillColor('#333').text(pdfSafe(`- ${d.fileName}`));
+      for (const d of v.documents) doc.fontSize(10).fillColor('#333').text(pdfSafe(legacyDocumentLine(d)));
     }
     if (v.letter) {
       doc.addPage().fontSize(14).fillColor('#000').text('Personal letter');

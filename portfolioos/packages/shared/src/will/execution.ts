@@ -108,3 +108,23 @@ export interface WillExecutionWire {
 export interface WillReviewedWire {
   nextReviewAt: string;
 }
+
+/**
+ * How a will's file is shown where vault documents are listed (the Succession
+ * nominee picker and the nominee's released view). A replaced will was revoked
+ * by a later one and must never look valid.
+ */
+export interface WillDocumentTag {
+  current: boolean;
+  label: string;
+}
+
+export const WILL_DOCUMENT_REPLACED_LABEL = 'Replaced by a later will';
+
+/** `category` is the Document category: "will" for the generated PDF, "executed" for the signed copy. */
+export function willDocumentTag(status: WillStatusWire, category: string | null, version: number): WillDocumentTag {
+  if (status === 'GENERATED' || status === 'EXECUTED') {
+    return { current: true, label: category === 'executed' ? `Signed copy (version ${version})` : `Your will (version ${version})` };
+  }
+  return { current: false, label: WILL_DOCUMENT_REPLACED_LABEL };
+}

@@ -31,6 +31,10 @@ export function NomineeDialog({ open, initial, onSave, onClose }: {
   }, [open, initial]);
   const wantsDocs = v.categories.includes('DOCUMENTS');
   const docs = useQuery({ queryKey: ['documents', 'legacy-picker'], queryFn: () => documentsApi.list(), enabled: open && wantsDocs });
+  // A replaced will was revoked by a later one: offer it only where it is already shared, so it can be unticked.
+  const shownDocs = (docs.data ?? []).filter(
+    (d) => d.will?.current !== false || v.documentIds.includes(d.id) || (initial?.documentIds ?? []).includes(d.id),
+  );
   const valid = v.name.trim() !== '' && /\S+@\S+\.\S+/.test(v.email) && v.relationship.trim() !== '' && v.categories.length > 0;
 
   return (
@@ -64,12 +68,15 @@ export function NomineeDialog({ open, initial, onSave, onClose }: {
             <fieldset>
               <legend className="mb-1 text-sm font-medium">Documents to share</legend>
               {docs.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-              {docs.data?.length === 0 && <p className="text-sm text-muted-foreground">No documents in your vault yet.</p>}
+              {docs.data && shownDocs.length === 0 && <p className="text-sm text-muted-foreground">No documents in your vault yet.</p>}
               <div className="max-h-40 space-y-1 overflow-y-auto">
-                {(docs.data ?? []).map((d) => (
+                {shownDocs.map((d) => (
                   <label key={d.id} className="flex min-w-0 items-center gap-2 text-sm">
                     <input type="checkbox" checked={v.documentIds.includes(d.id)} onChange={() => setV({ ...v, documentIds: toggle(v.documentIds, d.id) })} />
                     <span className="truncate">{d.fileName}</span>
+                    {d.will && (
+                      <span className={`shrink-0 text-xs ${d.will.current ? 'text-muted-foreground' : 'font-medium text-destructive'}`}>{d.will.label}</span>
+                    )}
                   </label>
                 ))}
               </div>

@@ -141,8 +141,13 @@ export function LegacyAccessPage() {
         <Card><CardContent className="space-y-2 p-4">
           <h2 className="font-medium">Documents</h2>
           {view.documents.map((d) => (
-            <div key={d.id} className="flex items-center justify-between gap-2 border-t pt-2">
-              <span className="min-w-0 truncate text-sm">{d.fileName}</span>
+            <div key={d.id} data-testid={`legacy-doc-${d.id}`} className="flex items-center justify-between gap-2 border-t pt-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm">{d.fileName}</div>
+                {d.will && (
+                  <div className={`text-xs ${d.will.current ? 'text-muted-foreground' : 'font-medium text-destructive'}`}>{d.will.label}</div>
+                )}
+              </div>
               <Button size="sm" variant="outline" className="shrink-0" onClick={() => dl(`/documents/${d.id}`, d.fileName)}>Download</Button>
             </div>
           ))}
