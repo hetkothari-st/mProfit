@@ -5,7 +5,7 @@ const trim = (v: string | undefined, fallback: string) => (v && v.trim() ? v.tri
 export const config = {
   siteUrl: trim(env.VITE_SITE_URL, 'https://everypaisa.in'),
   appUrl: trim(env.VITE_APP_URL, 'https://portfolio-os.up.railway.app'),
-  contactEmail: trim(env.VITE_CONTACT_EMAIL, 'hello@everypaisa.in'),
+  contactEmail: trim(env.VITE_CONTACT_EMAIL, 'everypaisa.admin@gmail.com'),
   contactEndpoint: env.VITE_CONTACT_ENDPOINT?.trim() || '',
 };
 
