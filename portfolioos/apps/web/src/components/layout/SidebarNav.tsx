@@ -7,6 +7,7 @@ import { UpgradeSidebarCard } from './UpgradeSidebarCard';
 import { AssetClassSectionList } from './AssetClassSectionList';
 import { FamilyNavTree } from './FamilyNavTree';
 import { NavSection, OVERVIEW_ITEMS, ASSET_CLASS_ITEMS, NAV_SECTIONS } from './navItems';
+import { PlanningNavGroup } from './PlanningNavGroup';
 import { Briefcase, ShieldCheck } from 'lucide-react';
 import { LIVE_QUERY } from '@/lib/liveQuery';
 import { useQuery } from '@tanstack/react-query';
@@ -131,6 +132,11 @@ export function SidebarNav({
 
         {/* Overview */}
         <NavSection section={{ heading: 'Overview', items: OVERVIEW_ITEMS }} collapsed={collapsed} />
+
+        {/* Planning: Goals, Will Maker, Tax Planning. Collapsible here; flat icons on the rail. The mobile
+            drawer renders this same component, so it gets the same group. */}
+        {collapsed && <div className="mx-3 h-px bg-sidebar-border/50" />}
+        <PlanningNavGroup collapsed={collapsed} />
 
 
 

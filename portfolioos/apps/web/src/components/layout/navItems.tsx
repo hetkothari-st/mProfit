@@ -82,10 +82,18 @@ export const OVERVIEW_ITEMS: NavItem[] = [
   { label: 'Income', to: '/income', icon: IndianRupee },
   { label: 'Portfolio Score', to: '/health-score', icon: HeartPulse },
   { label: 'Advisor', to: '/advisor', icon: Compass },
-  { label: 'Goals', to: '/goals', icon: Target },
-  { label: 'Will Maker', to: '/will', icon: ScrollText },
   { label: 'Transactions', to: '/transactions', icon: Receipt },
   { label: 'Cash Activity', to: '/cashflows', icon: ArrowLeftRight },
+];
+
+/**
+ * Planning (Will Maker spec): forward-looking pages, grouped and collapsible in
+ * the sidebar (PlanningNavGroup). Each page is linked here only.
+ */
+export const PLANNING_ITEMS: NavItem[] = [
+  { label: 'Goals', to: '/goals', icon: Target },
+  { label: 'Will Maker', to: '/will', icon: ScrollText },
+  { label: 'Tax Planning', to: '/tax', icon: Calculator },
 ];
 
 export const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
@@ -99,7 +107,6 @@ export const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
     heading: 'Tools',
     items: [
       { label: 'Reports', to: '/reports', icon: FileText },
-      { label: 'Tax', to: '/tax', icon: Calculator },
       { label: 'Import', to: '/import', icon: Upload },
       { label: 'Connectors', to: '/connectors', icon: Plug },
       { label: 'CAS', to: '/cas', icon: FileDown },
