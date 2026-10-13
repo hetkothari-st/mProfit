@@ -81,6 +81,20 @@ describe('SignedCopyForm', () => {
     expect(screen.getByRole('alert').textContent).toContain('Your two witnesses must be two different people.');
   });
 
+  it('clears a duplicate-witness issue when either witness is edited', () => {
+    const issues = [{ path: 'witnesses.1', code: 'duplicate_witness' }];
+    for (const label of ['Witness 1 - full name', 'Witness 2 - full name']) {
+      render(
+        <SignedCopyForm ctx={ctx} pending={false} onSubmit={vi.fn()} serverIssues={issues}
+          initial={{ executedOn: '2026-10-15', witnesses: ['Asha Rao', 'Asha Rao'] }} />,
+      );
+      expect(screen.getByRole('alert').textContent).toContain('Your two witnesses must be two different people.');
+      fireEvent.change(screen.getByLabelText(label), { target: { value: 'Vikram Shah' } });
+      expect(screen.queryByRole('alert')).toBeNull();
+      cleanup();
+    }
+  });
+
   it('starts from the stored record when correcting it', () => {
     render(
       <SignedCopyForm

@@ -62,6 +62,11 @@ export function issueField(path: string): SignedCopyField {
   return 'file';
 }
 
+/** The fields whose edit can fix an issue: two different witnesses can be fixed by changing either name. */
+export function issueFields(issue: { path: string; code: string }): SignedCopyField[] {
+  return issue.code === 'duplicate_witness' ? ['w1', 'w2'] : [issueField(issue.path)];
+}
+
 /** Plain sentences for the 422 codes of POST /api/will/wills/:id/execution. */
 export function issueMessage(issue: { path: string; code: string }): string {
   switch (issue.code) {

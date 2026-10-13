@@ -5,7 +5,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { issueField, issueMessage, type SignedCopyField } from './executeCopy';
+import { issueFields, issueMessage, type SignedCopyField } from './executeCopy';
 import type { WillSignedCopyInput } from '@/api/will.api';
 
 export interface SignedCopyContext {
@@ -90,7 +90,7 @@ export function SignedCopyForm({
   }
 
   const serverShown = (serverIssues ?? [])
-    .filter((i) => !(cleared.src === serverIssues && cleared.fields.includes(issueField(i.path))))
+    .filter((i) => !(cleared.src === serverIssues && issueFields(i).some((f) => cleared.fields.includes(f))))
     .map(issueMessage);
   const shown = [...problems, ...serverShown.filter((m) => !problems.includes(m))];
 
