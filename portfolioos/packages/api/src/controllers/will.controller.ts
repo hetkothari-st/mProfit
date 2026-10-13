@@ -8,6 +8,7 @@ import { writeAuditLog } from '../lib/audit.js';
 import { downloadHeaders } from '../lib/documentMime.js';
 import { getSignedCopy, getWillExecution, recordWillExecution } from '../services/will/willExecute.service.js';
 import { zodIssues } from '../services/will/willStore.js';
+import { markWillReviewed } from '../services/will/willReview.service.js';
 import {
   createWillDraft, discardWillDraft, getWillDraft, getWillOverview, listWillPeopleSuggestions,
   refreshWillEstate, saveWillSection,
@@ -29,7 +30,13 @@ export function idOf(req: Request, name: string): string {
   return parseOr422(id, req.params[name]);
 }
 
-const createBody = z.object({ fromWillId: z.string().min(1).max(64).optional() });
+const createBody = z
+  .object({
+    fromWillId: z.string().min(1).max(64).optional(),
+    /** Part 2: "My circumstances changed" - recorded in the audit trail. */
+    reason: z.literal('CIRCUMSTANCES_CHANGED').optional(),
+  })
+  .refine((b) => b.reason === undefined || b.fromWillId !== undefined, { path: ['reason'], message: 'needs_fromWillId' });
 const saveBody = z.object({ revision: z.number().int().min(0), currentStep: z.number().int().min(2).max(8), data: z.unknown() });
 const revisionBody = z.object({ revision: z.number().int().min(0) });
 
@@ -43,7 +50,7 @@ export async function createDraft(req: Request, res: Response): Promise<void> {
   const draft = await createWillDraft(userId, body.fromWillId ?? null);
   await writeAuditLog({
     userId, action: 'will_created', resource: `Will:${draft.id}`,
-    metadata: { version: draft.version, cloned: Boolean(body.fromWillId) }, req,
+    metadata: { version: draft.version, cloned: Boolean(body.fromWillId), reason: body.reason ?? null }, req,
   });
   created(res, draft);
 }
@@ -157,4 +164,12 @@ export async function downloadSignedCopy(req: Request, res: Response): Promise<v
   res.set(downloadHeaders(file.mimeType, file.fileName));
   res.setHeader('Cache-Control', 'no-store');
   res.send(file.buffer);
+}
+
+export async function reviewed(req: Request, res: Response): Promise<void> {
+  const userId = uid(req);
+  const willId = idOf(req, 'id');
+  const result = await markWillReviewed(userId, willId);
+  await writeAuditLog({ userId, action: 'will_reviewed', resource: `Will:${willId}`, metadata: { nextReviewAt: result.nextReviewAt }, req });
+  ok(res, result);
 }

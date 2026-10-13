@@ -49,3 +49,4 @@ willRouter.get('/versions/:vid/pdf', asyncHandler(will.downloadPdf));
 willRouter.get('/wills/:id/execution', asyncHandler(will.getExecution));
 willRouter.post('/wills/:id/execution', importLimiter, uploadWillSignedCopy, asyncHandler(will.recordExecution));
 willRouter.get('/wills/:id/signed-copy', asyncHandler(will.downloadSignedCopy));
+willRouter.post('/wills/:id/reviewed', asyncHandler(will.reviewed));

@@ -23,6 +23,7 @@ import { startPiiAtRestJobs } from './jobs/piiAtRestJobs.js';
 import { startKeyRotationJobs } from './jobs/keyRotationJobs.js';
 import { startSecretRotationJobs } from './jobs/secretRotationJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
+import { startWillReviewJob } from './jobs/willReviewJob.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
 import { startFundScoringJob } from './jobs/fundScoring.job.js';
 import { assertNamedFundReleaseGate } from './services/advisor/fundRanking/releaseGate.js';
@@ -207,6 +208,7 @@ const server = app.listen(env.PORT, '::', () => {
   startPiiAtRestJobs();
   startSecretRotationJobs();
   startAlertJobs();
+  startWillReviewJob();
   startNetWorthSnapshotJob();
   startFoExpiryJob();
   /**
