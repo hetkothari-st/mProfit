@@ -69,7 +69,7 @@ export function willReviewOf(wills: readonly Will[], today: string): WillReviewW
   return { willId: w.id, version: w.version, nextReviewAt, due: nextReviewAt <= today };
 }
 
-const DRAFT_EXISTS ='You already have a draft will. Continue it or discard it first.';
+const DRAFT_EXISTS = 'You already have a draft will. Continue it or discard it first.';
 
 function findOpenDraft(userId: string): Promise<{ id: string; currentStep: number } | null> {
   return prisma.will.findFirst({ where: { userId, status: 'DRAFT' }, select: { id: true, currentStep: true } });

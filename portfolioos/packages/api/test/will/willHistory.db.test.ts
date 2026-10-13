@@ -38,16 +38,20 @@ function wipe(userId: string) {
 
 let a: TestScope;
 let b: TestScope;
+let c: TestScope;
 
 beforeAll(async () => {
   a = await createTestScope('will-history-a');
   b = await createTestScope('will-history-b');
+  c = await createTestScope('will-history-c');
 });
 afterAll(async () => {
   await wipe(a.userId);
   await wipe(b.userId);
+  await wipe(c.userId);
   await a.cleanup();
   await b.cleanup();
+  await c.cleanup();
 });
 
 describe('overview history and review', () => {
@@ -96,5 +100,24 @@ describe('overview history and review', () => {
     const o = await b.runAs(() => getWillOverview(b.userId, deps));
     expect(o.history).toEqual([]);
     expect(o.review).toBeNull();
+  });
+});
+
+describe('history edge cases', () => {
+  it('a will replaced by a will that is not listed (discarded) shows no "replaced by" version', async () => {
+    const discarded = await insertWill(c.userId, 2, 'DISCARDED');
+    const old = await insertWill(c.userId, 1, 'SUPERSEDED', { supersededById: discarded.id });
+    const o = await c.runAs(() => getWillOverview(c.userId, deps));
+    expect(o.history.map((h) => h.willId)).toEqual([old.id]);
+    expect(o.history[0]).toMatchObject({ status: 'SUPERSEDED', supersededByVersion: null });
+  });
+
+  it('hasSignedCopy follows the recorded document id even when its row is missing (the download then 404s)', async () => {
+    const w = await insertWill(c.userId, 3, 'EXECUTED', {
+      executedAt: day('2026-10-01'), nextReviewAt: day('2028-10-01'), executedDocumentId: 'no-such-document',
+    });
+    expect(await runAsSystem(() => prisma.document.count({ where: { id: 'no-such-document' } }))).toBe(0);
+    const o = await c.runAs(() => getWillOverview(c.userId, deps));
+    expect(o.history.find((h) => h.willId === w.id)).toMatchObject({ hasSignedCopy: true });
   });
 });

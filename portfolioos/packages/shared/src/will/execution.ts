@@ -32,7 +32,7 @@ export const willExecutionInputSchema = z.object({
 export type WillExecutionInput = z.infer<typeof willExecutionInputSchema>;
 
 /** The sealed record kept on the Will row. */
-export const willExecutionRecordSchema = willExecutionInputSchema.extend({ recordedAt: z.string() });
+export const willExecutionRecordSchema = willExecutionInputSchema.extend({ recordedAt: z.string().datetime() });
 export type WillExecutionRecord = z.infer<typeof willExecutionRecordSchema>;
 
 /** Compare people's names: NFKC, trimmed, single spaces, lower case. */

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  addYearsIso, isIsoDay, normaliseWillName, willDocumentTag, willExecutionInputSchema, willNextReviewDate, willWitnessIssues,
+  addYearsIso, isIsoDay, normaliseWillName, willDocumentTag, willExecutionInputSchema, willExecutionRecordSchema, willNextReviewDate,
+  willWitnessIssues,
   willWitnessWarnings,
 } from './execution.js';
 import { validWillPayload } from './__tests__/fixtures.js';
@@ -82,5 +83,13 @@ describe('willDocumentTag', () => {
   it('marks every file of a replaced will as replaced', () => {
     expect(willDocumentTag('SUPERSEDED', 'will', 2)).toEqual({ current: false, label: 'Replaced by a later will' });
     expect(willDocumentTag('SUPERSEDED', 'executed', 2)).toEqual({ current: false, label: 'Replaced by a later will' });
+  });
+});
+
+describe('willExecutionRecordSchema', () => {
+  const base = { executedOn: '2026-10-12', witnesses: ['Asha Rao', 'Vikram Shah'] };
+  it('needs recordedAt as an ISO date-time', () => {
+    expect(willExecutionRecordSchema.safeParse({ ...base, recordedAt: '2026-10-12T06:00:00.000Z' }).success).toBe(true);
+    expect(willExecutionRecordSchema.safeParse({ ...base, recordedAt: 'yesterday' }).success).toBe(false);
   });
 });
