@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Contact — EveryPaisa</title>
+  <meta name="description" content="Write to the EveryPaisa team: early access, CA and adviser partnerships, press, and security reports." />
+  <meta name="theme-color" content="#ecede6" />
+  <link rel="icon" type="image/png" href="assets/favicon-32.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Tiro+Devanagari+Hindi&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/site.css" />
+  <style>
+    .letter-stage { perspective: 1600px; }
+    .contact-form { transform-origin: center top; transition: transform .9s var(--ease), opacity .6s; }
+    .contact-form.sent { transform: rotateX(72deg) translateY(40px) scale(.9); opacity: 0; }
+    .sent-note { display: none; text-align: center; padding: 60px 20px; background: #f7f3e8; border-radius: 8px; box-shadow: 0 30px 60px -40px rgba(16,32,25,.55); }
+    .sent-note.show { display: block; animation: folioIn .6s var(--ease); }
+    .sent-note .stamp { width: 96px; height: 96px; margin: 0 auto 20px; border-radius: 50%; display: grid; place-items: center; color: var(--gold-soft); font-family: var(--f-deva); font-size: 22px; box-shadow: inset 0 -8px 18px rgba(0,0,0,.4); }
+    .field .hint { font-size: 13px; color: var(--ink-3); }
+    .field .err { font-size: 13px; color: var(--madder); min-height: 1em; }
+  </style>
+</head>
+<body data-page="contact">
+
+<header class="site-header">
+  <nav class="wrap nav" aria-label="Main">
+    <a class="brand" href="index.html"><img src="assets/everypaisa-mark.png" alt="" width="34" height="34" />EveryPaisa</a>
+    <ul class="nav-links">
+      <li><a href="index.html#how">How it works</a></li>
+      <li><a href="index.html#assets">Asset classes</a></li>
+      <li><a href="features.html">Features</a></li>
+      <li><a href="index.html#privacy">Privacy</a></li>
+      <li><a href="index.html#pricing">Pricing</a></li>
+      <li><a href="contact.html" aria-current="page">Contact</a></li>
+    </ul>
+    <a class="btn btn-ink" href="index.html#early-access">Get early access</a>
+    <button class="nav-toggle" aria-expanded="false" aria-controls="mobile-menu">Menu</button>
+  </nav>
+  <div class="mobile-menu" id="mobile-menu">
+    <a href="index.html#how">How it works</a>
+    <a href="index.html#assets">Asset classes</a>
+    <a href="features.html">Features</a>
+    <a href="index.html#privacy">Privacy</a>
+    <a href="index.html#pricing">Pricing</a>
+    <a href="contact.html">Contact</a>
+    <a class="btn btn-ink" href="index.html#early-access">Get early access</a>
+  </div>
+</header>
+
+<main>
+  <section class="page-hero" style="padding-bottom:clamp(80px,10vw,140px)">
+    <div class="wrap contact-grid">
+      <div>
+        <h1 class="display">Write to us.</h1>
+        <p class="lede">A real person reads every message. Tell us what you'd like to track, what's missing, or how your practice works, and we'll reply within two working days.</p>
+        <ul class="contact-ways">
+          <li><strong>General &amp; early access</strong><a data-email href="#">hello@everypaisa.in</a></li>
+          <li><strong>CAs, advisers and family offices</strong><span>Choose "I'm a CA or adviser" in the form and we'll set up a walkthrough of the client workspace.</span></li>
+          <li><strong>Security</strong><span>Found a vulnerability? Choose "Security report" and include steps to reproduce. Please don't test against other people's accounts.</span></li>
+          <li><strong>Where we are</strong><span>Built in India, for Indian households. Data is stored with our cloud provider and encrypted at rest.</span></li>
+        </ul>
+      </div>
+
+      <div class="letter-stage">
+        <form class="contact-form" id="contact-form" novalidate>
+          <div class="field">
+            <label for="c-name">Your name</label>
+            <input id="c-name" name="name" autocomplete="name" required />
+            <span class="err" id="c-name-err"></span>
+          </div>
+          <div class="field">
+            <label for="c-email">Email</label>
+            <input id="c-email" name="email" type="email" autocomplete="email" required />
+            <span class="err" id="c-email-err"></span>
+          </div>
+          <fieldset class="field">
+            <legend>This is about</legend>
+            <div class="radios">
+              <label><input type="radio" name="topic" value="Early access" checked /><span>Early access</span></label>
+              <label><input type="radio" name="topic" value="I'm a CA or adviser" /><span>I'm a CA or adviser</span></label>
+              <label><input type="radio" name="topic" value="Feature request" /><span>Feature request</span></label>
+              <label><input type="radio" name="topic" value="Press" /><span>Press</span></label>
+              <label><input type="radio" name="topic" value="Security report" /><span>Security report</span></label>
+            </div>
+          </fieldset>
+          <div class="field">
+            <label for="c-msg">Message</label>
+            <textarea id="c-msg" name="message" required></textarea>
+            <span class="hint">Please don't include account numbers, PAN or passwords.</span>
+            <span class="err" id="c-msg-err"></span>
+          </div>
+          <div><button class="btn btn-ink" type="submit">Send message</button></div>
+        </form>
+        <div class="sent-note" id="sent-note" role="status" tabindex="-1">
+          <div class="stamp cloth">शुभ</div>
+          <h2 class="h3">Your message is ready to send.</h2>
+          <p class="small" style="margin-top:10px">Your mail app has opened with it filled in. If it didn't, write to <a data-email href="#">hello@everypaisa.in</a>.</p>
+          <button class="btn btn-line" type="button" id="write-again" style="margin-top:14px">Write another message</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:0" aria-labelledby="faq-title">
+    <div class="wrap">
+      <div class="section-head"><h2 class="h2" id="faq-title">Before you write</h2></div>
+      <div class="faq">
+        <details><summary>When can I start using EveryPaisa?</summary><p>We're inviting people in small groups. Request early access and we'll email you when your place is ready.</p></details>
+        <details><summary>Can my CA use it for several clients?</summary><p>Yes. The Pro / Adviser plan gives a professional workspace with unlimited client books, double-entry accounting and Tally export.</p></details>
+        <details><summary>Is there a mobile app?</summary><p>EveryPaisa works fully in your phone's browser and can be added to your home screen. Native apps are in progress. A Windows desktop app is available.</p></details>
+        <details><summary>Can I delete my data?</summary><p>Yes. Settings has a delete option that removes your account and records. Download any reports you want to keep first.</p></details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a class="brand" href="index.html"><img src="assets/everypaisa-mark.png" alt="" width="34" height="34" />EveryPaisa</a>
+        <p style="max-width:22em">The family ledger for Indian households: every asset, every rupee, one honest number.</p>
+      </div>
+      <div><h4>Product</h4><ul><li><a href="index.html#how">How it works</a></li><li><a href="index.html#assets">Asset classes</a></li><li><a href="features.html">All features</a></li><li><a href="features.html#reports">Reports</a></li></ul></div>
+      <div><h4>Company</h4><ul><li><a href="index.html#pricing">Pricing</a></li><li><a href="index.html#privacy">Privacy &amp; security</a></li><li><a href="contact.html">Contact</a></li></ul></div>
+      <div><h4>For professionals</h4><ul><li><a href="features.html#ca">CA workspace</a></li><li><a href="features.html#reports">Tax &amp; MIS reports</a></li><li><a href="contact.html?topic=ca">Talk to us</a></li></ul></div>
+    </div>
+    <div class="foot-bottom">
+      <span>© <span data-year>2026</span> EveryPaisa. Not investment advice.</span>
+      <span class="deva">शुभ लाभ</span>
+    </div>
+  </div>
+</footer>
+
+<script src="js/config.js"></script>
+<script src="js/site.js"></script>
+<script>
+  (function () {
+    const email = window.EP_CONFIG.contactEmail;
+    document.querySelectorAll('[data-email]').forEach((a) => { a.href = 'mailto:' + email; a.textContent = email; });
+
+    if (new URLSearchParams(location.search).get('topic') === 'ca') {
+      document.querySelector('input[value="I\'m a CA or adviser"]').checked = true;
+    }
+
+    const form = document.getElementById('contact-form');
+    const note = document.getElementById('sent-note');
+    const checks = [
+      ['c-name', (v) => v.trim() ? '' : 'Enter your name.'],
+      ['c-email', (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? '' : 'Enter an email address like name@example.com.'],
+      ['c-msg', (v) => v.trim().length >= 10 ? '' : 'Write a little more so we can help: at least 10 characters.'],
+    ];
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      let first = null;
+      checks.forEach(([id, fn]) => {
+        const el = document.getElementById(id);
+        const msg = fn(el.value);
+        document.getElementById(id + '-err').textContent = msg;
+        el.setAttribute('aria-invalid', msg ? 'true' : 'false');
+        if (msg && !first) first = el;
+      });
+      if (first) { first.focus(); return; }
+      const d = new FormData(form);
+      window.EP_CONTACT.send({
+        subject: `${d.get('topic')} — ${d.get('name')}`,
+        body: `${d.get('message')}\n\n${d.get('name')}\n${d.get('email')}`,
+      });
+      form.classList.add('sent');
+      setTimeout(() => { form.style.display = 'none'; note.classList.add('show'); note.focus(); }, 650);
+    });
+    document.getElementById('write-again').addEventListener('click', () => {
+      form.reset();
+      note.classList.remove('show');
+      form.style.display = '';
+      requestAnimationFrame(() => form.classList.remove('sent'));
+    });
+  })();
+</script>
+</body>
+</html>

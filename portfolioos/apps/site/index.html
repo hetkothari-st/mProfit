@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EveryPaisa — Every paisa, in one honest ledger</title>
+  <meta name="description" content="EveryPaisa keeps your family's money in one ledger: stocks, mutual funds, FDs, PF, gold, property, vehicles, insurance and loans. It reads your bank and broker alerts, works out your capital gains, and shows your real net worth." />
+  <meta property="og:title" content="EveryPaisa — Every paisa, in one honest ledger" />
+  <meta property="og:description" content="Nineteen asset classes, your inbox read for you, tax reports your CA will accept. Built for Indian households." />
+  <meta name="theme-color" content="#ecede6" />
+  <link rel="icon" type="image/png" href="assets/favicon-32.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Tiro+Devanagari+Hindi&family=Inter+Tight:wght@400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,600;1,9..144,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/site.css" />
+  <link rel="stylesheet" href="css/screens.css" />
+</head>
+<body data-page="home">
+
+<header class="site-header" id="top">
+  <nav class="wrap nav" aria-label="Main">
+    <a class="brand" href="index.html"><img src="assets/everypaisa-mark.png" alt="" width="34" height="34" />EveryPaisa</a>
+    <ul class="nav-links">
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#assets">Asset classes</a></li>
+      <li><a href="features.html">Features</a></li>
+      <li><a href="#privacy">Privacy</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="contact.html">Contact</a></li>
+    </ul>
+    <a class="btn btn-ink" href="#early-access">Get early access</a>
+    <button class="nav-toggle" aria-expanded="false" aria-controls="mobile-menu">Menu</button>
+  </nav>
+  <div class="mobile-menu" id="mobile-menu">
+    <a href="#how">How it works</a>
+    <a href="#assets">Asset classes</a>
+    <a href="features.html">Features</a>
+    <a href="#privacy">Privacy</a>
+    <a href="#pricing">Pricing</a>
+    <a href="contact.html">Contact</a>
+    <a class="btn btn-ink" href="#early-access">Get early access</a>
+  </div>
+</header>
+
+<main>
+
+  <!-- HERO: the ledger opens as you scroll -->
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-pin">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <h1 class="display" id="hero-title">Every paisa, in one honest ledger.</h1>
+          <p class="lede">Your family has kept a <em>bahi-khata</em> for generations. EveryPaisa is that ledger, rebuilt: stocks, mutual funds, FDs, PF, gold, property, vehicles, insurance and loans, with your bank and broker alerts filed in for you.</p>
+          <div class="hero-actions">
+            <a class="btn btn-ink" href="#early-access">Get early access</a>
+            <a class="btn btn-line" href="#how">See how it works</a>
+          </div>
+          <p class="hero-note"><span aria-hidden="true"></span>Free for individuals. Your data is encrypted and never sold.</p>
+        </div>
+
+        <div class="hero-visual">
+          <div class="book-stage" id="book-stage" aria-label="A red ledger book opens to show the EveryPaisa dashboard, review queue and tax report" role="img">
+            <div class="book-scaler" id="book-scaler">
+              <div class="book" id="book">
+                <div class="book-shadow"></div>
+                <div class="back-cover"><div class="face cloth"></div></div>
+                <div class="spine cloth"></div>
+                <div class="pages-block"><div class="edge-r"></div><div class="edge-b"></div></div>
+
+                <div class="leaf" data-leaf="3">
+                  <div class="face front"><div data-screen="tax"></div></div>
+                  <div class="face back ruled"></div>
+                </div>
+                <div class="leaf" data-leaf="2">
+                  <div class="face front"><div data-screen="review"></div></div>
+                  <div class="face back ruled">
+                    <h4>And at year end, the CA is happy.</h4>
+                    <p>Capital gains by FIFO, grandfathering, Schedule 112A and thirty-odd reports, ready before the ITR deadline.</p>
+                    <p class="hand">शुभ लाभ</p>
+                    <span class="folio">f. 3</span>
+                  </div>
+                </div>
+                <div class="leaf" data-leaf="1">
+                  <div class="face front"><div data-screen="dashboard"></div></div>
+                  <div class="face back ruled">
+                    <h4>Then it files itself.</h4>
+                    <p>Bank SMS, broker contract notes, SIP debits, FD interest. Each one is read, sorted and laid out for you to approve.</p>
+                    <p class="hand">जमा · नाम</p>
+                    <span class="folio">f. 2</span>
+                  </div>
+                </div>
+
+                <div class="cover">
+                  <div class="face front cloth">
+                    <div class="cover-strap"></div>
+                    <div class="cover-art foil">
+                      <div class="cover-swastik" aria-hidden="true">॥ श्री ॥</div>
+                      <div class="cover-title">शुभ लाभ</div>
+                      <div class="cover-sub">EveryPaisa</div>
+                      <div class="cover-year">संवत २०८२</div>
+                    </div>
+                  </div>
+                  <div class="face back endpaper">
+                    <div class="deva">॥ हिसाब ॥</div>
+                    <p>One page for everything the family owns, owes and is owed.</p>
+                    <small>Net worth, today, in one number.</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="hero-caption" id="hero-caption" aria-live="polite">Scroll to open the ledger</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- THE PROBLEM -->
+  <section class="section scatter" aria-labelledby="scatter-title" id="scatter">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker">The problem</p>
+        <h2 class="h2 reveal" id="scatter-title">Your money lives in forty places. You remember maybe twelve.</h2>
+        <p class="lede">A debit SMS here, a CAS PDF there, the LIC receipt in a drawer, the FD your father opened in 2014, the car's PUC that expired last week. Nobody has the full picture, least of all at tax time.</p>
+      </div>
+      <div class="scatter-stage" id="scatter-stage" aria-hidden="true">
+        <div class="slip sms"><div class="src"><span>VM-HDFCBK</span><span>09:41</span></div>Rs.12,500.00 debited from A/c XX9876 towards SIP. Avl bal Rs.84,210.</div>
+        <div class="slip pdf"><div class="src"><span>CAS · CAMS + KFin</span><span>PDF, 14 pp</span></div><b>Consolidated Account Statement</b><br/>Folios: 11 · Schemes: 23</div>
+        <div class="slip receipt"><div class="src"><span>FD advice</span><span>Branch copy</span></div>Fixed Deposit ₹5,00,000 @ 7.10% · Matures 18 Mar 2027</div>
+        <div class="slip"><div class="src"><span>Contract note</span><span>NSE · CM</span></div>BUY INFY × 25 @ ₹1,536.50<br/>Brokerage ₹20 · STT ₹38</div>
+        <div class="slip policy"><div class="src"><span>Premium receipt</span><span>Annual</span></div>Term plan · Sum assured ₹2 Cr · Premium ₹18,400 due 4 Nov</div>
+        <div class="slip rc"><div class="src"><span>RC · Vahan</span><span>LMV</span></div>MH 01 XX 4821 · Petrol · PUC valid till 12 Oct</div>
+        <div class="slip tenant"><div class="src"><span>UPI credit</span><span>1 Oct</span></div>₹32,000 received from R. SHARMA · "Oct rent"</div>
+        <div class="slip sms"><div class="src"><span>EPFO</span><span>Passbook</span></div>Contribution of ₹21,600 credited to UAN ending 4417.</div>
+        <div class="slip"><div class="src"><span>Gold</span><span>Locker</span></div>Bangles 46 g · 22K · bought 2011</div>
+        <div class="scatter-ledger cloth">
+          <div class="cover-title">शुभ लाभ</div>
+          <div class="cover-sub">One ledger</div>
+        </div>
+      </div>
+      <div class="scatter-foot">
+        <div><strong>19</strong>asset classes, from stocks and F&amp;O to vehicles and the gold in the locker.</div>
+        <div><strong>30+</strong>tax and CA reports, including Schedule 112A and grandfathered LTCG.</div>
+        <div><strong>1</strong>net worth number for you, or for the whole family.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="section" id="how" aria-labelledby="how-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker">How it works</p>
+        <h2 class="h2 reveal" id="how-title">Your inbox already has the data. We read it, you approve it.</h2>
+      </div>
+      <div class="flow">
+        <div>
+          <ol class="steps" id="steps">
+            <li data-step="0"><h3>Pick the senders you trust</h3><p>Connect Gmail with read-only access and choose your bank, broker and registrar. We only ever search mail from those addresses, never the rest of your inbox.</p></li>
+            <li data-step="1"><h3>Each alert becomes an entry</h3><p>Amount, date, instrument and account are pulled out of every alert, SIP debit and contract note. Personal identifiers are stripped before anything is parsed.</p></li>
+            <li data-step="2"><h3>You approve, once</h3><p>New entries wait in a review queue. After five clean entries from a sender, you can let that sender file straight into the ledger.</p></li>
+            <li data-step="3"><h3>The ledger adds up</h3><p>Holdings, gains, XIRR and net worth recalculate from the transactions themselves, so the numbers are always traceable back to a source.</p></li>
+          </ol>
+          <div class="sources">
+            <p>Prefer files or direct links? These work too:</p>
+            <ul class="source-list">
+              <li>CAS from CAMS &amp; KFintech</li>
+              <li>MF Central</li>
+              <li>Account Aggregator</li>
+              <li>Broker contract notes</li>
+              <li>Tradebooks &amp; P&amp;L files</li>
+              <li>EPF passbook</li>
+              <li>Excel &amp; CSV</li>
+              <li>Manual entry</li>
+            </ul>
+          </div>
+        </div>
+        <div class="film" aria-label="Animated demo: an SMS alert becomes a ledger entry, gets approved, and the net worth updates" role="img">
+          <div class="film-frame">
+            <div class="scr" id="film">
+              <div class="scr-top"><span class="scr-dot"></span><b>Inbox imports</b><span class="scr-pill">3 senders monitored</span></div>
+              <div class="f-left"><div class="f-mail scr-card" id="f-mail">
+                <div class="from"><span class="av">HB</span><div><b>HDFC Bank alerts</b><div class="scr-label">alerts@hdfcbank.net</div></div></div>
+                <div class="scr-label" style="margin-bottom:4px">SIP debit · today 09:41</div>
+                <div>Dear Customer, <mark id="f-amt">Rs.12,500.00</mark> has been debited from A/c XX9876 on <mark id="f-date">13-10-2026</mark> towards SIP for <mark id="f-fund">Parag Parikh Flexi Cap Fund</mark>.</div>
+              </div>
+              <div class="scr-card f-fields" id="f-fields">
+                <div class="scr-row" style="margin-bottom:6px"><b>What we read</b><span class="scr-chip">Identifiers removed</span></div>
+                <div class="f-kv"><span class="mut">Type</span><span>SIP installment</span></div>
+                <div class="f-kv"><span class="mut">Amount</span><span>₹12,500.00</span></div>
+                <div class="f-kv"><span class="mut">Date</span><span>13 Oct 2026</span></div>
+                <div class="f-kv"><span class="mut">Scheme</span><span>Parag Parikh Flexi Cap</span></div>
+                <div class="f-kv"><span class="mut">Account</span><span>XX9876</span></div>
+                <div class="f-kv"><span class="mut">Confidence</span><span class="lime">0.97</span></div>
+              </div></div>
+              <div class="f-queue scr-card" id="f-queue">
+                <div class="scr-row" style="margin-bottom:4px"><b>Pending review</b><button class="scr-btn" id="f-approve" tabindex="-1">Approve all</button></div>
+                <div class="f-ev" data-ev><div><div class="t">SIP INSTALLMENT · 0.97</div><div>Parag Parikh Flexi Cap</div></div><div class="amt">₹12,500.00</div><span class="scr-chip st">Review</span></div>
+                <div class="f-ev" data-ev><div><div class="t">BUY · 0.99</div><div>INFY × 25</div></div><div class="amt">₹38,412.50</div><span class="scr-chip st">Review</span></div>
+                <div class="f-ev" data-ev><div><div class="t">INTEREST CREDIT · 0.95</div><div>SBI fixed deposit</div></div><div class="amt">₹4,183.00</div><span class="scr-chip st">Review</span></div>
+              </div>
+              <div class="f-worth" id="f-worth">
+                <div class="scr-card">
+                  <div class="scr-label">Total net worth</div>
+                  <div class="scr-big" style="font-size:30px" id="f-nw">₹1,84,07,215</div>
+                  <div class="pos" style="margin-top:2px">+₹55,095 today</div>
+                  <svg class="spark" viewBox="0 0 200 54" preserveAspectRatio="none" style="margin-top:12px"><path id="f-spark" d="M0 46 L20 44 L40 40 L60 42 L80 33 L100 35 L120 26 L140 24 L160 18 L180 15 L200 8" fill="none" stroke="#e2fe53" stroke-width="2"/></svg>
+                  <div class="scr-grid2" style="margin-top:8px"><div><div class="scr-label">XIRR</div><b>14.2%</b></div><div><div class="scr-label">Unrealised P&amp;L</div><b class="pos">+₹22,48,905</b></div></div>
+                </div>
+                <div class="scr-card" style="display:flex;flex-direction:column;align-items:center;gap:10px;justify-content:center">
+                  <div class="donut" id="f-donut"></div>
+                  <div class="legend"><span><i style="background:#e2fe53"></i>Equities 40%</span><span><i style="background:#b69cf0"></i>Mutual funds 25%</span><span><i style="background:#f08c4a"></i>Real estate 19%</span><span><i style="background:#b3b3b3"></i>Other 16%</span></div>
+                </div>
+              </div>
+              <svg class="f-cursor" id="f-cursor" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 1 L1 13 L4.5 9.8 L7 15 L9 14 L6.6 9 L11 9 Z" fill="#fff" stroke="#111" stroke-width="1"/></svg>
+            </div>
+          </div>
+          <div class="film-controls">
+            <button id="film-toggle" aria-pressed="false">Pause</button>
+            <div class="film-progress"><i id="film-bar"></i></div>
+            <span id="film-label">Reading the alert</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ASSET CLASSES -->
+  <section class="section" id="assets" aria-labelledby="assets-title" style="padding-top:0">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker">What it tracks</p>
+        <h2 class="h2 reveal" id="assets-title">Nineteen asset classes. One index.</h2>
+        <p class="lede">Every folio in the ledger knows the rules of its asset: how it is priced, how it is taxed, and when it needs your attention.</p>
+      </div>
+      <div class="index-wrap">
+        <ul class="folio-list" id="folio-list" role="tablist" aria-label="Asset classes"></ul>
+        <div class="folio-card" id="folio-card" role="tabpanel" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHAPTERS -->
+  <section class="section chapters" id="tour" aria-labelledby="tour-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker">Inside the app</p>
+        <h2 class="h2 reveal" id="tour-title">Not ten dashboards. One place that answers the question you actually have.</h2>
+      </div>
+      <div class="chap-grid">
+        <div class="chap-list" id="chap-list">
+          <article class="chap" data-chap="dashboard">
+            <p class="tag">What am I worth?</p>
+            <h3>The whole family's money, on one page.</h3>
+            <p>Net worth across every asset, allocation, XIRR and profit, and the alerts that need you this week.</p>
+            <ul><li>Net worth history and cash-flow forecast</li><li>Best and worst performers, risk and correlation</li><li>A what-if simulator for your allocation</li><li>A portfolio score with plain-language fixes</li></ul>
+            <div class="inline-screen"><div class="laptop-screen"><div data-screen="dashboard"></div></div></div>
+          </article>
+          <article class="chap" data-chap="mf">
+            <p class="tag">Is this fund any good?</p>
+            <h3>Mutual fund research you can actually read.</h3>
+            <p>Each fund gets a score built from returns, risk, cost and consistency, with the reasoning shown, not hidden.</p>
+            <ul><li>Rolling returns and drawdowns over 1, 3 and 5 years</li><li>Overlap between the funds you hold</li><li>Look-through to the stocks underneath</li><li>Expense ratio drag, riskometer and tax lots</li></ul>
+            <div class="inline-screen"><div class="laptop-screen"><div data-screen="mf"></div></div></div>
+          </article>
+          <article class="chap" data-chap="tax">
+            <p class="tag">What do I owe?</p>
+            <h3>Capital gains your CA can sign off on.</h3>
+            <p>Gains are matched lot by lot using FIFO, with grandfathering for holdings bought before 31 January 2018.</p>
+            <ul><li>STCG, LTCG and intraday, split by asset and broker</li><li>Schedule 112A, ready for the ITR</li><li>Advance tax and tax-loss harvesting suggestions</li><li>One-click export to Tally</li></ul>
+            <div class="inline-screen"><div class="laptop-screen"><div data-screen="tax"></div></div></div>
+          </article>
+          <article class="chap" data-chap="insurance">
+            <p class="tag">Is my family covered?</p>
+            <h3>Insurance, read against what you actually need.</h3>
+            <p>See every policy, where the gaps are, and what is due. Print an emergency sheet the family can find when it matters.</p>
+            <ul><li>Life, health, motor and home policies in one list</li><li>Coverage gaps, explained in plain words</li><li>Premium and renewal reminders</li><li>Succession: nominees get verified access if something happens to you</li></ul>
+            <div class="inline-screen"><div class="laptop-screen"><div data-screen="insurance"></div></div></div>
+          </article>
+          <article class="chap" data-chap="vehicle">
+            <p class="tag">When does the PUC expire?</p>
+            <h3>Cars, flats and tenants, looked after.</h3>
+            <p>Add a vehicle by its registration number and the RC details fill in. Add a tenancy and the rent receipts write themselves.</p>
+            <ul><li>PUC, insurance, fitness and road-tax expiry alerts</li><li>Pending challans and today's fuel prices</li><li>Rent due dates, overdue reminders and receipts</li><li>Property value, expenses and capital gains on sale</li></ul>
+            <div class="inline-screen"><div class="laptop-screen"><div data-screen="vehicle"></div></div></div>
+          </article>
+          <article class="chap" data-chap="emi">
+            <p class="tag">Can I prepay the home loan?</p>
+            <h3>Everyday money, without the spreadsheet.</h3>
+            <p>Loans, credit cards, EMIs and the dinner bill you split with friends live in the same ledger as your investments.</p>
+            <ul><li>EMI calculator with current home-loan rates and prepayment</li><li>Home-loan tax benefits under 24(b) and 80C</li><li>Credit cards, dues and money you've lent</li><li>Split expenses with friends and settle up over UPI</li></ul>
+            <div class="inline-screen"><div class="laptop-screen"><div data-screen="emi"></div></div></div>
+          </article>
+          <article class="chap" data-chap="family">
+            <p class="tag">And for the whole household?</p>
+            <h3>One view for the family. One workspace for your CA.</h3>
+            <p>Add parents, a spouse or children, manage accounts for members who won't log in, and invite your CA with their own secure access.</p>
+            <ul><li>Consolidated family net worth and reports</li><li>Shared goals: retirement, education, a home</li><li>CA workspace with full double-entry accounting</li><li>Trial balance, P&amp;L and balance sheet per client</li></ul>
+            <div class="inline-screen"><div class="laptop-screen"><div data-screen="family"></div></div></div>
+          </article>
+        </div>
+        <div class="chap-device" aria-hidden="true">
+          <div class="laptop">
+            <div class="laptop-lid"><div class="laptop-screen"><div class="screen-stack" id="screen-stack"></div></div></div>
+            <div class="laptop-base"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AUDIENCES -->
+  <section class="section" aria-labelledby="aud-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker">Who it's for</p>
+        <h2 class="h2 reveal" id="aud-title">Built for the way Indian families hold money.</h2>
+      </div>
+      <div class="aud">
+        <div>
+          <h3>For you</h3>
+          <p>You invest through two brokers and four AMCs, have a PF you never look at and an FD that renews itself. You want one number you can trust and a tax report that doesn't take a weekend.</p>
+          <p class="who">Salaried professionals, first-time investors, active traders.</p>
+        </div>
+        <div>
+          <h3>For your family</h3>
+          <p>Your parents' FDs, your spouse's mutual funds, the flat in your father's name. See it together, plan goals together, and make sure everyone knows where things are.</p>
+          <p class="who">Households, joint families, people managing money for parents.</p>
+        </div>
+        <div>
+          <h3>For your CA</h3>
+          <p>Give your chartered accountant or adviser their own login to your books. They get the reports they file with: ledgers, trial balance, Schedule 112A, Tally export.</p>
+          <p class="who">Chartered accountants, advisers, family offices.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRIVACY -->
+  <section class="section vault" id="privacy" aria-labelledby="privacy-title">
+    <div class="wrap vault-grid">
+      <div>
+        <p class="kicker">Privacy</p>
+        <h2 class="h2 reveal" id="privacy-title">Sealed like the family ledger in the almirah.</h2>
+        <p class="lede">This is the most private data you have. We built EveryPaisa assuming that, from the database up.</p>
+        <ul class="vault-list">
+          <li><strong>Read-only, and only what you choose</strong><span>Gmail access is read-only and limited to the senders you pick.</span></li>
+          <li><strong>Identifiers encrypted at rest</strong><span>PAN, account, folio and policy numbers are encrypted with a key unique to you.</span></li>
+          <li><strong>Stripped before parsing</strong><span>Names, PAN and account numbers are removed before any alert is read by AI.</span></li>
+          <li><strong>Walled off per user</strong><span>The database itself refuses to return another person's rows, even to our own code.</span></li>
+          <li><strong>Two-factor sign-in</strong><span>Authenticator app codes and backup codes, required for CA workspaces.</span></li>
+          <li><strong>Leave whenever you like</strong><span>Download your reports any time, or delete your account and every record with it.</span></li>
+        </ul>
+      </div>
+      <div class="seal-stage" aria-hidden="true">
+        <div class="seal-glow"></div>
+        <div class="seal" id="seal">
+          <div class="rim"></div>
+          <div class="disc"><img src="assets/everypaisa-mark.png" alt="" /></div>
+          <div class="disc back"><div class="back-text">Encrypted.<br/>Never sold.<br/>Yours.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="section" id="pricing" aria-labelledby="pricing-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker">Pricing</p>
+        <h2 class="h2 reveal" id="pricing-title">Free for your own money. Pay when you automate, or add the family.</h2>
+      </div>
+      <div class="plans-scroll">
+        <table class="plans">
+          <thead>
+            <tr>
+              <th scope="col"><span class="sr-only">Feature</span></th>
+              <th scope="col"><h3>Free</h3><p>Your net worth in one place.</p><div class="price">₹0<small>forever</small></div></th>
+              <th scope="col" class="featured"><h3>Plus</h3><p>Automatic imports and the full report catalogue.</p><div class="price">At launch<small>monthly or yearly</small></div></th>
+              <th scope="col"><h3>Family</h3><p>One consolidated view for the household.</p><div class="price">At launch<small>3 members included</small></div></th>
+              <th scope="col"><h3>Pro / Adviser</h3><p>For CAs and advisers running client books.</p><div class="price">At launch<small>per practice</small></div></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">All 19 asset classes</th><td class="yes">Yes</td><td class="yes featured">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+            <tr><th scope="row">Net worth dashboard</th><td class="yes">Yes</td><td class="yes featured">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+            <tr><th scope="row">Portfolios</th><td>1</td><td class="featured">Multiple</td><td>Multiple</td><td>Unlimited clients</td></tr>
+            <tr><th scope="row">Reports</th><td>Holdings, XIRR, cash flow</td><td class="featured">30+ tax &amp; CA reports</td><td>30+, family-wise</td><td>30+, incl. F&amp;O reports</td></tr>
+            <tr><th scope="row">Inbox &amp; Account Aggregator imports</th><td class="no">—</td><td class="yes featured">Yes</td><td class="yes">Yes</td><td class="yes">Priority refresh</td></tr>
+            <tr><th scope="row">Ask-in-plain-English assistant</th><td class="no">—</td><td class="yes featured">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+            <tr><th scope="row">Goal projections</th><td class="no">—</td><td class="yes featured">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+            <tr><th scope="row">Family net worth &amp; sharing</th><td class="no">—</td><td class="no featured">—</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+            <tr><th scope="row">Double-entry accounting, Tally export</th><td class="no">—</td><td class="no featured">—</td><td class="no">—</td><td class="yes">Yes</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="plans-note">Paid plan prices will be announced at launch. Early-access members keep their launch price.</p>
+    </div>
+  </section>
+
+  <!-- PLATFORMS -->
+  <section class="section" style="padding-top:0" aria-labelledby="plat-title">
+    <div class="wrap platforms">
+      <div>
+        <p class="kicker">Where it runs</p>
+        <h2 class="h2 reveal" id="plat-title">On your laptop, your desk and your phone.</h2>
+        <ul class="plat-list">
+          <li><strong>Web</strong><span>Works in any modern browser. Nothing to install.</span></li>
+          <li><strong>Windows</strong><span>A desktop app that updates itself.</span></li>
+          <li><strong>Phone</strong><span>Fully usable on mobile today; add it to your home screen. Native apps are on the way.</span></li>
+        </ul>
+      </div>
+      <div class="devices" aria-hidden="true">
+        <div class="laptop">
+          <div class="laptop-lid"><div class="laptop-screen"><div data-screen="dashboard"></div></div></div>
+          <div class="laptop-base"></div>
+        </div>
+        <div class="phone"><div data-screen="mobile"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="section" style="padding-top:0" aria-labelledby="faq-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker">Questions</p>
+        <h2 class="h2 reveal" id="faq-title">Things people ask before they trust us with their money.</h2>
+      </div>
+      <div class="faq">
+        <details><summary>Can EveryPaisa move my money or place trades?</summary><p>No. EveryPaisa only reads. It has no way to move money, place orders or change anything at your bank or broker.</p></details>
+        <details><summary>Do you read my whole inbox?</summary><p>No. You choose the senders, like your bank's alert address or your broker. We search only mail from those addresses, with read-only access you can revoke from your Google account at any time.</p></details>
+        <details><summary>Which brokers and fund houses are supported?</summary><p>Mutual funds come in through your CAS from CAMS and KFintech or MF Central, which covers every AMC. Stocks come from contract notes and tradebooks from major brokers including Zerodha, Upstox, Angel One and Kotak, from your demat CAS, or from the Account Aggregator network. Anything else can be added from Excel or by hand.</p></details>
+        <details><summary>How accurate are the capital gains?</summary><p>Gains are computed from your transactions lot by lot, using FIFO, with the 31 January 2018 grandfathering rule and current holding-period rules for equity, debt and hybrid funds. Each figure links back to the buys and sells it came from, so your CA can check it.</p></details>
+        <details><summary>What happens to my data if I leave?</summary><p>Every report can be downloaded as PDF or Excel at any time. Deleting your account removes your records from our systems.</p></details>
+        <details><summary>Is this investment advice?</summary><p>EveryPaisa is a tracking and reporting tool. Scores, insights and suggestions help you understand your money; they aren't a recommendation to buy or sell anything.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="section cta" id="early-access" aria-labelledby="cta-title">
+    <div class="wrap">
+      <div>
+        <h2 class="h2" id="cta-title">Open your ledger.</h2>
+        <p class="lede" style="color:#efd9c6;margin-top:18px">We're letting families in a few at a time. Leave your email and we'll write when your place is ready.</p>
+      </div>
+      <div>
+        <form class="signup" id="signup" novalidate>
+          <label class="sr-only" for="signup-email">Email address</label>
+          <input id="signup-email" type="email" name="email" placeholder="you@example.com" autocomplete="email" required />
+          <button class="btn" type="submit">Request access</button>
+        </form>
+        <p class="form-msg" id="signup-msg" role="status"></p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a class="brand" href="index.html"><img src="assets/everypaisa-mark.png" alt="" width="34" height="34" />EveryPaisa</a>
+        <p style="max-width:22em">The family ledger for Indian households: every asset, every rupee, one honest number.</p>
+      </div>
+      <div><h4>Product</h4><ul><li><a href="#how">How it works</a></li><li><a href="#assets">Asset classes</a></li><li><a href="features.html">All features</a></li><li><a href="features.html#reports">Reports</a></li></ul></div>
+      <div><h4>Company</h4><ul><li><a href="#pricing">Pricing</a></li><li><a href="#privacy">Privacy &amp; security</a></li><li><a href="contact.html">Contact</a></li></ul></div>
+      <div><h4>For professionals</h4><ul><li><a href="features.html#ca">CA workspace</a></li><li><a href="features.html#reports">Tax &amp; MIS reports</a></li><li><a href="contact.html?topic=ca">Talk to us</a></li></ul></div>
+    </div>
+    <div class="foot-bottom">
+      <span>© <span data-year>2026</span> EveryPaisa. Not investment advice.</span>
+      <span class="deva">शुभ लाभ</span>
+    </div>
+  </div>
+</footer>
+
+<template id="tpl-screens"></template>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/screens.js"></script>
+<script src="js/site.js"></script>
+</body>
+</html>

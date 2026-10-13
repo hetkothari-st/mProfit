@@ -1,0 +1,76 @@
+/* Layouts for the rendered app screens. Container queries let one screen
+   work as a small ledger page, a laptop display, or a phone. */
+.scr { container-type: size; }
+.scr b { font-weight: 600; }
+
+/* dashboard */
+.s-dash-grid { display: grid; gap: 8px; grid-template-columns: 1fr; }
+.s-alloc { display: flex; align-items: center; gap: 12px; }
+.s-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.s-alerts { display: grid; gap: 6px; }
+.s-dash .spark { height: 40px; margin-top: 6px; }
+@container (max-height: 420px) and (max-width: 420px) {
+  .s-dash .s-kpis { display: none; }
+  .s-dash .donut { width: 72px; height: 72px; }
+  .s-dash .donut::after { inset: 13px; }
+}
+@container (min-width: 440px) {
+  .s-dash-grid { grid-template-columns: 1.25fr 1fr; }
+  .s-dash .spark { height: 60px; }
+  .s-nw .scr-big { font-size: 30px; }
+}
+
+/* review */
+.s-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.s-list { padding: 4px 10px; }
+.s-ev { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--app-line); }
+.s-ev:last-child { border-bottom: 0; }
+.s-banner { display: grid; gap: 2px; border-color: rgba(226,254,83,.35); }
+@container (max-width: 420px) { .s-banner .mut { display: none; } }
+
+/* tax */
+.s-tax-kpi .scr-card { padding: 8px; }
+.s-tax-kpi b { font-size: 12.5px; }
+.s-harvest { border-color: rgba(226,254,83,.3); }
+@container (max-width: 420px) { .s-hide-sm { display: none; } .s-tax-kpi b { font-size: 11px; } }
+
+/* mutual fund */
+.s-score { display: flex; align-items: baseline; gap: 1px; border: 1px solid var(--app-lime); border-radius: 10px; padding: 4px 9px; }
+.s-score b { font-size: 22px; color: var(--app-lime); font-family: var(--f-app-display); }
+.s-score span { color: var(--app-muted); font-size: 10px; }
+.s-mf-grid { display: grid; gap: 8px; }
+.s-pillars { display: grid; gap: 7px; }
+.s-pill { display: grid; grid-template-columns: 74px 1fr; align-items: center; gap: 8px; }
+.s-hist { display: flex; align-items: flex-end; gap: 3px; height: 62px; }
+.s-hist i { flex: 1; background: #3a3a3a; border-radius: 2px 2px 0 0; }
+.s-hist i:nth-child(6), .s-hist i:nth-child(7) { background: var(--app-lime); }
+.s-overlap { display: grid; gap: 4px; }
+@container (min-width: 440px) { .s-mf-grid { grid-template-columns: 1fr 1fr; } .s-overlap { grid-column: 1 / -1; } }
+
+/* insurance */
+.s-sheet { display: grid; gap: 4px; justify-items: start; }
+
+/* vehicle */
+.s-veh-head { display: flex; gap: 12px; align-items: center; }
+.s-veh-head img { width: 110px; flex: none; filter: invert(1) brightness(.9); opacity: .85; }
+.s-plate { display: inline-block; font-weight: 700; letter-spacing: .06em; background: #f5f5f5; color: #111; border-radius: 4px; padding: 2px 8px; font-size: 12px; margin-bottom: 3px; border: 1px solid #999; }
+@container (max-width: 420px) { .s-veh-head img { width: 70px; } }
+
+/* emi */
+.s-emi-grid { display: grid; gap: 8px; }
+.s-split { display: flex; height: 8px; border-radius: 99px; overflow: hidden; margin: 8px 0 4px; }
+.s-split i { display: block; height: 100%; background: var(--app-lime); }
+@container (min-width: 440px) { .s-emi-grid { grid-template-columns: 1fr 1fr; } .s-splitcard { grid-column: 1 / -1; } }
+
+/* family */
+.s-mem { display: grid; grid-template-columns: 22px 1fr 1fr auto; gap: 8px; align-items: center; padding: 5px 0; }
+.s-av { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 8.5px; font-weight: 700; color: #111; }
+@container (max-width: 420px) { .s-mem { grid-template-columns: 22px 1fr auto; } .s-mem .bar { display: none; } }
+
+/* phone */
+.s-mobile .scr-big { font-size: 22px; }
+
+.s-wide { display: none; }
+.s-find { line-height: 1.5; }
+.s-rates { gap: 3px; }
+@container (min-width: 440px) { .s-wide { display: block; } .s-rates { display: grid; } .s-find { grid-column: 1 / -1; } }
