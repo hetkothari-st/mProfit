@@ -124,7 +124,7 @@ export const WILL_DOCUMENT_REPLACED_LABEL = 'Replaced by a later will';
 /** `category` is the Document category: "will" for the generated PDF, "executed" for the signed copy. */
 export function willDocumentTag(status: WillStatusWire, category: string | null, version: number): WillDocumentTag {
   if (status === 'GENERATED' || status === 'EXECUTED') {
-    return { current: true, label: category === 'executed' ? `Signed copy (version ${version})` : `Your will (version ${version})` };
+    return { current: true, label: category === 'executed' ? `Signed will, version ${version}` : `Will, version ${version} (unsigned print)` };
   }
   return { current: false, label: WILL_DOCUMENT_REPLACED_LABEL };
 }

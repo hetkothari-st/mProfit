@@ -72,8 +72,8 @@ const tagsByFile = async () =>
 describe('will documents carry their will status', () => {
   it('labels the live will and its signed copy, and leaves other files alone', async () => {
     expect(await tagsByFile()).toEqual({
-      'will-v1.pdf': { current: true, label: 'Your will (version 1)' },
-      'will-v1-signed.png': { current: true, label: 'Signed copy (version 1)' },
+      'will-v1.pdf': { current: true, label: 'Will, version 1 (unsigned print)' },
+      'will-v1-signed.png': { current: true, label: 'Signed will, version 1' },
       'deed.pdf': null,
     });
   });
@@ -84,7 +84,7 @@ describe('will documents carry their will status', () => {
     expect(await tagsByFile()).toEqual({
       'will-v1.pdf': { current: false, label: 'Replaced by a later will' },
       'will-v1-signed.png': { current: false, label: 'Replaced by a later will' },
-      'will-v2.pdf': { current: true, label: 'Your will (version 2)' },
+      'will-v2.pdf': { current: true, label: 'Will, version 2 (unsigned print)' },
       'deed.pdf': null,
     });
     const view = await buildLegacyView(a.userId, executorId);

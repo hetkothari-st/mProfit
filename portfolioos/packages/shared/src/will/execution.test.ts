@@ -76,8 +76,8 @@ describe('witness checks', () => {
 
 describe('willDocumentTag', () => {
   it('labels a live will and its signed copy with the version', () => {
-    expect(willDocumentTag('GENERATED', 'will', 3)).toEqual({ current: true, label: 'Your will (version 3)' });
-    expect(willDocumentTag('EXECUTED', 'executed', 3)).toEqual({ current: true, label: 'Signed copy (version 3)' });
+    expect(willDocumentTag('GENERATED', 'will', 3)).toEqual({ current: true, label: 'Will, version 3 (unsigned print)' });
+    expect(willDocumentTag('EXECUTED', 'executed', 3)).toEqual({ current: true, label: 'Signed will, version 3' });
   });
 
   it('marks every file of a replaced will as replaced', () => {

@@ -24,7 +24,7 @@ describe('LegacyAccessPage documents', () => {
       documents: [
         { id: 'd1', fileName: 'deed.pdf', category: null },
         { id: 'd2', fileName: 'will-v1-signed.png', category: 'executed', will: { current: false, label: 'Replaced by a later will' } },
-        { id: 'd3', fileName: 'will-v2.pdf', category: 'will', will: { current: true, label: 'Your will (version 2)' } },
+        { id: 'd3', fileName: 'will-v2.pdf', category: 'will', will: { current: true, label: 'Will, version 2 (unsigned print)' } },
       ],
     };
     vi.mocked(legacyPublic.view).mockResolvedValue(view);
@@ -32,7 +32,7 @@ describe('LegacyAccessPage documents', () => {
     renderWithProviders(<LegacyAccessPage />, { route: `/legacy/access/${TOKEN}`, path: '/legacy/access/:token' });
     expect(await screen.findByText('will-v1-signed.png')).toBeTruthy();
     expect(screen.getByTestId('legacy-doc-d2').textContent).toContain('Replaced by a later will');
-    expect(screen.getByTestId('legacy-doc-d3').textContent).toContain('Your will (version 2)');
+    expect(screen.getByTestId('legacy-doc-d3').textContent).toContain('Will, version 2 (unsigned print)');
     expect(screen.getByTestId('legacy-doc-d1').textContent).not.toContain('will');
   });
 });

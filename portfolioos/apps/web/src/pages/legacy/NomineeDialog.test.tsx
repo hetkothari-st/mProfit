@@ -25,8 +25,8 @@ describe('NomineeDialog document picker', () => {
   it('hides a replaced will unless it is already shared, labels it when shown, and labels the live will', async () => {
     vi.mocked(documentsApi.list).mockResolvedValue([
       doc('deed', 'deed.pdf'),
-      doc('live', 'will-v2.pdf', { current: true, label: 'Your will (version 2)' }),
-      doc('live-signed', 'will-v2-signed.pdf', { current: true, label: 'Signed copy (version 2)' }),
+      doc('live', 'will-v2.pdf', { current: true, label: 'Will, version 2 (unsigned print)' }),
+      doc('live-signed', 'will-v2-signed.pdf', { current: true, label: 'Signed will, version 2' }),
       doc('old-pdf', 'will-v1.pdf', replaced),
       doc('old-signed', 'will-v1-signed.png', replaced),
     ]);
@@ -35,8 +35,8 @@ describe('NomineeDialog document picker', () => {
     expect(screen.queryByText('will-v1.pdf')).toBeNull();
     const oldRow = screen.getByText('will-v1-signed.png').closest('label');
     expect(oldRow?.textContent).toContain('Replaced by a later will');
-    expect(screen.getByText('will-v2.pdf').closest('label')?.textContent).toContain('Your will (version 2)');
-    expect(screen.getByText('will-v2-signed.pdf').closest('label')?.textContent).toContain('Signed copy (version 2)');
+    expect(screen.getByText('will-v2.pdf').closest('label')?.textContent).toContain('Will, version 2 (unsigned print)');
+    expect(screen.getByText('will-v2-signed.pdf').closest('label')?.textContent).toContain('Signed will, version 2');
     expect(screen.getByText('deed.pdf').closest('label')?.textContent).toBe('deed.pdf');
   });
 });
