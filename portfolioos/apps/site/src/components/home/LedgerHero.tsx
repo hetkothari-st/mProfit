@@ -18,14 +18,23 @@ export function LedgerHero() {
     const scaler = el.querySelector<HTMLElement>('.book-scaler')!;
     const book = el.querySelector<HTMLElement>('.book')!;
     const cover = el.querySelector<HTMLElement>('.cover')!;
+    const band = el.querySelector<HTMLElement>('.band')!;
+    const floor = el.querySelector<HTMLElement>('.book-floor')!;
     const leaves = [1, 2, 3].map((n) => el.querySelector<HTMLElement>(`[data-leaf="${n}"]`)!);
     const narrow = window.matchMedia('(max-width: 960px)').matches;
     const cssNum = (name: string, fallback: number) => parseFloat(getComputedStyle(stage).getPropertyValue(name)) || fallback;
 
+    const copy = el.querySelector<HTMLElement>('.hero-copy')!;
+    const visual = el.querySelector<HTMLElement>('.hero-visual')!;
+    const grid = el.querySelector<HTMLElement>('.hero-grid')!;
+
+    // Phones: shrink the open spread to fit the screen width.
+    // Desktop: the scroll timeline scales the book up instead (see below).
     const fit = () => {
+      if (!narrow) return;
       const pw = cssNum('--pw', 300);
       const s = Math.min(1, stage.clientWidth / (pw * 2 + 24));
-      scaler.style.transform = `scale(${s})`;
+      gsap.set(scaler, { scale: s });
       stage.style.height = s < 1 ? `${Math.round((cssNum('--ph', 410) + 110) * s)}px` : '';
     };
     fit();
@@ -36,6 +45,8 @@ export function LedgerHero() {
       if (prefersReducedMotion()) {
         gsap.set(book, openPose());
         gsap.set(cover, { z: 0.5, rotationY: -180, transformOrigin: 'left center' });
+        gsap.set(band, { autoAlpha: 0 });
+        gsap.set(floor, { scaleX: 1.9 });
         leaves.forEach((l, i) => gsap.set(l, { z: 3 - i, transformOrigin: 'left center' }));
         setCaption(1);
         return;
@@ -45,6 +56,11 @@ export function LedgerHero() {
       // unturned leaves stack 3,2,1 on the right; turned ones 1,2,3 on the left
       leaves.forEach((l, i) => gsap.set(l, { z: 3 - i, rotationY: 0, transformOrigin: 'left center' }));
 
+      const openScale = () => {
+        const pw = cssNum('--pw', 360);
+        const ph = cssNum('--ph', 490);
+        return Math.min(1.4, (grid.clientWidth - 16) / (pw * 2 + 24), (window.innerHeight - 72 - 110) / (ph + 30));
+      };
       const idle = gsap.to(book, { rotationY: -24, rotationX: 18, duration: 3.2, yoyo: true, repeat: -1, ease: 'sine.inOut' });
       const tl = gsap.timeline({
         defaults: { ease: 'power2.inOut' },
@@ -65,6 +81,18 @@ export function LedgerHero() {
       });
       tl.to(book, { ...openPose(), duration: 1 }, 0)
         .to(cover, { rotationY: -180, z: 0.5, duration: 1 }, 0.1)
+        .to(band, { autoAlpha: 0, duration: 0.25 }, 0.05)
+        .to(floor, { scaleX: narrow ? 1.9 : () => 1.9 * openScale(), scaleY: narrow ? 1 : openScale, y: narrow ? 0 : () => (openScale() - 1) * cssNum('--ph', 490) * 0.5, opacity: 0.9, duration: 1 }, 0);
+      if (!narrow) {
+        // As it opens, the headline steps aside and the ledger moves to the
+        // centre and grows until the spread fills the hero.
+        const toCentre = () => grid.clientWidth / 2 - (visual.offsetLeft - grid.offsetLeft + visual.offsetWidth / 2);
+        tl.to(copy, { autoAlpha: 0, x: -80, duration: 0.6 }, 0)
+          .to(el.querySelector('.hero-caption'), { autoAlpha: 0, duration: 0.3 }, 0)
+          .to(visual, { x: toCentre, duration: 1 }, 0)
+          .to(scaler, { scale: openScale, duration: 1 }, 0);
+      }
+      tl
         .to({}, { duration: 0.5 })
         .to(leaves[0], { rotationY: -179, z: 1, duration: 1 })
         .to({}, { duration: 0.5 })
@@ -96,13 +124,14 @@ export function LedgerHero() {
           </div>
 
           <div className="hero-visual">
-            <div className="book-stage" role="img" aria-label="A red ledger book opens to show the EveryPaisa dashboard, review queue and tax report">
+            <div className="book-stage" role="img" aria-label="A black EveryPaisa ledger opens to show the dashboard, review queue and tax report">
+              <div className="book-floor" />
               <div className="book-scaler">
                 <div className="book">
-                  <div className="book-shadow" />
-                  <div className="back-cover"><div className="face cloth" /></div>
-                  <div className="spine cloth" />
+                  <div className="back-cover"><div className="face board" /></div>
+                  <div className="spine board-spine" />
                   <div className="pages-block"><div className="edge-r" /><div className="edge-b" /></div>
+                  <div className="ribbon" />
 
                   <div className="leaf" data-leaf="3">
                     <div className="face front"><Screen name="tax" /></div>
@@ -113,7 +142,7 @@ export function LedgerHero() {
                     <div className="face back ruled">
                       <h4>And at year end, the CA is happy.</h4>
                       <p>Capital gains by FIFO, grandfathering, Schedule 112A and thirty-odd reports, ready before the ITR deadline.</p>
-                      <p className="hand" lang="hi">शुभ लाभ</p>
+                      <p className="hand">Cr. ₹2,86,910 ✓</p>
                       <span className="folio">f. 3</span>
                     </div>
                   </div>
@@ -122,25 +151,36 @@ export function LedgerHero() {
                     <div className="face back ruled">
                       <h4>Then it files itself.</h4>
                       <p>Bank SMS, broker contract notes, SIP debits, FD interest. Each one is read, sorted and laid out for you to approve.</p>
-                      <p className="hand" lang="hi">जमा · नाम</p>
+                      <p className="hand">Dr. / Cr. — reconciled</p>
                       <span className="folio">f. 2</span>
                     </div>
                   </div>
 
                   <div className="cover">
-                    <div className="face front cloth">
-                      <div className="cover-strap" />
-                      <div className="cover-art foil" lang="hi">
-                        <div className="cover-swastik" aria-hidden="true">॥ श्री ॥</div>
-                        <div className="cover-title">शुभ लाभ</div>
-                        <div className="cover-sub" lang="en">EveryPaisa</div>
-                        <div className="cover-year">संवत २०८२</div>
+                    <div className="face front board cover-front">
+                      <div className="cf-top">
+                        <img className="cf-mark" src="/assets/everypaisa-mark.png" alt="" />
+                        <span>EveryPaisa</span>
                       </div>
+                      <div className="cf-title">Family<br /><em>Ledger</em></div>
+                      <div className="cf-figure">
+                        <span className="cf-label">Total net worth</span>
+                        <span className="cf-amount">₹1,84,62,310</span>
+                        <svg className="cf-spark" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true">
+                          <path d="M0 34 L20 33 L40 30 L60 31 L80 24 L100 26 L120 19 L140 17 L160 12 L180 10 L200 4" fill="none" stroke="currentColor" strokeWidth="2" />
+                        </svg>
+                      </div>
+                      <div className="cf-foot"><span>Assets · Liabilities · Net worth</span><span>FY 2026–27</span></div>
+                      <div className="band" />
                     </div>
-                    <div className="face back endpaper">
-                      <div className="deva" lang="hi">॥ हिसाब ॥</div>
-                      <p>One page for everything the family owns, owes and is owed.</p>
-                      <small>Net worth, today, in one number.</small>
+                    <div className="face back board">
+                      <div className="endpaper">
+                        <div className="bookplate">
+                          <div className="bp-k">This ledger belongs to</div>
+                          <p>One page for everything the family owns, owes and is <em>owed.</em></p>
+                          <small>Net worth, today, in one number.</small>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

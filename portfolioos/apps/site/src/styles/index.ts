@@ -11,4 +11,5 @@ import '@fontsource/fraunces/600.css';
 import '@fontsource/fraunces/500-italic.css';
 import './site.css';
 import './screens.css';
+import './ledger.css';
 import './react.css';

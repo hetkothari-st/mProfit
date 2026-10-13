@@ -106,7 +106,7 @@ export default function Contact() {
             )}
             {done && (
               <div className="sent-note" ref={noteRef} tabIndex={-1} role="status">
-                <div className="stamp cloth" lang="hi">शुभ</div>
+                <div className="stamp cloth" aria-hidden="true">₹</div>
                 {state === 'sent' ? (
                   <>
                     <h2 className="h3">Message sent.</h2>
