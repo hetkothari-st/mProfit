@@ -136,7 +136,7 @@ const listDocuments: ConnectorTool<Record<string, never>> = {
         asOf: dmy(ctx.now),
         documents: rows.slice(0, 200).map((d) => ({
           userText: d.fileName, category: d.category ?? null, belongsTo: d.ownerType, type: d.mimeType,
-          sizeKb: Math.ceil(Number(d.sizeBytes) / 1024), added: dmy(d.createdAt),
+          sizeKb: Math.ceil(d.sizeBytes / 1024), added: dmy(d.createdAt),
         })),
         truncated: rows.length > 200,
       },
