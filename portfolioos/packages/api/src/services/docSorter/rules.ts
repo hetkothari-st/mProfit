@@ -42,7 +42,7 @@ export function scoreTypes(text: string): Array<[SortDocType, number]> {
 }
 
 const LABEL =
-  /(?:name of (?:the )?(?:assessee|employee|account holder)|name and address of the employee|name of (?:applicant|policy ?holder|the employee)|account holder(?: name)?|employee name|customer name|investor name|client name|depositor name|policy ?holder|applicant|name)\s*[:\-]?\s*([^\n]{3,80})/i;
+  /(?:name of (?:the )?(?:assessee|employee|account holder)|name and address of the employee|name of (?:applicant|policy ?holder|the employee)|account holder(?: name)?|employee name|customer name|investor name|client name|depositor name|policy ?holder|applicant|name)\s*[:-]?\s*([^\n]{3,80})/i;
 const CERTIFY =
   /certif(?:y|ied)(?: that)?\s+(?:(?:shri|smt\.?|mr\.?|mrs\.?|ms\.?|kumari)\s+)?([A-Za-z][A-Za-z.' ]{2,50}?)(?=\s+(?:has|resides|is|annual|son|daughter|wife)\b)/i;
 const STOP = /\s{2,}|\b(?:PAN|Date|A\/c|Account|Policy|Period|Statement|Father|Address|Mobile|AY|Assessment)\b|X{4}|\d/i;
@@ -88,6 +88,9 @@ function extractPanLast4(text: string): string | null {
   return m ? m[0].slice(-4) : null;
 }
 
+/** Calendar parts, not money: explicit base-10 integer parse. */
+const toInt = (s: string | undefined): number => Number.parseInt(s ?? '', 10);
+
 const MONTHS: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
 const iso = (y: number, m: number, d: number): string => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 const lastDay = (y: number, m: number): number => new Date(Date.UTC(y, m, 0)).getUTCDate();
@@ -97,12 +100,12 @@ function parseAllDates(text: string): Array<{ date: string; index: number }> {
   const numeric = /\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})\b/g;
   const named = /\b(\d{1,2})[ -]([A-Za-z]{3})[a-z]*[ ,-]+(\d{4})\b/g;
   for (const m of text.matchAll(numeric)) {
-    const [d, mo, y] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const [d, mo, y] = [toInt(m[1]), toInt(m[2]), toInt(m[3])];
     if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) out.push({ date: iso(y, mo, d), index: m.index ?? 0 });
   }
   for (const m of text.matchAll(named)) {
     const mo = MONTHS[(m[2] ?? '').toLowerCase()];
-    if (mo) out.push({ date: iso(Number(m[3]), mo, Number(m[1])), index: m.index ?? 0 });
+    if (mo) out.push({ date: iso(toInt(m[3]), mo, toInt(m[1])), index: m.index ?? 0 });
   }
   return out;
 }
@@ -112,16 +115,16 @@ function extractDate(text: string, type: SortDocType, now: Date): string | null 
   if (type === 'ITR' || type === 'FORM_16') {
     // Assessment Year 2025-26 covers FY 2024-25, which ends 31 Mar 2025.
     const ay = /(?:assessment year|\bAY\b)\s*[: ]?\s*(\d{4})\s*[-–]\s*\d{2,4}/i.exec(head);
-    if (ay?.[1]) return iso(Number(ay[1]), 3, 31);
+    if (ay?.[1]) return iso(toInt(ay[1]), 3, 31);
     const fy = /financial year\s*[: ]?\s*(\d{4})\s*[-–]\s*\d{2,4}/i.exec(head);
-    if (fy?.[1]) return iso(Number(fy[1]) + 1, 3, 31);
+    if (fy?.[1]) return iso(toInt(fy[1]) + 1, 3, 31);
   }
   if (type === 'SALARY_SLIP') {
     const m =
       /(?:month(?: of)?|for|slip\s*[-–]?)\s*:?\s*([A-Za-z]{3})[a-z]*[ ,]+(\d{4})/i.exec(head) ??
       /\b([A-Za-z]{3})[a-z]*[ ,]+(\d{4})\b/.exec(head);
     const mo = m ? MONTHS[(m[1] ?? '').toLowerCase()] : undefined;
-    if (m && mo) return iso(Number(m[2]), mo, lastDay(Number(m[2]), mo));
+    if (m && mo) return iso(toInt(m[2]), mo, lastDay(toInt(m[2]), mo));
   }
   const horizon = now.getTime() + 86_400_000 * 366;
   // A maturity date is in the future by design and is never the document's own date.
