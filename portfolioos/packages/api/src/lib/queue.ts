@@ -104,6 +104,34 @@ export function getGmailScanQueue(): Bull.Queue<GmailScanJobPayload> {
   return _gmailScanQueue;
 }
 
+export interface DocSortJobPayload {
+  documentId: string;
+  userId: string;
+  /** Only for a "this PDF needs a password" retry; lives in Redis for the job's lifetime, never in the DB. */
+  password?: string;
+}
+
+let _docSortQueue: Bull.Queue<DocSortJobPayload> | null = null;
+
+/** Bull queue for the Documents sorter: one job per uploaded file, bounded to 5 minutes. */
+export function getDocSortQueue(): Bull.Queue<DocSortJobPayload> {
+  if (!_docSortQueue) {
+    _docSortQueue = new Bull<DocSortJobPayload>('doc-sort', env.REDIS_URL, {
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 30_000 },
+        timeout: 5 * 60 * 1000,
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 100 },
+      },
+    });
+    _docSortQueue.on('failed', (job, err) => {
+      logger.error({ jobId: job?.id, err }, '[queue] doc-sort job failed');
+    });
+  }
+  return _docSortQueue;
+}
+
 export async function closeQueues(): Promise<void> {
   if (_importQueue) {
     await _importQueue.close();
@@ -112,6 +140,10 @@ export async function closeQueues(): Promise<void> {
   if (_gmailScanQueue) {
     await _gmailScanQueue.close();
     _gmailScanQueue = null;
+  }
+  if (_docSortQueue) {
+    await _docSortQueue.close();
+    _docSortQueue = null;
   }
 }
 
