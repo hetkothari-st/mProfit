@@ -2,16 +2,20 @@ import { useRef, type ReactNode } from 'react';
 import { gsap, prefersReducedMotion, useIsoLayoutEffect } from '../../lib/gsap';
 import { SectionHead } from '../Common';
 
-const SLIPS: { cls: string; src: [string, string]; body: ReactNode }[] = [
-  { cls: 'sms', src: ['VM-HDFCBK', '09:41'], body: 'Rs.12,500.00 debited from A/c XX9876 towards SIP. Avl bal Rs.84,210.' },
-  { cls: 'pdf', src: ['CAS · CAMS + KFin', 'PDF, 14 pp'], body: <><b>Consolidated Account Statement</b><br />Folios: 11 · Schemes: 23</> },
-  { cls: 'receipt', src: ['FD advice', 'Branch copy'], body: 'Fixed Deposit ₹5,00,000 @ 7.10% · Matures 18 Mar 2027' },
-  { cls: '', src: ['Contract note', 'NSE · CM'], body: <>BUY INFY × 25 @ ₹1,536.50<br />Brokerage ₹20 · STT ₹38</> },
-  { cls: 'policy', src: ['Premium receipt', 'Annual'], body: 'Term plan · Sum assured ₹2 Cr · Premium ₹18,400 due 4 Nov' },
-  { cls: 'rc', src: ['RC · Vahan', 'LMV'], body: 'MH 01 XX 4821 · Petrol · PUC valid till 12 Oct' },
-  { cls: 'tenant', src: ['UPI credit', '1 Oct'], body: '₹32,000 received from R. SHARMA · "Oct rent"' },
-  { cls: 'sms', src: ['EPFO', 'Passbook'], body: 'Contribution of ₹21,600 credited to UAN ending 4417.' },
-  { cls: '', src: ['Gold', 'Locker'], body: 'Bangles 46 g · 22K · bought 2011' },
+// Each slip is drawn as the real thing it stands for: a phone notification,
+// a PDF, a bank counterfoil, a torn contract note, a policy certificate,
+// the RC smart card, a locker tag.
+type Slip = { cls: string; src: [string, string]; body: ReactNode; icon?: string; stamp?: string };
+const SLIPS: Slip[] = [
+  { cls: 'notif bank', icon: 'HD', src: ['VM-HDFCBK', 'now'], body: 'Rs.12,500.00 debited from A/c XX9876 towards SIP. Avl bal Rs.84,210.' },
+  { cls: 'doc', src: ['CAS · CAMS + KFin', '14 pp'], body: <><b>Consolidated Account Statement</b><br />Folios: 11 · Schemes: 23</> },
+  { cls: 'counterfoil', stamp: 'Branch copy', src: ['FD advice', 'No. 004812'], body: <>Fixed Deposit <b>₹5,00,000</b> @ 7.10%<br />Matures 18 Mar 2027</> },
+  { cls: 'torn', src: ['Contract note', 'NSE · CM'], body: <><b>BUY INFY × 25 @ ₹1,536.50</b><br />Brokerage ₹20 · STT ₹38</> },
+  { cls: 'cert', src: ['Premium receipt', 'Annual'], body: <>Term plan · Sum assured <b>₹2 Cr</b><br />Premium ₹18,400 due 4 Nov</> },
+  { cls: 'card', src: ['Registration certificate', 'LMV'], body: <><b>MH 01 XX 4821</b><br />Petrol · PUC valid till 12 Oct</> },
+  { cls: 'notif upi', icon: '✓', src: ['UPI credit', '1 Oct'], body: '₹32,000 received from R. SHARMA · "Oct rent"' },
+  { cls: 'notif epf', icon: 'PF', src: ['EPFO', '2m ago'], body: 'Contribution of ₹21,600 credited to UAN ending 4417.' },
+  { cls: 'tag', src: ['Locker 17', 'Gold'], body: <><b>Bangles 46 g</b><br />22K · bought 2011</> },
 ];
 
 // [x fraction, y fraction, depth, rotation] for each slip
@@ -59,8 +63,10 @@ export function Scatter() {
         <div className="scatter-stage" ref={stageRef} aria-hidden="true">
           {SLIPS.map((s, i) => (
             <div className={`slip ${s.cls}`} key={i}>
+              {s.icon && <i className="slip-ic">{s.icon}</i>}
               <div className="src"><span>{s.src[0]}</span><span>{s.src[1]}</span></div>
-              {s.body}
+              <div className="slip-body">{s.body}</div>
+              {s.stamp && <span className="slip-stamp">{s.stamp}</span>}
             </div>
           ))}
           <div className="scatter-ledger board ledger-mini">

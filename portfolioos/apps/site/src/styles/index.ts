@@ -16,3 +16,4 @@ import './ledger.css';
 import './react.css';
 import './type.css';
 import './theme.css';
+import './slips.css';
