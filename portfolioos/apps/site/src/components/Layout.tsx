@@ -99,7 +99,6 @@ function Footer() {
         </div>
         <div className="foot-bottom">
           <span>© {new Date().getFullYear()} EveryPaisa. EveryPaisa is a tracking and reporting tool, not investment advice.</span>
-          <span className="deva" lang="hi">शुभ लाभ</span>
         </div>
       </div>
     </footer>
