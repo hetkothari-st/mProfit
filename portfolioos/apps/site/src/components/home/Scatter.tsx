@@ -12,7 +12,8 @@ const SLIPS: Slip[] = [
   { cls: 'counterfoil', stamp: 'Branch copy', src: ['FD advice', 'No. 004812'], body: <>Fixed Deposit <b>₹5,00,000</b> @ 7.10%<br />Matures 18 Mar 2027</> },
   { cls: 'torn', src: ['Contract note', 'NSE · CM'], body: <><b>BUY INFY × 25 @ ₹1,536.50</b><br />Brokerage ₹20 · STT ₹38</> },
   { cls: 'cert', src: ['Premium receipt', 'Annual'], body: <>Term plan · Sum assured <b>₹2 Cr</b><br />Premium ₹18,400 due 4 Nov</> },
-  { cls: 'card', src: ['Registration certificate', 'LMV'], body: <><b>MH 01 XX 4821</b><br />Petrol · PUC valid till 12 Oct</> },
+  { cls: 'card', src: ['Credit card', 'Bill due 18 Oct'], body: <><b className="cc-num">•••• •••• •••• 2907</b><span className="cc-due">Outstanding ₹46,210</span></> },
+  { cls: 'rcdoc', src: ['RC · Vahan', 'LMV'], body: <><b className="plate">MH 01 XX 4821</b><br />Petrol · PUC valid till 12 Oct</> },
   { cls: 'notif upi', icon: '✓', src: ['UPI credit', '1 Oct'], body: '₹32,000 received from R. SHARMA · "Oct rent"' },
   { cls: 'notif epf', icon: 'PF', src: ['EPFO', '2m ago'], body: 'Contribution of ₹21,600 credited to UAN ending 4417.' },
   { cls: 'tag', src: ['Locker 17', 'Gold'], body: <><b>Bangles 46 g</b><br />22K · bought 2011</> },
@@ -21,8 +22,9 @@ const SLIPS: Slip[] = [
 // [x fraction, y fraction, depth, rotation] for each slip
 const SPOTS: [number, number, number, number][] = [
   [-0.38, -0.3, 60, -8], [0.3, -0.34, -40, 6], [-0.08, -0.06, 120, -3],
-  [0.36, 0.06, 20, 9], [-0.4, 0.18, -80, 5], [0.06, 0.32, 40, -7],
-  [0.3, 0.34, -120, 4], [-0.22, 0.38, 90, -10], [0.02, -0.38, -60, 3],
+  [0.36, -0.03, 20, 9], [-0.4, 0.18, -80, 5], [0.06, 0.32, 40, -7],
+  [0.4, 0.35, -120, 4], [-0.22, 0.38, 90, -10], [0.02, -0.38, -60, 3],
+  [-0.37, -0.05, -30, 6],
 ];
 
 /** The problem: scattered paperwork that gathers into one ledger as you scroll. */
