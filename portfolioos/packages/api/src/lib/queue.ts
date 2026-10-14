@@ -107,7 +107,7 @@ export function getGmailScanQueue(): Bull.Queue<GmailScanJobPayload> {
 export interface DocSortJobPayload {
   documentId: string;
   userId: string;
-  /** Only for a "this PDF needs a password" retry; lives in Redis for the job's lifetime, never in the DB. */
+  /** Only for a "this PDF needs a password" retry. Removed from Redis when the job ends; never in the DB. */
   password?: string;
 }
 
@@ -118,11 +118,13 @@ export function getDocSortQueue(): Bull.Queue<DocSortJobPayload> {
   if (!_docSortQueue) {
     _docSortQueue = new Bull<DocSortJobPayload>('doc-sort', env.REDIS_URL, {
       defaultJobOptions: {
-        attempts: 2,
-        backoff: { type: 'exponential', delay: 30_000 },
+        // One attempt: a timed-out job keeps running in this process, so a retry would run beside
+        // it. A job that fails is marked FAILED on its document and re-queued by dropping the file again.
+        attempts: 1,
         timeout: 5 * 60 * 1000,
-        removeOnComplete: { count: 100 },
-        removeOnFail: { count: 100 },
+        // A retried PDF password rides in the job data: never keep finished jobs in Redis.
+        removeOnComplete: true,
+        removeOnFail: true,
       },
     });
     _docSortQueue.on('failed', (job, err) => {

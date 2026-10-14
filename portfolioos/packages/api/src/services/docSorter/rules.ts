@@ -41,8 +41,14 @@ export function scoreTypes(text: string): Array<[SortDocType, number]> {
   return scores.sort((a, b) => b[1] - a[1]);
 }
 
-const LABEL =
-  /(?:name of (?:the )?(?:assessee|employee|account holder)|name and address of the employee|name of (?:applicant|policy ?holder|the employee)|account holder(?: name)?|employee name|customer name|investor name|client name|depositor name|policy ?holder|applicant|name)\s*[:-]?\s*([^\n]{3,80})/i;
+// Labels that name the document's holder (separator optional). Anchored to a line start or a
+// column gap, so "Branch Name", "Nominee Name", "Father's Name" and "Name of the Insurer" never match.
+const HOLDER_LABEL =
+  /(?:^\s*|\s{2,})(?:name of (?:the )?(?:assessee|employee|account holder)|name and address of the employee|name of (?:applicant|policy ?holder)|account holder(?: name)?|employee name|customer name|investor name|client name|depositor name|policy ?holder|applicant)\s*[:-]?\s*([^\n]{3,80})/i;
+// A bare "Name" only counts at the start of a line and with an explicit ':' or '-'.
+const BARE_LABEL = /^\s*name\s*[:-]\s*([^\n]{3,80})/i;
+// Words that show a label was matched against its neighbour, not a person.
+const NOT_A_NAME = new Set(['and', 'of', 'the', 'address', 'name', 'bank', 'branch', 'insurer', 'employer', 'deductor']);
 const CERTIFY =
   /certif(?:y|ied)(?: that)?\s+(?:(?:shri|smt\.?|mr\.?|mrs\.?|ms\.?|kumari)\s+)?([A-Za-z][A-Za-z.' ]{2,50}?)(?=\s+(?:has|resides|is|annual|son|daughter|wife)\b)/i;
 const STOP = /\s{2,}|\b(?:PAN|Date|A\/c|Account|Policy|Period|Statement|Father|Address|Mobile|AY|Assessment)\b|X{4}|\d/i;
@@ -62,6 +68,7 @@ export function sanitizePersonName(raw: string): string | null {
   if (tokens.length < 1 || tokens.length > 5) return null;
   if (cleaned.length < 3 || cleaned.length > 60) return null;
   if (!tokens.every((t) => /^[A-Za-z][A-Za-z.']*$/.test(t))) return null;
+  if (tokens.some((t) => NOT_A_NAME.has(t.toLowerCase()))) return null;
   return cleaned;
 }
 
@@ -73,19 +80,34 @@ function extractName(text: string): string | null {
     if (n) return n;
   }
   for (const line of head.split('\n')) {
-    const m = LABEL.exec(line);
+    const m = HOLDER_LABEL.exec(line) ?? BARE_LABEL.exec(line);
     if (m?.[1]) {
       const n = sanitizePersonName(m[1]);
-      if (n) return n;
+      // A lone word is too weak to file under (usually a fragment): leave it to the LLM / review.
+      if (n && n.split(' ').length >= 2) return n;
     }
   }
   return null;
 }
 
-const PAN = /\b(?:[A-Z]{5}|X{5})\d{4}[A-Z]\b/;
+const PAN_RE = /\b(?:[A-Z]{5}|X{5})\d{4}[A-Z]\b/g;
+const PAN_HOLDER_LINE = /employee|assessee|holder|investor|customer|applicant|client|depositor/i;
+const PAN_OTHER_PARTY = /deductor|employer|\btan\b|nominee|insurer|\bbank\b|branch|company|firm/i;
+
+/**
+ * Last 4 of the PAN that belongs to the document's holder. A PAN on a
+ * deductor/employer/nominee line is never taken; with no holder-labelled PAN,
+ * a single PAN on the page is used and several are ambiguous (null).
+ */
 function extractPanLast4(text: string): string | null {
-  const m = PAN.exec(text.slice(0, 6000));
-  return m ? m[0].slice(-4) : null;
+  const found: Array<{ pan: string; line: string }> = [];
+  for (const line of text.slice(0, 6000).split('\n')) {
+    for (const m of line.matchAll(PAN_RE)) found.push({ pan: m[0], line });
+  }
+  const holder = found.find((f) => PAN_HOLDER_LINE.test(f.line) && !PAN_OTHER_PARTY.test(f.line));
+  if (holder) return holder.pan.slice(-4);
+  const only = found.length === 1 ? found[0] : undefined;
+  return only && !PAN_OTHER_PARTY.test(only.line) ? only.pan.slice(-4) : null;
 }
 
 /** Calendar parts, not money: explicit base-10 integer parse. */
@@ -93,7 +115,12 @@ const toInt = (s: string | undefined): number => Number.parseInt(s ?? '', 10);
 
 const MONTHS: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
 const iso = (y: number, m: number, d: number): string => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-const lastDay = (y: number, m: number): number => new Date(Date.UTC(y, m, 0)).getUTCDate();
+/** True only for a day that exists (no 31 Feb rolling into March). */
+const isRealDate = (y: number, m: number, d: number): boolean => {
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+};
+const lastDay =(y: number, m: number): number => new Date(Date.UTC(y, m, 0)).getUTCDate();
 
 function parseAllDates(text: string): Array<{ date: string; index: number }> {
   const out: Array<{ date: string; index: number }> = [];
@@ -101,11 +128,11 @@ function parseAllDates(text: string): Array<{ date: string; index: number }> {
   const named = /\b(\d{1,2})[ -]([A-Za-z]{3})[a-z]*[ ,-]+(\d{4})\b/g;
   for (const m of text.matchAll(numeric)) {
     const [d, mo, y] = [toInt(m[1]), toInt(m[2]), toInt(m[3])];
-    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) out.push({ date: iso(y, mo, d), index: m.index ?? 0 });
+    if (isRealDate(y, mo, d)) out.push({ date: iso(y, mo, d), index: m.index ?? 0 });
   }
   for (const m of text.matchAll(named)) {
     const mo = MONTHS[(m[2] ?? '').toLowerCase()];
-    if (mo) out.push({ date: iso(toInt(m[3]), mo, toInt(m[1])), index: m.index ?? 0 });
+    if (mo && isRealDate(toInt(m[3]), mo, toInt(m[1]))) out.push({ date: iso(toInt(m[3]), mo, toInt(m[1])), index: m.index ?? 0 });
   }
   return out;
 }

@@ -2856,6 +2856,8 @@ model DocumentPerson {
   nameKey      String
   panLast4     String?
   linkedUserId String?
+  /// Keys of names merged into, or renamed away from, this folder: they route here too.
+  aliasKeys    String[]   @default([])
   autoCreated  Boolean    @default(true)
   createdAt    DateTime   @default(now())
   documents    Document[]

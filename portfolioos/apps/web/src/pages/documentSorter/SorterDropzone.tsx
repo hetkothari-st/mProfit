@@ -8,7 +8,7 @@ import { documentSorterApi } from '@/api/documentSorter.api';
 import { fileProgressLabel, findFile, formatBytes } from './treeView';
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.heic,.webp,.tiff,.bmp';
-const BATCH = 20; // the API takes at most 20 files per request
+const BATCH = 10; // the API takes at most 10 files per request
 const MAX_ROWS = 12;
 
 interface DropRow {

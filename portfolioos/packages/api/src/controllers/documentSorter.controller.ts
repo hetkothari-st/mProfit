@@ -2,9 +2,10 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { DOC_TYPES } from '@everypaisa/shared';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
-import { ok } from '../lib/response.js';
+import { created, ok } from '../lib/response.js';
 import { acceptUploads, submitPassword } from '../services/docSorter/sorter.service.js';
-import { buildFolderZip, getTree, mergePeople, renamePerson, updateFile } from '../services/docSorter/sorterEdit.service.js';
+import { buildFolderZip, createPerson, getTree, mergePeople, renamePerson, updateFile } from '../services/docSorter/sorterEdit.service.js';
+import { isRealIsoDate } from '../services/docSorter/naming.js';
 
 function userId(req: Request): string {
   if (!req.user) throw new UnauthorizedError();
@@ -17,7 +18,7 @@ const patchFileSchema = z
   .object({
     personId: z.string().min(1).optional(),
     docType: docTypeSchema.optional(),
-    docDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional(),
+    docDate: z.string().refine(isRealIsoDate, 'Use a real date as YYYY-MM-DD').optional(),
   })
   .strict();
 
@@ -44,6 +45,11 @@ export async function submitFilePassword(req: Request, res: Response) {
   const { password } = z.object({ password: z.string().min(1).max(200) }).parse(req.body);
   await submitPassword(userId(req), req.params.id!, password);
   res.status(202).json({ success: true, data: { accepted: true } });
+}
+
+export async function addPerson(req: Request, res: Response) {
+  const { displayName } = z.object({ displayName: z.string().trim().min(1).max(80) }).parse(req.body);
+  created(res, await createPerson(userId(req), displayName));
 }
 
 export async function patchPerson(req: Request, res: Response) {

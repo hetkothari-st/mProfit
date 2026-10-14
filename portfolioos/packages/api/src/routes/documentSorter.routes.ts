@@ -13,6 +13,7 @@ documentSorterRouter.post('/upload', uploadSorterFiles, asyncHandler(c.upload));
 documentSorterRouter.get('/tree', asyncHandler(c.tree));
 documentSorterRouter.patch('/files/:id', asyncHandler(c.patchFile));
 documentSorterRouter.post('/files/:id/password', asyncHandler(c.submitFilePassword));
+documentSorterRouter.post('/people', asyncHandler(c.addPerson));
 documentSorterRouter.patch('/people/:id', asyncHandler(c.patchPerson));
 documentSorterRouter.post('/people/merge', asyncHandler(c.merge));
 documentSorterRouter.get('/folder-zip', asyncHandler(c.folderZip));

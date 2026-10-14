@@ -47,6 +47,10 @@ export const documentSorterApi = {
   async submitPassword(id: string, password: string): Promise<void> {
     await api.post(`/api/documents-sorter/files/${id}/password`, { password });
   },
+  async createPerson(displayName: string): Promise<SorterPersonDTO> {
+    const { data } = await api.post<ApiResponse<SorterPersonDTO>>('/api/documents-sorter/people', { displayName });
+    return unwrap(data);
+  },
   async renamePerson(id: string, displayName: string): Promise<SorterPersonDTO> {
     const { data } = await api.patch<ApiResponse<SorterPersonDTO>>(`/api/documents-sorter/people/${id}`, { displayName });
     return unwrap(data);

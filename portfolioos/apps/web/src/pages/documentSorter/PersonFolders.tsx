@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Check, Download, Folder, FolderOpen, KeyRound, Merge, Pencil, UserRound } from 'lucide-react';
@@ -11,7 +11,7 @@ import { documentSorterApi } from '@/api/documentSorter.api';
 import { DocumentViewerModal } from '@/components/documents/DocumentViewerModal';
 import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
 import { FileRow } from './FileRow';
-import { MoveDialog } from './MoveDialog';
+import { MoveDialog, type MoveTarget } from './MoveDialog';
 
 type View = { kind: 'root' } | { kind: 'person'; id: string } | { kind: 'unassigned' };
 
@@ -33,11 +33,16 @@ export function PersonFolders({ tree, onChanged }: Props) {
   const [mergeInto, setMergeInto] = useState('');
 
   const fail = (err: unknown, fallback: string) => toast.error(apiErrorMessage(err, fallback));
-  const people = tree.people.map(({ id, displayName, autoCreated, linkedUserId }) => ({ id, displayName, autoCreated, linkedUserId }));
+  const people = useMemo(
+    () => tree.people.map(({ id, displayName, autoCreated, linkedUserId }) => ({ id, displayName, autoCreated, linkedUserId })),
+    [tree.people],
+  );
 
   const move = useMutation({
-    mutationFn: (v: { id: string; personId: string; docType: SorterFileDTO['docType'] & string }) =>
-      documentSorterApi.patchFile(v.id, { personId: v.personId, docType: v.docType }),
+    mutationFn: async (v: { id: string; target: MoveTarget }) => {
+      const personId = 'personId' in v.target ? v.target.personId : (await documentSorterApi.createPerson(v.target.newPersonName)).id;
+      return documentSorterApi.patchFile(v.id, { personId, docType: v.target.docType });
+    },
     onSuccess: () => { setMoving(null); onChanged(); toast.success('Moved and renamed'); },
     onError: (e) => fail(e, "Couldn't move the file"),
   });
@@ -95,7 +100,7 @@ export function PersonFolders({ tree, onChanged }: Props) {
         people={people}
         saving={move.isPending}
         onClose={() => setMoving(null)}
-        onSave={(p) => moving && move.mutate({ id: moving.id, personId: p.personId, docType: p.docType })}
+        onSave={(target) => moving && move.mutate({ id: moving.id, target })}
       />
       <DocumentViewerModal
         documentId={viewing?.id ?? null}
