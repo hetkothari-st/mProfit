@@ -20,15 +20,16 @@ export function makeTextPdf(text: string): Promise<Buffer> {
   return collect(doc);
 }
 
-/** A PNG of large black text on white, easy for OCR. */
+/** A PNG of large black text on white, one line per newline, easy for OCR. */
 export function makeTextPng(text: string): Promise<Buffer> {
-  const canvas = createCanvas(1400, 260);
+  const lines = text.split('\n');
+  const canvas = createCanvas(1600, 40 + lines.length * 130);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#000000';
-  ctx.font = 'bold 96px sans-serif';
-  ctx.fillText(text, 40, 160);
+  ctx.font = 'bold 90px sans-serif';
+  lines.forEach((line, i) => ctx.fillText(line, 40, 120 + i * 130));
   return Promise.resolve(canvas.toBuffer('image/png'));
 }
 
