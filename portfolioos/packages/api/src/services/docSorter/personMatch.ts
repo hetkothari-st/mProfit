@@ -49,7 +49,7 @@ function editDistanceAtMost1(a: string, b: string): boolean {
 function tokenEq(a: string, b: string): boolean {
   if (a === b) return true;
   if (a.length === 1 || b.length === 1) return a[0] === b[0];
-  return a.length >= 4 && b.length >= 4 && editDistanceAtMost1(a, b);
+  return a.length >= 5 && b.length >= 5 && editDistanceAtMost1(a, b);
 }
 
 function similar(aKey: string, bKey: string): boolean {

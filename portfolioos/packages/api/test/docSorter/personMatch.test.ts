@@ -18,7 +18,7 @@ describe('matchPerson', () => {
     expect(matchPerson([c('1', 'Rahul Kumar Sharma')], nameKey('Rahul K Sharma'), null)).toBe('1');
   });
   it('matches a 1-letter spelling variant on long tokens', () => {
-    expect(matchPerson([c('1', 'Priya Nair')], nameKey('Priya Nayar'), null)).toBe('1');
+    expect(matchPerson([c('1', 'Anita Verma')], nameKey('Anita Varma'), null)).toBe('1');
   });
   it('prefers the exact person when a similar one also exists', () => {
     const cands = [c('1', 'Rahul Sharma'), c('2', 'Rahul Kumar Sharma')];
