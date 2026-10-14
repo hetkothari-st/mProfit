@@ -290,16 +290,16 @@ async function exchangeRefresh(body: Record<string, unknown>, client: McpClientR
 }
 
 /** The two grant types this server issues tokens for; anything else is refused. */
-const GRANT_HANDLERS: Readonly<Record<string, (body: Record<string, unknown>, client: McpClientRow) => ReturnType<typeof issueTokens>>> = {
-  authorization_code: exchangeCode,
-  refresh_token: exchangeRefresh,
-};
+const GRANT_HANDLERS = new Map<string, (body: Record<string, unknown>, client: McpClientRow) => ReturnType<typeof issueTokens>>([
+  ['authorization_code', exchangeCode],
+  ['refresh_token', exchangeRefresh],
+]);
 
 export async function exchangeToken(body: Record<string, unknown>) {
   const clientId = str(body.client_id);
   const client = clientId ? await runAsSystem(() => prisma.mcpClient.findUnique({ where: { clientId } })) : null;
   if (!client) throw new OAuthError(401, 'invalid_client', 'Unknown client');
-  const handler = Object.prototype.hasOwnProperty.call(GRANT_HANDLERS, String(body.grant_type)) ? GRANT_HANDLERS[String(body.grant_type)] : undefined;
+  const handler = GRANT_HANDLERS.get(String(body.grant_type));
   if (!handler) throw new OAuthError(400, 'unsupported_grant_type', 'grant_type must be authorization_code or refresh_token');
   return handler(body, client);
 }
