@@ -237,61 +237,71 @@ async function revokeGrant(userId: string, grantId: string, reason: string): Pro
   await runAsUser(userId, () => prisma.mcpGrant.updateMany({ where: { id: grantId, revokedAt: null }, data: { revokedAt: new Date(), revokedReason: reason } }));
 }
 
+type McpClientRow = NonNullable<Awaited<ReturnType<typeof prisma.mcpClient.findUnique>>>;
+
+async function exchangeCode(body: Record<string, unknown>, client: McpClientRow) {
+  const raw = str(body.code) ?? '';
+  const code = await runAsSystem(() => prisma.mcpAuthCode.findUnique({ where: { codeHash: sha(raw) }, include: { grant: true } }));
+  if (!code || code.grant.clientId !== client.id) throw new OAuthError(400, 'invalid_grant', 'Invalid code');
+  if (code.expiresAt <= new Date() || code.grant.revokedAt) throw new OAuthError(400, 'invalid_grant', 'Code expired');
+  if (str(body.redirect_uri) !== code.redirectUri) throw new OAuthError(400, 'invalid_grant', 'redirect_uri mismatch');
+  const res = str(body.resource);
+  if (res !== undefined && trimSlashes(res) !== mcpConfig().resource) throw new OAuthError(400, 'invalid_target', 'Unknown resource');
+  if (!verifyPkceS256(str(body.code_verifier) ?? '', code.codeChallenge)) throw new OAuthError(400, 'invalid_grant', 'PKCE verification failed');
+  // Single use is decided by this atomic update alone (race-safe). A code
+  // that was already used is a replay (RFC 6749 4.1.2): revoke everything
+  // issued from it.
+  const marked = await runAsSystem(() => prisma.mcpAuthCode.updateMany({ where: { id: code.id, usedAt: null }, data: { usedAt: new Date() } }));
+  if (marked.count !== 1) {
+    await revokeGrant(code.userId, code.grantId, 'code_replay');
+    await writeAuditLog({ userId: code.userId, action: 'mcp_refresh_reuse', resource: `McpGrant:${code.grantId}`, metadata: { kind: 'code_replay' } });
+    throw new OAuthError(400, 'invalid_grant', 'Code already used');
+  }
+  // A fresh consent retires every token issued before it: a refresh token
+  // stolen earlier stops working, and since it is deleted (not merely
+  // superseded) presenting it is not mistaken for reuse of the new one.
+  const next = code.grant.refreshGeneration + 1;
+  await runAsUser(code.userId, () => runInTransaction(async (tx) => {
+    await tx.mcpToken.deleteMany({ where: { grantId: code.grantId } });
+    await tx.mcpGrant.update({ where: { id: code.grantId }, data: { refreshGeneration: next } });
+  }));
+  return issueTokens(code.userId, code.grantId, next, code.grant.areas);
+
+}
+
+async function exchangeRefresh(body: Record<string, unknown>, client: McpClientRow) {
+  const raw = str(body.refresh_token) ?? '';
+  const tok = await runAsSystem(() => prisma.mcpToken.findUnique({ where: { tokenHash: sha(raw) }, include: { grant: true } }));
+  if (!tok || tok.kind !== 'REFRESH' || tok.grant.clientId !== client.id) throw new OAuthError(400, 'invalid_grant', 'Invalid refresh token');
+  if (tok.grant.revokedAt || tok.expiresAt <= new Date()) throw new OAuthError(400, 'invalid_grant', 'Refresh token expired or revoked');
+  if (tok.generation !== tok.grant.refreshGeneration) {
+    await revokeGrant(tok.userId, tok.grantId, 'refresh_reuse');
+    await writeAuditLog({ userId: tok.userId, action: 'mcp_refresh_reuse', resource: `McpGrant:${tok.grantId}`, metadata: { kind: 'refresh_reuse' } });
+    throw new OAuthError(400, 'invalid_grant', 'Refresh token already used');
+  }
+  const next = tok.grant.refreshGeneration + 1;
+  const bumped = await runAsUser(tok.userId, () => prisma.mcpGrant.updateMany({
+    where: { id: tok.grantId, refreshGeneration: tok.generation, revokedAt: null }, data: { refreshGeneration: next },
+  }));
+  if (bumped.count !== 1) throw new OAuthError(400, 'invalid_grant', 'Refresh token already used');
+  await writeAuditLog({ userId: tok.userId, action: 'mcp_token_refreshed', resource: `McpGrant:${tok.grantId}` });
+  return issueTokens(tok.userId, tok.grantId, next, tok.grant.areas);
+
+}
+
+/** The two grant types this server issues tokens for; anything else is refused. */
+const GRANT_HANDLERS: Readonly<Record<string, (body: Record<string, unknown>, client: McpClientRow) => ReturnType<typeof issueTokens>>> = {
+  authorization_code: exchangeCode,
+  refresh_token: exchangeRefresh,
+};
+
 export async function exchangeToken(body: Record<string, unknown>) {
-  const grantType = str(body.grant_type);
   const clientId = str(body.client_id);
   const client = clientId ? await runAsSystem(() => prisma.mcpClient.findUnique({ where: { clientId } })) : null;
   if (!client) throw new OAuthError(401, 'invalid_client', 'Unknown client');
-
-  if (grantType === 'authorization_code') {
-    const raw = str(body.code) ?? '';
-    const code = await runAsSystem(() => prisma.mcpAuthCode.findUnique({ where: { codeHash: sha(raw) }, include: { grant: true } }));
-    if (!code || code.grant.clientId !== client.id) throw new OAuthError(400, 'invalid_grant', 'Invalid code');
-    if (code.expiresAt <= new Date() || code.grant.revokedAt) throw new OAuthError(400, 'invalid_grant', 'Code expired');
-    if (str(body.redirect_uri) !== code.redirectUri) throw new OAuthError(400, 'invalid_grant', 'redirect_uri mismatch');
-    const res = str(body.resource);
-    if (res !== undefined && trimSlashes(res) !== mcpConfig().resource) throw new OAuthError(400, 'invalid_target', 'Unknown resource');
-    if (!verifyPkceS256(str(body.code_verifier) ?? '', code.codeChallenge)) throw new OAuthError(400, 'invalid_grant', 'PKCE verification failed');
-    // Single use is decided by this atomic update alone (race-safe). A code
-    // that was already used is a replay (RFC 6749 4.1.2): revoke everything
-    // issued from it.
-    const marked = await runAsSystem(() => prisma.mcpAuthCode.updateMany({ where: { id: code.id, usedAt: null }, data: { usedAt: new Date() } }));
-    if (marked.count !== 1) {
-      await revokeGrant(code.userId, code.grantId, 'code_replay');
-      await writeAuditLog({ userId: code.userId, action: 'mcp_refresh_reuse', resource: `McpGrant:${code.grantId}`, metadata: { kind: 'code_replay' } });
-      throw new OAuthError(400, 'invalid_grant', 'Code already used');
-    }
-    // A fresh consent retires every token issued before it: a refresh token
-    // stolen earlier stops working, and since it is deleted (not merely
-    // superseded) presenting it is not mistaken for reuse of the new one.
-    const next = code.grant.refreshGeneration + 1;
-    await runAsUser(code.userId, () => runInTransaction(async (tx) => {
-      await tx.mcpToken.deleteMany({ where: { grantId: code.grantId } });
-      await tx.mcpGrant.update({ where: { id: code.grantId }, data: { refreshGeneration: next } });
-    }));
-    return issueTokens(code.userId, code.grantId, next, code.grant.areas);
-  }
-
-  if (grantType === 'refresh_token') {
-    const raw = str(body.refresh_token) ?? '';
-    const tok = await runAsSystem(() => prisma.mcpToken.findUnique({ where: { tokenHash: sha(raw) }, include: { grant: true } }));
-    if (!tok || tok.kind !== 'REFRESH' || tok.grant.clientId !== client.id) throw new OAuthError(400, 'invalid_grant', 'Invalid refresh token');
-    if (tok.grant.revokedAt || tok.expiresAt <= new Date()) throw new OAuthError(400, 'invalid_grant', 'Refresh token expired or revoked');
-    if (tok.generation !== tok.grant.refreshGeneration) {
-      await revokeGrant(tok.userId, tok.grantId, 'refresh_reuse');
-      await writeAuditLog({ userId: tok.userId, action: 'mcp_refresh_reuse', resource: `McpGrant:${tok.grantId}`, metadata: { kind: 'refresh_reuse' } });
-      throw new OAuthError(400, 'invalid_grant', 'Refresh token already used');
-    }
-    const next = tok.grant.refreshGeneration + 1;
-    const bumped = await runAsUser(tok.userId, () => prisma.mcpGrant.updateMany({
-      where: { id: tok.grantId, refreshGeneration: tok.generation, revokedAt: null }, data: { refreshGeneration: next },
-    }));
-    if (bumped.count !== 1) throw new OAuthError(400, 'invalid_grant', 'Refresh token already used');
-    await writeAuditLog({ userId: tok.userId, action: 'mcp_token_refreshed', resource: `McpGrant:${tok.grantId}` });
-    return issueTokens(tok.userId, tok.grantId, next, tok.grant.areas);
-  }
-
-  throw new OAuthError(400, 'unsupported_grant_type', 'grant_type must be authorization_code or refresh_token');
+  const handler = Object.prototype.hasOwnProperty.call(GRANT_HANDLERS, String(body.grant_type)) ? GRANT_HANDLERS[String(body.grant_type)] : undefined;
+  if (!handler) throw new OAuthError(400, 'unsupported_grant_type', 'grant_type must be authorization_code or refresh_token');
+  return handler(body, client);
 }
 
 export async function revokeToken(raw: string): Promise<void> {
