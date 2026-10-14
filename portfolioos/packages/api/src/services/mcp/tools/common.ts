@@ -1,0 +1,31 @@
+import { formatDateOnly } from '@everypaisa/shared';
+import { listPortfolios } from '../../portfolio.service.js';
+import { ToolUserError } from './types.js';
+
+export function dmy(d: Date | string | null | undefined): string | null {
+  if (!d) return null;
+  return formatDateOnly(typeof d === 'string' ? d : d.toISOString());
+}
+
+/** Accepts dd/mm/yyyy or yyyy-mm-dd; returns yyyy-mm-dd. Throws a plain ToolUserError on nonsense. */
+export function parseDateArg(v: string | undefined, label: string): string | undefined {
+  if (v === undefined || v === '') return undefined;
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
+  const iso = m ? `${m[3]}-${m[2]}-${m[1]}` : v;
+  const t = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00Z`) : null;
+  if (!t || Number.isNaN(t.getTime()) || t.toISOString().slice(0, 10) !== iso) {
+    throw new ToolUserError(`The ${label} date "${v}" is not a real date. Use dd/mm/yyyy.`);
+  }
+  return iso;
+}
+
+/** XIRR fraction (0.1234) -> "12.34"; null stays null. Rates are dimensionless, not money. */
+export function pct(x: number | null | undefined): string | null {
+  return x === null || x === undefined || !Number.isFinite(x) ? null : (x * 100).toFixed(2);
+}
+
+/** The user's own portfolios, never CA client-workspace books. */
+export async function ownPortfolios(userId: string) {
+  const all = await listPortfolios(userId);
+  return all.filter((p) => p.userId === userId && p.clientId === null);
+}
