@@ -16,7 +16,13 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const request = { reqId: 'r1', clientName: 'ChatGPT', redirectHost: 'chatgpt.com', expiresAt: '2099-01-01T00:00:00Z', currentAreas: null };
+const request = {
+  reqId: 'r1', clientName: 'ChatGPT', redirectHost: 'chatgpt.com', expiresAt: '2099-01-01T00:00:00Z', currentAreas: null, currentMemberIds: null,
+  members: [
+    { userId: 'm1', name: 'Mom', relation: 'Mother', kind: 'managed' as const, shareable: true },
+    { userId: 'b1', name: 'Ravi', relation: 'Brother', kind: 'member' as const, shareable: false, reason: 'Has not allowed family AI connectors' },
+  ],
+};
 const route = '/connect/authorize?req=r1';
 
 describe('ConnectAuthorizePage', () => {
@@ -34,8 +40,22 @@ describe('ConnectAuthorizePage', () => {
     expect(loans.checked).toBe(true);
     fireEvent.click(loans);
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-    await waitFor(() => expect(connectApi.decide).toHaveBeenCalledWith('r1', true, ['investments', 'retirement', 'banking', 'insurance', 'property', 'vehicles', 'goals_tax', 'split']));
+    await waitFor(() => expect(connectApi.decide).toHaveBeenCalledWith('r1', true, ['investments', 'retirement', 'banking', 'insurance', 'property', 'vehicles', 'goals_tax', 'split'], []));
     await waitFor(() => expect(leaveForChatbot).toHaveBeenCalledWith('https://chatgpt.com/cb?code=x'));
+  });
+
+  it('lists family members: managed off by default, not-opted-in disabled with the reason', async () => {
+    vi.mocked(connectApi.getRequest).mockResolvedValue(request);
+    vi.mocked(connectApi.decide).mockResolvedValue({ redirectTo: 'https://chatgpt.com/cb?code=x' });
+    renderWithProviders(<ConnectAuthorizePage />, { route });
+    const mom = (await screen.findByRole('checkbox', { name: /Mom/ })) as HTMLInputElement;
+    const ravi = screen.getByRole('checkbox', { name: /Ravi/ }) as HTMLInputElement;
+    expect(mom.checked).toBe(false);
+    expect(ravi.disabled).toBe(true);
+    expect(screen.getByText('Has not allowed family AI connectors')).toBeTruthy();
+    fireEvent.click(mom);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(vi.mocked(connectApi.decide).mock.calls[0]![3]).toEqual(['m1']));
   });
 
   it('Cancel sends a denial', async () => {
@@ -43,7 +63,7 @@ describe('ConnectAuthorizePage', () => {
     vi.mocked(connectApi.decide).mockResolvedValue({ redirectTo: 'https://chatgpt.com/cb?error=access_denied' });
     renderWithProviders(<ConnectAuthorizePage />, { route });
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
-    await waitFor(() => expect(connectApi.decide).toHaveBeenCalledWith('r1', false, []));
+    await waitFor(() => expect(connectApi.decide).toHaveBeenCalledWith('r1', false, [], []));
   });
 
   it('expired request shows error', async () => {

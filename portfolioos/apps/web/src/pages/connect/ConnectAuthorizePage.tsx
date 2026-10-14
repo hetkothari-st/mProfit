@@ -12,6 +12,7 @@ import { apiErrorMessage } from '@/api/client';
 import { connectApi } from '@/api/connect.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { leaveForChatbot } from './leaveForChatbot';
+import { SharingToggles } from './SharingToggles';
 
 const PROVIDER: Record<string, string> = { ChatGPT: 'OpenAI', Claude: 'Anthropic' };
 
@@ -32,8 +33,15 @@ export function ConnectAuthorizePage() {
     const current = request.data?.currentAreas;
     return new Set<AiConnectorArea>(current ?? AI_CONNECTOR_AREAS.filter((a) => AI_CONNECTOR_AREA_INFO[a].defaultOn));
   }, [picked, request.data]);
+  const [pickedMembers, setPickedMembers] = useState<Set<string> | null>(null);
+  // Family members start off; a reconnect keeps whoever was shared before.
+  const memberIds = useMemo(() => pickedMembers ?? new Set(request.data?.currentMemberIds ?? []), [pickedMembers, request.data]);
   const decide = useMutation({
-    mutationFn: (approve: boolean) => connectApi.decide(reqId, approve, approve ? AI_CONNECTOR_AREAS.filter((a) => areas.has(a)) : []),
+    mutationFn: (approve: boolean) => connectApi.decide(
+      reqId, approve,
+      approve ? AI_CONNECTOR_AREAS.filter((a) => areas.has(a)) : [],
+      approve ? [...memberIds] : [],
+    ),
     onSuccess: (r) => leaveForChatbot(r.redirectTo),
   });
 
@@ -42,6 +50,12 @@ export function ConnectAuthorizePage() {
     if (next.has(a)) next.delete(a);
     else next.add(a);
     setPicked(next);
+  }
+  function toggleMember(id: string) {
+    const next = new Set(memberIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setPickedMembers(next);
   }
 
   if (!reqId || request.isError) {
@@ -79,18 +93,10 @@ export function ConnectAuthorizePage() {
           </div>
         ) : (
           <>
-            <fieldset className="space-y-2">
-              <legend className="mb-2 text-sm font-medium text-foreground">Choose what {clientName} can read</legend>
-              {AI_CONNECTOR_AREAS.map((a) => (
-                <label key={a} className="flex items-start gap-3 rounded-md border border-border p-3 text-sm">
-                  <input type="checkbox" className="mt-1" checked={areas.has(a)} onChange={() => toggle(a)} aria-label={AI_CONNECTOR_AREA_INFO[a].label} />
-                  <span className="min-w-0">
-                    <span className="block font-medium text-foreground">{AI_CONNECTOR_AREA_INFO[a].label}</span>
-                    <span className="block text-xs text-muted-foreground">{AI_CONNECTOR_AREA_INFO[a].description}</span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
+            <SharingToggles
+              clientName={clientName} areas={areas} onToggleArea={toggle}
+              members={request.data.members} memberIds={memberIds} onToggleMember={toggleMember}
+            />
             <ul className="space-y-1 text-xs text-muted-foreground">
               <li>Read-only: {clientName} can never add, change or delete anything.</li>
               <li>Account, card, policy and ID numbers are shown as the last 4 characters only.</li>

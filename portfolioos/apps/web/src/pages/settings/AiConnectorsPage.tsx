@@ -22,6 +22,12 @@ export function AiConnectorsPage() {
   const list = useQuery({ queryKey: ['connect', 'connections'], queryFn: connectApi.connections });
   const [guide, setGuide] = useState<ConnectorApp | null>(null);
   const [toRevoke, setToRevoke] = useState<AiConnectionWire | null>(null);
+  const optIn = useQuery({ queryKey: ['connect', 'family-opt-in'], queryFn: connectApi.getFamilyOptIn });
+  const setOptIn = useMutation({
+    mutationFn: (v: boolean) => connectApi.setFamilyOptIn(v),
+    onSuccess: (v) => qc.setQueryData(['connect', 'family-opt-in'], v),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Could not save. Try again.')),
+  });
   const revoke = useMutation({
     mutationFn: (id: string) => connectApi.revoke(id),
     onSuccess: async () => {
@@ -101,6 +107,22 @@ export function AiConnectorsPage() {
           </Card>
         ))}
       </section>
+      <Card className="space-y-2 p-4">
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox" className="mt-1" checked={optIn.data ?? false}
+            disabled={optIn.isLoading || setOptIn.isPending}
+            onChange={(e) => setOptIn.mutate(e.target.checked)}
+            aria-label="Allow family to include me in their AI connectors"
+          />
+          <span className="min-w-0">
+            <span className="block font-medium text-foreground">Allow family to include me in their AI connectors</span>
+            <span className="block text-xs text-muted-foreground">
+              When on, family members who can already see your data in EveryPaisa may also let their own ChatGPT or Claude read it. Off by default.
+            </span>
+          </span>
+        </label>
+      </Card>
       <ConfirmDialog
         open={toRevoke !== null}
         onOpenChange={(o) => { if (!o) setToRevoke(null); }}

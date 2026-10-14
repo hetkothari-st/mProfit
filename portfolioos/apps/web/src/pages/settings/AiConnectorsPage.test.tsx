@@ -6,7 +6,7 @@ import { connectApi } from '@/api/connect.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { AiConnectorsPage } from './AiConnectorsPage';
 
-vi.mock('@/api/connect.api', () => ({ connectApi: { connections: vi.fn(), revoke: vi.fn() } }));
+vi.mock('@/api/connect.api', () => ({ connectApi: { connections: vi.fn(), revoke: vi.fn(), getFamilyOptIn: vi.fn(), setFamilyOptIn: vi.fn() } }));
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('react-hot-toast', () => ({ default: toastMock }));
 const open = vi.fn();
@@ -17,10 +17,12 @@ beforeEach(() => {
   window.open = open as never;
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
   useAuthStore.setState({ user: { id: 'u1', plan: 'PLUS' } as never });
+  vi.mocked(connectApi.getFamilyOptIn).mockResolvedValue(false);
+  vi.mocked(connectApi.setFamilyOptIn).mockImplementation(async (v: boolean) => v);
 });
 afterEach(cleanup);
 
-const conn = { id: 'g1', clientName: 'Claude', connectedOn: '14/10/2026', lastUsedAt: null, areas: ['investments', 'retirement'] };
+const conn = { id: 'g1', clientName: 'Claude', connectedOn: '14/10/2026', lastUsedAt: null, areas: ['investments', 'retirement'], memberUserIds: [] };
 
 describe('AiConnectorsPage', () => {
   it('Connect ChatGPT copies the URL and opens ChatGPT settings', async () => {
@@ -53,5 +55,16 @@ describe('AiConnectorsPage', () => {
     expect(await screen.findByText('Claude')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Revoke' })).toBeTruthy();
     expect(screen.getAllByText(/Plus/).length).toBeGreaterThan(0);
+  });
+
+  it('family opt-in switch saves the new value', async () => {
+    vi.mocked(connectApi.connections).mockResolvedValue([]);
+    renderWithProviders(<AiConnectorsPage />);
+    const sw = (await screen.findByRole('checkbox', { name: /Allow family to include me/ })) as HTMLInputElement;
+    await waitFor(() => expect(sw.disabled).toBe(false));
+    expect(sw.checked).toBe(false);
+    fireEvent.click(sw);
+    await waitFor(() => expect(connectApi.setFamilyOptIn).toHaveBeenCalledWith(true));
+    await waitFor(() => expect(sw.checked).toBe(true));
   });
 });
