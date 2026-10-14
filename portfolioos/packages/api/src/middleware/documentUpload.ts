@@ -40,3 +40,18 @@ export const uploadDocumentFile = multer({
     cb(null, true);
   },
 }).single('file');
+
+/** Documents sorter: many files in one drop, same allowlist and per-file size limit as the vault. */
+export const SORTER_MAX_FILES = 20;
+export const uploadSorterFiles = multer({
+  storage: memoryStorage,
+  limits: { fileSize: env.MAX_UPLOAD_SIZE_MB * 1024 * 1024, files: SORTER_MAX_FILES },
+  fileFilter: (_req, file, cb) => {
+    const ext = extname(file.originalname).toLowerCase();
+    if (!ALLOWED.has(ext)) {
+      cb(new Error(`Unsupported file type: ${ext}`));
+      return;
+    }
+    cb(null, true);
+  },
+}).array('files', SORTER_MAX_FILES);
