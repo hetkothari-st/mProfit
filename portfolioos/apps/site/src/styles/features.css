@@ -119,3 +119,10 @@
   background: var(--lime); transform: scaleX(0); transform-origin: left; transition: transform .45s var(--ease);
 }
 .asset-tiles li:hover::before, .asset-tiles li:focus-visible::before { transform: scaleX(1); }
+
+/* ---------- desktop downloads (home, "Where it runs") ---------- */
+.dl { margin-top: 30px; }
+.dl-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.dl-btn svg { width: 16px; height: 16px; flex: none; }
+.dl-note { margin: 14px 0 0; font-size: 14px; color: var(--ink-3); }
+.dl-note a { color: var(--ink-2); text-underline-offset: 3px; }

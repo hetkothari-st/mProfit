@@ -77,6 +77,7 @@ function Footer() {
               <li><Link to="/features">All features</Link></li>
               <li><Link to="/features#reports">Reports</Link></li>
               <li><Link to="/pricing">Pricing</Link></li>
+              <li><Link to="/#download">Desktop app</Link></li>
             </ul>
           </div>
           <div>

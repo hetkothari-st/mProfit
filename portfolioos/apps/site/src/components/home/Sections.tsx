@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { assetFolios } from '../../data/content';
+import { DESKTOP_RELEASES_PAGE, fetchDesktopDownloads, visitorOs, type DesktopDownloads } from '../../lib/desktop';
 import { gsap, prefersReducedMotion, useIsoLayoutEffect } from '../../lib/gsap';
 import { SectionHead } from '../Common';
 import { Screen, type ScreenName } from '../screens/Screens';
@@ -188,6 +189,44 @@ export function PrivacySeal({ points, cta = true }: { points: [string, string][]
 }
 
 /* ---------- Platforms ---------- */
+const WinIcon = () => (
+  <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M1 2.5 7 1.7v5.8H1zM8 1.6 15 .7v6.8H8zM1 8.5h6v5.8l-6-.8zM8 8.5h7v6.8l-7-.9z" /></svg>
+);
+const MacIcon = () => (
+  <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.4" d="M3 3.5h10v7H3zM1 12.5h14" /></svg>
+);
+
+/** Windows and Mac installers, the visitor's own system first. */
+function DesktopDownloadButtons() {
+  const [dl, setDl] = useState<DesktopDownloads | null>(null);
+  const [os, setOs] = useState<'windows' | 'mac' | 'other'>('other');
+  useEffect(() => {
+    setOs(visitorOs());
+    let live = true;
+    fetchDesktopDownloads().then((d) => { if (live) setDl(d); }).catch(() => undefined);
+    return () => { live = false; };
+  }, []);
+  const win = (
+    <a key="win" className={`btn ${os === 'mac' ? 'btn-line' : 'btn-ink'} dl-btn`} href={dl?.windows ?? DESKTOP_RELEASES_PAGE} rel="noopener noreferrer">
+      <WinIcon /> Download for Windows
+    </a>
+  );
+  const mac = (
+    <a key="mac" className={`btn ${os === 'mac' ? 'btn-ink' : 'btn-line'} dl-btn`} href={dl?.mac ?? DESKTOP_RELEASES_PAGE} rel="noopener noreferrer">
+      <MacIcon /> Download for Mac
+    </a>
+  );
+  return (
+    <div className="dl">
+      <div className="dl-buttons">{os === 'mac' ? [mac, win] : [win, mac]}</div>
+      <p className="dl-note">
+        {dl ? `Version ${dl.version}. ` : ''}Free, signs in to the same account, and updates itself.{' '}
+        <a href={DESKTOP_RELEASES_PAGE} rel="noopener noreferrer">All downloads</a>
+      </p>
+    </div>
+  );
+}
+
 export function Platforms() {
   const ref = useRef<HTMLDivElement>(null);
   useIsoLayoutEffect(() => {
@@ -199,16 +238,17 @@ export function Platforms() {
     return () => ctx.revert();
   }, []);
   return (
-    <section className="section section-flush" aria-labelledby="plat-title">
+    <section className="section section-flush" id="download" aria-labelledby="plat-title">
       <div className="wrap platforms">
         <div>
           <p className="kicker">Where it runs</p>
           <h2 className="h2" id="plat-title">On your laptop, your desk and your phone.</h2>
           <ul className="plat-list">
             <li><strong>Web</strong><span>Works in any modern browser. Nothing to install.</span></li>
-            <li><strong>Windows</strong><span>A desktop app that updates itself.</span></li>
+            <li><strong>Desktop</strong><span>An app for Windows and Mac, in its own window, with the same account and data. It updates itself.</span></li>
             <li><strong>Phone</strong><span>Fully usable on mobile today; add it to your home screen. Native apps are on the way.</span></li>
           </ul>
+          <DesktopDownloadButtons />
         </div>
         <div className="devices" ref={ref} aria-hidden="true">
           <div className="laptop">
