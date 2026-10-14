@@ -70,6 +70,7 @@ import { LegacyLinkPage } from './pages/legacy/LegacyLinkPage';
 import { LegacyAccessPage } from './pages/legacy/LegacyAccessPage';
 import { GoalsPage } from './pages/goals/GoalsPage';
 import { WillOverviewPage } from './pages/will/WillOverviewPage';
+import { ConnectAuthorizePage } from './pages/connect/ConnectAuthorizePage';
 import { WillExecutePage } from './pages/will/execute/WillExecutePage';
 import { WillWizardPage } from './pages/will/WillWizardPage';
 import { IncomePage } from './pages/income/IncomePage';
@@ -128,6 +129,16 @@ export function App() {
       <Route
         path="/professional-invitations/:token"
         element={<AcceptProfessionalInvitePage />}
+      />
+      {/* AI Connector approval: signed in, but outside the app layout. A
+          signed-out user is sent to /login and comes back here (ProtectedRoute). */}
+      <Route
+        path="/connect/authorize"
+        element={
+          <ProtectedRoute>
+            <ConnectAuthorizePage />
+          </ProtectedRoute>
+        }
       />
       <Route
         path="/onboarding"
