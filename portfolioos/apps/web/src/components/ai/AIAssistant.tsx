@@ -729,6 +729,10 @@ function Composer({
               {locked
                 ? 'Answers are locked on the Free plan.'
                 : 'Based on your live portfolio data. Not investment advice.'}
+              {' '}
+              <Link to="/settings/ai-connectors" className="underline underline-offset-2 hover:text-foreground">
+                Prefer your own ChatGPT or Claude? Connect it
+              </Link>
             </span>
           )}
           {quota && !locked && (

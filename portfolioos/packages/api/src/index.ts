@@ -25,6 +25,7 @@ import { startKeyRotationJobs } from './jobs/keyRotationJobs.js';
 import { startSecretRotationJobs } from './jobs/secretRotationJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
 import { startWillReviewJob } from './jobs/willReviewJob.js';
+import { startMcpCleanupJob } from './jobs/mcpCleanupJob.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
 import { startFundScoringJob } from './jobs/fundScoring.job.js';
 import { assertNamedFundReleaseGate } from './services/advisor/fundRanking/releaseGate.js';
@@ -47,6 +48,8 @@ import { startLoanRatesJob } from './jobs/loanRatesJob.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
 import { makeOriginCheck } from './lib/corsOrigins.js';
+import { mcpCors, mcpOAuthRouter } from './routes/mcpOAuth.routes.js';
+import { mcpRouter } from './routes/mcp.routes.js';
 import { apiSandbox } from './lib/apiSandbox.js';
 import { redactUrl } from './lib/redactUrl.js';
 import { auditDownloads } from './lib/auditDownloads.js';
@@ -80,6 +83,10 @@ app.use(
     hsts: { maxAge: 15_552_000, includeSubDomains: true, preload: false },
   }),
 );
+// AI Connector endpoints: any origin, no credentials (bearer only). Must run
+// before the global CORS so a browser preflight from the MCP Inspector is
+// answered here instead of being refused by the frontend allow-list.
+app.use(['/mcp', '/oauth', '/.well-known'], mcpCors);
 const isOriginAllowed = makeOriginCheck(env.CORS_ORIGIN);
 app.use(
   cors({
@@ -134,6 +141,10 @@ app.use(
 app.get('/health', (_req, res) => {
   res.json({ success: true, data: { status: 'ok', uptime: process.uptime() } });
 });
+
+app.use(mcpOAuthRouter);
+app.use(mcpRouter);
+if (env.MCP_ENABLED === 'true' && !env.API_PUBLIC_URL) logger.error('mcp.disabled.no_public_url');
 
 app.use('/api', apiSandbox);
 app.use('/api', auditDownloads);
@@ -211,6 +222,7 @@ const server = app.listen(env.PORT, '::', () => {
   startSecretRotationJobs();
   startAlertJobs();
   startWillReviewJob();
+  startMcpCleanupJob();
   startNetWorthSnapshotJob();
   startFoExpiryJob();
   /**

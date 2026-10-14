@@ -130,6 +130,14 @@ const EnvSchema = z.object({
   // /api/families endpoints 404 and the frontend Settings section hides
   // itself. Rolls out per beta cohort without touching solo users.
   ENABLE_FAMILY: z.enum(['true', 'false']).default('true'),
+  // AI Connector (MCP). Off until the owner has tested with their own
+  // ChatGPT/Claude. API_PUBLIC_URL is the public https origin of THIS API
+  // (issuer + resource); without it the connector stays off.
+  MCP_ENABLED: z.enum(['true', 'false']).default('false'),
+  API_PUBLIC_URL: z.string().url().optional(),
+  // Exact OAuth callback URLs (not hosts): a host-only allowlist would let any
+  // page on chatgpt.com/claude.ai receive a code (consent phishing).
+  MCP_REDIRECT_URI_ALLOWLIST: z.string().default('https://chatgpt.com/connector_platform_oauth_redirect,https://chat.openai.com/connector_platform_oauth_redirect,https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback'),
 
   // ─── Market-feed proportionality canary ───────────────────────
   // A feed that returns a plausible-looking but much smaller file, or whose

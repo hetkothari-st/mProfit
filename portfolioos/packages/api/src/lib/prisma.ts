@@ -236,6 +236,11 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'LegacyToken',
   'LegacyCode',
   'LegacyOutbox',
+  // AI Connector (20261015110000_ai_connector). Owner-only policies. McpClient
+  // and McpAuthRequest have no userId (created before sign-in) and no policy.
+  'McpGrant',
+  'McpAuthCode',
+  'McpToken',
 ]);
 
 /**

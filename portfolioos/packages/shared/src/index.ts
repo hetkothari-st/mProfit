@@ -23,5 +23,6 @@ export * from './amountInWords.js';
 // Will Maker (docs/superpowers/specs/2026-10-12-will-maker-design.md).
 export * from './will/index.js';
 export * from './legacy.js';
+export * from './aiConnector.js';
 // Documents sorter (docs/superpowers/specs/2026-10-14-document-sorter-design.md).
 export * from './documentSorter.js';

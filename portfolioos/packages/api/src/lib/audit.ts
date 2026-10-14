@@ -60,7 +60,13 @@ export type AuditAction =
   | 'legacy_otp_failed'
   | 'legacy_view'
   | 'legacy_document_download'
-  | 'legacy_pdf';
+  | 'legacy_pdf'
+  | 'mcp_connected'
+  | 'mcp_sharing_changed'
+  | 'mcp_revoked'
+  | 'mcp_token_refreshed'
+  | 'mcp_refresh_reuse'
+  | 'mcp_tool_called';
 
 export interface AuditInput {
   userId?: string | null;

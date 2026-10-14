@@ -291,3 +291,39 @@ export const scrapeLimiter = rateLimit({
     code: 'RATE_LIMITED',
   },
 });
+
+// AI Connector OAuth endpoints are public (no login): per IP.
+export const mcpOAuthLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  passOnStoreError: true,
+  store: makeStore('mcpoauth'),
+  message: { error: 'slow_down', error_description: 'Too many requests' },
+});
+
+/** Per connection (grant). Mounted after the MCP bearer check sets res.locals.mcp. */
+function grantKey(res: { locals: { mcp?: { grantId: string } } }): string {
+  return `grant:${res.locals.mcp?.grantId ?? 'none'}`;
+}
+export const mcpMinuteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  passOnStoreError: true,
+  keyGenerator: (_req, res) => grantKey(res as never),
+  store: makeStore('mcpmin'),
+  message: { jsonrpc: '2.0', error: { code: -32000, message: 'Too many requests from this chatbot. Try again in a minute.' }, id: null },
+});
+export const mcpDayLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 2000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  passOnStoreError: true,
+  keyGenerator: (_req, res) => grantKey(res as never),
+  store: makeStore('mcpday'),
+  message: { jsonrpc: '2.0', error: { code: -32000, message: 'Daily limit reached for this chatbot. Try again tomorrow.' }, id: null },
+});

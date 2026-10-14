@@ -21,6 +21,7 @@ import { ClientBooksPage } from './pages/ca/ClientBooksPage';
 import { AcceptCaInvitationPage } from './pages/ca/AcceptCaInvitationPage';
 import { AcceptProfessionalInvitePage } from './pages/ca/AcceptProfessionalInvitePage';
 import { ProfessionalAccessPage } from './pages/settings/ProfessionalAccessPage';
+import { AiConnectorsPage } from './pages/settings/AiConnectorsPage';
 import { LoanRatesAdminPage } from './pages/settings/LoanRatesAdminPage';
 import { FamilyMemberPage } from './pages/family/FamilyMemberPage';
 import { TransactionsPage } from './pages/transactions/TransactionsPage';
@@ -71,6 +72,7 @@ import { LegacyLinkPage } from './pages/legacy/LegacyLinkPage';
 import { LegacyAccessPage } from './pages/legacy/LegacyAccessPage';
 import { GoalsPage } from './pages/goals/GoalsPage';
 import { WillOverviewPage } from './pages/will/WillOverviewPage';
+import { ConnectAuthorizePage } from './pages/connect/ConnectAuthorizePage';
 import { WillExecutePage } from './pages/will/execute/WillExecutePage';
 import { WillWizardPage } from './pages/will/WillWizardPage';
 import { IncomePage } from './pages/income/IncomePage';
@@ -130,6 +132,16 @@ export function App() {
         path="/professional-invitations/:token"
         element={<AcceptProfessionalInvitePage />}
       />
+      {/* AI Connector approval: signed in, but outside the app layout. A
+          signed-out user is sent to /login and comes back here (ProtectedRoute). */}
+      <Route
+        path="/connect/authorize"
+        element={
+          <ProtectedRoute>
+            <ConnectAuthorizePage />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/onboarding"
         element={
@@ -162,6 +174,7 @@ export function App() {
         <Route path="/ca/clients/:clientId" element={<ProfessionalTwoFactorGate><ClientBooksPage /></ProfessionalTwoFactorGate>} />
         <Route path="/ca/invitations/:token/accept" element={<AcceptCaInvitationPage />} />
         <Route path="/settings/professional-access" element={<ProfessionalAccessPage />} />
+        <Route path="/settings/ai-connectors" element={<AiConnectorsPage />} />
         <Route path="/settings/loan-rates" element={<LoanRatesAdminPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/stocks" element={<StocksPage />} />

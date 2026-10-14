@@ -28,6 +28,9 @@ export const FEATURE_MIN_TIER = {
   AA_FINVU_AUTOIMPORT: 'PLUS',
   AI_INSIGHTS: 'PLUS',
   GOAL_PROJECTIONS: 'PLUS',
+  // Bring-your-own ChatGPT/Claude over MCP (AI Connector). Read-only; the
+  // user's own AI subscription pays for the chat.
+  AI_CONNECTOR: 'PLUS',
   FAMILY_SHARING: 'FAMILY',
   // The /advisor engine: deterministic, prescriptive recommendations against a
   // risk-profiled target allocation. Sits with AI_INSIGHTS and GOAL_PROJECTIONS
