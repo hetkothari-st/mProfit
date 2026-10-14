@@ -1,0 +1,154 @@
+/* Night-desk theme. The site used to sit on pale sage paper, which washed
+   out next to the black-and-lime ledger. Now the page is the dark desk the
+   ledger rests on, lit by one lamp: near-black olive surfaces, ivory text,
+   the app's lime as the only bright colour. Paper objects (slips, the folio
+   card, ledger pages) stay cream, so they read as things lying on the desk.
+   Loaded last; it redefines the tokens and patches the few hard-coded
+   light surfaces in site.css and react.css. */
+
+:root {
+  --paper: #0d0e0b;
+  --paper-2: #13150f;
+  --paper-3: #1c1f17;
+  --ink: #f1f0e6;
+  --ink-2: #c4c6b8;
+  --ink-3: #8d9083;
+  --rule: rgba(241, 240, 230, .1);
+  --rule-strong: rgba(241, 240, 230, .24);
+
+  --lime: #e2fe53;
+  --lime-ink: #10120b;     /* text on lime */
+  --olive: #5f7400;        /* accent on cream paper */
+
+  --sage: #a9c23f;
+  --sage-soft: #cfe08a;
+  --moss: #e2fe53;
+  --pine: #080907;
+  --madder: #e2fe53;
+  --madder-deep: #10120b;
+  --danger: #ff8a78;
+  color-scheme: dark;
+}
+
+/* faint light-coloured grain instead of the dark paper fibre */
+body::before {
+  opacity: .35;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 .9 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+::selection { background: var(--lime); color: var(--lime-ink); }
+
+/* ---------- buttons ---------- */
+.btn-ink { background: var(--lime); color: var(--lime-ink); box-shadow: 0 0 0 0 rgba(226, 254, 83, 0); transition: transform .25s var(--ease), box-shadow .3s, background .25s; }
+.btn-ink:hover { background: #ecff86; box-shadow: 0 10px 30px -8px rgba(226, 254, 83, .45); }
+.btn-paper { background: var(--ink); color: var(--paper); }
+.btn-paper:hover { background: #fff; }
+
+/* ---------- header ---------- */
+.site-header { background: color-mix(in srgb, var(--paper) 78%, transparent); }
+.brand { color: var(--ink); }
+
+/* ---------- hero: the ledger under a lamp ---------- */
+.hero-pin { position: relative; isolation: isolate; }
+.hero { overflow-x: clip; }
+.hero-pin::before { /* lamp light falling on the desk, behind the book */
+  content: ""; position: absolute; z-index: -1; pointer-events: none;
+  right: -10%; top: -20%; width: 80%; height: 130%;
+  background:
+    radial-gradient(closest-side, rgba(226, 254, 83, .16), rgba(226, 254, 83, .05) 55%, transparent),
+    radial-gradient(60% 50% at 60% 40%, rgba(255, 236, 190, .07), transparent 70%);
+  filter: blur(10px);
+}
+.hero-pin::after { /* ledger ruling on the desk, fading out from the book */
+  content: ""; position: absolute; inset: 0; z-index: -2; pointer-events: none;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 47px, rgba(241, 240, 230, .045) 47px 48px);
+  mask-image: radial-gradient(70% 80% at 68% 45%, #000 10%, transparent 75%);
+  -webkit-mask-image: radial-gradient(70% 80% at 68% 45%, #000 10%, transparent 75%);
+}
+.hero .display { color: var(--ink); text-shadow: 0 1px 0 rgba(0, 0, 0, .4); }
+.hero .lede em { color: var(--ink); }
+.hero-note span { background: var(--lime); box-shadow: 0 0 0 4px rgba(226, 254, 83, .18), 0 0 14px rgba(226, 254, 83, .6); }
+
+/* the black boards need a rim of light to stand off the dark desk */
+.cover .face.front.cover-front {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .09), inset -1px 0 0 rgba(255, 255, 255, .16),
+    inset 12px 0 20px -10px rgba(0, 0, 0, .9),
+    0 0 0 1px rgba(226, 254, 83, .12);
+}
+.back-cover .face.board { box-shadow: 0 0 0 1px rgba(255, 255, 255, .08), 0 60px 90px -30px rgba(0, 0, 0, .95), 0 0 120px -20px rgba(226, 254, 83, .22); }
+.book-floor {
+  background: radial-gradient(closest-side, rgba(0, 0, 0, .95), rgba(0, 0, 0, .6) 55%, transparent);
+  opacity: 1;
+}
+.book-stage::before { /* lit pool on the desk under the book */
+  content: ""; position: absolute; left: 50%; bottom: 10px; z-index: 0; pointer-events: none;
+  width: calc(var(--pw) * 2.2); height: 150px; transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(226, 254, 83, .13), rgba(226, 254, 83, .04) 60%, transparent);
+}
+.hero-caption { color: var(--ink-3); }
+
+/* ---------- sections ---------- */
+.scatter, .chapters { background: var(--paper-2); }
+.scatter-foot div { border-top-color: var(--rule-strong); }
+.steps li.active::before { color: var(--lime); }
+.film-frame { background: #050604; box-shadow: 0 0 0 1px rgba(241, 240, 230, .08), 0 40px 80px -40px rgba(0, 0, 0, .9); }
+.film-progress i { background: var(--lime); }
+.source-list li { background: rgba(241, 240, 230, .03); }
+
+/* folio card stays cream paper: dark text, olive accents */
+.folio-card { color: #23251d; box-shadow: 0 40px 70px -40px rgba(0, 0, 0, .95), 0 0 0 1px rgba(0, 0, 0, .2); }
+.folio-card h3, .folio-card li { color: #15170f; }
+.folio-card p { color: #3d4033; }
+.folio-card .no { color: var(--olive); }
+.folio-card li::before { background: var(--olive); }
+.folio-card { background-image:
+    linear-gradient(90deg, transparent 46px, rgba(140, 160, 30, .7) 46px 47px, transparent 47px),
+    repeating-linear-gradient(180deg, transparent 0 31px, rgba(20, 20, 20, .09) 31px 32px); }
+
+.laptop-lid { box-shadow: 0 0 0 1px #2f322b inset, 0 50px 90px -30px rgba(0, 0, 0, .95), 0 0 100px -30px rgba(226, 254, 83, .18); }
+.laptop-base { background: linear-gradient(#474a43, #26281f); }
+.laptop-base::after { background: #1a1c16; }
+.phone { box-shadow: 0 0 0 1px #34372f inset, 0 40px 70px -25px rgba(0, 0, 0, .95); }
+.fan-card { box-shadow: 0 0 0 1px #2f322b, 0 30px 60px -30px rgba(0, 0, 0, .95); }
+
+.aud > div { border-top-color: var(--lime); }
+
+.vault { background: var(--pine); border-block: 1px solid var(--rule); }
+.seal-glow { background: radial-gradient(closest-side, rgba(226, 254, 83, .14), transparent); }
+
+.plans-scroll { border-top-color: var(--lime); }
+.plans .featured { background: rgba(226, 254, 83, .06); }
+.plans .yes { color: var(--lime); }
+
+.faq summary::after { border-color: var(--ink-2); }
+.faq details[open] summary { color: var(--lime); }
+
+/* ---------- CTA: the one lime slab ---------- */
+.cta { background: var(--lime); color: var(--lime-ink); }
+.cta::before {
+  background: repeating-linear-gradient(180deg, transparent 0 47px, rgba(16, 18, 11, .08) 47px 48px);
+}
+.cta .h2 { color: var(--lime-ink); }
+.cta p, .cta-lede { color: #3a4214; }
+.cta .btn-paper { background: var(--lime-ink); color: var(--lime); }
+.cta .btn-paper:hover { background: #000; }
+.btn-line-light { border-color: rgba(16, 18, 11, .45); color: var(--lime-ink); }
+.btn-line-light:hover { border-color: var(--lime-ink); }
+.cta :focus-visible { outline-color: var(--lime-ink); }
+
+/* ---------- footer ---------- */
+.site-footer { background: #060705; border-top: 1px solid var(--rule); }
+
+/* ---------- inner pages ---------- */
+.toc a:hover { background: var(--lime); color: var(--lime-ink); border-color: var(--lime); }
+
+/* contact: dark card, dark fields */
+.contact-form, .sent-note { background: var(--paper-3); color: var(--ink); box-shadow: 0 0 0 1px var(--rule), 0 40px 70px -40px rgba(0, 0, 0, .95); }
+.field input, .field textarea, .field select { background: var(--paper); color: var(--ink); }
+.field input:focus, .field textarea:focus, .field select:focus { outline-color: var(--lime); border-color: var(--lime); }
+.radios label:has(input:checked) { background: rgba(226, 254, 83, .08); }
+.err { color: var(--danger); }
+.field input[aria-invalid="true"], .field textarea[aria-invalid="true"] { border-color: var(--danger); }
+.sent-note .stamp { background: var(--lime); color: var(--lime-ink); }
