@@ -22,7 +22,10 @@ export function parseDateArg(v: string | undefined, label: string): string | und
 
 /** XIRR fraction (0.1234) -> "12.34"; null stays null. Rates are dimensionless, not money. */
 export function pct(x: number | null | undefined): string | null {
-  return x === null || x === undefined || !Number.isFinite(x) ? null : (x * 100).toFixed(2);
+  if (x === null || x === undefined || !Number.isFinite(x)) return null;
+  const s = (x * 100).toFixed(2);
+  // A tiny negative rate rounds to "-0.00", which reads as a loss.
+  return s === '-0.00' ? '0.00' : s;
 }
 
 /** The user's own portfolios, never CA client-workspace books. */
