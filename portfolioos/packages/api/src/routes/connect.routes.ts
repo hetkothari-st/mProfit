@@ -36,7 +36,18 @@ connectRouter.delete('/connections/:id', asyncHandler(async (req: Request, res: 
 connectRouter.get('/requests/:reqId', asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true, data: await getAuthRequest(req.params.reqId!, req.user!.id).catch(asApp) });
 }));
-connectRouter.post('/requests/:reqId/decision', requireFeature('AI_CONNECTOR'), asyncHandler(async (req: Request, res: Response) => {
+// Approving needs the plan; declining never does, so a FREE user's Cancel
+// still tells the chatbot access_denied instead of leaving it waiting.
+const approveNeedsPlan = requireFeature('AI_CONNECTOR');
+function gateApprove(req: Request, res: Response, next: NextFunction): void {
+  if ((req.body as { approve?: unknown } | undefined)?.approve === true) {
+    approveNeedsPlan(req, res, next);
+    return;
+  }
+  next();
+}
+
+connectRouter.post('/requests/:reqId/decision', gateApprove, asyncHandler(async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as { approve?: unknown; areas?: unknown };
   const r = await decide(req.params.reqId!, req.user!.id, { approve: body.approve === true, areas: body.areas }, req).catch(asApp);
   if (r.isNewConnection && r.grantId) void notifyNewConnection(req.user!.id, r.clientName, r.grantId);

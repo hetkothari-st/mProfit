@@ -127,6 +127,20 @@ describe('full flow over HTTP', () => {
     await runAsSystem(() => prisma.mcpClient.deleteMany({ where: { clientId: reg.client_id } }));
   });
 
+  it('a FREE user can still decline, so the chatbot hears access_denied', async () => {
+    const reg = await (await fetch(`${base}/oauth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ redirect_uris: [REDIRECT] }) })).json();
+    const auth = await fetch(`${base}/oauth/authorize?${new URLSearchParams({
+      response_type: 'code', client_id: reg.client_id, redirect_uri: REDIRECT, code_challenge: challenge, code_challenge_method: 'S256', state: 'd1',
+    })}`, { redirect: 'manual' });
+    const reqId = new URL(auth.headers.get('location')!).searchParams.get('req')!;
+    const r = await fetch(`${base}/api/connect/requests/${reqId}/decision`, {
+      method: 'POST', headers: { authorization: `Bearer ${jwt('FREE')}`, 'content-type': 'application/json' }, body: JSON.stringify({ approve: false }),
+    });
+    expect(r.status).toBe(200);
+    expect(new URL((await r.json()).data.redirectTo).searchParams.get('error')).toBe('access_denied');
+    await runAsSystem(() => prisma.mcpClient.deleteMany({ where: { clientId: reg.client_id } }));
+  });
+
   it('an unknown client gets an error page, never a redirect', async () => {
     const r = await fetch(`${base}/oauth/authorize?client_id=nope&redirect_uri=${encodeURIComponent(REDIRECT)}&response_type=code`, { redirect: 'manual' });
     expect(r.status).toBe(400);

@@ -24,6 +24,7 @@ import { startKeyRotationJobs } from './jobs/keyRotationJobs.js';
 import { startSecretRotationJobs } from './jobs/secretRotationJobs.js';
 import { startAlertJobs } from './jobs/alertJobs.js';
 import { startWillReviewJob } from './jobs/willReviewJob.js';
+import { startMcpCleanupJob } from './jobs/mcpCleanupJob.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
 import { startFundScoringJob } from './jobs/fundScoring.job.js';
 import { assertNamedFundReleaseGate } from './services/advisor/fundRanking/releaseGate.js';
@@ -219,6 +220,7 @@ const server = app.listen(env.PORT, '::', () => {
   startSecretRotationJobs();
   startAlertJobs();
   startWillReviewJob();
+  startMcpCleanupJob();
   startNetWorthSnapshotJob();
   startFoExpiryJob();
   /**

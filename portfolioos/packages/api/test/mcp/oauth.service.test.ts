@@ -63,6 +63,10 @@ describe('registration', () => {
   it('refuses a redirect host outside the allowlist', async () => {
     await expect(svc.registerClient({ redirect_uris: ['https://evil.example/cb'] })).rejects.toMatchObject({ error: 'invalid_redirect_uri' });
   });
+  it('refuses any other path on an allowed host (exact callback only)', async () => {
+    await expect(svc.registerClient({ redirect_uris: ['https://claude.ai/some/user/page'] })).rejects.toMatchObject({ error: 'invalid_redirect_uri' });
+    await expect(svc.registerClient({ redirect_uris: ['https://chatgpt.com/g/attacker'] })).rejects.toMatchObject({ error: 'invalid_redirect_uri' });
+  });
   it('refuses http redirects', async () => {
     await expect(svc.registerClient({ redirect_uris: ['http://claude.ai/cb'] })).rejects.toMatchObject({ error: 'invalid_redirect_uri' });
   });
@@ -147,6 +151,31 @@ describe('tokens', () => {
     await svc.revokeConnection(user.userId, conn!.id);
     expect(await svc.resolveAccessToken(t.access_token)).toBeNull();
     expect(await svc.listConnections(user.userId)).toEqual([]);
+  });
+  it('re-consent retires the old tokens without revoking the fresh connection', async () => {
+    const t1 = await tokensFromCode(await approveAndGetCode(['investments']));
+    const t2 = await tokensFromCode(await approveAndGetCode(['retirement']));
+    expect(await svc.resolveAccessToken(t1.access_token)).toBeNull();
+    await expect(svc.exchangeToken({ grant_type: 'refresh_token', refresh_token: t1.refresh_token, client_id: clientId }))
+      .rejects.toMatchObject({ error: 'invalid_grant' });
+    expect(await svc.resolveAccessToken(t2.access_token)).toMatchObject({ areas: ['retirement'] });
+    const t3 = await svc.exchangeToken({ grant_type: 'refresh_token', refresh_token: t2.refresh_token, client_id: clientId });
+    expect(await svc.resolveAccessToken(t3.access_token)).not.toBeNull();
+  });
+  it('purgeExpiredMcpRows deletes expired requests, codes, tokens and orphan clients only', async () => {
+    const old = new Date(Date.now() - 8 * 86_400_000);
+    const orphan = await runAsSystem(() => prisma.mcpClient.create({ data: { clientId: `mcp_orphan_${Date.now()}`, redirectUris: [REDIRECT], displayName: 'Claude', registeredAt: old } }));
+    const { reqId } = await svc.startAuthorization({ response_type: 'code', client_id: clientId, redirect_uri: REDIRECT, code_challenge: challenge, code_challenge_method: 'S256' });
+    await runAsSystem(() => prisma.mcpAuthRequest.update({ where: { id: reqId }, data: { expiresAt: new Date(Date.now() - 1000) } }));
+    const live = await tokensFromCode(await approveAndGetCode(['investments']));
+    await runAsSystem(() => prisma.mcpToken.updateMany({ where: { userId: user.userId, kind: 'REFRESH' }, data: { expiresAt: new Date(Date.now() - 1000) } }));
+    const r = await svc.purgeExpiredMcpRows(new Date());
+    expect(r.requests).toBeGreaterThanOrEqual(1);
+    expect(r.tokens).toBeGreaterThanOrEqual(1);
+    expect(r.clients).toBeGreaterThanOrEqual(1);
+    expect(await runAsSystem(() => prisma.mcpClient.findUnique({ where: { id: orphan.id } }))).toBeNull();
+    expect(await runAsSystem(() => prisma.mcpClient.findUnique({ where: { clientId } }))).not.toBeNull();
+    expect(await svc.resolveAccessToken(live.access_token)).not.toBeNull();
   });
   it('audits without data', async () => {
     const rows = await runAsSystem(() => prisma.auditLog.findMany({ where: { userId: user.userId, action: { startsWith: 'mcp_' } } }));

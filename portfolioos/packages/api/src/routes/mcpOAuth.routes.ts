@@ -63,7 +63,8 @@ mcpOAuthRouter.post('/oauth/register', mcpOAuthLimiter, (req, res, next) => {
   registerClient(req.body).then((r) => res.status(201).set('Cache-Control', 'no-store').json(r), (e) => sendOAuthError(res, e, next));
 });
 
-mcpOAuthRouter.get('/oauth/authorize', (req, res, next) => {
+// Rate limited: every hit writes an McpAuthRequest row and needs no login.
+mcpOAuthRouter.get('/oauth/authorize', mcpOAuthLimiter, (req, res, next) => {
   startAuthorization(req.query as Record<string, unknown>).then(
     ({ reqId }) => res.redirect(302, `${env.FRONTEND_URL.replace(/\/+$/, '')}/connect/authorize?req=${encodeURIComponent(reqId)}`),
     (e) => {

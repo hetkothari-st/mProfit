@@ -135,7 +135,9 @@ const EnvSchema = z.object({
   // (issuer + resource); without it the connector stays off.
   MCP_ENABLED: z.enum(['true', 'false']).default('false'),
   API_PUBLIC_URL: z.string().url().optional(),
-  MCP_REDIRECT_HOST_ALLOWLIST: z.string().default('chatgpt.com,chat.openai.com,claude.ai,claude.com'),
+  // Exact OAuth callback URLs (not hosts): a host-only allowlist would let any
+  // page on chatgpt.com/claude.ai receive a code (consent phishing).
+  MCP_REDIRECT_URI_ALLOWLIST: z.string().default('https://chatgpt.com/connector_platform_oauth_redirect,https://chat.openai.com/connector_platform_oauth_redirect,https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback'),
 
   // ─── Market-feed proportionality canary ───────────────────────
   // A feed that returns a plausible-looking but much smaller file, or whose

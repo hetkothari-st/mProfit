@@ -33,13 +33,13 @@ export class OAuthError extends Error {
   }
 }
 
-export function mcpConfig(): { enabled: boolean; issuer: string; resource: string; allowHosts: string[] } {
+export function mcpConfig(): { enabled: boolean; issuer: string; resource: string; allowUris: string[] } {
   const issuer = (env.API_PUBLIC_URL ?? '').replace(/\/+$/, '');
   return {
     enabled: env.MCP_ENABLED === 'true' && issuer !== '',
     issuer,
     resource: `${issuer}/mcp`,
-    allowHosts: env.MCP_REDIRECT_HOST_ALLOWLIST.split(',').map((h) => h.trim().toLowerCase()).filter(Boolean),
+    allowUris: env.MCP_REDIRECT_URI_ALLOWLIST.split(',').map((u) => u.trim()).filter(Boolean),
   };
 }
 
@@ -52,14 +52,15 @@ function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.length > 0 ? v : undefined;
 }
 
-function checkRedirect(uri: string, allowHosts: string[]): URL {
+function checkRedirect(uri: string, allowUris: string[]): URL {
   let u: URL;
   try {
     u = new URL(uri);
   } catch {
     throw new OAuthError(400, 'invalid_redirect_uri', 'redirect_uri is not a valid URL');
   }
-  if (u.protocol !== 'https:' || !allowHosts.includes(u.hostname.toLowerCase())) {
+  // Exact callback match: origin + path, no query or fragment.
+  if (u.protocol !== 'https:' || u.search || u.hash || !allowUris.includes(`${u.origin}${u.pathname}`)) {
     throw new OAuthError(400, 'invalid_redirect_uri', 'This app is not allowed to connect to EveryPaisa.');
   }
   return u;
@@ -69,8 +70,8 @@ export async function registerClient(body: unknown) {
   const b = (body ?? {}) as Record<string, unknown>;
   const uris = Array.isArray(b.redirect_uris) ? b.redirect_uris.filter((u): u is string => typeof u === 'string') : [];
   if (uris.length === 0 || uris.length > 5) throw new OAuthError(400, 'invalid_redirect_uri', 'redirect_uris must list 1-5 URLs');
-  const { allowHosts } = mcpConfig();
-  const hosts = uris.map((u) => checkRedirect(u, allowHosts).hostname.toLowerCase());
+  const { allowUris } = mcpConfig();
+  const hosts = uris.map((u) => checkRedirect(u, allowUris).hostname.toLowerCase());
   const method = str(b.token_endpoint_auth_method) ?? 'none';
   if (method !== 'none') throw new OAuthError(400, 'invalid_client_metadata', 'Only public clients (token_endpoint_auth_method=none) are supported');
   const displayName = clientDisplayName(hosts[0]!);
@@ -233,7 +234,15 @@ export async function exchangeToken(body: Record<string, unknown>) {
     if (!verifyPkceS256(str(body.code_verifier) ?? '', code.codeChallenge)) throw new OAuthError(400, 'invalid_grant', 'PKCE verification failed');
     const marked = await runAsSystem(() => prisma.mcpAuthCode.updateMany({ where: { id: code.id, usedAt: null }, data: { usedAt: new Date() } }));
     if (marked.count !== 1) throw new OAuthError(400, 'invalid_grant', 'Code already used');
-    return issueTokens(code.userId, code.grantId, code.grant.refreshGeneration, code.grant.areas);
+    // A fresh consent retires every token issued before it: a refresh token
+    // stolen earlier stops working, and since it is deleted (not merely
+    // superseded) presenting it is not mistaken for reuse of the new one.
+    const next = code.grant.refreshGeneration + 1;
+    await runAsUser(code.userId, () => runInTransaction(async (tx) => {
+      await tx.mcpToken.deleteMany({ where: { grantId: code.grantId } });
+      await tx.mcpGrant.update({ where: { id: code.grantId }, data: { refreshGeneration: next } });
+    }));
+    return issueTokens(code.userId, code.grantId, next, code.grant.areas);
   }
 
   if (grantType === 'refresh_token') {
@@ -291,4 +300,20 @@ export async function revokeConnection(userId: string, grantId: string, req?: Re
   }));
   if (done.count !== 1) throw new OAuthError(404, 'not_found', 'Connection not found');
   await writeAuditLog({ userId, action: 'mcp_revoked', resource: `McpGrant:${grantId}`, metadata: { by: 'user' }, req });
+}
+
+/**
+ * Daily sweep (system context): expired or answered auth requests, used or
+ * expired codes, expired tokens, and clients nobody connected for 7 days.
+ */
+export async function purgeExpiredMcpRows(now: Date = new Date()): Promise<{ requests: number; codes: number; tokens: number; clients: number }> {
+  const dayAgo = new Date(now.getTime() - 24 * 60 * MIN);
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * MIN);
+  return runAsSystem(async () => {
+    const requests = await prisma.mcpAuthRequest.deleteMany({ where: { OR: [{ expiresAt: { lt: now } }, { consumedAt: { lt: dayAgo } }] } });
+    const codes = await prisma.mcpAuthCode.deleteMany({ where: { OR: [{ expiresAt: { lt: dayAgo } }, { usedAt: { lt: dayAgo } }] } });
+    const tokens = await prisma.mcpToken.deleteMany({ where: { expiresAt: { lt: now } } });
+    const clients = await prisma.mcpClient.deleteMany({ where: { registeredAt: { lt: weekAgo }, grants: { none: {} } } });
+    return { requests: requests.count, codes: codes.count, tokens: tokens.count, clients: clients.count };
+  });
 }
