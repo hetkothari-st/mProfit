@@ -9,7 +9,7 @@ import { mcpEnabledGate } from './mcpOAuth.routes.js';
 import { mcpConfig, resolveAccessToken } from '../services/mcp/oauth.service.js';
 import { buildMcpServer } from '../services/mcp/server.js';
 
-interface McpLocals { grantId: string; userId: string; areas: AiConnectorArea[]; clientName: string }
+interface McpLocals { grantId: string; userId: string; areas: AiConnectorArea[]; memberUserIds: string[]; clientName: string }
 
 function challenge(res: Response, invalid: boolean): void {
   const { issuer } = mcpConfig();
@@ -49,7 +49,7 @@ mcpRouter.post('/mcp', mcpBearer, mcpMinuteLimiter, mcpDayLimiter, async (req: R
     const planOk = !!user && hasFeature(user.plan as PlanTierValue, 'AI_CONNECTOR');
     void runAsUser(ctx.userId, () => prisma.mcpGrant.update({ where: { id: ctx.grantId }, data: { lastUsedAt: new Date() } }))
       .catch((err) => logger.warn({ err }, 'mcp.last_used.failed'));
-    const server = buildMcpServer({ userId: ctx.userId, grantId: ctx.grantId, areas: ctx.areas, planOk, now: new Date() });
+    const server = buildMcpServer({ userId: ctx.userId, grantId: ctx.grantId, areas: ctx.areas, memberUserIds: ctx.memberUserIds, planOk, now: new Date() });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on('close', () => {
       void transport.close();

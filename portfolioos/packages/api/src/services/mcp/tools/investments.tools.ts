@@ -43,7 +43,9 @@ const holdingsInput = {
 const listHoldings: ConnectorTool<typeof holdingsInput> = {
   name: 'list_holdings', area: 'investments', title: 'Holdings',
   description: 'What you hold now: quantity, cost, value, gain and XIRR per holding.', input: holdingsInput,
+  partialCaps: true,
   async run(ctx, args) {
+    const capped = ctx.person?.caps.assetClasses ?? null;
     const { ids } = await scopeFor(ctx.userId, args.portfolioId);
     const own = await ownPortfolios(ctx.userId);
     const nameOf = new Map(own.map((p) => [p.id, p.name]));
@@ -51,6 +53,7 @@ const listHoldings: ConnectorTool<typeof holdingsInput> = {
     for (const id of ids) {
       for (const h of await getPortfolioHoldings(ctx.userId, id)) {
         if (args.assetClass && h.assetClass !== args.assetClass) continue;
+        if (capped && !capped.includes(h.assetClass as never)) continue;
         rows.push({
           portfolio: nameOf.get(id), assetClass: h.assetClass, name: h.assetName, symbol: h.symbol, isin: h.isin,
           quantity: h.quantity, avgCost: h.avgCostPrice, totalCost: h.totalCost, currentPrice: h.currentPrice,
@@ -76,7 +79,9 @@ const txInput = {
 const listTransactionsTool: ConnectorTool<typeof txInput> = {
   name: 'list_transactions', area: 'investments', title: 'Transactions',
   description: 'Buys, sells, dividends and other investment transactions, newest first, 200 per page.', input: txInput,
+  partialCaps: true,
   async run(ctx, args) {
+    const capped = ctx.person?.caps.assetClasses ?? null;
     const from = parseDateArg(args.from, 'from');
     const to = parseDateArg(args.to, 'to');
     const own = await ownPortfolios(ctx.userId);
@@ -88,7 +93,7 @@ const listTransactionsTool: ConnectorTool<typeof txInput> = {
     } as never);
     // listTransactions is personal-scope without a familyId; this filter is
     // what guarantees own, non-client portfolios only.
-    const items = r.items.filter((t) => nameOf.has(t.portfolioId));
+    const items = r.items.filter((t) => nameOf.has(t.portfolioId) && (!capped || capped.includes(t.assetClass as never)));
     return {
       rows: items.length,
       data: {

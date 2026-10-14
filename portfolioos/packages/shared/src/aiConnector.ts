@@ -40,6 +40,36 @@ export function clientDisplayName(redirectHost: string): string {
   return CLIENT_NAMES[redirectHost.toLowerCase()] ?? redirectHost.toLowerCase();
 }
 
+/**
+ * Which family-visibility categories gate each area when a family member's
+ * data is read (FamilyMember.visibleCategories / visibleAssetClasses).
+ * 'ASSET_CLASSES' = gated by asset class; null = no family token exists, so
+ * only the user and their managed profiles can be read for that area.
+ */
+export const AREA_CATEGORY: Record<AiConnectorArea, readonly string[] | 'ASSET_CLASSES' | null> = {
+  investments: 'ASSET_CLASSES',
+  retirement: 'ASSET_CLASSES',
+  banking: ['BANK_ACCOUNT', 'CREDIT_CARD'],
+  loans: ['LOAN'],
+  insurance: ['INSURANCE'],
+  property: ['OWNED_PROPERTY', 'RENTAL'],
+  vehicles: ['VEHICLE'],
+  goals_tax: ['GOAL'],
+  split: null,
+  will: null,
+  documents: null,
+};
+
+/** A family member the user may share with a chatbot (approval page). */
+export interface AiConnectorMemberWire {
+  userId: string;
+  name: string;
+  relation: string;
+  kind: 'managed' | 'member';
+  shareable: boolean;
+  reason?: string;
+}
+
 /** GET /api/connect/requests/:reqId */
 export interface AiConnectorAuthRequestWire {
   reqId: string;
@@ -49,6 +79,9 @@ export interface AiConnectorAuthRequestWire {
   expiresAt: string;
   /** Areas already shared when this client is already connected, else null. */
   currentAreas: AiConnectorArea[] | null;
+  /** Members already shared when this client is already connected, else null. */
+  currentMemberIds: string[] | null;
+  members: AiConnectorMemberWire[];
 }
 
 /** POST /api/connect/requests/:reqId/decision */
@@ -65,4 +98,5 @@ export interface AiConnectionWire {
   /** ISO timestamp or null. */
   lastUsedAt: string | null;
   areas: AiConnectorArea[];
+  memberUserIds: string[];
 }

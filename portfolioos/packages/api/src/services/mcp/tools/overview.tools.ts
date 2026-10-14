@@ -3,6 +3,7 @@ import { prisma } from '../../../lib/prisma.js';
 import { getDashboardNetWorth } from '../../dashboard.service.js';
 import type { ConnectorTool } from './types.js';
 import { dmy, hasClientBooks, ownPortfolios } from './common.js';
+import { areaWholeFor, selfPerson } from '../people.js';
 
 /** Alert type -> the area it belongs to. CUSTOM alerts are free text and never shared. */
 const ALERT_AREA: Record<string, AiConnectorArea> = {
@@ -49,7 +50,9 @@ const getOverview: ConnectorTool<Record<string, never>> = {
       netWorth = serializeMoney(toDecimal(d.netWorthAfterLiabilities).minus(toDecimal(d.portfolio.currentValue)).plus(cur));
       inv = { currentValue: serializeMoney(cur), invested: serializeMoney(cost), unrealisedGain: serializeMoney(cur.minus(cost)) };
     }
-    const has = (a: AiConnectorArea) => ctx.areas.includes(a);
+    const person = ctx.person ?? selfPerson(ctx.userId);
+    // A capped family member's totals cannot be filtered, so such areas are left out.
+    const has = (a: AiConnectorArea) => ctx.areas.includes(a) && areaWholeFor(person, a);
     const all = NET_WORTH_AREAS.every(has);
     const data: Record<string, unknown> = {
       asOf: dmy(ctx.now), owner: 'You', currency: 'INR',
@@ -82,10 +85,14 @@ const listPeople: ConnectorTool<Record<string, never>> = {
   name: 'list_people',
   area: 'always',
   title: 'People',
-  description: 'Whose data this chatbot can see.',
+  description: 'Whose data this chatbot can see. Pass a person id as member to other tools, or member "all".',
   input: {},
+  noMember: true,
   async run(ctx) {
-    return { rows: 1, data: { asOf: dmy(ctx.now), people: [{ id: 'me', name: 'You', relation: 'self' }] } };
+    const people = (ctx.people ?? [selfPerson(ctx.userId)]).map((p) => ({
+      id: p.kind === 'self' ? 'me' : p.userId, name: p.label, relation: p.relation, kind: p.kind,
+    }));
+    return { rows: people.length, data: { asOf: dmy(ctx.now), people } };
   },
 };
 

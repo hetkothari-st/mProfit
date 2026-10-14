@@ -53,6 +53,9 @@ model User {
   /// "deactivated account" in ~60 places and would silently drag this into
   /// gates it was never meant to affect.
   isShadowClient        Boolean          @default(false)
+  /// AI Connector: this person lets family members include them in their
+  /// own ChatGPT/Claude connections. Off by default.
+  aiConnectorFamilyOptIn Boolean         @default(false)
   /// Set on a MANAGED family profile: someone without an email or login (a
   /// grandparent, a child) whose finances a family member keeps for them.
   /// Always paired with `isShadowClient = true`, so every sign-in path refuses

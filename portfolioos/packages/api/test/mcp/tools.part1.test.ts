@@ -66,7 +66,7 @@ describe('Part 1 tools', () => {
   });
 
   it('list_people is just you in Part 1', async () => {
-    expect((await call('list_people', a.userId)).people).toEqual([{ id: 'me', name: 'You', relation: 'self' }]);
+    expect((await call('list_people', a.userId)).people).toEqual([{ id: 'me', name: 'You', relation: 'self', kind: 'self' }]);
   });
 
   it('list_holdings and list_portfolios return only own portfolios', async () => {

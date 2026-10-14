@@ -10,6 +10,7 @@ import { inviteTokenHash } from '../../lib/inviteToken.js';
 import { writeAuditLog } from '../../lib/audit.js';
 import { env } from '../../config/env.js';
 import { verifyPkceS256 } from './pkce.js';
+import { listShareablePeople } from './people.js';
 
 /**
  * OAuth 2.1 authorization server for the AI Connector (MCP authorization
@@ -143,20 +144,35 @@ export async function getAuthRequest(reqId: string, userId: string): Promise<AiC
     redirectHost: new URL(r.redirectUri).hostname,
     expiresAt: r.expiresAt.toISOString(),
     currentAreas: existing ? existing.areas.filter(isAiConnectorArea) : null,
+    currentMemberIds: existing ? existing.memberUserIds : null,
+    members: await listShareablePeople(userId),
   };
 }
 
+/** Members on a decision must be people the user may share right now (managed, or opted-in). */
+async function validMemberIds(userId: string, raw: unknown): Promise<string[]> {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw) || !raw.every((x) => typeof x === 'string')) throw new OAuthError(400, 'invalid_request', 'memberIds must be a list of ids');
+  const ids = [...new Set(raw as string[])];
+  if (ids.length === 0) return [];
+  const ok = new Set((await listShareablePeople(userId)).filter((p) => p.shareable).map((p) => p.userId));
+  if (!ids.every((id) => ok.has(id))) throw new OAuthError(400, 'invalid_request', 'One of these people cannot be shared');
+  return ids;
+}
+
 export async function decide(
-  reqId: string, userId: string, input: { approve: boolean; areas: unknown }, req?: Request,
+  reqId: string, userId: string, input: { approve: boolean; areas: unknown; memberIds?: unknown }, req?: Request,
 ): Promise<{ redirectTo: string; isNewConnection: boolean; grantId: string | null; clientName: string }> {
   const { issuer } = mcpConfig();
   const { r, client } = await liveRequest(reqId);
   // Validate before claiming, so a bad payload does not burn the request.
   let areas: AiConnectorArea[] = [];
+  let memberUserIds: string[] = [];
   if (input.approve) {
     const raw = Array.isArray(input.areas) ? input.areas : null;
     if (!raw || !raw.every(isAiConnectorArea)) throw new OAuthError(400, 'invalid_request', 'Unknown sharing area');
     areas = [...new Set(raw)] as AiConnectorArea[];
+    memberUserIds = await validMemberIds(userId, input.memberIds);
   }
   // Claim the request: a double-click or a replayed decision gets 404.
   const claimed = await runAsSystem(() => prisma.mcpAuthRequest.updateMany({ where: { id: reqId, consumedAt: null }, data: { consumedAt: new Date() } }));
@@ -171,8 +187,8 @@ export async function decide(
   const { grantId, isNew } = await runAsUser(userId, () => runInTransaction(async (tx) => {
     const existing = await tx.mcpGrant.findFirst({ where: { userId, clientId: client.id, revokedAt: null } });
     const grant = existing
-      ? await tx.mcpGrant.update({ where: { id: existing.id }, data: { areas } })
-      : await tx.mcpGrant.create({ data: { userId, clientId: client.id, areas } });
+      ? await tx.mcpGrant.update({ where: { id: existing.id }, data: { areas, memberUserIds } })
+      : await tx.mcpGrant.create({ data: { userId, clientId: client.id, areas, memberUserIds } });
     await tx.mcpAuthCode.create({
       data: {
         userId, grantId: grant.id, codeHash: code.hash, codeChallenge: r.codeChallenge, redirectUri: r.redirectUri,
@@ -183,7 +199,7 @@ export async function decide(
   }));
   await writeAuditLog({
     userId, action: isNew ? 'mcp_connected' : 'mcp_sharing_changed', resource: `McpGrant:${grantId}`,
-    metadata: { client: client.displayName, areas }, req,
+    metadata: { client: client.displayName, areas, memberCount: memberUserIds.length }, req,
   });
   return {
     redirectTo: redirectWith(r.redirectUri, { code: code.raw, state: r.state ?? undefined, iss: issuer }),
@@ -274,11 +290,11 @@ export async function revokeToken(raw: string): Promise<void> {
   await writeAuditLog({ userId: tok.userId, action: 'mcp_revoked', resource: `McpGrant:${tok.grantId}`, metadata: { by: 'client' } });
 }
 
-export async function resolveAccessToken(raw: string): Promise<{ grantId: string; userId: string; areas: AiConnectorArea[]; clientName: string } | null> {
+export async function resolveAccessToken(raw: string): Promise<{ grantId: string; userId: string; areas: AiConnectorArea[]; memberUserIds: string[]; clientName: string } | null> {
   if (!raw.startsWith('epa_')) return null;
   const tok = await runAsSystem(() => prisma.mcpToken.findUnique({ where: { tokenHash: sha(raw) }, include: { grant: { include: { client: true } } } }));
   if (!tok || tok.kind !== 'ACCESS' || tok.expiresAt <= new Date() || tok.grant.revokedAt) return null;
-  return { grantId: tok.grantId, userId: tok.userId, areas: tok.grant.areas.filter(isAiConnectorArea), clientName: tok.grant.client.displayName };
+  return { grantId: tok.grantId, userId: tok.userId, areas: tok.grant.areas.filter(isAiConnectorArea), memberUserIds: tok.grant.memberUserIds, clientName: tok.grant.client.displayName };
 }
 
 export async function listConnections(userId: string): Promise<AiConnectionWire[]> {
@@ -291,6 +307,7 @@ export async function listConnections(userId: string): Promise<AiConnectionWire[
     connectedOn: formatDateOnly(g.createdAt.toISOString()),
     lastUsedAt: g.lastUsedAt ? g.lastUsedAt.toISOString() : null,
     areas: g.areas.filter(isAiConnectorArea),
+    memberUserIds: g.memberUserIds,
   }));
 }
 
@@ -316,4 +333,16 @@ export async function purgeExpiredMcpRows(now: Date = new Date()): Promise<{ req
     const clients = await prisma.mcpClient.deleteMany({ where: { registeredAt: { lt: weekAgo }, grants: { none: {} } } });
     return { requests: requests.count, codes: codes.count, tokens: tokens.count, clients: clients.count };
   });
+}
+
+/** Settings: may family members include this user in their own connectors? */
+export async function getFamilyOptIn(userId: string): Promise<boolean> {
+  const u = await runAsUser(userId, () => prisma.user.findUnique({ where: { id: userId }, select: { aiConnectorFamilyOptIn: true } }));
+  return u?.aiConnectorFamilyOptIn ?? false;
+}
+
+export async function setFamilyOptIn(userId: string, optIn: boolean, req?: Request): Promise<boolean> {
+  await runAsUser(userId, () => prisma.user.update({ where: { id: userId }, data: { aiConnectorFamilyOptIn: optIn } }));
+  await writeAuditLog({ userId, action: 'mcp_sharing_changed', resource: `User:${userId}`, metadata: { familyOptIn: optIn }, req });
+  return optIn;
 }

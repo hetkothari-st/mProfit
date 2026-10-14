@@ -4,7 +4,7 @@ import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
 import { AppError, ForbiddenError } from '../lib/errors.js';
 import { mcpEnabledGate } from './mcpOAuth.routes.js';
-import { OAuthError, decide, getAuthRequest, listConnections, revokeConnection } from '../services/mcp/oauth.service.js';
+import { OAuthError, decide, getAuthRequest, getFamilyOptIn, listConnections, revokeConnection, setFamilyOptIn } from '../services/mcp/oauth.service.js';
 import { notifyNewConnection } from '../services/mcp/notice.service.js';
 
 /** Connecting a chatbot is for the signed-in person's own account only (v1). */
@@ -48,8 +48,18 @@ function gateApprove(req: Request, res: Response, next: NextFunction): void {
 }
 
 connectRouter.post('/requests/:reqId/decision', gateApprove, asyncHandler(async (req: Request, res: Response) => {
-  const body = (req.body ?? {}) as { approve?: unknown; areas?: unknown };
-  const r = await decide(req.params.reqId!, req.user!.id, { approve: body.approve === true, areas: body.areas }, req).catch(asApp);
+  const body = (req.body ?? {}) as { approve?: unknown; areas?: unknown; memberIds?: unknown };
+  const r = await decide(req.params.reqId!, req.user!.id, { approve: body.approve === true, areas: body.areas, memberIds: body.memberIds }, req).catch(asApp);
   if (r.isNewConnection && r.grantId) void notifyNewConnection(req.user!.id, r.clientName, r.grantId);
   res.json({ success: true, data: { redirectTo: r.redirectTo } });
+}));
+
+// Ungated: being included in a relative's connector is the relative's plan, not this user's.
+connectRouter.get('/family-opt-in', asyncHandler(async (req: Request, res: Response) => {
+  res.json({ success: true, data: { optIn: await getFamilyOptIn(req.user!.id) } });
+}));
+connectRouter.put('/family-opt-in', asyncHandler(async (req: Request, res: Response) => {
+  const optIn = (req.body as { optIn?: unknown } | undefined)?.optIn;
+  if (typeof optIn !== 'boolean') throw new AppError('optIn must be true or false', 400, 'INVALID_REQUEST');
+  res.json({ success: true, data: { optIn: await setFamilyOptIn(req.user!.id, optIn, req) } });
 }));
