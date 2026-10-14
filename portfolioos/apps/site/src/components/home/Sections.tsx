@@ -7,7 +7,7 @@ import { Screen, type ScreenName } from '../screens/Screens';
 
 /* ---------- Asset classes as a ledger index ---------- */
 export function AssetIndex() {
-  const [sel, setSel] = useState(3);
+  const [sel, setSel] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
   const a = assetFolios[sel];
 
