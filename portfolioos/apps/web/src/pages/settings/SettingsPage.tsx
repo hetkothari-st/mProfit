@@ -161,6 +161,18 @@ export function SettingsPage() {
 
         <DesktopAppSection />
 
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>AI connectors</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Use your own ChatGPT or Claude with your EveryPaisa data.{' '}
+            <Link to="/settings/ai-connectors" className="underline underline-offset-2 hover:text-foreground">
+              Manage AI connectors
+            </Link>
+          </CardContent>
+        </Card>
+
         {user?.role === 'ADMIN' && (
           <Card className="mt-6">
             <CardHeader>
