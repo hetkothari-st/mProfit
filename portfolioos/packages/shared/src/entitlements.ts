@@ -52,6 +52,10 @@ export const FEATURE_MIN_TIER = {
   // Will Maker: a fixed-template will under Indian law from the user's own
   // data (docs/superpowers/specs/2026-10-12-will-maker-design.md).
   WILL_MAKER: 'PLUS',
+  // Documents sorter: drop files, they are read locally (OCR + optional redacted
+  // LLM fallback), filed per person and type, and renamed. PLUS because OCR and
+  // the LLM fallback cost real compute (docs/superpowers/specs/2026-10-14-document-sorter-design.md).
+  DOCUMENT_SORTER: 'PLUS',
   // Legacy Transfer (docs/legacy-transfer): nominees get read-only access on
   // inactivity or a scheduled date. An armed plan keeps running after a lapse
   // (see plan.service) — only *configuring* it needs this flag.

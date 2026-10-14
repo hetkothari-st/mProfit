@@ -24,3 +24,5 @@ export * from './amountInWords.js';
 export * from './will/index.js';
 export * from './legacy.js';
 export * from './aiConnector.js';
+// Documents sorter (docs/superpowers/specs/2026-10-14-document-sorter-design.md).
+export * from './documentSorter.js';

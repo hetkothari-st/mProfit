@@ -32,6 +32,7 @@ import { adminLoanRatesRouter } from './adminLoanRates.routes.js';
 import { foRouter } from './fo.routes.js';
 import { catalogRouter, valuationRouter } from './valuation.routes.js';
 import { documentsRouter } from './documents.routes.js';
+import { documentSorterRouter } from './documentSorter.routes.js';
 import { loansRouter } from './loans.routes.js';
 import { loansGivenRouter } from './loansGiven.routes.js';
 import { splitRouter } from './split.routes.js';
@@ -107,6 +108,7 @@ export function registerRoutes(app: Express): void {
   app.use('/api/catalog', catalogRouter);
   app.use('/api/valuations', valuationRouter);
   app.use('/api/documents', documentsRouter);
+  app.use('/api/documents-sorter', documentSorterRouter);
   app.use('/api/loans', loansRouter);
   app.use('/api/loans-given', loansGivenRouter);
   app.use('/api/split', splitRouter);

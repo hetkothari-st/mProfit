@@ -248,6 +248,7 @@ model User {
 
   @@index([deletionScheduledFor])
   @@index([managedById])
+  documentPersons DocumentPerson[]
 }
 
 model UserNotificationConfig {
@@ -2812,8 +2813,62 @@ model Document {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
+  // Document sorter (docs/superpowers/specs/2026-10-14-document-sorter-design.md).
+  // All nullable: only PERSON_DOCS rows carry them.
+  personId    String?
+  person      DocumentPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
+  docType     SortDocType?
+  docDate     DateTime?       @db.Date
+  contentHash String?
+  sortStatus  SortStatus?
+  sortReason  String?
+
+  @@unique([userId, contentHash])
   @@index([userId, ownerType, ownerId])
   @@index([userId, createdAt])
+  @@index([userId, personId, docType])
+}
+
+enum SortDocType {
+  ITR
+  FORM_16
+  INCOME_CERTIFICATE
+  BANK_STATEMENT
+  SALARY_SLIP
+  CAS
+  CONTRACT_NOTE
+  INSURANCE
+  FD_CERTIFICATE
+  ID_PROOF
+  OTHER
+}
+
+enum SortStatus {
+  PROCESSING
+  FILED
+  NEEDS_REVIEW
+  NEEDS_PASSWORD
+  FAILED
+}
+
+/// A folder owner in the Documents sorter: a person named on uploaded
+/// documents. Auto-created from the name found on a document; optionally
+/// linked to a family/managed-profile User.
+model DocumentPerson {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName  String
+  nameKey      String
+  panLast4     String?
+  linkedUserId String?
+  /// Keys of names merged into, or renamed away from, this folder: they route here too.
+  aliasKeys    String[]   @default([])
+  autoCreated  Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  documents    Document[]
+
+  @@unique([userId, nameKey])
 }
 
 /// The bytes of a vault document, keyed by Document.storageKey. Kept out of
@@ -2842,6 +2897,7 @@ enum DocumentOwnerType {
   OWNED_PROPERTY
   LOAN_GIVEN
   WILL
+  PERSON_DOCS
   OTHER
 }
 

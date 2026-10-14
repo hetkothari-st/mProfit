@@ -54,3 +54,6 @@ rc_details.js
 scratch.html
 scratch/
 scratch_*.json
+
+# tesseract.js downloads language data into the working directory
+*.traineddata

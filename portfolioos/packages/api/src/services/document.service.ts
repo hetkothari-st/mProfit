@@ -105,6 +105,9 @@ async function assertOwnerAccessible(
       if (!row) throw new ForbiddenError('Will not owned by user');
       return;
     }
+    case 'PERSON_DOCS':
+      // sorter folders are per-user rows; Document.userId is the guard
+      return;
     case 'OTHER':
       // free-form; userId on Document is the only guard
       return;

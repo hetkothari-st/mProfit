@@ -119,6 +119,8 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'Document',
   // Vault file bytes (20261006170000_document_blob) — same owner policy.
   'DocumentBlob',
+  // Documents sorter folders (20261014150000_document_sorter) — owner-only policy.
+  'DocumentPerson',
   'UserDataKey',
   'TwoFactorBackupCode',
   'MfaChallenge',
