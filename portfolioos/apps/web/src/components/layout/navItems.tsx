@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
+  Bot,
   LayoutDashboard,
   Briefcase,
   TrendingUp,
@@ -94,6 +95,7 @@ export const PLANNING_ITEMS: NavItem[] = [
   { label: 'Goals', to: '/goals', icon: Target },
   { label: 'Will Maker', to: '/will', icon: ScrollText },
   { label: 'Tax Planning', to: '/tax', icon: Calculator },
+  { label: 'AI connectors', to: '/settings/ai-connectors', icon: Bot },
 ];
 
 export const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
