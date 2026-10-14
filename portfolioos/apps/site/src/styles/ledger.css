@@ -147,3 +147,71 @@
   .ruled .hand { font-size: 16px; }
   .cf-foot span:first-child { display: none; }
 }
+
+/* ---------- open spread: paper, not screens ----------
+   On the dark site the spread read as two app panels. Now both sides are
+   paper: a printed bookplate on a cream endpaper, and each app screen
+   pasted onto a ruled page like a print, taped in and captioned by hand. */
+:root { --board: #1c1d19; --cream: #f4f1e4; --olive: #5f7400; }
+.back-cover .face.board, .cover .face.back.board { box-shadow: 0 0 0 1px rgba(255, 255, 255, .1), 0 60px 90px -30px rgba(0, 0, 0, .95), 0 0 120px -20px rgba(226, 254, 83, .2); }
+
+.cover .face.back .endpaper {
+  background:
+    repeating-linear-gradient(45deg, rgba(95, 116, 0, .07) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(-45deg, rgba(95, 116, 0, .07) 0 1px, transparent 1px 9px),
+    var(--cream);
+  color: #15170f;
+  box-shadow: inset -14px 0 22px -12px rgba(0, 0, 0, .45);
+}
+.bookplate {
+  background: #fbfaf3; border: 1.5px solid #15170f; border-radius: 6px;
+  box-shadow: inset 0 0 0 4px #fbfaf3, inset 0 0 0 5px rgba(21, 23, 15, .45), 0 1px 0 rgba(0, 0, 0, .06);
+  text-align: center;
+}
+.bookplate .bp-k { color: var(--olive); }
+.bookplate .bp-name {
+  font-family: var(--f-app-display); font-style: italic; font-weight: 500; color: var(--olive);
+  font-size: calc(var(--pw) * .075); line-height: 1.1; margin-top: 6px; padding-bottom: 4px;
+  border-bottom: 1px dotted rgba(21, 23, 15, .45);
+}
+.bookplate p { color: #15170f; font-size: calc(var(--pw) * .048); }
+.bookplate p em { color: var(--olive); }
+.bookplate small { color: #5d6050; }
+
+.leaf .face.front.paper-page {
+  display: block; padding: 0;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 27px, rgba(20, 20, 20, .07) 27px 28px),
+    var(--page);
+}
+.pasted {
+  position: absolute; left: 11%; right: 8%; top: 8%; height: 70%; margin: 0;
+  background: #fff; padding: 6px; border-radius: 3px;
+  transform: rotate(-1.2deg);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, .18), 0 14px 24px -14px rgba(0, 0, 0, .6);
+}
+[data-leaf="2"] .pasted { transform: rotate(1deg); }
+[data-leaf="3"] .pasted { transform: rotate(-.5deg); }
+.pasted .scr { border-radius: 2px; }
+.pasted::before { /* the print fades out instead of cutting a row in half */
+  content: ""; position: absolute; left: 6px; right: 6px; bottom: 6px; height: 36%;
+  background: linear-gradient(rgba(13, 13, 13, 0), #0d0d0d 62%); border-radius: 0 0 2px 2px; pointer-events: none;
+}
+.pasted::after { /* tape */
+  content: ""; position: absolute; top: -9px; left: 33%; width: 34%; height: 20px;
+  background: rgba(226, 254, 83, .72);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .15);
+  transform: rotate(-2deg);
+  clip-path: polygon(2% 0, 98% 6%, 100% 100%, 0 94%);
+}
+.pasted-cap {
+  position: absolute; left: 13%; right: 8%; top: 82%; margin: 0;
+  font-family: var(--f-app-display); font-style: italic; font-weight: 500;
+  color: var(--olive); font-size: calc(var(--pw) * .052); line-height: 1.2;
+}
+.paper-page .folio { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 12px; color: #8a8a74; }
+@media (max-width: 560px) {
+  .pasted { padding: 4px; }
+  .pasted::after { height: 14px; top: -6px; }
+  .paper-page .folio { bottom: 8px; font-size: 10px; }
+}

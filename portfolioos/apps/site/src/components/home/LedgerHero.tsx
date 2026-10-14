@@ -131,20 +131,32 @@ export function LedgerHero() {
                   <div className="ribbon" />
 
                   <div className="leaf" data-leaf="3">
-                    <div className="face front"><Screen name="tax" /></div>
+                    <div className="face front paper-page">
+                      <figure className="pasted"><Screen name="tax" /></figure>
+                      <p className="pasted-cap">Tax, worked out lot by lot</p>
+                      <span className="folio">f. 5</span>
+                    </div>
                     <div className="face back ruled" />
                   </div>
                   <div className="leaf" data-leaf="2">
-                    <div className="face front"><Screen name="review" /></div>
+                    <div className="face front paper-page">
+                      <figure className="pasted"><Screen name="review" /></figure>
+                      <p className="pasted-cap">Alerts, waiting for a nod</p>
+                      <span className="folio">f. 3</span>
+                    </div>
                     <div className="face back ruled">
                       <h4>And at year end, the CA is happy.</h4>
                       <p>Capital gains by FIFO, grandfathering, Schedule 112A and thirty-odd reports, ready before the ITR deadline.</p>
                       <p className="hand">Cr. ₹2,86,910 ✓</p>
-                      <span className="folio">f. 3</span>
+                      <span className="folio">f. 4</span>
                     </div>
                   </div>
                   <div className="leaf" data-leaf="1">
-                    <div className="face front"><Screen name="dashboard" /></div>
+                    <div className="face front paper-page">
+                      <figure className="pasted"><Screen name="dashboard" /></figure>
+                      <p className="pasted-cap">Net worth, on page one</p>
+                      <span className="folio">f. 1</span>
+                    </div>
                     <div className="face back ruled">
                       <h4>Then it files itself.</h4>
                       <p>Bank SMS, broker contract notes, SIP debits, FD interest. Each one is read, sorted and laid out for you to approve.</p>
@@ -173,6 +185,7 @@ export function LedgerHero() {
                       <div className="endpaper">
                         <div className="bookplate">
                           <div className="bp-k">This ledger belongs to</div>
+                          <div className="bp-name">The family</div>
                           <p>One page for everything the family owns, owes and is <em>owed.</em></p>
                           <small>Net worth, today, in one number.</small>
                         </div>

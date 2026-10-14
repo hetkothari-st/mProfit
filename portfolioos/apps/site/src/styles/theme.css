@@ -90,7 +90,8 @@ body::before {
 .hero-caption { color: var(--ink-3); }
 
 /* ---------- sections ---------- */
-.scatter, .chapters { background: var(--paper-2); }
+.scatter { background: linear-gradient(var(--paper), var(--paper-2) 260px); }
+.chapters { background: var(--paper-2); }
 .scatter-foot div { border-top-color: var(--rule-strong); }
 .steps li.active::before { color: var(--lime); }
 .film-frame { background: #050604; box-shadow: 0 0 0 1px rgba(241, 240, 230, .08), 0 40px 80px -40px rgba(0, 0, 0, .9); }
