@@ -113,6 +113,10 @@ export function areaAllowedFor(person: Person, area: AiConnectorArea | 'always')
 /** Can a whole-area total be shown (no per-row filtering possible)? */
 export function areaWholeFor(person: Person, area: AiConnectorArea): boolean {
   if (person.kind !== 'member') return true;
-  if (AREA_CATEGORY[area] === 'ASSET_CLASSES') return person.caps.assetClasses === null;
-  return areaAllowedFor(person, area);
+  const gate = AREA_CATEGORY[area];
+  if (gate === null) return false;
+  if (gate === 'ASSET_CLASSES') return person.caps.assetClasses === null;
+  // A total mixes every category of the area, so each one must be visible.
+  const cats = person.caps.categories;
+  return cats === null || gate.every((c) => cats.includes(c));
 }

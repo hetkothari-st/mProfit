@@ -6,7 +6,7 @@ import { createTestScope, type TestScope } from '../helpers/db.js';
 import { createTransaction } from '../../src/services/transaction.service.js';
 import { listShareablePeople } from '../../src/services/mcp/people.js';
 import { runConnectorTool } from '../../src/services/mcp/server.js';
-import { decide, registerClient, startAuthorization } from '../../src/services/mcp/oauth.service.js';
+import { decide, registerClient, startAuthorization, updateConnection } from '../../src/services/mcp/oauth.service.js';
 import { CONNECTOR_TOOLS } from '../../src/services/mcp/tools/index.js';
 import type { AiConnectorArea } from '@everypaisa/shared';
 
@@ -104,6 +104,42 @@ describe('family people', () => {
     const h = await call('list_holdings', { member: b.userId }, [b.userId]);
     expect((h.data.holdings as Array<{ assetClass: string }>).map((x) => x.assetClass)).toEqual(['FIXED_DEPOSIT']);
     await expect(call('get_performance', { member: b.userId }, [b.userId])).rejects.toThrow(/has not shared/);
+  });
+
+  it('overview totals need every category of an area (cards hidden when only bank accounts are shared)', async () => {
+    await runAsSystem(async () => {
+      await prisma.user.update({ where: { id: b.userId }, data: { aiConnectorFamilyOptIn: true } });
+      await prisma.familyMember.updateMany({ where: { familyId: f2, userId: a.userId }, data: { visibleCategories: ['BANK_ACCOUNT', 'RENTAL'] } });
+    });
+    try {
+      const ov = await call('get_overview', { member: b.userId }, [b.userId], ['banking', 'property']);
+      expect(ov.data).not.toHaveProperty('creditCards');
+      expect(ov.data).not.toHaveProperty('property');
+    } finally {
+      await runAsSystem(() => prisma.familyMember.updateMany({ where: { familyId: f2, userId: a.userId }, data: { visibleCategories: [] } }));
+    }
+  });
+
+  it('filtered results say rows were hidden', async () => {
+    await runAsSystem(() => prisma.user.update({ where: { id: b.userId }, data: { aiConnectorFamilyOptIn: true } }));
+    const h = await call('list_holdings', { member: b.userId }, [b.userId]);
+    expect(String(h.data.note)).toMatch(/hidden/i);
+  });
+
+  it('a member who opted out does not block saving the connection', async () => {
+    const client = await runAsSystem(() => prisma.mcpClient.create({ data: { clientId: `mcp_stale_${Date.now()}`, redirectUris: [], displayName: 'Claude' } }));
+    try {
+      const g = await runAsUser(a.userId, () => prisma.mcpGrant.create({ data: { userId: a.userId, clientId: client.id, areas: ['investments', 'loans'], memberUserIds: [b.userId] } }));
+      await runAsSystem(() => prisma.user.update({ where: { id: b.userId }, data: { aiConnectorFamilyOptIn: false } }));
+      const conn = await runAsUser(a.userId, () => updateConnection(a.userId, g.id, { areas: ['investments'], memberUserIds: [b.userId] }));
+      expect(conn.areas).toEqual(['investments']);
+      expect(conn.memberUserIds).toEqual([]);
+    } finally {
+      await runAsSystem(async () => {
+        await prisma.mcpGrant.deleteMany({ where: { clientId: client.id } });
+        await prisma.mcpClient.delete({ where: { id: client.id } });
+      });
+    }
   });
 
   it('opt-out takes effect next call', async () => {

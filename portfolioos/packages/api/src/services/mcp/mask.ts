@@ -14,6 +14,8 @@ const PAN_RE = /\b[A-Za-z]{5}\d{4}[A-Za-z]\b/g;
 // Digit groups joined by single spaces or hyphens (phones, cards, accounts).
 // Commas, dots and slashes break a group, so Indian amounts and dates survive.
 const DIGIT_GROUPS = /(?<![\d.,/])\d(?:[ -]?\d){8,}(?![\d.,/])/g;
+// Indian vehicle plates: MH47BT5950, MH 12 AB 1234, DL3CAF0001.
+const PLATE_RE = /\b[A-Z]{2}[ -]?\d{1,2}[ -]?[A-Z]{0,3}[ -]?\d{4}\b/gi;
 const EMAIL_OR_UPI = /[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)/g;
 const AADHAAR_RE = /\b\d{4}\s\d{4}\s\d{4}\b/g;
 
@@ -33,6 +35,7 @@ function maskText(s: string): string {
   return redactText(grouped)
     .replace(EMAIL_OR_UPI, (_m, domain: string) => `XXXX@${domain}`)
     .replace(PAN_RE, (m) => last4(m)!)
+    .replace(PLATE_RE, (m) => last4(m.replace(/[ -]/g, ''))!)
     .replace(AADHAAR_RE, (m) => last4(m)!)
     .replace(LONG_DIGITS, (m) => last4(m)!);
 }

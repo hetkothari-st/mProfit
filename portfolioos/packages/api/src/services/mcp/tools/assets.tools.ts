@@ -30,7 +30,7 @@ const listInsurance: ConnectorTool<Record<string, never>> = {
 };
 
 const listPropertiesTool: ConnectorTool<Record<string, never>> = {
-  name: 'list_properties', area: 'property', title: 'Property',
+  name: 'list_properties', area: 'property', partialCaps: true, title: 'Property',
   description: 'Homes, land and rentals: value, ownership share, tenants, rent received or overdue, and expenses this financial year.', input: {},
   async run(ctx) {
     const cats = ctx.person?.kind === 'member' ? ctx.person.caps.categories : null;
@@ -52,6 +52,7 @@ const listPropertiesTool: ConnectorTool<Record<string, never>> = {
       rows: owned.length + rentals.length,
       data: {
         asOf: dmy(ctx.now), currency: 'INR', financialYear: fy,
+        ...(seeOwned && seeRental ? {} : { note: `${seeOwned ? 'Rental properties are' : 'Owned properties are'} hidden by ${ctx.person?.label ?? 'this person'}'s family sharing settings, so this list is not complete.` }),
         owned: owned.map((p) => ({
           name: p.name, city: p.city ?? null, type: p.propertyType, status: p.status, ownership: p.ownershipType, ownershipPct: p.ownershipPercent ?? null,
           purchaseDate: dmy(p.purchaseDate), purchasePrice: p.purchasePrice, currentValue: p.currentValue, annualPropertyTax: p.annualPropertyTax ?? null,

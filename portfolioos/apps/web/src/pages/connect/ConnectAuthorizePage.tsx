@@ -35,7 +35,11 @@ export function ConnectAuthorizePage() {
   }, [picked, request.data]);
   const [pickedMembers, setPickedMembers] = useState<Set<string> | null>(null);
   // Family members start off; a reconnect keeps whoever was shared before.
-  const memberIds = useMemo(() => pickedMembers ?? new Set(request.data?.currentMemberIds ?? []), [pickedMembers, request.data]);
+  const memberIds = useMemo(() => {
+    if (pickedMembers) return pickedMembers;
+    const ok = new Set((request.data?.members ?? []).filter((m) => m.shareable).map((m) => m.userId));
+    return new Set((request.data?.currentMemberIds ?? []).filter((id) => ok.has(id)));
+  }, [pickedMembers, request.data]);
   const decide = useMutation({
     mutationFn: (approve: boolean) => connectApi.decide(
       reqId, approve,

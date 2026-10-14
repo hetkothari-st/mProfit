@@ -150,14 +150,17 @@ export async function getAuthRequest(reqId: string, userId: string): Promise<AiC
 }
 
 /** Members on a decision must be people the user may share right now (managed, or opted-in). */
-async function validMemberIds(userId: string, raw: unknown): Promise<string[]> {
+async function validMemberIds(userId: string, raw: unknown, previously: readonly string[] = []): Promise<string[]> {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw) || !raw.every((x) => typeof x === 'string')) throw new OAuthError(400, 'invalid_request', 'memberIds must be a list of ids');
   const ids = [...new Set(raw as string[])];
   if (ids.length === 0) return [];
   const ok = new Set((await listShareablePeople(userId)).filter((p) => p.shareable).map((p) => p.userId));
-  if (!ids.every((id) => ok.has(id))) throw new OAuthError(400, 'invalid_request', 'One of these people cannot be shared');
-  return ids;
+  // Someone already on the connection who has since opted out or left is
+  // dropped quietly: the owner cannot untick them, and refusing would block
+  // narrowing (a privacy action). Adding someone new who cannot be shared is refused.
+  if (ids.some((id) => !ok.has(id) && !previously.includes(id))) throw new OAuthError(400, 'invalid_request', 'One of these people cannot be shared');
+  return ids.filter((id) => ok.has(id));
 }
 
 export async function decide(
@@ -172,7 +175,8 @@ export async function decide(
     const raw = Array.isArray(input.areas) ? input.areas : null;
     if (!raw || !raw.every(isAiConnectorArea)) throw new OAuthError(400, 'invalid_request', 'Unknown sharing area');
     areas = [...new Set(raw)] as AiConnectorArea[];
-    memberUserIds = await validMemberIds(userId, input.memberIds);
+    const prior = await runAsUser(userId, () => prisma.mcpGrant.findFirst({ where: { userId, clientId: client.id, revokedAt: null }, select: { memberUserIds: true } }));
+    memberUserIds = await validMemberIds(userId, input.memberIds, prior?.memberUserIds ?? []);
   }
   // Claim the request: a double-click or a replayed decision gets 404.
   const claimed = await runAsSystem(() => prisma.mcpAuthRequest.updateMany({ where: { id: reqId, consumedAt: null }, data: { consumedAt: new Date() } }));
@@ -354,7 +358,9 @@ export async function updateConnection(
   const raw = Array.isArray(input.areas) ? input.areas : null;
   if (!raw || !raw.every(isAiConnectorArea)) throw new OAuthError(400, 'invalid_request', 'Unknown sharing area');
   const areas = [...new Set(raw)] as AiConnectorArea[];
-  const memberUserIds = await validMemberIds(userId, input.memberUserIds);
+  const prior = await runAsUser(userId, () => prisma.mcpGrant.findFirst({ where: { id: grantId, userId, revokedAt: null }, select: { memberUserIds: true } }));
+  if (!prior) throw new OAuthError(404, 'not_found', 'Connection not found');
+  const memberUserIds = await validMemberIds(userId, input.memberUserIds, prior.memberUserIds);
   const done = await runAsUser(userId, () => prisma.mcpGrant.updateMany({
     where: { id: grantId, userId, revokedAt: null }, data: { areas, memberUserIds },
   }));

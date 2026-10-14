@@ -46,4 +46,10 @@ describe('maskForChatbot', () => {
     const v = { t: 'Paid 1,00,000.00 on 10/04/2026 and 2,40,000 later' };
     expect(maskForChatbot(v)).toEqual(v);
   });
+  it('masks Indian vehicle registration plates in free text', () => {
+    const out = maskForChatbot({ t: 'Maruti Swift (MH47BT5950) and MH 12 AB 1234 and DL3CAF0001' });
+    expect(out.t).not.toMatch(/MH47BT|MH 12 AB|DL3CAF/);
+    expect(out.t).toContain('5950');
+    expect(out.t).toContain('Maruti Swift');
+  });
 });

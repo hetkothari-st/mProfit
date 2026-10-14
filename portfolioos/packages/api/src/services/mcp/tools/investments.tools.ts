@@ -9,6 +9,10 @@ import { dmy, hasClientBooks, ownPortfolios, parseDateArg, pct } from './common.
 
 const NOT_YOURS = 'That portfolio id is not one of yours. Call list_portfolios for valid ids.';
 
+function hiddenNote(label: string | undefined): string {
+  return `Some asset classes are hidden by ${label ?? 'this person'}'s family sharing settings, so this list is not complete.`;
+}
+
 async function scopeFor(userId: string, portfolioId?: string): Promise<{ scope: AnalyticsScope; ids: string[] }> {
   const own = await ownPortfolios(userId);
   if (portfolioId) {
@@ -64,7 +68,10 @@ const listHoldings: ConnectorTool<typeof holdingsInput> = {
     }
     return {
       rows: Math.min(rows.length, MAX_ROWS),
-      data: { asOf: dmy(ctx.now), owner: 'You', currency: 'INR', holdings: rows.slice(0, MAX_ROWS), truncated: rows.length > MAX_ROWS },
+      data: {
+        asOf: dmy(ctx.now), owner: 'You', currency: 'INR', holdings: rows.slice(0, MAX_ROWS), truncated: rows.length > MAX_ROWS,
+        ...(capped ? { note: hiddenNote(ctx.person?.label) } : {}),
+      },
     };
   },
 };
@@ -97,7 +104,10 @@ const listTransactionsTool: ConnectorTool<typeof txInput> = {
     return {
       rows: items.length,
       data: {
-        asOf: dmy(ctx.now), owner: 'You', currency: 'INR', page, totalPages: r.pagination.totalPages,
+        asOf: dmy(ctx.now), owner: 'You', currency: 'INR', page,
+        // Rows are filtered after paging for a capped member, so page counts would mislead.
+        totalPages: capped ? null : r.pagination.totalPages,
+        ...(capped ? { note: hiddenNote(ctx.person?.label) } : {}),
         transactions: items.map((t) => ({
           date: dmy(t.tradeDate), portfolio: nameOf.get(t.portfolioId), assetClass: t.assetClass, type: t.transactionType,
           name: t.assetName, symbol: t.symbol, quantity: t.quantity, price: t.price, netAmount: t.netAmount,
