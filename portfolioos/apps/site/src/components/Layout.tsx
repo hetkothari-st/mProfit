@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { appLinks } from '../lib/config';
 import { metaFor } from '../lib/meta';
-import { ScrollTrigger } from '../lib/gsap';
+import { ScrollTrigger, useIsoLayoutEffect } from '../lib/gsap';
 
 const NAV: { to: string; label: string }[] = [
   { to: '/#how', label: 'How it works' },
@@ -107,25 +107,41 @@ function Footer() {
 
 /** Scroll to top or to #hash on navigation, keep <title> and description in sync. */
 function RouteEffects() {
-  const { pathname, hash } = useLocation();
+  const { pathname, hash, key } = useLocation();
   useEffect(() => {
     const meta = metaFor(pathname);
     document.title = meta.title;
     document.querySelector('meta[name="description"]')?.setAttribute('content', meta.description);
   }, [pathname]);
 
-  useEffect(() => {
-    if (!hash) {
+  // Every page opens at its top: on links, on Back/Forward and on reload.
+  // The browser's own restoration would drop you mid-page, and on the home
+  // page that lands inside a pinned scroll scene. Only a link that names a
+  // section (/#how, /features#reports) scrolls somewhere else.
+  useIsoLayoutEffect(() => {
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  }, []);
+
+  useIsoLayoutEffect(() => {
+    if (hash) return;
+    window.scrollTo(0, 0);
+    // pin spacers are added after mount; settle them, then pin to the top again
+    const id = window.requestAnimationFrame(() => {
+      ScrollTrigger.refresh();
       window.scrollTo(0, 0);
-      return;
-    }
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [pathname, hash, key]);
+
+  useEffect(() => {
+    if (!hash) return;
     // wait a frame so the page's sections (and any pin spacers) exist
     const id = window.setTimeout(() => {
       ScrollTrigger.refresh();
       document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
     }, 60);
     return () => window.clearTimeout(id);
-  }, [pathname, hash]);
+  }, [pathname, hash, key]);
   return null;
 }
 
