@@ -281,7 +281,7 @@ describe('the access window', () => {
 
     // And the service says why, rather than showing an empty page.
     await expect(runAsVerified(ca.userId, () => getCaScope(ca.userId, g.id))).rejects.toThrow(
-      /ended on 2020-01-01/,
+      /ended on 01\/01\/2020/,
     );
   });
 
