@@ -95,6 +95,7 @@ export const OVERVIEW_ITEMS: NavItem[] = [
 export const PLANNING_ITEMS: NavItem[] = [
   { label: 'Goals', to: '/goals', icon: Target },
   { label: 'Will Maker', to: '/will', icon: ScrollText },
+  { label: 'Succession', to: '/legacy', icon: HeartHandshake },
   { label: 'Tax Planning', to: '/tax', icon: Calculator },
   { label: 'AI connectors', to: '/settings/ai-connectors', icon: Bot },
 ];
@@ -118,7 +119,6 @@ export const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Split Expenses', to: '/split', icon: UsersRound },
       { label: 'EMI Calculator', to: '/emi', icon: Percent },
       { label: 'Documents', to: '/documents', icon: FolderTree },
-      { label: 'Succession', to: '/legacy', icon: HeartHandshake },
       { label: 'Alerts', to: '/alerts', icon: BellRing },
       // Hidden for now — page still reachable at /import/failures.
       // { label: 'Failures (DLQ)', to: '/import/failures', icon: Bug },

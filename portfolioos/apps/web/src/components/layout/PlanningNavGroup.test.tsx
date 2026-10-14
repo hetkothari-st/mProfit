@@ -22,11 +22,11 @@ afterEach(() => {
 });
 
 describe('PlanningNavGroup', () => {
-  it('is open by default with Goals, Will Maker, Tax Planning and AI connectors', () => {
+  it('is open by default with Goals, Will Maker, Succession, Tax Planning and AI connectors', () => {
     const { container } = renderGroup();
     const header = screen.getByRole('button', { name: 'Planning' });
     expect(header.getAttribute('aria-expanded')).toBe('true');
-    expect(hrefs(container)).toEqual(['/goals', '/will', '/tax', '/settings/ai-connectors']);
+    expect(hrefs(container)).toEqual(['/goals', '/will', '/legacy', '/tax', '/settings/ai-connectors']);
     expect(screen.getByText('Tax Planning')).toBeTruthy();
   });
 
@@ -41,7 +41,7 @@ describe('PlanningNavGroup', () => {
     expect(screen.getByRole('button', { name: 'Planning' }).getAttribute('aria-expanded')).toBe('false');
     expect(hrefs(second.container)).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: 'Planning' }));
-    expect(hrefs(second.container)).toEqual(['/goals', '/will', '/tax', '/settings/ai-connectors']);
+    expect(hrefs(second.container)).toEqual(['/goals', '/will', '/legacy', '/tax', '/settings/ai-connectors']);
     expect(localStorage.getItem(PLANNING_OPEN_KEY)).toBe('1');
   });
 
@@ -65,12 +65,12 @@ describe('PlanningNavGroup', () => {
     expect(screen.queryByTestId('planning-active-dot')).toBeNull();
   });
 
-  it('the icon rail shows the four items flat, with no header', () => {
+  it('the icon rail shows the five items flat, with no header', () => {
     localStorage.setItem(PLANNING_OPEN_KEY, '0');
     const { container } = renderGroup(true);
     expect(screen.queryByRole('button', { name: 'Planning' })).toBeNull();
-    expect(hrefs(container)).toEqual(['/goals', '/will', '/tax', '/settings/ai-connectors']);
-    expect([...container.querySelectorAll('a')].map((a) => a.getAttribute('title'))).toEqual(['Goals', 'Will Maker', 'Tax Planning', 'AI connectors']);
+    expect(hrefs(container)).toEqual(['/goals', '/will', '/legacy', '/tax', '/settings/ai-connectors']);
+    expect([...container.querySelectorAll('a')].map((a) => a.getAttribute('title'))).toEqual(['Goals', 'Will Maker', 'Succession', 'Tax Planning', 'AI connectors']);
   });
 
   it('works when storage is blocked', () => {
@@ -81,7 +81,7 @@ describe('PlanningNavGroup', () => {
       throw new Error('blocked');
     });
     const { container } = renderGroup();
-    expect(hrefs(container)).toEqual(['/goals', '/will', '/tax', '/settings/ai-connectors']);
+    expect(hrefs(container)).toEqual(['/goals', '/will', '/legacy', '/tax', '/settings/ai-connectors']);
     fireEvent.click(screen.getByRole('button', { name: 'Planning' }));
     expect(hrefs(container)).toEqual([]);
   });
