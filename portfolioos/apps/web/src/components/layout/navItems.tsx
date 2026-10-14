@@ -41,6 +41,7 @@ import {
   ShieldCheck,
   Compass,
   Percent,
+  FolderTree,
   ScrollText,
   HeartHandshake,
 } from 'lucide-react';
@@ -114,6 +115,7 @@ export const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Accounting', to: '/accounting', icon: BookOpenCheck },
       { label: 'Split Expenses', to: '/split', icon: UsersRound },
       { label: 'EMI Calculator', to: '/emi', icon: Percent },
+      { label: 'Documents', to: '/documents', icon: FolderTree },
       { label: 'Succession', to: '/legacy', icon: HeartHandshake },
       { label: 'Alerts', to: '/alerts', icon: BellRing },
       // Hidden for now — page still reachable at /import/failures.
