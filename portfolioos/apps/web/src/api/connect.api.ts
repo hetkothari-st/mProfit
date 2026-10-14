@@ -1,4 +1,6 @@
-import type { AiConnectionWire, AiConnectorArea, AiConnectorAuthRequestWire, AiConnectorDecisionResultWire, ApiResponse } from '@everypaisa/shared';
+import type {
+  AiConnectionActivityWire, AiConnectionWire, AiConnectorArea, AiConnectorAuthRequestWire, AiConnectorDecisionResultWire, AiConnectorMemberWire, ApiResponse,
+} from '@everypaisa/shared';
 import { api, unwrap } from './client';
 
 const BASE = '/api/connect';
@@ -19,6 +21,18 @@ export const connectApi = {
   },
   async revoke(id: string): Promise<void> {
     await api.delete(`${BASE}/connections/${encodeURIComponent(id)}`);
+  },
+  async update(id: string, areas: AiConnectorArea[], memberUserIds: string[]): Promise<AiConnectionWire> {
+    const { data } = await api.patch<ApiResponse<AiConnectionWire>>(`${BASE}/connections/${encodeURIComponent(id)}`, { areas, memberUserIds });
+    return unwrap(data);
+  },
+  async activity(id: string): Promise<AiConnectionActivityWire[]> {
+    const { data } = await api.get<ApiResponse<AiConnectionActivityWire[]>>(`${BASE}/connections/${encodeURIComponent(id)}/activity`);
+    return unwrap(data);
+  },
+  async people(): Promise<AiConnectorMemberWire[]> {
+    const { data } = await api.get<ApiResponse<AiConnectorMemberWire[]>>(`${BASE}/people`);
+    return unwrap(data);
   },
   async getFamilyOptIn(): Promise<boolean> {
     const { data } = await api.get<ApiResponse<{ optIn: boolean }>>(`${BASE}/family-opt-in`);

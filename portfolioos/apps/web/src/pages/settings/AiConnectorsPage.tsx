@@ -13,6 +13,7 @@ import { apiErrorMessage } from '@/api/client';
 import { connectApi } from '@/api/connect.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { SETUP, connectorUrl, type ConnectorApp } from './aiConnectorSetup';
+import { EditSharingDialog, RecentActivity } from './AiConnectionExtras';
 
 /** Settings > AI connectors: connect ChatGPT/Claude, see and revoke connections. */
 export function AiConnectorsPage() {
@@ -22,6 +23,7 @@ export function AiConnectorsPage() {
   const list = useQuery({ queryKey: ['connect', 'connections'], queryFn: connectApi.connections });
   const [guide, setGuide] = useState<ConnectorApp | null>(null);
   const [toRevoke, setToRevoke] = useState<AiConnectionWire | null>(null);
+  const [editing, setEditing] = useState<AiConnectionWire | null>(null);
   const optIn = useQuery({ queryKey: ['connect', 'family-opt-in'], queryFn: connectApi.getFamilyOptIn });
   const setOptIn = useMutation({
     mutationFn: (v: boolean) => connectApi.setFamilyOptIn(v),
@@ -98,12 +100,17 @@ export function AiConnectorsPage() {
                   Connected {c.connectedOn} - {c.lastUsedAt ? `last used ${formatDateIST(c.lastUsedAt)}` : 'Not used yet'}
                 </p>
               </div>
-              <Button size="sm" variant="outline" onClick={() => setToRevoke(c)}>Revoke</Button>
+              <div className="flex flex-wrap gap-2">
+                {allowed && <Button size="sm" variant="outline" onClick={() => setEditing(c)}>Edit sharing</Button>}
+                <Button size="sm" variant="outline" onClick={() => setToRevoke(c)}>Revoke</Button>
+              </div>
             </div>
             <div className="flex flex-wrap gap-1">
               {c.areas.length === 0 && <span className="text-xs text-muted-foreground">Overview only</span>}
               {c.areas.map((a) => <Badge key={a} variant="secondary">{AI_CONNECTOR_AREA_INFO[a].label}</Badge>)}
+              {c.memberUserIds.length > 0 && <Badge variant="outline">+{c.memberUserIds.length} family</Badge>}
             </div>
+            <RecentActivity connId={c.id} />
           </Card>
         ))}
       </section>
@@ -123,6 +130,7 @@ export function AiConnectorsPage() {
           </span>
         </label>
       </Card>
+      {editing && <EditSharingDialog key={editing.id} conn={editing} open onOpenChange={(o) => { if (!o) setEditing(null); }} />}
       <ConfirmDialog
         open={toRevoke !== null}
         onOpenChange={(o) => { if (!o) setToRevoke(null); }}

@@ -100,3 +100,14 @@ export interface AiConnectionWire {
   areas: AiConnectorArea[];
   memberUserIds: string[];
 }
+
+/** GET /api/connect/connections/:id/activity - the chatbot's last 20 lookups. */
+export interface AiConnectionActivityWire {
+  tool: string;
+  area: string;
+  people: number;
+  rows: number;
+  ok: boolean;
+  /** ISO timestamp. */
+  at: string;
+}

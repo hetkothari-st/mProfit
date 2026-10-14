@@ -4,8 +4,11 @@ import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
 import { AppError, ForbiddenError } from '../lib/errors.js';
 import { mcpEnabledGate } from './mcpOAuth.routes.js';
-import { OAuthError, decide, getAuthRequest, getFamilyOptIn, listConnections, revokeConnection, setFamilyOptIn } from '../services/mcp/oauth.service.js';
+import {
+  OAuthError, connectionActivity, decide, getAuthRequest, getFamilyOptIn, listConnections, revokeConnection, setFamilyOptIn, updateConnection,
+} from '../services/mcp/oauth.service.js';
 import { notifyNewConnection } from '../services/mcp/notice.service.js';
+import { listShareablePeople } from '../services/mcp/people.js';
 
 /** Connecting a chatbot is for the signed-in person's own account only (v1). */
 function rejectActAs(req: Request, _res: Response, next: NextFunction): void {
@@ -62,4 +65,16 @@ connectRouter.put('/family-opt-in', asyncHandler(async (req: Request, res: Respo
   const optIn = (req.body as { optIn?: unknown } | undefined)?.optIn;
   if (typeof optIn !== 'boolean') throw new AppError('optIn must be true or false', 400, 'INVALID_REQUEST');
   res.json({ success: true, data: { optIn: await setFamilyOptIn(req.user!.id, optIn, req) } });
+}));
+
+// Widening what a chatbot reads is like approving it, so it needs the plan.
+connectRouter.patch('/connections/:id', requireFeature('AI_CONNECTOR'), asyncHandler(async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { areas?: unknown; memberUserIds?: unknown };
+  res.json({ success: true, data: await updateConnection(req.user!.id, req.params.id!, { areas: body.areas, memberUserIds: body.memberUserIds }, req).catch(asApp) });
+}));
+connectRouter.get('/connections/:id/activity', asyncHandler(async (req: Request, res: Response) => {
+  res.json({ success: true, data: await connectionActivity(req.user!.id, req.params.id!).catch(asApp) });
+}));
+connectRouter.get('/people', asyncHandler(async (req: Request, res: Response) => {
+  res.json({ success: true, data: await listShareablePeople(req.user!.id) });
 }));

@@ -129,6 +129,24 @@ describe('/mcp tools', () => {
       await runAsSystem(() => prisma.user.update({ where: { id: user.userId }, data: { plan: 'PLUS' } }));
     }
   });
+  it('narrowed areas drop tools on the next tools/list, and activity shows the calls', async () => {
+    const token = await newAccessToken(['investments', 'loans']);
+    const c1 = await connect(token);
+    expect((await c1.listTools()).tools.map((t) => t.name)).toContain('test_loans_only');
+    await c1.callTool({ name: 'test_echo_me', arguments: {} });
+    await c1.close();
+    const [conn] = await svc.listConnections(user.userId);
+    await svc.updateConnection(user.userId, conn!.id, { areas: ['investments'], memberUserIds: [] });
+    const c2 = await connect(token);
+    expect((await c2.listTools()).tools.map((t) => t.name)).not.toContain('test_loans_only');
+    await c2.close();
+    await vi.waitFor(async () => {
+      const act = await svc.connectionActivity(user.userId, conn!.id);
+      expect(act[0]).toMatchObject({ tool: 'test_echo_me', area: 'always', people: 1, ok: true });
+    }, { timeout: 3000 });
+    await expect(svc.updateConnection(user.userId, conn!.id, { areas: ['everything'], memberUserIds: [] })).rejects.toMatchObject({ status: 400 });
+  });
+
   it('revoked grant answers 401 on the next call', async () => {
     const token = await newAccessToken(['investments']);
     const client = await connect(token);

@@ -6,7 +6,7 @@ import { connectApi } from '@/api/connect.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { AiConnectorsPage } from './AiConnectorsPage';
 
-vi.mock('@/api/connect.api', () => ({ connectApi: { connections: vi.fn(), revoke: vi.fn(), getFamilyOptIn: vi.fn(), setFamilyOptIn: vi.fn() } }));
+vi.mock('@/api/connect.api', () => ({ connectApi: { connections: vi.fn(), revoke: vi.fn(), getFamilyOptIn: vi.fn(), setFamilyOptIn: vi.fn(), update: vi.fn(), activity: vi.fn(), people: vi.fn() } }));
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('react-hot-toast', () => ({ default: toastMock }));
 const open = vi.fn();
@@ -66,5 +66,25 @@ describe('AiConnectorsPage', () => {
     fireEvent.click(sw);
     await waitFor(() => expect(connectApi.setFamilyOptIn).toHaveBeenCalledWith(true));
     await waitFor(() => expect(sw.checked).toBe(true));
+  });
+
+  it('Edit sharing saves the new areas', async () => {
+    vi.mocked(connectApi.connections).mockResolvedValue([conn as never]);
+    vi.mocked(connectApi.people).mockResolvedValue([]);
+    vi.mocked(connectApi.update).mockResolvedValue({ ...conn, areas: ['investments'] } as never);
+    renderWithProviders(<AiConnectorsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit sharing' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Retirement' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(connectApi.update).toHaveBeenCalledWith('g1', ['investments'], []));
+  });
+
+  it('Recent activity lists the lookups', async () => {
+    vi.mocked(connectApi.connections).mockResolvedValue([conn as never]);
+    vi.mocked(connectApi.activity).mockResolvedValue([{ tool: 'list_loans', area: 'loans', people: 1, rows: 3, ok: true, at: '2026-10-14T05:12:00.000Z' }]);
+    renderWithProviders(<AiConnectorsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Recent activity' }));
+    expect(await screen.findByText(/list_loans/)).toBeTruthy();
+    expect(screen.getByText(/3 rows/)).toBeTruthy();
   });
 });

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import type { Request } from 'express';
 import {
   clientDisplayName, isAiConnectorArea, formatDateOnly,
-  type AiConnectorArea, type AiConnectorAuthRequestWire, type AiConnectionWire,
+  type AiConnectorArea, type AiConnectorAuthRequestWire, type AiConnectionWire, type AiConnectionActivityWire,
 } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem, runAsUser } from '../../lib/requestContext.js';
@@ -345,4 +345,35 @@ export async function setFamilyOptIn(userId: string, optIn: boolean, req?: Reque
   await runAsUser(userId, () => prisma.user.update({ where: { id: userId }, data: { aiConnectorFamilyOptIn: optIn } }));
   await writeAuditLog({ userId, action: 'mcp_sharing_changed', resource: `User:${userId}`, metadata: { familyOptIn: optIn }, req });
   return optIn;
+}
+
+/** Edit sharing: same validation as approving. Takes effect on the chatbot's next call. */
+export async function updateConnection(
+  userId: string, grantId: string, input: { areas: unknown; memberUserIds: unknown }, req?: Request,
+): Promise<AiConnectionWire> {
+  const raw = Array.isArray(input.areas) ? input.areas : null;
+  if (!raw || !raw.every(isAiConnectorArea)) throw new OAuthError(400, 'invalid_request', 'Unknown sharing area');
+  const areas = [...new Set(raw)] as AiConnectorArea[];
+  const memberUserIds = await validMemberIds(userId, input.memberUserIds);
+  const done = await runAsUser(userId, () => prisma.mcpGrant.updateMany({
+    where: { id: grantId, userId, revokedAt: null }, data: { areas, memberUserIds },
+  }));
+  if (done.count !== 1) throw new OAuthError(404, 'not_found', 'Connection not found');
+  await writeAuditLog({ userId, action: 'mcp_sharing_changed', resource: `McpGrant:${grantId}`, metadata: { areas, memberCount: memberUserIds.length }, req });
+  const conn = (await listConnections(userId)).find((c) => c.id === grantId);
+  if (!conn) throw new OAuthError(404, 'not_found', 'Connection not found');
+  return conn;
+}
+
+/** The chatbot's last 20 lookups on this connection (from the audit log; no data in it). */
+export async function connectionActivity(userId: string, grantId: string): Promise<AiConnectionActivityWire[]> {
+  const grant = await runAsUser(userId, () => prisma.mcpGrant.findFirst({ where: { id: grantId, userId }, select: { id: true } }));
+  if (!grant) throw new OAuthError(404, 'not_found', 'Connection not found');
+  const rows = await runAsSystem(() => prisma.auditLog.findMany({
+    where: { userId, action: 'mcp_tool_called', resource: `McpGrant:${grantId}` }, orderBy: { createdAt: 'desc' }, take: 20,
+  }));
+  return rows.map((r) => {
+    const m = (r.metadata ?? {}) as { tool?: string; area?: string; memberCount?: number; rowCount?: number; ok?: boolean };
+    return { tool: m.tool ?? '', area: m.area ?? '', people: m.memberCount ?? 1, rows: m.rowCount ?? 0, ok: m.ok === true, at: r.createdAt.toISOString() };
+  });
 }
