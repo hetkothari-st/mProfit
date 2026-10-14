@@ -47,6 +47,7 @@ import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
 import { makeOriginCheck } from './lib/corsOrigins.js';
 import { mcpCors, mcpOAuthRouter } from './routes/mcpOAuth.routes.js';
+import { mcpRouter } from './routes/mcp.routes.js';
 import { apiSandbox } from './lib/apiSandbox.js';
 import { redactUrl } from './lib/redactUrl.js';
 import { auditDownloads } from './lib/auditDownloads.js';
@@ -140,6 +141,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use(mcpOAuthRouter);
+app.use(mcpRouter);
 if (env.MCP_ENABLED === 'true' && !env.API_PUBLIC_URL) logger.error('mcp.disabled.no_public_url');
 
 app.use('/api', apiSandbox);
