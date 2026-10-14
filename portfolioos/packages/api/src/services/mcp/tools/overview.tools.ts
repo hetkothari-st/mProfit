@@ -1,8 +1,8 @@
-import type { AiConnectorArea } from '@everypaisa/shared';
+import { serializeMoney, toDecimal, type AiConnectorArea } from '@everypaisa/shared';
 import { prisma } from '../../../lib/prisma.js';
 import { getDashboardNetWorth } from '../../dashboard.service.js';
 import type { ConnectorTool } from './types.js';
-import { dmy } from './common.js';
+import { dmy, hasClientBooks, ownPortfolios } from './common.js';
 
 /** Alert type -> the area it belongs to. CUSTOM alerts are free text and never shared. */
 const ALERT_AREA: Record<string, AiConnectorArea> = {
@@ -34,14 +34,29 @@ const getOverview: ConnectorTool<Record<string, never>> = {
   input: {},
   async run(ctx) {
     const d = await getDashboardNetWorth(ctx.userId);
+    let inv = { currentValue: d.portfolio.currentValue, invested: d.portfolio.totalInvested, unrealisedGain: d.portfolio.unrealisedPnL };
+    let netWorth = d.netWorthAfterLiabilities;
+    if (await hasClientBooks(ctx.userId)) {
+      // The dashboard counts CA client books; rebuild the investments block
+      // from the user's own portfolios and take the difference out of net worth.
+      let cur = toDecimal('0');
+      let cost = toDecimal('0');
+      for (const p of await ownPortfolios(ctx.userId)) {
+        const one = await getDashboardNetWorth(ctx.userId, p.id);
+        cur = cur.plus(toDecimal(one.portfolio.currentValue));
+        cost = cost.plus(toDecimal(one.portfolio.totalInvested));
+      }
+      netWorth = serializeMoney(toDecimal(d.netWorthAfterLiabilities).minus(toDecimal(d.portfolio.currentValue)).plus(cur));
+      inv = { currentValue: serializeMoney(cur), invested: serializeMoney(cost), unrealisedGain: serializeMoney(cur.minus(cost)) };
+    }
     const has = (a: AiConnectorArea) => ctx.areas.includes(a);
     const all = NET_WORTH_AREAS.every(has);
     const data: Record<string, unknown> = {
       asOf: dmy(ctx.now), owner: 'You', currency: 'INR',
-      netWorth: all ? d.netWorthAfterLiabilities : null,
+      netWorth: all ? netWorth : null,
       ...(all ? {} : { netWorthNote: 'Net worth is hidden because not all areas are shared with this chatbot.' }),
     };
-    if (has('investments')) data.investments = { currentValue: d.portfolio.currentValue, invested: d.portfolio.totalInvested, unrealisedGain: d.portfolio.unrealisedPnL };
+    if (has('investments')) data.investments = inv;
     if (has('property')) data.property = { count: d.realEstate.count, totalValue: d.realEstate.totalValue, monthlyRent: d.realEstate.monthlyRent, rentOverdueCount: d.realEstate.overdueCount };
     if (has('vehicles')) data.vehicles = { count: d.vehicles.count, totalValue: d.vehicles.totalValue, pendingChallans: d.vehicles.pendingChallans };
     if (has('insurance')) data.insurance = { activePolicies: d.insurance.activePoliciesCount, totalCover: d.insurance.totalSumAssured, annualPremium: d.insurance.annualPremiumTotal };

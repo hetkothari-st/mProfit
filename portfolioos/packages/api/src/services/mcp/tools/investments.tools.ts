@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { serializeMoney } from '@everypaisa/shared';
+import { serializeMoney, toDecimal } from '@everypaisa/shared';
 import { getPortfolioHoldings } from '../../portfolio.service.js';
 import { listTransactions } from '../../transaction.service.js';
 import { getAllocationByClass, getAssetClassXirr, getCgByFy, getKpis, type AnalyticsScope } from '../../analytics.service.js';
 import { listForexBalances } from '../../forex.service.js';
 import { MAX_ROWS, ToolUserError, type ConnectorTool } from './types.js';
-import { dmy, ownPortfolios, parseDateArg, pct } from './common.js';
+import { dmy, hasClientBooks, ownPortfolios, parseDateArg, pct } from './common.js';
 
 const NOT_YOURS = 'That portfolio id is not one of yours. Call list_portfolios for valid ids.';
 
@@ -108,6 +108,7 @@ const getPerformance: ConnectorTool<typeof perfInput> = {
   name: 'get_performance', area: 'investments', title: 'Performance',
   description: 'XIRR (overall, 1/3/5 years), gains, income this year and allocation by asset class.', input: perfInput,
   async run(ctx, args) {
+    if (!args.portfolioId && (await hasClientBooks(ctx.userId))) return ownBooksPerformance(ctx.userId, ctx.now);
     const { scope } = await scopeFor(ctx.userId, args.portfolioId);
     const [k, alloc, byClass] = await Promise.all([getKpis(scope), getAllocationByClass(scope), getAssetClassXirr(scope)]);
     return {
@@ -125,12 +126,69 @@ const getPerformance: ConnectorTool<typeof perfInput> = {
   },
 };
 
+type Dec = ReturnType<typeof toDecimal>;
+
+/**
+ * Performance when the user also keeps CA client books (whose money the
+ * user-level analytics include): money totals and allocation are summed over
+ * the user's own portfolios. A combined XIRR cannot be summed, so it is left
+ * out and per-portfolio XIRR is given instead.
+ */
+async function ownBooksPerformance(userId: string, now: Date) {
+  const own = await ownPortfolios(userId);
+  const t = { invested: toDecimal('0'), currentValue: toDecimal('0'), unrealised: toDecimal('0'), realised: toDecimal('0'), income: toDecimal('0') };
+  const alloc = new Map<string, Dec>();
+  const perPortfolio: Record<string, unknown>[] = [];
+  for (const p of own) {
+    const scope: AnalyticsScope = { kind: 'portfolio', portfolioId: p.id };
+    const [k, slices] = await Promise.all([getKpis(scope), getAllocationByClass(scope)]);
+    t.invested = t.invested.plus(toDecimal(k.totalCost));
+    t.currentValue = t.currentValue.plus(toDecimal(k.currentValue));
+    t.unrealised = t.unrealised.plus(toDecimal(k.unrealisedPnL));
+    t.realised = t.realised.plus(toDecimal(k.realisedYtd));
+    t.income = t.income.plus(toDecimal(k.incomeYtd));
+    for (const s of slices) alloc.set(s.label, (alloc.get(s.label) ?? toDecimal('0')).plus(toDecimal(s.value)));
+    perPortfolio.push({ portfolio: p.name, xirrPct: pct(k.xirrOverall), invested: k.totalCost, currentValue: k.currentValue });
+  }
+  const total = [...alloc.values()].reduce((s, v) => s.plus(v), toDecimal('0'));
+  return {
+    rows: own.length,
+    data: {
+      asOf: dmy(now), owner: 'You', currency: 'INR',
+      xirrPct: null, xirr1yPct: null, xirr3yPct: null, xirr5yPct: null, xirrReliable: false,
+      xirrNote: 'A combined XIRR is not available for this account; see xirrPct per portfolio.',
+      invested: serializeMoney(t.invested), currentValue: serializeMoney(t.currentValue), unrealisedGain: serializeMoney(t.unrealised),
+      realisedThisFy: serializeMoney(t.realised), incomeThisFy: serializeMoney(t.income),
+      allocation: [...alloc.entries()].map(([label, v]) => ({
+        assetClass: label, value: serializeMoney(v), pct: total.isZero() ? '0.00' : v.dividedBy(total).times(100).toFixed(2),
+      })),
+      byPortfolio: perPortfolio,
+    },
+  };
+}
+
+/** Capital gains per FY from the user's own portfolios only (CA client books excluded). */
+async function ownCgByFy(userId: string) {
+  if (!(await hasClientBooks(userId))) return getCgByFy({ kind: 'user', userId });
+  const byFy = new Map<string, { intraday: Dec; stcg: Dec; ltcg: Dec }>();
+  for (const p of await ownPortfolios(userId)) {
+    for (const r of await getCgByFy({ kind: 'portfolio', portfolioId: p.id })) {
+      const cur = byFy.get(r.fy) ?? { intraday: toDecimal('0'), stcg: toDecimal('0'), ltcg: toDecimal('0') };
+      byFy.set(r.fy, { intraday: cur.intraday.plus(toDecimal(r.intraday)), stcg: cur.stcg.plus(toDecimal(r.stcg)), ltcg: cur.ltcg.plus(toDecimal(r.ltcg)) });
+    }
+  }
+  return [...byFy.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([fy, v]) => ({
+    fy, intraday: serializeMoney(v.intraday), stcg: serializeMoney(v.stcg), ltcg: serializeMoney(v.ltcg),
+    total: serializeMoney(v.intraday.plus(v.stcg).plus(v.ltcg)),
+  }));
+}
+
 const cgInput = { fy: z.string().regex(/^\d{4}-\d{2}$/).optional().describe('Indian financial year, e.g. 2025-26') };
 const getCapitalGains: ConnectorTool<typeof cgInput> = {
   name: 'get_capital_gains', area: 'investments', title: 'Capital gains',
   description: 'Realised capital gains per financial year: intraday, short term and long term.', input: cgInput,
   async run(ctx, args) {
-    const rows = (await getCgByFy({ kind: 'user', userId: ctx.userId })).filter((r) => !args.fy || r.fy === args.fy);
+    const rows = (await ownCgByFy(ctx.userId)).filter((r) => !args.fy || r.fy === args.fy);
     return {
       rows: rows.length,
       data: { asOf: dmy(ctx.now), owner: 'You', currency: 'INR', years: rows.map((r) => ({ fy: r.fy, intraday: r.intraday, shortTerm: r.stcg, longTerm: r.ltcg, total: r.total })) },

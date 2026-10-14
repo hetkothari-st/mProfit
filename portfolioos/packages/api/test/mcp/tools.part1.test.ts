@@ -84,6 +84,32 @@ describe('Part 1 tools', () => {
     expect((ps.portfolios as Array<{ id: string }>).map((x) => x.id)).not.toContain(p.id);
   });
 
+  it('client-book activity changes no tool output (overview, performance, capital gains)', async () => {
+    const tools = ['get_overview', 'get_performance', 'get_capital_gains'] as const;
+    const all: ToolContext['areas'] = ['investments', 'retirement', 'banking', 'loans', 'insurance', 'property', 'vehicles'];
+    const before = await Promise.all(tools.map((n) => call(n, a.userId, {}, all)));
+    const c = await runAsSystem(() => prisma.client.create({ data: { advisorId: a.userId, name: 'Client Y' } }));
+    const book = await runAsSystem(() => prisma.portfolio.create({ data: { userId: a.userId, name: 'Client Y book', clientId: c.id, currency: 'INR', type: 'INVESTMENT' } }));
+    try {
+      await runAsUser(a.userId, async () => {
+        await createTransaction(a.userId, { portfolioId: book.id, assetClass: 'PHYSICAL_GOLD', transactionType: 'BUY', assetName: 'Gold coin', tradeDate: '2024-01-10', quantity: '10', price: '5000' } as never);
+        await createTransaction(a.userId, { portfolioId: book.id, assetClass: 'PHYSICAL_GOLD', transactionType: 'SELL', assetName: 'Gold coin', tradeDate: '2026-05-10', quantity: '4', price: '9000' } as never);
+      });
+      const after = await Promise.all(tools.map((n) => call(n, a.userId, {}, all)));
+      expect(after[0]).toEqual(before[0]);
+      expect(after[1]).toEqual(before[1]);
+      expect(after[2]).toEqual(before[2]);
+    } finally {
+      await runAsSystem(async () => {
+        await prisma.capitalGain.deleteMany({ where: { portfolioId: book.id } });
+        await prisma.holdingProjection.deleteMany({ where: { portfolioId: book.id } });
+        await prisma.transaction.deleteMany({ where: { portfolioId: book.id } });
+        await prisma.portfolio.delete({ where: { id: book.id } });
+        await prisma.client.delete({ where: { id: c.id } });
+      });
+    }
+  });
+
   it('narration with account number is masked', async () => {
     const tx = await call('list_transactions', a.userId, { from: '01/04/2026', to: '30/04/2026' });
     const row = (tx.transactions as Array<Record<string, unknown>>)[0]!;

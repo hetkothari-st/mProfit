@@ -1,4 +1,5 @@
 import { formatDateOnly } from '@everypaisa/shared';
+import { prisma } from '../../../lib/prisma.js';
 import { listPortfolios } from '../../portfolio.service.js';
 import { ToolUserError } from './types.js';
 
@@ -28,4 +29,13 @@ export function pct(x: number | null | undefined): string | null {
 export async function ownPortfolios(userId: string) {
   const all = await listPortfolios(userId);
   return all.filter((p) => p.userId === userId && p.clientId === null);
+}
+
+/**
+ * True when the user also keeps CA client-workspace books. The app's
+ * user-level aggregates (dashboard, analytics, capital gains) include those
+ * books, so tools must then add up the user's own portfolios one by one.
+ */
+export async function hasClientBooks(userId: string): Promise<boolean> {
+  return (await prisma.portfolio.count({ where: { userId, clientId: { not: null } } })) > 0;
 }
