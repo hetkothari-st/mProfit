@@ -381,7 +381,7 @@ function AssistantBubble({
     <div className="flex justify-start mb-4 group">
       <div className="flex items-start gap-2 max-w-[88%]">
         <div className="h-7 w-7 rounded-full bg-gradient-to-br from-accent via-accent/85 to-accent/60 flex items-center justify-center shrink-0 ring-1 ring-background shadow-sm mt-0.5">
-          <AssistantIcon className="h-3.5 w-3.5 text-accent-foreground" strokeWidth={2.2} />
+          <AssistantIcon className="h-5 w-5 text-accent-foreground" strokeWidth={2.2} />
         </div>
         <div className="min-w-0 flex flex-col gap-1">
           <div className="rounded-2xl rounded-tl-md px-4 py-3 text-[14px] leading-[1.6] bg-card border border-border/70 shadow-sm">

@@ -165,7 +165,7 @@ export function AssistantButton() {
             />
           )}
           <AssistantIcon
-            className="relative h-5 w-5 group-hover:scale-110 transition-transform"
+            className="relative h-8 w-8 group-hover:scale-110 transition-transform"
             strokeWidth={1.9}
           />
         </button>
@@ -213,7 +213,7 @@ function TeaserBubble({
             className="text-left block"
           >
             <div className="flex items-center gap-1.5 mb-0.5">
-              <AssistantIcon className="h-3 w-3 text-accent" strokeWidth={2} />
+              <AssistantIcon className="h-4 w-4 text-accent" strokeWidth={2} />
               <span className="text-[10px] uppercase tracking-kerned text-accent-ink">
                 New
               </span>
