@@ -1,0 +1,121 @@
+/* Features page, below the fan. Was ten walls of text in a 3-column grid.
+   Now each group sits beside the app screen that does the job, asset
+   classes are a wall of folio tiles, and reports are a shelf of documents. */
+
+/* ---------- group + screen ---------- */
+.feat-split {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+  gap: clamp(30px, 5vw, 72px); align-items: start;
+  padding: clamp(70px, 9vw, 120px) 0;
+}
+.feat-split.flip .feat-visual { order: -1; }
+.feat-split .feat-block-head { grid-template-columns: 1fr; gap: 14px; margin-bottom: 30px; }
+.feat-split .feat-block-head p { font-size: 18px; max-width: 30em; }
+
+.feat-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 30px; }
+.feat-list li { padding: 16px 0 16px 22px; border-top: 1px solid var(--rule); position: relative; }
+.feat-list li::before {
+  content: ""; position: absolute; left: 0; top: 23px; width: 9px; height: 9px; border-radius: 2px;
+  background: var(--lime); box-shadow: 0 0 10px rgba(226, 254, 83, .45);
+}
+.feat-list h3 { font-family: var(--f-text); font-weight: 600; font-size: 16.5px; line-height: 1.3; margin: 0 0 4px; color: var(--ink); letter-spacing: 0; }
+.feat-list p { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--ink-3); }
+
+.feat-visual { position: sticky; top: 110px; perspective: 1600px; }
+.feat-visual::before { /* lamp glow behind the device */
+  content: ""; position: absolute; inset: -12% -8%; z-index: -1; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(226, 254, 83, .14), transparent 75%);
+}
+.feat-device {
+  aspect-ratio: 4 / 3.3; padding: 12px; border-radius: 18px;
+  background: #050604;
+  box-shadow: 0 0 0 1px rgba(241, 240, 230, .1), 0 50px 90px -40px rgba(0, 0, 0, .95);
+  transform: rotateY(-7deg) rotateX(3deg);
+  transition: transform .8s var(--ease);
+}
+.feat-split.flip .feat-device { transform: rotateY(7deg) rotateX(3deg); }
+.feat-visual:hover .feat-device { transform: none; }
+.feat-device .scr { border-radius: 9px; }
+
+/* CA: a printed trial balance on ledger paper */
+.feat-books {
+  border-radius: 6px; padding: 8px 26px 26px 0; transform: rotate(1.2deg);
+  box-shadow: 0 50px 90px -40px rgba(0, 0, 0, .95), 0 0 0 1px rgba(0, 0, 0, .2);
+}
+.feat-books .fb-sub { margin: -6px 0 10px 32px; font-size: 13px; color: #6b6e60; }
+.feat-books table { margin-left: 32px; width: calc(100% - 32px); border-collapse: collapse; font-family: var(--f-app); font-size: 14px; font-variant-numeric: tabular-nums; }
+.feat-books th, .feat-books td { text-align: left; padding: 0 6px; height: 28px; font-weight: 400; color: #2a2c22; }
+.feat-books th { color: #6b6e60; font-size: 12px; }
+.feat-books th + th, .feat-books td + td { text-align: right; }
+.feat-books tfoot td { font-weight: 600; color: #111; border-top: 1.5px solid #222; border-bottom: 3px double #222; }
+.feat-books .hand { margin-top: 12px; }
+
+/* ---------- asset tiles ---------- */
+.asset-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.asset-tiles li {
+  position: relative; min-height: 150px; padding: 18px 18px 16px; border-radius: 12px;
+  background: linear-gradient(160deg, var(--paper-3), var(--paper-2));
+  border: 1px solid var(--rule); overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  transition: border-color .3s, transform .4s var(--ease), background .3s;
+}
+.asset-tiles .at-no { position: absolute; top: 14px; right: 16px; font-family: var(--f-display); font-size: 13px; color: var(--ink-3); }
+.asset-tiles h3 { font-family: var(--f-head); font-size: 30px; line-height: 1; margin: 0; color: var(--ink); transition: color .3s; }
+.asset-tiles p {
+  margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--ink-3);
+  max-height: 0; opacity: 0; transition: max-height .45s var(--ease), opacity .3s, margin .3s;
+}
+.asset-tiles li:hover, .asset-tiles li:focus-visible { border-color: rgba(226, 254, 83, .5); transform: translateY(-3px); background: linear-gradient(160deg, #23271b, var(--paper-2)); }
+.asset-tiles li:hover h3, .asset-tiles li:focus-visible h3 { color: var(--lime); }
+.asset-tiles li:hover p, .asset-tiles li:focus-visible p { max-height: 6em; opacity: 1; margin-top: 8px; }
+@media (hover: none) { .asset-tiles p { max-height: none; opacity: 1; margin-top: 8px; } }
+
+/* ---------- reports: four filing folders ---------- */
+.folders { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 44px 16px; padding-top: 30px; }
+.folder {
+  position: relative; padding: 22px 18px 18px;
+  background: linear-gradient(170deg, var(--paper-3), var(--paper-2) 70%);
+  border: 1px solid var(--rule); border-radius: 0 12px 12px 12px;
+  box-shadow: 0 30px 60px -36px rgba(0, 0, 0, .9);
+}
+.folder-tab {
+  position: absolute; left: -1px; bottom: 100%; max-width: 82%;
+  padding: 7px 14px 6px; border: 1px solid var(--rule); border-bottom: 0; border-radius: 10px 10px 0 0;
+  background: var(--paper-3);
+  font-family: var(--f-text); font-weight: 600; font-size: 13.5px; line-height: 1.2; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.folder-count { position: absolute; right: 16px; top: 8px; font-family: var(--f-head); font-size: 52px; line-height: 1; color: var(--lime); opacity: .9; }
+.folder ul { list-style: none; margin: 34px 0 0; padding: 0; }
+.folder li {
+  position: relative; padding: 8px 0 8px 22px; font-size: 14px; line-height: 1.35; color: var(--ink-2);
+  border-top: 1px solid var(--rule); transition: color .2s, padding .25s var(--ease);
+}
+.folder li::before { /* tiny document */
+  content: ""; position: absolute; left: 0; top: 10px; width: 11px; height: 14px; border-radius: 1.5px;
+  background: linear-gradient(225deg, transparent 3px, var(--cream, #f4f1e4) 3px);
+  opacity: .75;
+}
+.folder li:hover { color: var(--ink); padding-left: 26px; }
+.folder li:hover::before { background: linear-gradient(225deg, transparent 3px, var(--lime) 3px); opacity: 1; }
+@media (max-width: 1100px) { .folders { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+@media (max-width: 960px) {
+  .feat-split { grid-template-columns: 1fr; }
+  .feat-split.flip .feat-visual { order: 0; }
+  .feat-visual { position: relative; top: 0; max-width: 560px; }
+  .feat-device, .feat-split.flip .feat-device { transform: none; }
+}
+@media (max-width: 600px) {
+  .feat-list { grid-template-columns: 1fr; }
+  .folders { grid-template-columns: 1fr; }
+  .asset-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .asset-tiles li { min-height: 120px; padding: 14px; }
+  .asset-tiles h3 { font-size: 24px; }
+}
+.asset-tiles .at-pt { margin-top: 6px; font-size: 12.5px; line-height: 1.35; color: #a9c23f; }
+.asset-tiles li::before { /* lime rule that draws in on hover */
+  content: ""; position: absolute; left: 0; top: 0; height: 2px; width: 100%;
+  background: var(--lime); transform: scaleX(0); transform-origin: left; transition: transform .45s var(--ease);
+}
+.asset-tiles li:hover::before, .asset-tiles li:focus-visible::before { transform: scaleX(1); }

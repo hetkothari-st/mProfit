@@ -67,12 +67,92 @@ const TOC: [string, string][] = [
   ['family', 'Family'], ['ca', 'For CAs'],
 ];
 
-function Group({ id, title, intro, items }: { id: string; title: string; intro: string; items: [string, string][] }) {
+// The app screen shown beside each group. 'ca' gets a printed trial balance
+// instead, since a CA's deliverable is the books themselves.
+const VISUAL: Record<string, ScreenName | 'books'> = {
+  imports: 'review', overview: 'dashboard', mf: 'mf', tax: 'tax', protect: 'insurance',
+  things: 'vehicle', everyday: 'emi', family: 'family', ca: 'books',
+};
+
+function Books() {
+  const rows: [string, string, string][] = [
+    ['Equity shares', '18,42,600', ''], ['Mutual funds', '42,10,300', ''], ['Bank — savings', '3,84,210', ''],
+    ['Home loan', '', '31,20,000'], ['Capital account', '', '33,17,110'],
+  ];
   return (
-    <section className="feat-block" id={id} aria-labelledby={`${id}-title`}>
-      <div className="feat-block-head"><h2 className="h2" id={`${id}-title`}>{title}</h2><p>{intro}</p></div>
-      <div className="feat-grid">
-        {items.map(([h, p]) => <div className="feat" key={h}><h3>{h}</h3><p>{p}</p></div>)}
+    <div className="feat-books ruled">
+      <h4>Trial balance</h4>
+      <p className="fb-sub">As at 31 March 2027</p>
+      <table>
+        <thead><tr><th>Account</th><th>Dr.</th><th>Cr.</th></tr></thead>
+        <tbody>{rows.map(([a, d, c]) => <tr key={a}><td>{a}</td><td>{d}</td><td>{c}</td></tr>)}</tbody>
+        <tfoot><tr><td>Total</td><td>64,37,110</td><td>64,37,110</td></tr></tfoot>
+      </table>
+      <p className="hand">Tallied ✓</p>
+    </div>
+  );
+}
+
+function Group({ id, title, intro, items, flip }: { id: string; title: string; intro: string; items: [string, string][]; flip?: boolean }) {
+  const v = VISUAL[id];
+  return (
+    <section className={`feat-block feat-split${flip ? ' flip' : ''}`} id={id} aria-labelledby={`${id}-title`}>
+      <div className="feat-copy">
+        <div className="feat-block-head"><h2 className="h2" id={`${id}-title`}>{title}</h2><p>{intro}</p></div>
+        <ul className="feat-list">
+          {items.map(([h, p]) => <li key={h}><h3>{h}</h3><p>{p}</p></li>)}
+        </ul>
+      </div>
+      {v && (
+        <div className="feat-visual" aria-hidden="true">
+          {v === 'books' ? <Books /> : <div className="feat-device"><Screen name={v} /></div>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AssetTiles() {
+  return (
+    <section className="feat-block" id="asset-classes" aria-labelledby="asset-classes-title">
+      <div className="feat-block-head"><h2 className="h2" id="asset-classes-title">Nineteen asset classes</h2><p>Each one priced and taxed by its own rules.</p></div>
+      <ul className="asset-tiles">
+        {assetFolios.map((a, i) => (
+          <li key={a.name} tabIndex={0}>
+            <span className="at-no">f. {i + 1}</span>
+            <h3>{a.name}</h3>
+            <span className="at-pt">{a.points[0]}</span>
+            <p>{a.summary}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// Reports filed into four folders, so 41 names read as a cabinet, not a list.
+const FOLDERS: [string, string[]][] = [
+  ['Holdings & performance', ['Holdings summary', 'Portfolio snapshot', 'Top holdings', 'Sector allocation', 'Demat holdings', 'Family-wise holdings', 'Performance (XIRR)', 'Holding-period return', 'Combined realised & unrealised', 'Mutual fund mark-to-market']],
+  ['Tax', ['Capital gains (FIFO)', 'Brokerwise capital gains', 'Mutual fund capital gains', 'Grandfathered LTCG', 'ITR Schedule 112A', 'Short-term, long-term & speculation', 'Tax P&L', 'Tax summary', 'Advance tax summary', 'STT (section 10DB)', 'Dividend report', 'Income report']],
+  ['Trades & brokers', ['Cash flow', 'Fund flow', 'Contract notes summary', 'Contract note charges', 'Broker bill register', 'Broker bill register, member-wise', 'Script ledger', 'Scriptwise quantity', 'Opening stock', 'Closing balance']],
+  ['Books of account', ['Account ledger', 'Financial ledger', 'Day book', 'Chart of accounts', 'Trial balance', 'Profit & loss', 'Balance sheet', 'Bank reconciliation', 'Tally export']],
+];
+
+function ReportShelf() {
+  return (
+    <section className="feat-block" id="reports" aria-labelledby="reports-title">
+      <div className="feat-block-head">
+        <h2 className="h2" id="reports-title">Every report, listed</h2>
+        <p>{reports.length} reports, each a download as PDF or Excel. Family-wise versions are available on the Family plan.</p>
+      </div>
+      <div className="folders">
+        {FOLDERS.map(([name, list]) => (
+          <div className="folder" key={name}>
+            <h3 className="folder-tab">{name}</h3>
+            <span className="folder-count" aria-hidden="true">{list.length}</span>
+            <ul>{list.map((r) => <li key={r}>{r}</li>)}</ul>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -97,22 +177,11 @@ export default function Features() {
 
       <div className="wrap">
         <Group {...first} />
-        <Group {...second} />
-        <Group
-          id="asset-classes"
-          title="Nineteen asset classes"
-          intro="Each one priced and taxed by its own rules."
-          items={assetFolios.map((a) => [a.name, a.summary])}
-        />
-        {rest.slice(0, 2).map((g) => <Group key={g.id} {...g} />)}
-        <section className="feat-block" id="reports" aria-labelledby="reports-title">
-          <div className="feat-block-head">
-            <h2 className="h2" id="reports-title">Every report, listed</h2>
-            <p>Download as PDF or Excel. Family-wise versions are available on the Family plan.</p>
-          </div>
-          <ol className="report-book">{reports.map((r) => <li key={r}>{r}</li>)}</ol>
-        </section>
-        {rest.slice(2).map((g) => <Group key={g.id} {...g} />)}
+        <Group {...second} flip />
+        <AssetTiles />
+        {rest.slice(0, 2).map((g, i) => <Group key={g.id} {...g} flip={i % 2 === 1} />)}
+        <ReportShelf />
+        {rest.slice(2).map((g, i) => <Group key={g.id} {...g} flip={i % 2 === 1} />)}
       </div>
 
       <CtaBand title="Seen enough to try it?" text="Create a free account, or tell us what you'd need before you'd switch.">
