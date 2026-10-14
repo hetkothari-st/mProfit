@@ -1,4 +1,4 @@
-import { formatDateOnly } from '@everypaisa/shared';
+import { formatDateOnly, serializeMoney, toDecimal } from '@everypaisa/shared';
 import { prisma } from '../../../lib/prisma.js';
 import { listPortfolios } from '../../portfolio.service.js';
 import { ToolUserError } from './types.js';
@@ -41,4 +41,10 @@ export async function ownPortfolios(userId: string) {
  */
 export async function hasClientBooks(userId: string): Promise<boolean> {
   return (await prisma.portfolio.count({ where: { userId, clientId: { not: null } } })) > 0;
+}
+
+/** Any money-like value (Prisma Decimal, string, number) as a decimal string; null stays null. */
+export function money(v: unknown): string | null {
+  if (v === null || v === undefined || v === '') return null;
+  return serializeMoney(toDecimal(String(v)));
 }
