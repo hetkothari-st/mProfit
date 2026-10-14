@@ -228,6 +228,9 @@ model User {
   // Will Maker. Personal content is sealed inside Will.payload.
   wills        Will[]
   willVersions WillVersion[]
+  mcpGrants    McpGrant[]
+  mcpAuthCodes McpAuthCode[]
+  mcpTokens    McpToken[]
 
   // Two-factor sign-in (services/twoFactor.service.ts). The TOTP secret is
   // encrypted under SECRETS_KEY; set only once a code has confirmed it.
@@ -5367,29 +5370,29 @@ enum WillStatus {
 }
 
 model Will {
-  id               String        @id @default(cuid())
-  userId           String
-  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String        @id @default(cuid())
+  userId             String
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Per-user number shown as "Version N".
-  version          Int
-  status           WillStatus    @default(DRAFT)
+  version            Int
+  status             WillStatus    @default(DRAFT)
   /// Optimistic lock: every save must name the revision it read.
-  revision         Int           @default(0)
+  revision           Int           @default(0)
   /// Wizard step to resume at (2-8; step 1 is the overview).
-  currentStep      Int           @default(2)
-  payload          Bytes
-  payloadSchemaVer Int           @default(1)
-  supersededById   String?
-  generatedAt      DateTime?     @db.Timestamptz(3)
-  executedAt       DateTime?     @db.Date
-  nextReviewAt     DateTime?     @db.Date
+  currentStep        Int           @default(2)
+  payload            Bytes
+  payloadSchemaVer   Int           @default(1)
+  supersededById     String?
+  generatedAt        DateTime?     @db.Timestamptz(3)
+  executedAt         DateTime?     @db.Date
+  nextReviewAt       DateTime?     @db.Date
   /// Part 2: signing date + witness names, sealed under slot "willexec:<id>".
   executionSealed    Bytes?
   /// Part 2: Document (ownerType WILL, category "executed") holding the signed copy.
   executedDocumentId String?
-  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
-  versions         WillVersion[]
+  createdAt          DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @db.Timestamptz(3)
+  versions           WillVersion[]
 
   @@unique([userId, version])
   @@index([userId, status])
@@ -5567,4 +5570,88 @@ model LegacyOutbox {
 
   @@unique([planId, kind, cycle, recipientKey])
   @@index([sentAt])
+}
+
+// ─── AI CONNECTOR (bring your own ChatGPT / Claude over MCP) ───────────
+// Spec: docs/superpowers/specs/2026-10-14-ai-connector-design.md. Tokens and
+// codes are stored as SHA-256 only. McpClient and McpAuthRequest exist before
+// any user is known, so they carry no userId and no policy.
+
+enum McpTokenKind {
+  ACCESS
+  REFRESH
+}
+
+model McpClient {
+  id           String     @id @default(cuid())
+  clientId     String     @unique
+  redirectUris String[]
+  displayName  String
+  registeredAt DateTime   @default(now()) @db.Timestamptz(3)
+  lastSeenAt   DateTime?  @db.Timestamptz(3)
+  grants       McpGrant[]
+}
+
+model McpAuthRequest {
+  /// Random 32-byte base64url id; the `req` on the web approval page.
+  id            String    @id
+  clientId      String
+  redirectUri   String
+  state         String?
+  codeChallenge String
+  resource      String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt     DateTime  @db.Timestamptz(3)
+  consumedAt    DateTime? @db.Timestamptz(3)
+
+  @@index([expiresAt])
+}
+
+model McpGrant {
+  id                String        @id @default(cuid())
+  userId            String
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId          String
+  client            McpClient     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  areas             String[]
+  /// Family members shared with this chatbot (Part 2). Empty = only the user.
+  memberUserIds     String[]      @default([])
+  refreshGeneration Int           @default(0)
+  createdAt         DateTime      @default(now()) @db.Timestamptz(3)
+  lastUsedAt        DateTime?     @db.Timestamptz(3)
+  revokedAt         DateTime?     @db.Timestamptz(3)
+  revokedReason     String?
+  codes             McpAuthCode[]
+  tokens            McpToken[]
+
+  @@index([userId, revokedAt])
+}
+
+model McpAuthCode {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  grantId       String
+  grant         McpGrant  @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  codeHash      String    @unique
+  codeChallenge String
+  redirectUri   String
+  resource      String?
+  expiresAt     DateTime  @db.Timestamptz(3)
+  usedAt        DateTime? @db.Timestamptz(3)
+}
+
+model McpToken {
+  id         String       @id @default(cuid())
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  grantId    String
+  grant      McpGrant     @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  tokenHash  String       @unique
+  kind       McpTokenKind
+  generation Int
+  expiresAt  DateTime     @db.Timestamptz(3)
+  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@index([grantId])
 }

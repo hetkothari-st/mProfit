@@ -336,6 +336,10 @@ export async function purgeUser(userId: string): Promise<void> {
         // RESTRICT, so deleting a will that still has versions fails. Both
         // also cascade from User, but the purge names every user table it
         // relies on. Will PDFs are Document rows and cascade with the user.
+        // AI Connector: tokens and codes before grants (both reference grant).
+        await tx.mcpToken.deleteMany({ where: { userId: id } });
+        await tx.mcpAuthCode.deleteMany({ where: { userId: id } });
+        await tx.mcpGrant.deleteMany({ where: { userId: id } });
         await tx.willVersion.deleteMany({ where: { userId: id } });
         await tx.will.deleteMany({ where: { userId: id } });
       }
