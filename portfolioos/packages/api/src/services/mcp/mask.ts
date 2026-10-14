@@ -1,3 +1,5 @@
+import { redactText } from '../../ingestion/pii.js';
+
 /**
  * The one masking layer every connector tool result passes through before it
  * leaves for OpenAI/Anthropic. Tools already select explicit fields; this is
@@ -8,7 +10,11 @@ const ID_KEY = /^(account(number|no)?|cardnumber|card(no)?|policy(number|no)|fol
 const DECIMAL = /^-?\d+\.\d+$/;
 const BARE_LONG_INT = /^\d{9,}$/;
 const LONG_DIGITS = /(?<![\d.])\d{9,}(?![\d.])/g;
-const PAN_RE = /\b[A-Z]{5}\d{4}[A-Z]\b/g;
+const PAN_RE = /\b[A-Za-z]{5}\d{4}[A-Za-z]\b/g;
+// Digit groups joined by single spaces or hyphens (phones, cards, accounts).
+// Commas, dots and slashes break a group, so Indian amounts and dates survive.
+const DIGIT_GROUPS = /(?<![\d.,/])\d(?:[ -]?\d){8,}(?![\d.,/])/g;
+const EMAIL_OR_UPI = /[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)/g;
 const AADHAAR_RE = /\b\d{4}\s\d{4}\s\d{4}\b/g;
 
 export function last4(raw: string | null | undefined): string | null {
@@ -20,7 +26,12 @@ export function last4(raw: string | null | undefined): string | null {
 function maskText(s: string): string {
   if (DECIMAL.test(s)) return s;
   if (BARE_LONG_INT.test(s)) return last4(s)!;
-  return s
+  // Whole digit groups first (a 16-digit card must not be split by the
+  // Aadhaar rule into 12 + 4), then the shared LLM redactor (PAN, Aadhaar,
+  // labelled accounts, CVV/PIN/OTP, phones), then the shapes it does not cover.
+  const grouped = s.replace(DIGIT_GROUPS, (m) => last4(m.replace(/\D/g, ''))!);
+  return redactText(grouped)
+    .replace(EMAIL_OR_UPI, (_m, domain: string) => `XXXX@${domain}`)
     .replace(PAN_RE, (m) => last4(m)!)
     .replace(AADHAAR_RE, (m) => last4(m)!)
     .replace(LONG_DIGITS, (m) => last4(m)!);

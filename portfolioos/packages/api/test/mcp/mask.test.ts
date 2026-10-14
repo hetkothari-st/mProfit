@@ -27,4 +27,23 @@ describe('maskForChatbot', () => {
     expect(last4('')).toBeNull();
     expect(last4('12')).toBe('XXXX12');
   });
+  it('masks spaced and hyphenated digit groups (phones, accounts, cards)', () => {
+    const out = maskForChatbot({ a: 'Call +91 98765 43210', b: 'A/c 1234-5678-9012', c: 'Card 4111 1111 1111 1111' });
+    expect(out.a).not.toMatch(/98765/);
+    expect(out.b).not.toMatch(/1234-5678/);
+    expect(out.c).not.toMatch(/\d{4} \d{4}/);
+    expect(out.c).toContain('1111');
+  });
+  it('masks lowercase PAN, OTP, UPI ids and emails', () => {
+    const out = maskForChatbot({ t: 'pan abcde1234f OTP 482913 via 9876543210@ybl mail ramesh.k@gmail.com' });
+    expect(out.t).not.toMatch(/abcde1234f/i);
+    expect(out.t).not.toContain('482913');
+    expect(out.t).not.toContain('9876543210');
+    expect(out.t).not.toContain('ramesh.k');
+    expect(out.t).toContain('@ybl');
+  });
+  it('keeps Indian-format amounts and dates readable', () => {
+    const v = { t: 'Paid 1,00,000.00 on 10/04/2026 and 2,40,000 later' };
+    expect(maskForChatbot(v)).toEqual(v);
+  });
 });
