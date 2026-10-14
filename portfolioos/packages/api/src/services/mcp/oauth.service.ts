@@ -49,6 +49,12 @@ function secret(prefix: string): { raw: string; hash: string } {
   const raw = `${prefix}${crypto.randomBytes(32).toString('base64url')}`;
   return { raw, hash: sha(raw) };
 }
+/** Drop trailing slashes without a regex (CodeQL: polynomial regex on user input). */
+function trimSlashes(v: string): string {
+  let end = v.length;
+  while (end > 0 && v.charCodeAt(end - 1) === 47) end--;
+  return v.slice(0, end);
+}
 function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.length > 0 ? v : undefined;
 }
@@ -115,7 +121,7 @@ export async function startAuthorization(q: Record<string, unknown>): Promise<{ 
   const challenge = str(q.code_challenge);
   if (!challenge || q.code_challenge_method !== 'S256') fail('invalid_request', 'PKCE with S256 is required');
   const res = str(q.resource);
-  if (res !== undefined && res.replace(/\/+$/, '') !== resource) fail('invalid_target', 'Unknown resource');
+  if (res !== undefined && trimSlashes(res) !== resource) fail('invalid_target', 'Unknown resource');
   const reqId = crypto.randomBytes(32).toString('base64url');
   await runAsSystem(() => prisma.mcpAuthRequest.create({
     data: {
@@ -241,19 +247,20 @@ export async function exchangeToken(body: Record<string, unknown>) {
     const raw = str(body.code) ?? '';
     const code = await runAsSystem(() => prisma.mcpAuthCode.findUnique({ where: { codeHash: sha(raw) }, include: { grant: true } }));
     if (!code || code.grant.clientId !== client.id) throw new OAuthError(400, 'invalid_grant', 'Invalid code');
-    if (code.usedAt) {
-      // RFC 6749 4.1.2: a replayed code revokes everything issued from it.
+    if (code.expiresAt <= new Date() || code.grant.revokedAt) throw new OAuthError(400, 'invalid_grant', 'Code expired');
+    if (str(body.redirect_uri) !== code.redirectUri) throw new OAuthError(400, 'invalid_grant', 'redirect_uri mismatch');
+    const res = str(body.resource);
+    if (res !== undefined && trimSlashes(res) !== mcpConfig().resource) throw new OAuthError(400, 'invalid_target', 'Unknown resource');
+    if (!verifyPkceS256(str(body.code_verifier) ?? '', code.codeChallenge)) throw new OAuthError(400, 'invalid_grant', 'PKCE verification failed');
+    // Single use is decided by this atomic update alone (race-safe). A code
+    // that was already used is a replay (RFC 6749 4.1.2): revoke everything
+    // issued from it.
+    const marked = await runAsSystem(() => prisma.mcpAuthCode.updateMany({ where: { id: code.id, usedAt: null }, data: { usedAt: new Date() } }));
+    if (marked.count !== 1) {
       await revokeGrant(code.userId, code.grantId, 'code_replay');
       await writeAuditLog({ userId: code.userId, action: 'mcp_refresh_reuse', resource: `McpGrant:${code.grantId}`, metadata: { kind: 'code_replay' } });
       throw new OAuthError(400, 'invalid_grant', 'Code already used');
     }
-    if (code.expiresAt <= new Date() || code.grant.revokedAt) throw new OAuthError(400, 'invalid_grant', 'Code expired');
-    if (str(body.redirect_uri) !== code.redirectUri) throw new OAuthError(400, 'invalid_grant', 'redirect_uri mismatch');
-    const res = str(body.resource);
-    if (res !== undefined && res.replace(/\/+$/, '') !== mcpConfig().resource) throw new OAuthError(400, 'invalid_target', 'Unknown resource');
-    if (!verifyPkceS256(str(body.code_verifier) ?? '', code.codeChallenge)) throw new OAuthError(400, 'invalid_grant', 'PKCE verification failed');
-    const marked = await runAsSystem(() => prisma.mcpAuthCode.updateMany({ where: { id: code.id, usedAt: null }, data: { usedAt: new Date() } }));
-    if (marked.count !== 1) throw new OAuthError(400, 'invalid_grant', 'Code already used');
     // A fresh consent retires every token issued before it: a refresh token
     // stolen earlier stops working, and since it is deleted (not merely
     // superseded) presenting it is not mistaken for reuse of the new one.
