@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Sparkles, X } from 'lucide-react';
+import { BrainCircuit, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { AIAssistant } from './AIAssistant';
 import { aiAssistantApi } from '@/api/aiAssistant.api';
@@ -163,7 +163,7 @@ export function AssistantButton() {
               className="absolute inset-0 rounded-full bg-accent/40 animate-ping pointer-events-none"
             />
           )}
-          <Sparkles
+          <BrainCircuit
             className="relative h-5 w-5 group-hover:scale-110 transition-transform"
             strokeWidth={1.9}
           />
@@ -212,7 +212,7 @@ function TeaserBubble({
             className="text-left block"
           >
             <div className="flex items-center gap-1.5 mb-0.5">
-              <Sparkles className="h-3 w-3 text-accent" strokeWidth={2} />
+              <BrainCircuit className="h-3 w-3 text-accent" strokeWidth={2} />
               <span className="text-[10px] uppercase tracking-kerned text-accent-ink">
                 New
               </span>
