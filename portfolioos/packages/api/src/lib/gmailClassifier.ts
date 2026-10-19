@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { ANTHROPIC_CLIENT_OPTIONS } from './anthropicOptions.js';
 import { z } from 'zod';
 import { Decimal } from '@everypaisa/shared';
 import { env } from '../config/env.js';
@@ -126,7 +127,7 @@ export async function classifyAttachmentWithLlm(
   }
 
   warnIfZeroRetentionUnconfirmed('gmail.classify');
-  const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY! });
+  const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY!, ...ANTHROPIC_CLIENT_OPTIONS });
 
   const redacted = redactForLlm(input.first4kbText);
   const userPayload = `Filename: ${input.fileName}

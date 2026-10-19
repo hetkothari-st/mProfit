@@ -1,5 +1,6 @@
 import { logger } from '../../lib/logger.js';
 import { AppError } from '../../lib/errors.js';
+import { OUTBOUND_FETCH_TIMEOUT_MS } from '../../lib/httpDispatcher.js';
 
 /**
  * Upstox v2 OAuth2 (authorization-code grant):
@@ -64,6 +65,7 @@ export async function refreshUpstoxToken(input: {
 async function upstoxTokenCall(form: Record<string, string>): Promise<UpstoxSession> {
   const body = new URLSearchParams(form).toString();
   const res = await fetch(UPSTOX_TOKEN_URL, {
+    signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',

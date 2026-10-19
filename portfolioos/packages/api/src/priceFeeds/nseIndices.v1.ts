@@ -70,6 +70,7 @@
  */
 
 import { request } from 'undici';
+import { boundedAgent, followRedirects } from '../lib/httpDispatcher.js';
 import { logger } from '../lib/logger.js';
 import {
   parseNiftyTriJson,
@@ -255,7 +256,8 @@ export async function httpGetText(
     const res = await request(url, {
       method: 'GET',
       headers,
-      maxRedirections: 5,
+      // Interceptor, not `maxRedirections` (rejected by undici v7 / Node 24).
+      dispatcher: followRedirects,
       bodyTimeout: 30_000,
       headersTimeout: 15_000,
     });
@@ -279,7 +281,7 @@ export async function httpGetText(
 /**
  * POST a JSON body and return the response as text.
  *
- * `maxRedirections: 0` on purpose. undici replays a POST body across a 307 but
+ * No redirect following, on purpose. undici replays a POST body across a 307 but
  * degrades a 301/302 to GET, and a silently-degraded GET here returns the
  * site's HTML homepage under HTTP 200 — a "successful" response containing no
  * data. Better to see the 3xx as an `HTTP_ERROR` and know the endpoint moved.
@@ -294,7 +296,8 @@ export async function httpPostJson(
       method: 'POST',
       headers,
       body,
-      maxRedirections: 0,
+      // A dispatcher with no redirect interceptor: a 3xx comes back as-is.
+      dispatcher: boundedAgent,
       bodyTimeout: 30_000,
       headersTimeout: 15_000,
     });

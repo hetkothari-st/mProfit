@@ -12,6 +12,7 @@ import {
 } from '../services/goals.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
+import { decimalInput } from '../lib/zodMoney.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const moneyString = z.union([
@@ -26,8 +27,10 @@ const baseSchema = z.object({
   status: z.enum(GOAL_STATUSES).optional(),
   targetAmount: moneyString,
   initialAmount: moneyString.optional(),
-  inflationRate: z.union([z.string(), z.number()]).nullable().optional(),
-  expectedReturn: z.union([z.string(), z.number()]).nullable().optional(),
+  // Decimal(5,4): a rate as a fraction (0.06), finite and below 10.
+  inflationRate: decimalInput(10).nullable().optional(),
+  // Decimal(5,4): a rate as a fraction (0.06), finite and below 10.
+  expectedReturn: decimalInput(10).nullable().optional(),
   targetDate: isoDate,
   startDate: isoDate.optional(),
   portfolioIds: z.array(z.string()).optional(),

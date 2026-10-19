@@ -12,12 +12,15 @@ import { removeDuplicates, scanDuplicates } from '../services/duplicates.service
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { parseFamilyId } from '../lib/familyHeader.js';
+import { decimalInput } from '../lib/zodMoney.js';
 
 const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD');
 
-const decimalLike = z.union([z.number(), z.string()]);
+// Finite decimals only ("NaN"/"Infinity"/hex rejected), bounded inside the
+// Decimal(18,6)/(18,4) columns these land in. See lib/zodMoney.ts.
+const decimalLike = decimalInput(1e12);
 
 // Exported so the CA workspace's own create-transaction route
 // (caAccounting.controller.ts) validates against the exact same shape rather

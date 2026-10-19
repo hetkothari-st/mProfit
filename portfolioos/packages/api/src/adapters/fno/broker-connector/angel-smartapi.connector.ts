@@ -7,6 +7,7 @@ import { getActiveBrokerSession } from '../../../services/brokerOauth/index.js';
 import { parseKiteTradingSymbol, resolveLotSize } from '../symbol-parser.js';
 import type { BrokerConnector, SyncResult } from './types.js';
 import type { FnoNormalizedTrade } from '../types.js';
+import { boundedAgent } from '../../../lib/httpDispatcher.js';
 
 /**
  * Angel One SmartAPI adapter.
@@ -37,6 +38,7 @@ interface AngelTrade {
 async function angelPost<T>(accessToken: string, apiKey: string, path: string, body: unknown): Promise<T> {
   const res = await request(`${ANGEL_BASE}${path}`, {
     method: 'POST',
+    dispatcher: boundedAgent,
     headers: {
       authorization: `Bearer ${accessToken}`,
       accept: 'application/json',

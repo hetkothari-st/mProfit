@@ -27,13 +27,14 @@ import {
 } from '../services/pf/uanLookup.service.js';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
+import { enqueueBounded, logQueueErrors } from '../lib/queue.js';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { sseHub } from '../lib/sseHub.js';
 import { runAsUser } from '../lib/requestContext.js';
 import { decryptCredentialBlob, decryptIdentifier } from '../services/pfCredentials.service.js';
 import { getPfAccountById } from '../services/pfAccounts.service.js';
 import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
-import { startSession, transition, complete, fail } from '../services/pfFetchSessions.service.js';
+import { startSession, transition, reportStatus, complete, fail } from '../services/pfFetchSessions.service.js';
 import { buildCanonicalEvents } from '../services/pfCanonicalize.service.js';
 import { runPfChain } from '../adapters/pf/chain.js';
 import { recomputeForAsset } from '../services/holdingsProjection.js';
@@ -111,6 +112,7 @@ export function getPfFetchQueue(): Bull.Queue<PfFetchJobPayload> {
       },
     });
 
+    logQueueErrors(_pfFetchQueue, 'pf-headless-fetch');
     _pfFetchQueue.on('failed', (job, err) => {
       logger.error(
         { jobId: job?.id, sessionId: job?.data?.sessionId, err },
@@ -127,10 +129,12 @@ export function getPfFetchQueue(): Bull.Queue<PfFetchJobPayload> {
   return _pfFetchQueue;
 }
 
-// Exported as `pfFetchQueue` for the controller to enqueue jobs
+// Exported as `pfFetchQueue` for the controller to enqueue jobs. Resolves false
+// when the queue did not accept the job in time (Redis down) instead of
+// hanging the request on ioredis's offline buffer.
 export const pfFetchQueue = {
-  add: async (name: string, payload: PfFetchJobPayload) => {
-    return getPfFetchQueue().add(name, payload);
+  add: async (name: string, payload: PfFetchJobPayload): Promise<boolean> => {
+    return enqueueBounded(getPfFetchQueue().add(name, payload), `pf:${name}:${payload.sessionId}`);
   },
 };
 
@@ -194,7 +198,7 @@ export function startPfFetchWorker(): void {
           credentials,
           abortSignal: abortController.signal,
           emit(status: PfFetchStatus, info?: Record<string, unknown>) {
-            void transition(sessionId, status, info);
+            void reportStatus(sessionId, status, info);
           },
           prompt: {
             async askCaptcha(imgBytes: Buffer): Promise<string> {

@@ -37,6 +37,7 @@ import { startMfNavAdjustmentJob } from './jobs/mfNavAdjustmentJob.js';
 import { startMfMetricsJob } from './jobs/mfMetricsJob.js';
 import { startMfPeerRankJob } from './jobs/mfPeerRankJob.js';
 import { startMfMetadataJob } from './jobs/mfMetadataJob.js';
+import { startMfNavHistoryBackfillJob } from './jobs/mfNavHistoryBackfillJob.js';
 import { startBenchmarkPriceJob } from './jobs/benchmarkPriceJob.js';
 import { startRiskFreeRateJob } from './jobs/riskFreeRateJob.js';
 import { startMfReconciliationJob } from './jobs/mfReconciliationJob.js';
@@ -55,6 +56,14 @@ import { redactUrl } from './lib/redactUrl.js';
 import { auditDownloads } from './lib/auditDownloads.js';
 import { startSecurityAlertJobs } from './jobs/securityAlertJobs.js';
 import { sweepOrphanWillDocuments } from './services/will/willOrphanSweep.js';
+import cron from 'node-cron';
+import { makeReadyHandler } from './lib/health.js';
+import { createShutdown } from './lib/shutdown.js';
+import { startPfFetchWorker } from './jobs/pfFetchWorker.js';
+import { startPfNudgeJob } from './jobs/pfNudgeJob.js';
+import { startSplitShareLinkReconcileJob } from './jobs/splitShareLinkReconcileJob.js';
+import { startSplitDigestJobs } from './jobs/splitDigestJobs.js';
+import { startLegacyTransferJob } from './jobs/legacyTransferJob.js';
 
 // Initialise Sentry BEFORE building the Express app so auto-instrumentation
 // wraps all request handling. No-ops if SENTRY_DSN is not set.
@@ -141,6 +150,8 @@ app.use(
 app.get('/health', (_req, res) => {
   res.json({ success: true, data: { status: 'ok', uptime: process.uptime() } });
 });
+// Readiness (database reachable). Railway's deploy healthcheck uses this one.
+app.get('/ready', makeReadyHandler());
 
 app.use(mcpOAuthRouter);
 app.use(mcpRouter);
@@ -263,6 +274,11 @@ const server = app.listen(env.PORT, '::', () => {
   startBenchmarkPriceJob();
   startRiskFreeRateJob();
   startMfMetadataJob();
+  // Sun 03:00 IST, after mfMetadata's 02:00 on the 1st. Fetches full history only
+  // for schemes with no MFNav rows yet (new launches the metadata job found);
+  // a scheme already backfilled costs zero requests. Rows land with
+  // adjustedNav NULL and the nightly mfNavAdjustment run fills them.
+  startMfNavHistoryBackfillJob();
   startMfReconciliationJob();
   /**
    * The two user-scoped MF workers. Neither is on a cron: mfAnalysis is driven
@@ -294,6 +310,14 @@ const server = app.listen(env.PORT, '::', () => {
   startMfScoreJob();
   // Daily 07:30 IST live loan rates (EMI calculator, spec s5.4). ENABLE_LOAN_RATES_CRON=false disables it.
   startLoanRatesJob();
+  // These five used to start at the end of runStartupSync, so a DB error early
+  // in the sync (or ENABLE_STARTUP_SYNC=false) meant they never ran at all —
+  // Succession included. They do not depend on the sync's data.
+  startPfFetchWorker();
+  startPfNudgeJob();
+  startSplitShareLinkReconcileJob();
+  startSplitDigestJobs();
+  startLegacyTransferJob();
   // Best effort: will PDFs left behind by an interrupted generate (ids only in the logs).
   sweepOrphanWillDocuments()
     .then((r) => logger.info(r, 'will.orphan_sweep'))
@@ -302,16 +326,23 @@ const server = app.listen(env.PORT, '::', () => {
   runStartupSync().catch((err) => logger.error({ err }, 'Startup sync failed'));
 });
 
-async function shutdown(signal: string) {
-  logger.info(`${signal} received, shutting down gracefully`);
-  server.close(async () => {
+// Railway's edge keeps upstream connections alive longer than Node's 5 s
+// default; when Node closes an idle socket first, a request already in flight
+// on it fails as a 502. Keep it above the proxy's idle timeout, and
+// headersTimeout above keepAliveTimeout as Node requires.
+server.keepAliveTimeout = 65_000;
+server.headersTimeout = 66_000;
+
+const shutdown = createShutdown({
+  server,
+  stopSchedulers: () => {
+    for (const task of cron.getTasks().values()) task.stop();
     stopMailboxPoller();
-    await closeQueues();
-    await prisma.$disconnect();
-    process.exit(0);
-  });
-  setTimeout(() => process.exit(1), 10_000).unref();
-}
+  },
+  closeQueues,
+  disconnect: () => prisma.$disconnect(),
+  exit: (code) => process.exit(code),
+});
 
 /**
  * Log before dying.

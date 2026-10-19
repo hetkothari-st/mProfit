@@ -6,7 +6,7 @@ import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { runFeedWithCanary } from './feedCanary.js';
 import type { MFCategory } from '@prisma/client';
-import { followRedirects } from '../lib/httpDispatcher.js';
+import { boundedAgent, followRedirects } from '../lib/httpDispatcher.js';
 
 export interface AmfiNavRow {
   schemeCode: string;
@@ -331,6 +331,7 @@ export async function backfillMfNavHistory(
   try {
     const res = await request(`https://api.mfapi.in/mf/${encodeURIComponent(schemeCode)}`, {
       method: 'GET',
+      dispatcher: boundedAgent,
       headers: { accept: 'application/json', 'user-agent': 'EveryPaisa/0.2' },
     });
     if (res.statusCode < 200 || res.statusCode >= 300) {

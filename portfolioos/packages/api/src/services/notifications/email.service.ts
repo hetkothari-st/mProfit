@@ -63,6 +63,17 @@ function envFallbackConfig(): SmtpConfig | null {
   };
 }
 
+/**
+ * nodemailer's defaults are 2 min to connect and 10 min of socket inactivity,
+ * and signup / password-reset codes are sent while the user waits on the
+ * request. A stalled SMTP server must fail fast so the caller can report it.
+ */
+export const SMTP_TIMEOUTS = {
+  connectionTimeout: 10_000,
+  greetingTimeout: 10_000,
+  socketTimeout: 20_000,
+} as const;
+
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
   const cfg = input.config ?? envFallbackConfig();
   if (!cfg) {
@@ -81,6 +92,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       port: cfg.port,
       secure: cfg.secure,
       auth: { user: cfg.user, pass: cfg.pass },
+      ...SMTP_TIMEOUTS,
     });
     const info = await transporter.sendMail({
       from: cfg.from,

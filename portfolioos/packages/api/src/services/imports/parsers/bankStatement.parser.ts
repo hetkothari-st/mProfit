@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { ANTHROPIC_CLIENT_OPTIONS } from '../../../lib/anthropicOptions.js';
 import { z } from 'zod';
 import { env } from '../../../config/env.js';
 import { logger } from '../../../lib/logger.js';
@@ -149,7 +150,7 @@ export const bankStatementParser: Parser = {
     const bankName = detectBank(pdfText);
 
     warnIfZeroRetentionUnconfirmed('import.bank_statement');
-    const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY! });
+    const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY!, ...ANTHROPIC_CLIENT_OPTIONS });
     let resp;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

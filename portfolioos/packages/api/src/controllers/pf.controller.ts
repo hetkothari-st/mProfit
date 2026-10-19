@@ -25,7 +25,22 @@ import {
   encryptCredentialBlob,
   decryptIdentifier,
 } from '../services/pfCredentials.service.js';
-import { startSession } from '../services/pfFetchSessions.service.js';
+import { startSession, fail as failSession } from '../services/pfFetchSessions.service.js';
+
+const QUEUE_UNAVAILABLE = 'Could not start this right now. Please try again in a minute.';
+
+/**
+ * The queue did not take the job (Redis down). Close the session so the SSE
+ * stream and the UI see a terminal state, and tell the caller it is temporary.
+ */
+async function rejectUnqueued(res: Response, sessionId: string): Promise<void> {
+  try {
+    await failSession(sessionId, QUEUE_UNAVAILABLE);
+  } catch (err) {
+    logger.warn({ err, sessionId }, '[pf] could not mark unqueued session failed');
+  }
+  error(res, 503, QUEUE_UNAVAILABLE, 'QUEUE_UNAVAILABLE');
+}
 import { buildCanonicalEvents } from '../services/pfCanonicalize.service.js';
 import { recomputeForAsset } from '../services/holdingsProjection.js';
 import { tokenizePassbookPdf, tokenizePassbookText } from '../adapters/pf/shared/pdfPassbookParser.js';
@@ -153,13 +168,14 @@ export async function startSessionHandler(req: Request, res: Response) {
   });
 
   // Enqueue the headless fetch job
-  await pfFetchQueue.add('fetch', {
+  const queued = await pfFetchQueue.add('fetch', {
     sessionId: session.id,
     accountId: account.id,
     userId,
     // Only pass credentials inline if user chose NOT to save them
     credentialOverride: !saveCredentials ? credentials : undefined,
   });
+  if (!queued) return rejectUnqueued(res, session.id);
 
   ok(res, { sessionId: session.id });
 }
@@ -198,7 +214,8 @@ export async function startUanLookupHandler(req: Request, res: Response) {
   const { sessionId } = await startUanLookup(userId, input, source);
 
   if (source === 'SERVER_HEADLESS') {
-    await pfFetchQueue.add('uan-lookup', { kind: 'UAN_LOOKUP', sessionId, userId, input });
+    const queued = await pfFetchQueue.add('uan-lookup', { kind: 'UAN_LOOKUP', sessionId, userId, input });
+    if (!queued) return rejectUnqueued(res, sessionId);
   }
   // For EXTENSION the paired extension picks the job up; nothing to enqueue.
 
@@ -235,12 +252,13 @@ export async function startPasswordResetHandler(req: Request, res: Response) {
   const { sessionId } = await startPasswordReset(userId, input, source);
 
   if (source === 'SERVER_HEADLESS') {
-    await pfFetchQueue.add('password-reset', {
+    const queued = await pfFetchQueue.add('password-reset', {
       kind: 'PASSWORD_RESET',
       sessionId,
       userId,
       input,
     });
+    if (!queued) return rejectUnqueued(res, sessionId);
   }
 
   ok(res, { sessionId });

@@ -1,5 +1,6 @@
 import YahooFinance from 'yahoo-finance2';
 import { logger } from '../lib/logger.js';
+import { OUTBOUND_FETCH_TIMEOUT_MS } from '../lib/httpDispatcher.js';
 
 // v3+ is instance-based; v2 (a module singleton) is unmaintained and logs a
 // deprecation notice on every boot.
@@ -138,6 +139,7 @@ export async function yahooChartDirect(
     for (let attempt = 0; ; attempt++) {
       res = await throttled(() =>
         fetch(url, {
+          signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
           headers: {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             Accept: 'application/json,*/*',

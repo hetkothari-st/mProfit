@@ -1,4 +1,4 @@
-import { getImportQueue } from '../lib/queue.js';
+import { enqueueBounded, getImportQueue } from '../lib/queue.js';
 import { processImportJob } from '../services/imports/import.service.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
@@ -77,11 +77,18 @@ export function startImportWorker(): void {
   logger.info('[worker] import worker started — concurrency=2, timeout=5min');
 
   // Rescue: re-enqueue any PENDING jobs that never got picked up (e.g. after
-  // a crash, or if Redis wasn't reachable at the time of upload).
-  void rescuePendingJobs(q);
+  // a crash, or if Redis wasn't reachable at the time of upload), then close
+  // out PROCESSING rows whose Bull job no longer exists.
+  void rescuePendingJobs(q).then(() => sweepOrphanedProcessingJobs(q));
 }
 
-async function rescuePendingJobs(q: ReturnType<typeof getImportQueue>): Promise<void> {
+type RescueQueue = Pick<ReturnType<typeof getImportQueue>, 'add' | 'getJob'>;
+
+/** A PROCESSING row older than this cannot still be running: the job timeout is 5 minutes. */
+const ORPHAN_AFTER_MS = 60 * 60 * 1000;
+const REDIS_WAIT_MS = 5_000;
+
+export async function rescuePendingJobs(q: RescueQueue): Promise<void> {
   try {
     // Cross-tenant scan — can't be attributed to one user.
     const pending = await runAsSystem(() =>
@@ -94,13 +101,76 @@ async function rescuePendingJobs(q: ReturnType<typeof getImportQueue>): Promise<
     if (pending.length === 0) return;
     logger.info({ count: pending.length }, '[worker] re-enqueueing stuck PENDING jobs');
     for (const j of pending) {
-      try {
-        await q.add({ importJobId: j.id, userId: j.userId });
-      } catch (err) {
-        logger.warn({ err, jobId: j.id, fileName: j.fileName }, '[worker] rescue enqueue failed');
-      }
+      // jobId = ImportJob id, so a job still sitting in Redis is not added twice.
+      // No pdfPassword: it is never persisted, so a protected PDF fails here
+      // and asks the user for the password again.
+      const queued = await enqueueBounded(q.add({ importJobId: j.id, userId: j.userId }, { jobId: j.id }), `import-rescue:${j.id}`);
+      // Redis is not answering; every further add would wait out the same timeout.
+      if (!queued) return;
     }
   } catch (err) {
     logger.warn({ err }, '[worker] rescuePendingJobs failed');
+  }
+}
+
+/**
+ * A row stuck in PROCESSING with no live Bull job behind it (Redis lost the
+ * job, or it predates jobId = ImportJob id) never moves again and shows as a
+ * spinner forever. Mark it FAILED so the user can re-upload. Skipped entirely
+ * while Redis cannot answer, since "no job" would then be a guess.
+ */
+export async function sweepOrphanedProcessingJobs(q: RescueQueue, now: Date = new Date()): Promise<number> {
+  try {
+    const stale = await runAsSystem(() =>
+      prisma.importJob.findMany({
+        where: { status: 'PROCESSING', createdAt: { lt: new Date(now.getTime() - ORPHAN_AFTER_MS) } },
+        select: { id: true },
+        take: 200,
+      }),
+    );
+    let swept = 0;
+    for (const { id } of stale) {
+      const state = await withTimeout(lookUpJobState(q, id), REDIS_WAIT_MS);
+      if (state === 'unknown') {
+        logger.warn('[worker] orphan sweep skipped — Redis not answering');
+        return swept;
+      }
+      if (state === 'live') continue;
+      await runAsSystem(() =>
+        prisma.importJob.updateMany({
+          where: { id, status: 'PROCESSING' },
+          data: {
+            status: 'FAILED',
+            errorLog: { workerError: 'Import was interrupted. Please upload the file again.', orphaned: true },
+            completedAt: now,
+          },
+        }),
+      );
+      swept++;
+    }
+    if (swept > 0) logger.warn({ swept }, '[worker] marked orphaned PROCESSING imports FAILED');
+    return swept;
+  } catch (err) {
+    logger.warn({ err }, '[worker] orphan sweep failed');
+    return 0;
+  }
+}
+
+async function lookUpJobState(q: RescueQueue, id: string): Promise<'live' | 'gone'> {
+  const job = await q.getJob(id);
+  if (!job) return 'gone';
+  const state = await job.getState();
+  return state === 'completed' || state === 'failed' ? 'gone' : 'live';
+}
+
+async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | 'unknown'> {
+  let timer: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<'unknown'>((resolve) => {
+    timer = setTimeout(() => resolve('unknown'), ms);
+  });
+  try {
+    return await Promise.race([p.catch(() => 'unknown' as const), timedOut]);
+  } finally {
+    clearTimeout(timer);
   }
 }
