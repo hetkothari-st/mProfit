@@ -1368,6 +1368,12 @@ model ImportJob {
   // Phase Gmail-FullInbox — back-reference when this job was promoted
   // from a discovered Gmail attachment. Null for direct uploads.
   gmailDocId            String?
+  /// What the source statement itself says the investor held at its closing
+  /// date ({ asOf, holdings: [{ isin, folio, schemeName, units }] }), when the
+  /// parser could read it. The data-quality check compares it with the units
+  /// the app's own transactions add up to on that date — a gap means rows are
+  /// missing or doubled. Null for files that carry no closing position.
+  statementSnapshot     Json?
   createdAt             DateTime     @default(now())
   completedAt           DateTime?
 
@@ -3951,6 +3957,24 @@ enum FmvSource {
 // possible (no daily historical prices for FDs/real estate/etc.), so the
 // series starts from whenever the nightly cron (or the day-1 backfill
 // script) first ran for that user.
+
+// One row per run of the nightly stored-data integrity check
+// (jobs/dataIntegrityJob.ts). System-owned, like the MF reference tables: no
+// userId, no RLS policy. `details` names portfolios and asset keys only —
+// never amounts tied to a person's name.
+model DataIntegrityRun {
+  id                String    @id @default(cuid())
+  startedAt         DateTime  @default(now())
+  finishedAt        DateTime?
+  portfoliosChecked Int       @default(0)
+  holdingDrifts     Int       @default(0)
+  gainDrifts        Int       @default(0)
+  portfoliosRepaired Int      @default(0)
+  failures          Int       @default(0)
+  details           Json?
+
+  @@index([startedAt])
+}
 
 model NetWorthSnapshot {
   id                       String    @id @default(cuid())
