@@ -17,7 +17,7 @@ import { requiredMonthlySip } from '../services/goals/goalMath.js';
 import type { AdvisorAssetBucketValue, AdvisorFacts } from '../services/advisor/types.js';
 import { buildInsuranceData } from './contextBuilder.js';
 import { QueryIntent } from './queryClassifier.js';
-import { searchKnowledge } from './knowledge/search.js';
+import { credit, searchKnowledge } from './knowledge/search.js';
 import { resolveProduct } from '../services/advisor/productResolution.js';
 import { env } from '../config/env.js';
 
@@ -202,7 +202,7 @@ export const ADVISOR_TOOLS: Anthropic.Tool[] = [
   {
     name: 'search_knowledge',
     description:
-      'Search the adviser library: principles from The Intelligent Investor, The Little Book of Common Sense Investing, A Random Walk Down Wall Street, The Psychology of Money and Let’s Talk Money, plus the planning framework.',
+      'Search the adviser library: the NISM investment adviser syllabus (Series X-A and X-B: planning, markets, products, tax, retirement, insurance, estate, regulation, behavioural finance), Let’s Talk Money, and the planning framework.',
     input_schema: obj({ query: { type: 'string' } }, ['query']),
   },
 ];
@@ -540,7 +540,7 @@ const EXECUTORS: Record<string, Executor> = {
       passages: searchKnowledge(q, { limit: 4 }).map(({ entry: e }) => ({
         id: e.id,
         title: e.title,
-        credit: e.source.kind === 'BOOK' ? `${e.source.book}, ${e.source.author}` : 'Planning framework',
+        credit: credit(e),
         principle: e.principle,
         inPractice: e.inPractice ?? null,
       })),

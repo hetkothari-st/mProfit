@@ -122,7 +122,8 @@ export function searchKnowledge(
 
 const EDITION_LABEL: Record<string, string> = { '2025-06': 'Jun 2025', '2025-12': 'Dec 2025' };
 
-function credit(e: KnowledgeEntry): string {
+/** Where an entry comes from, in the words the model should use to credit it. */
+export function credit(e: KnowledgeEntry): string {
   switch (e.source.kind) {
     case 'BOOK':
       return `from "${e.source.book}" by ${e.source.author}`;
