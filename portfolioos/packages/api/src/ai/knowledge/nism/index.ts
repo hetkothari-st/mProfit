@@ -37,6 +37,9 @@ import { XB_07 } from './xb-07-tax-concepts.js';
 import { XB_08 } from './xb-08-capital-gains.js';
 import { XB_09 } from './xb-09-other-sources.js';
 import { XB_10 } from './xb-10-debt-taxation.js';
+import { XB_11 } from './xb-11-equity-taxation.js';
+import { XB_12 } from './xb-12-other-products-tax.js';
+import { XB_13 } from './xb-13-special-cases-tax.js';
 import { XB_16 } from './xb-16-behavioural-finance-basics.js';
 import { XB_17 } from './xb-17-behavioural-finance-practice.js';
 
@@ -71,6 +74,9 @@ export const NISM_LIBRARY: readonly KnowledgeEntry[] = [
   ...XB_08,
   ...XB_09,
   ...XB_10,
+  ...XB_11,
+  ...XB_12,
+  ...XB_13,
   ...XB_16,
   ...XB_17,
 ];

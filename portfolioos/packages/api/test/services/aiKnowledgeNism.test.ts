@@ -297,6 +297,36 @@ describe('NISM retrieval, chapter by chapter', () => {
   it('X-B 10: tax free bonds', () => {
     expect(ids('tax free bonds capital gain on sale')).toContain('xb-10-gsec-tbill-taxfree');
   });
+  it('X-B 11: F&O tax', () => {
+    expect(ids('how is F&O trading income taxed, business income loss set off')).toContain('xb-11-derivatives-tax');
+  });
+  it('X-B 11: equity STCG LTCG', () => {
+    expect(ids('tax on selling shares within one year and after one year, STT')).toContain('xb-11-listed-equity-tax');
+  });
+  it('X-B 11: bonus stripping', () => {
+    expect(ids('bonus stripping rule for mutual fund units')).toContain('xb-11-bonus-stripping-exemption-limit');
+  });
+  it('X-B 12: ESOP', () => {
+    expect(ids('how are ESOPs taxed on exercise and sale')).toContain('xb-12-esop-tax');
+  });
+  it('X-B 12: SGB redemption', () => {
+    expect(ids('is sovereign gold bond redemption tax free')).toContain('xb-12-sgb');
+  });
+  it('X-B 12: REIT distribution', () => {
+    expect(ids('how are REIT distributions taxed, interest dividend rent')).toContain('xb-12-reit-invit');
+  });
+  it('X-B 12: insurance maturity', () => {
+    expect(ids('is life insurance maturity taxable if premium is above 5 lakh')).toContain('xb-12-life-insurance-tax');
+  });
+  it('X-B 13: bonus shares', () => {
+    expect(ids('cost and holding period of bonus shares when I sell them')).toContain('xb-13-bonus-shares');
+  });
+  it('X-B 13: tax slabs', () => {
+    expect(ids('new tax regime slab rates 2025-26')).toContain('xb-13-tax-slabs');
+  });
+  it('X-B 13: stock lending', () => {
+    expect(ids('lending my shares through SLB, how is the fee taxed')).toContain('xb-13-slb');
+  });
   it('X-B 16: prospect theory', () => {
     expect(ids('why do people hold losing stocks and sell winners early, prospect theory')).toContain('xb-16-prospect-theory');
   });
