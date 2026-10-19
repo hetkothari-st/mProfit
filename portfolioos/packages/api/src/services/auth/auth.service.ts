@@ -20,7 +20,7 @@ import {
   refreshTokenExpiry,
   signAccessToken,
 } from './jwt.service.js';
-import { panColumns } from '../piiAtRest.service.js';
+import { panColumns } from '../security/piiAtRest.service.js';
 import { assertNotPendingDeletion } from '../accountDeletion.service.js';
 import { linkContactsForUser } from '../split/linking.service.js';
 import { effectivePlan } from '../../lib/effectivePlan.js';
@@ -672,7 +672,7 @@ export async function updateProfile(
   const data: Record<string, unknown> = {};
   if (patch.name !== undefined) data.name = patch.name;
   if (patch.phone !== undefined) data.phone = patch.phone;
-  // Encrypted columns, not plaintext — see services/piiAtRest.service.ts.
+  // Encrypted columns, not plaintext — see services/security/piiAtRest.service.ts.
   if (patch.pan !== undefined) Object.assign(data, await panColumns(patch.pan || null));
   if (patch.dob !== undefined) data.dob = patch.dob ? new Date(patch.dob) : null;
   const user = await prisma.user.update({

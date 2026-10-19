@@ -16,7 +16,7 @@ import { verifyUploadedFile } from '../lib/uploadSecurity.js';
 import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
-import { panColumns } from '../services/piiAtRest.service.js';
+import { panColumns } from '../services/security/piiAtRest.service.js';
 import { readBuffer } from '../lib/documentStorage.js';
 
 const ImportTypeEnum = z.enum([

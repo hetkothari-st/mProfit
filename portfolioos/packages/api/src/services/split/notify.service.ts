@@ -6,7 +6,7 @@ import { runAsSystem, runAsUser } from '../../lib/requestContext.js';
 import { BadRequestError, ConflictError, NotFoundError, TooManyRequestsError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { env } from '../../config/env.js';
-import { openText } from '../piiAtRest.service.js';
+import { openText } from '../security/piiAtRest.service.js';
 import { sendEmail } from '../notifications/email.service.js';
 import { requireMember } from './groups.service.js';
 import { listFriends } from './ledger.service.js';

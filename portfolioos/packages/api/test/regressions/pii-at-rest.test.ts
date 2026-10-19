@@ -11,7 +11,7 @@ import {
   readRegistrationNo,
   loanAccountNumberColumns,
   readLoanAccountNumber,
-} from '../../src/services/piiAtRest.service.js';
+} from '../../src/services/security/piiAtRest.service.js';
 import { isMaskedAccountNumber, withMaskedAccount } from '../../src/services/loans.service.js';
 
 /**

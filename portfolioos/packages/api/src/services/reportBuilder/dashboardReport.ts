@@ -48,7 +48,7 @@ import {
 } from '../charts/pdfCharts.js';
 import { themeFor, type ThemeName, type PdfTheme } from '../charts/pdfTheme.js';
 import { drawBrandLockup } from '../charts/pdfBrand.js';
-import { plateOf } from '../piiAtRest.service.js';
+import { plateOf } from '../security/piiAtRest.service.js';
 
 import { formatDateIST } from '@everypaisa/shared';
 export type DashboardScope = 'single' | 'all';

@@ -12,7 +12,7 @@ import {
   submitKfintechMailback,
   KfintechMailbackError,
 } from '../../ingestion/mfMailback/kfintechMailback.js';
-import { readPan } from '../piiAtRest.service.js';
+import { readPan } from '../security/piiAtRest.service.js';
 
 const SOURCE_ADAPTER = 'mfcas.mailback.v1';
 const SOURCE_ADAPTER_VER = '1.0.0';

@@ -19,16 +19,16 @@
  *   2. One place to get normalisation right. A fingerprint is only useful if
  *      "MH 47 BT 5950" and "mh47bt5950" hash identically.
  */
-import { prisma } from '../lib/prisma.js';
-import { env } from '../config/env.js';
-import { logger } from '../lib/logger.js';
+import { prisma } from '../../lib/prisma.js';
+import { env } from '../../config/env.js';
+import { logger } from '../../lib/logger.js';
 import {
   decryptIdentifier,
   decryptIdentifierSync,
   encryptIdentifier,
   hashIdentifier,
   last4,
-} from './pfCredentials.service.js';
+} from '../pfCredentials.service.js';
 
 const PAN_PURPOSE = 'pan';
 

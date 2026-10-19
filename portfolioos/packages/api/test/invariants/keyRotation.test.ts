@@ -2,14 +2,14 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { env } from '../../src/config/env.js';
-import { rotateAppEncryptionKey } from '../../src/services/appKeyRotation.service.js';
+import { rotateAppEncryptionKey } from '../../src/services/security/appKeyRotation.service.js';
 import { createVehicle, getVehicle } from '../../src/services/vehicles.service.js';
 import { createAccount, getAccount } from '../../src/services/bankAccounts.service.js';
-import { findVehicleByPlate } from '../../src/services/piiAtRest.service.js';
+import { findVehicleByPlate } from '../../src/services/security/piiAtRest.service.js';
 import { forgetUserDek } from '../../src/lib/userKeys.js';
 import { readBuffer, saveBuffer } from '../../src/lib/documentStorage.js';
 import { decryptSecret, encryptSecret } from '../../src/lib/secrets.js';
-import { rotateLegacySecrets } from '../../src/services/secretRotation.service.js';
+import { rotateLegacySecrets } from '../../src/services/security/secretRotation.service.js';
 
 /**
  * A full APP_ENCRYPTION_KEY rotation against a real database: data written

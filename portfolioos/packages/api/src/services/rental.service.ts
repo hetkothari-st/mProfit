@@ -36,7 +36,7 @@ import {
   getTenancyOwned,
   OVERDUE_GRACE_DAYS,
 } from './rentalLedger.service.js';
-import { revealTenancy, tenantContactColumns } from './piiAtRest.service.js';
+import { revealTenancy, tenantContactColumns } from './security/piiAtRest.service.js';
 
 /**
  * Transaction client type as handed to $transaction callbacks on our

@@ -33,7 +33,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors
 import { hashPassword } from '../auth/password.service.js';
 import { recordCaAudit } from './caAudit.service.js';
 import type { Request } from 'express';
-import { panColumns } from '../piiAtRest.service.js';
+import { panColumns } from '../security/piiAtRest.service.js';
 import { assertProfessionalSecondFactor } from '../../lib/professionalMfa.js';
 
 /** Clears every form of an invitation token: single use, or withdrawn. */
@@ -368,7 +368,7 @@ export async function createManagedClient(
         email: input.email ?? null,
         // Dual-write: the CA client list still renders Client.pan, so the
         // plaintext stays until that view reads the encrypted copy. See
-        // services/piiAtRest.service.ts.
+        // services/security/piiAtRest.service.ts.
         pan: input.pan ?? null,
         panEnc: shadowPanColumns.panEnc,
         panHash: shadowPanColumns.panHash,

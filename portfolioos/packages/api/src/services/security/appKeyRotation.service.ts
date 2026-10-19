@@ -21,18 +21,18 @@
  * current, and left alone.
  */
 import { Prisma } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
-import { logger } from '../lib/logger.js';
-import { rewrapUserKeys } from '../lib/userKeys.js';
+import { prisma } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
+import { rewrapUserKeys } from '../../lib/userKeys.js';
 import {
   decryptWithKeyInfo,
   encryptCredentialBlob,
   encryptIdentifier,
   loadPreviousKey,
   type CredentialBlob,
-} from './pfCredentials.service.js';
+} from '../pfCredentials.service.js';
 import { panHash, registrationNoHash } from './piiAtRest.service.js';
-import { hashPolicyNumber } from './insurance.service.js';
+import { hashPolicyNumber } from '../insurance.service.js';
 
 type Kind = 'text' | 'bytes' | 'credentials';
 

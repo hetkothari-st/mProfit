@@ -1,6 +1,6 @@
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { rotateLegacySecrets } from '../services/secretRotation.service.js';
+import { rotateLegacySecrets } from '../services/security/secretRotation.service.js';
 
 /**
  * Move stored third-party secrets off the legacy development key.

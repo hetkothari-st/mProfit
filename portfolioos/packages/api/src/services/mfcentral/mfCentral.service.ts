@@ -13,7 +13,7 @@ import {
   MFCentralError,
 } from '../../ingestion/mfcentral/mfCentralPlaywright.js';
 import type { ParsedTransaction } from '../../ingestion/fileImport/parsers/types.js';
-import { readPan } from '../piiAtRest.service.js';
+import { readPan } from '../security/piiAtRest.service.js';
 
 const SOURCE_ADAPTER = 'mfcentral.cas.v1';
 const SOURCE_ADAPTER_VER = '1.0.0';

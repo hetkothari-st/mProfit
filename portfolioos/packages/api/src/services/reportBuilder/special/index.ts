@@ -72,7 +72,7 @@ import { acquisitionDates, holdingsAsOf, sortHoldings } from '../../holdingsAsOf
 import { cashDirection } from '../../cashDirection.js';
 import { inrAmount, transactionInrNet } from '../../investmentIncome.service.js';
 import { availableTaxFys, buildTaxSummary } from '../../tax.service.js';
-import { readPan } from '../../piiAtRest.service.js';
+import { readPan } from '../../security/piiAtRest.service.js';
 
 async function userMember(userId: string): Promise<{ family: string; member: string; pan: string | undefined }> {
   const u = await prisma.user.findUnique({

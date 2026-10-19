@@ -1,6 +1,6 @@
-import { prisma } from '../lib/prisma.js';
-import { logger } from '../lib/logger.js';
-import { decryptSecretWithKeyInfo, encryptSecret, isCurrentFormat } from '../lib/secrets.js';
+import { prisma } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
+import { decryptSecretWithKeyInfo, encryptSecret, isCurrentFormat } from '../../lib/secrets.js';
 
 /**
  * Re-encrypt every stored third-party secret under the current SECRETS_KEY.

@@ -1,9 +1,9 @@
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { rotateAppEncryptionKey } from '../services/appKeyRotation.service.js';
+import { rotateAppEncryptionKey } from '../services/security/appKeyRotation.service.js';
 
 /**
- * APP_ENCRYPTION_KEY rotation (services/appKeyRotation.service.ts). Runs on
+ * APP_ENCRYPTION_KEY rotation (services/security/appKeyRotation.service.ts). Runs on
  * boot only while APP_ENCRYPTION_KEY_PREVIOUS is set; otherwise a no-op.
  * SECRETS_KEY rotation runs in jobs/secretRotationJobs.ts.
  */

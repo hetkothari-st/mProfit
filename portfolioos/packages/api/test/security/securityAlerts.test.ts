@@ -5,7 +5,7 @@ vi.mock('../../src/services/notifications/email.service.js', () => mail);
 
 const { createTestScope, prisma } = await import('../helpers/db.js');
 const { runAsSystem } = await import('../../src/lib/requestContext.js');
-const alerts = await import('../../src/services/securityAlerts.service.js');
+const alerts = await import('../../src/services/security/securityAlerts.service.js');
 const { auditDownloads } = await import('../../src/lib/auditDownloads.js');
 
 const CHROME_WIN = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/141.0 Safari/537.36';
