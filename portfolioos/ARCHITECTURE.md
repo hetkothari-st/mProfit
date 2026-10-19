@@ -50,7 +50,7 @@ Background work runs as Bull jobs: `packages/api/src/jobs/*`, queued through `li
 |---|---|
 | `routes/` | One `<feature>.routes.ts` per area: URL definitions only. |
 | `controllers/` | One `<feature>.controller.ts` per area: request → service → response. |
-| `services/` | Business logic, grouped by feature into sub-folders (`services/<feature>/`). |
+| `services/` | Business logic, one folder per feature (`services/<feature>/`), each with a short `README.md` saying what is in it. No loose files at this level. |
 | `ingestion/` | Bringing data in from outside, with one sub-folder per source (Gmail, Zerodha, F&O brokers, Finfactor AA, CAS parser, MF Central, PF/PPF, vehicles, file imports) plus the LLM parser and the canonical-event pipeline. See the placement rule and `ingestion/README.md`. |
 | `priceFeeds/` | Market-data fetchers: NSE/BSE bhavcopy, AMFI NAV, indices, FX, commodity, crypto. |
 | `jobs/` | Bull workers and cron schedules. |

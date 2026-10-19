@@ -115,6 +115,7 @@ import {
   renderModelReport,
   renderRefusalReport,
   scoreUniverseAsOf,
+  DEFAULT_REPORT_DIR,
   REFUSAL_BANNER,
   type BacktestCoverage,
   type BacktestMember,
@@ -139,9 +140,7 @@ const FORWARD_YEARS = Number.parseInt(
 const SCHEME_LIMIT = process.env.BACKTEST_SCHEME_LIMIT
   ? Number.parseInt(process.env.BACKTEST_SCHEME_LIMIT, 10)
   : null;
-const REPORT_DIR =
-  process.env.BACKTEST_REPORT_DIR ??
-  path.resolve(process.cwd(), '../../docs/mf-analytics/backtests');
+const REPORT_DIR = process.env.BACKTEST_REPORT_DIR ?? DEFAULT_REPORT_DIR;
 
 /**
  * How stale an `MfSchemeMetrics` row may be and still count as "the state of

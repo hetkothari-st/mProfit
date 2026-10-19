@@ -38,7 +38,8 @@ pnpm -r run test                                   # API tests need Postgres + R
 - `packages/api/src/priceFeeds/` holds market-data fetchers.
 - A new API area adds `routes/<feature>.routes.ts`, `controllers/<feature>.controller.ts` and
   `services/<feature>/`, and mounts the router in `routes/index.ts`.
-- Move files with `packages/api/scripts/moveFiles.ts` (it fixes imports, including `vi.mock` paths). Then run
+- Move files with `packages/api/scripts/moveFiles.ts` (it fixes imports, including `vi.mock` paths; on Git Bash prefix
+  `MSYS_NO_PATHCONV=1` when passing `--alias`). Then run
   `node scripts/feature-index.mjs --write` to refresh the map.
 
 ## Rules still in force

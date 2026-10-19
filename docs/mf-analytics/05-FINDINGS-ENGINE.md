@@ -1,6 +1,6 @@
 # 05 — Findings, Verdicts and Prose
 
-`services/mfAnalytics/` — `mfFacts.builder.ts`, `rules/`, `mfVerdict.ts`,
+`services/mf/mfAnalytics/` — `mfFacts.builder.ts`, `rules/`, `mfVerdict.ts`,
 `mfAnalysisEngine.service.ts`. This mirrors `services/advisor/` exactly; read
 `CONTEXT.md §9.8` first. The three guarantees carry over:
 
@@ -264,7 +264,7 @@ category that is missing, never silently omits.
 
 ---
 
-## 8. Tests (`test/services/mfAnalytics/rules/`, `mfVerdict.test.ts`, `mfAnalysisEngine.test.ts`)
+## 8. Tests (`test/services/mf/mfAnalytics/rules/`, `mfVerdict.test.ts`, `mfAnalysisEngine.test.ts`)
 
 1. One test file per rule: fixture facts that fire it, fixture facts one notch
    below threshold that don't, and an assertion that `whatWouldChangeThis` is

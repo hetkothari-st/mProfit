@@ -1,6 +1,6 @@
 # 02 — Metrics
 
-`services/mfAnalytics/mfMetricsMath.ts` — pure functions, `Decimal` in and out,
+`services/mf/mfAnalytics/mfMetricsMath.ts` — pure functions, `Decimal` in and out,
 no I/O, no Prisma. `mfMetrics.service.ts` loads series and calls them.
 Everything here is unit-tested against golden fixtures (§8).
 
@@ -197,7 +197,7 @@ Portfolio and structural metrics live in `MfCurrentProfile` (the horizon-0 row).
 
 ---
 
-## 10. Tests (`packages/api/test/services/mfAnalytics/`)
+## 10. Tests (`packages/api/test/services/mf/mfAnalytics/`)
 
 Golden fixtures in `test/fixtures/mf/`:
 

@@ -298,7 +298,7 @@ and is registered in `router.service.ts` only if the router needs to route to it
 
 ## 4. Factsheet / holdings adapters
 
-Under `src/adapters/mfFactsheet/`. Follow the repo convention: pure
+Under `src/ingestion/mfFactsheet/`. Follow the repo convention: pure
 `<amc>.parse.ts` (fixture-tested, ≥5 fixtures) + `<amc>.v1.ts` (network).
 
 `registry.ts` maps `amcCode` → adapter. Each adapter implements:
