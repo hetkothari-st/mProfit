@@ -33,6 +33,10 @@ import { XB_03 } from './xb-03-non-life-insurance.js';
 import { XB_04 } from './xb-04-retirement-basics.js';
 import { XB_05 } from './xb-05-retirement-products.js';
 import { XB_06 } from './xb-06-retirement-misc.js';
+import { XB_07 } from './xb-07-tax-concepts.js';
+import { XB_08 } from './xb-08-capital-gains.js';
+import { XB_09 } from './xb-09-other-sources.js';
+import { XB_10 } from './xb-10-debt-taxation.js';
 import { XB_16 } from './xb-16-behavioural-finance-basics.js';
 import { XB_17 } from './xb-17-behavioural-finance-practice.js';
 
@@ -63,6 +67,10 @@ export const NISM_LIBRARY: readonly KnowledgeEntry[] = [
   ...XB_04,
   ...XB_05,
   ...XB_06,
+  ...XB_07,
+  ...XB_08,
+  ...XB_09,
+  ...XB_10,
   ...XB_16,
   ...XB_17,
 ];

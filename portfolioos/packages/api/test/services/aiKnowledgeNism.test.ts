@@ -258,6 +258,45 @@ describe('NISM retrieval, chapter by chapter', () => {
   it('X-B 6: EPF transfer', () => {
     expect(ids('should I withdraw or transfer my PF when changing job')).toContain('xb-06-early-withdrawals-transfers');
   });
+  it('X-B 7: RNOR status', () => {
+    expect(ids('returning NRI resident but not ordinarily resident status 729 days')).toContain('xb-07-residential-status');
+  });
+  it('X-B 7: home loan interest', () => {
+    expect(ids('home loan interest deduction 2 lakh self occupied new regime')).toContain('xb-07-house-property');
+  });
+  it('X-B 7: clubbing', () => {
+    expect(ids('if I gift money to my wife who pays tax on the interest, clubbing')).toContain('xb-07-clubbing');
+  });
+  it('X-B 7: loss set off', () => {
+    expect(ids('can long term capital loss be set off against short term gain, carry forward')).toContain('xb-07-set-off-carry-forward');
+  });
+  it('X-B 7: 87A rebate', () => {
+    expect(ids('no tax up to 12 lakh new regime rebate 87A')).toContain('xb-07-deductions-rebate');
+  });
+  it('X-B 8: holding period', () => {
+    expect(ids('after how many months is a debt fund or unlisted share long term')).toContain('xb-08-holding-periods');
+  });
+  it('X-B 8: indexation on property', () => {
+    expect(ids('property bought before July 2024 indexation 20% or 12.5%')).toContain('xb-08-indexation');
+  });
+  it('X-B 8: section 54', () => {
+    expect(ids('save capital gains tax by buying a new house section 54 or 54EC bonds')).toContain('xb-08-exemptions-54');
+  });
+  it('X-B 8: grandfathering', () => {
+    expect(ids('cost of acquisition grandfathering 31 January 2018 shares')).toContain('xb-08-computation');
+  });
+  it('X-B 9: buyback tax', () => {
+    expect(ids('how is a share buyback taxed now')).toContain('xb-09-dividends-buyback');
+  });
+  it('X-B 9: gift from relative', () => {
+    expect(ids('is a gift of shares from my uncle taxable, who is a relative')).toContain('xb-09-gifts');
+  });
+  it('X-B 10: debt fund tax', () => {
+    expect(ids('how is a debt mutual fund bought in 2024 taxed')).toContain('xb-10-mutual-fund-tax-categories');
+  });
+  it('X-B 10: tax free bonds', () => {
+    expect(ids('tax free bonds capital gain on sale')).toContain('xb-10-gsec-tbill-taxfree');
+  });
   it('X-B 16: prospect theory', () => {
     expect(ids('why do people hold losing stocks and sell winners early, prospect theory')).toContain('xb-16-prospect-theory');
   });
