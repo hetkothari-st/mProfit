@@ -24,6 +24,12 @@ describe('boot-time job wiring', () => {
     expect(startupSync).not.toMatch(new RegExp(`\\b${name}\\(`));
   });
 
+  // R-18: the weekly NAV-history backfill was exported but never started, so
+  // newly listed schemes never got history and stayed unscored.
+  it('starts the weekly MF NAV history backfill', () => {
+    expect(index).toMatch(/^\s*startMfNavHistoryBackfillJob\(\);/m);
+  });
+
   it.each(STARTERS)('%s is started from index.ts', (name) => {
     expect(index).toMatch(new RegExp(`^\\s*${name}\\(\\);`, 'm'));
   });

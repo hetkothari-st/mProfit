@@ -37,6 +37,7 @@ import { startMfNavAdjustmentJob } from './jobs/mfNavAdjustmentJob.js';
 import { startMfMetricsJob } from './jobs/mfMetricsJob.js';
 import { startMfPeerRankJob } from './jobs/mfPeerRankJob.js';
 import { startMfMetadataJob } from './jobs/mfMetadataJob.js';
+import { startMfNavHistoryBackfillJob } from './jobs/mfNavHistoryBackfillJob.js';
 import { startBenchmarkPriceJob } from './jobs/benchmarkPriceJob.js';
 import { startRiskFreeRateJob } from './jobs/riskFreeRateJob.js';
 import { startMfReconciliationJob } from './jobs/mfReconciliationJob.js';
@@ -273,6 +274,11 @@ const server = app.listen(env.PORT, '::', () => {
   startBenchmarkPriceJob();
   startRiskFreeRateJob();
   startMfMetadataJob();
+  // Sun 03:00 IST, after mfMetadata's 02:00 on the 1st. Fetches full history only
+  // for schemes with no MFNav rows yet (new launches the metadata job found);
+  // a scheme already backfilled costs zero requests. Rows land with
+  // adjustedNav NULL and the nightly mfNavAdjustment run fills them.
+  startMfNavHistoryBackfillJob();
   startMfReconciliationJob();
   /**
    * The two user-scoped MF workers. Neither is on a cron: mfAnalysis is driven
