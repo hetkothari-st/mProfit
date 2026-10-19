@@ -8,7 +8,7 @@ import type {
 } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import { assetKeyFromTransaction } from './assetKey.js';
+import { assetKeyFromTransaction } from './holdings/assetKey.js';
 import { getLatestFoContractPrice } from '../priceFeeds/nseFoMaster.service.js';
 import { getLiveFoPricesBatch } from '../priceFeeds/nseLiveFo.service.js';
 

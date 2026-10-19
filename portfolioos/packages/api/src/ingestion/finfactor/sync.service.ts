@@ -23,7 +23,7 @@ import { Decimal as PrismaDecimal } from '@prisma/client/runtime/library';
 import type { MFCategory, TransactionType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
-import { recomputeForAsset } from '../../services/holdingsProjection.js';
+import { recomputeForAsset } from '../../services/holdings/holdingsProjection.js';
 import { fetchMfInsights, fetchMfStatement } from './mf.service.js';
 
 const SOURCE_ADAPTER = 'finvu.aa.v1';

@@ -3,7 +3,7 @@ import { Decimal } from 'decimal.js';
 import {
   createTransaction,
   updateTransaction,
-} from '../../src/services/transaction.service.js';
+} from '../../src/services/holdings/transaction.service.js';
 import { persistCapitalGainsForPortfolio } from '../../src/services/capitalGains.service.js';
 import { createTestScope, seedStockMaster, prisma, type TestScope } from '../helpers/db.js';
 

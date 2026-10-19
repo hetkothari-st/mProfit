@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeAssetKey, assetKeyFromTransaction, extractUnderlyingFromAssetName } from '../../src/services/assetKey.js';
+import { computeAssetKey, assetKeyFromTransaction, extractUnderlyingFromAssetName } from '../../src/services/holdings/assetKey.js';
 
 /**
  * INVARIANT: F&O contracts on the same underlying with different (type, strike,

@@ -4,7 +4,7 @@ import { formatDateTimeIST } from '@everypaisa/shared';
 /**
  * Price-freshness indicator. Shows when the market quote behind a holding's
  * value was captured; turns amber with a ⚠ when the quote is stale (older than
- * its asset class tolerance — see api/services/priceStaleness.ts). Renders
+ * its asset class tolerance — see api/services/holdings/priceStaleness.ts). Renders
  * nothing for assets with no market price (priceAsOf null).
  */
 export function PriceAsOf({ asOf, stale }: { asOf?: string | null; stale?: boolean }) {

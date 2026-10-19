@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Prisma } from '@prisma/client';
-import { latestVsPrevious } from '../../src/services/portfolio.service.js';
+import { latestVsPrevious } from '../../src/services/holdings/portfolio.service.js';
 
 /**
  * `getPortfolioSummary`'s "Today's change" used to only look at stocks

@@ -5,7 +5,7 @@ import { prisma } from '../../lib/prisma.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../lib/logger.js';
 import { encryptSecret, decryptSecret } from '../../lib/secrets.js';
-import { createTransaction } from '../../services/transaction.service.js';
+import { createTransaction } from '../../services/holdings/transaction.service.js';
 import type { AssetClass, TransactionType } from '@prisma/client';
 import { boundedAgent } from '../../lib/httpDispatcher.js';
 

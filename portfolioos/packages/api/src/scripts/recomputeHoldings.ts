@@ -16,7 +16,7 @@
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { recomputeAllPortfolios } from '../services/holdingsProjection.js';
+import { recomputeAllPortfolios } from '../services/holdings/holdingsProjection.js';
 import { persistCapitalGainsForPortfolio } from '../services/capitalGains.service.js';
 
 /**

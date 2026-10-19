@@ -110,12 +110,12 @@ export type Quantity = string & { readonly __brand: 'Quantity' };
 ### 3.2 Holdings are a projection, never a source of truth
 
 `Transaction` rows are the source of truth. `HoldingProjection` is derived by
-replaying transactions (FIFO) through `services/holdingsProjection.ts`.
+replaying transactions (FIFO) through `services/holdings/holdingsProjection.ts`.
 
 - Any transaction write triggers `recomputeForAsset(portfolioId, assetKey)`.
-- `assetKey` (`services/assetKey.ts`) is the identity of an instrument — the
+- `assetKey` (`services/holdings/assetKey.ts`) is the identity of an instrument — the
   uniqueness key that replaced a broken multi-column key.
-- The legacy `Holding` table is **frozen**. `services/holdings.service.ts` is a
+- The legacy `Holding` table is **frozen**. `services/holdings/holdings.service.ts` is a
   deprecated shim over the projection; new code imports `holdingsProjection.js`
   directly.
 - F&O is excluded: `FUTURES`/`OPTIONS` live in `DerivativePosition` because
@@ -802,7 +802,7 @@ map, not a summary of them.
 | `fuel`, `fuelStates` | Fuel prices (vehicle running cost) |
 | `corporateActions` | Splits, bonuses, dividends |
 
-`services/priceStaleness.ts` decides when a quote is too old to display as live.
+`services/holdings/priceStaleness.ts` decides when a quote is too old to display as live.
 
 **Jobs** (`src/jobs/`, started in `index.ts` after `listen`): `priceJobs`,
 `importWorker`, `gmailScanWorker`, `mailboxPoller`, `vehicleJobs`, `catalogJobs`,

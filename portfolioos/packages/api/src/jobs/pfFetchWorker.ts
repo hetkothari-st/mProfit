@@ -37,7 +37,7 @@ import { writeIngestionFailure } from '../services/ingestionFailures.service.js'
 import { startSession, transition, reportStatus, complete, fail } from '../services/pfFetchSessions.service.js';
 import { buildCanonicalEvents } from '../services/pfCanonicalize.service.js';
 import { runPfChain } from '../ingestion/pf/chain.js';
-import { recomputeForAsset } from '../services/holdingsProjection.js';
+import { recomputeForAsset } from '../services/holdings/holdingsProjection.js';
 import { incCounter } from '../lib/metrics.js';
 import { randomUUID } from 'node:crypto';
 import type { ScrapeContext } from '../ingestion/pf/types.js';

@@ -35,7 +35,7 @@ import { computePortfolioXirr, computeUserXirr } from '../xirr.service.js';
 import { computePortfolioCapitalGains } from '../capitalGains.service.js';
 import { computePortfolioFoPnl } from '../foPnl.service.js';
 import { derivativePositionValue } from '../derivativePosition.service.js';
-import { replayTransactions } from '../holdingsProjection.js';
+import { replayTransactions } from '../holdings/holdingsProjection.js';
 import { getDashboardNetWorth } from '../dashboard.service.js';
 import {
   drawPieChart,

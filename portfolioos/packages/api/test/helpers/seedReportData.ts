@@ -3,7 +3,7 @@ import type { AssetClass, TransactionType } from '@prisma/client';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { createTestScope, type TestScope } from './db.js';
-import { recomputeForPortfolio } from '../../src/services/holdingsProjection.js';
+import { recomputeForPortfolio } from '../../src/services/holdings/holdingsProjection.js';
 import { persistCapitalGainsForPortfolio } from '../../src/services/capitalGains.service.js';
 import { recomputeDerivativePosition } from '../../src/services/derivativePosition.service.js';
 

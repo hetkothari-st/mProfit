@@ -9,19 +9,19 @@ import {
   type Quantity,
 } from '@everypaisa/shared';
 import type { Transaction } from '@prisma/client';
-import { prisma, runInTransaction } from '../lib/prisma.js';
-import { logger } from '../lib/logger.js';
-import { ForbiddenError, NotFoundError } from '../lib/errors.js';
-import { fetchHistorical, buildYahooSymbol } from '../priceFeeds/yahoo.service.js';
+import { prisma, runInTransaction } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
+import { ForbiddenError, NotFoundError } from '../../lib/errors.js';
+import { fetchHistorical, buildYahooSymbol } from '../../priceFeeds/yahoo.service.js';
 import { valuationMethodFor } from './valuationMethod.js';
 import { isPriceStale } from './priceStaleness.js';
 import {
   getEffectiveScope,
   portfolioReadableWhere,
   type EffectiveScope,
-} from './familyScope.service.js';
-import { runAsSystem, runAsUser } from '../lib/requestContext.js';
-import { computePortfolioXirr, computeHoldingXirrs } from './xirr.service.js';
+} from '../familyScope.service.js';
+import { runAsSystem, runAsUser } from '../../lib/requestContext.js';
+import { computePortfolioXirr, computeHoldingXirrs } from '../xirr.service.js';
 
 function toPortfolioDTO(p: Portfolio) {
   return {

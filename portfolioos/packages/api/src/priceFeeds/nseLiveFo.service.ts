@@ -129,7 +129,7 @@ function normalizeExpiry(raw: string | undefined): string | null {
 }
 
 /**
- * Mirror the precedence in services/assetKey.computeAssetKey:
+ * Mirror the precedence in services/holdings/assetKey.computeAssetKey:
  *   FUT  → "fno:<UND>:FUT:000000:<YYYY-MM-DD>"
  *   OPT  → "fno:<UND>:<CE|PE>:<strike padded 6>:<YYYY-MM-DD>"
  * Drift here = silent miss against DerivativePosition.assetKey.

@@ -11,7 +11,7 @@ import {
   runFeedWithCanary,
 } from '../priceFeeds/feedCanary.js';
 import { updateStockPricesFromYahoo } from '../priceFeeds/yahoo.service.js';
-import { refreshAllHoldingPrices } from '../services/holdings.service.js';
+import { refreshAllHoldingPrices } from '../services/holdings/holdings.service.js';
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
 import { loadBseEquityUniverse } from '../priceFeeds/bseUniverse.service.js';
 import { loadNseCorporateActions } from '../priceFeeds/corporateActions.service.js';

@@ -128,7 +128,7 @@ export async function runMasterSync(): Promise<MasterSyncResult> {
   const { syncAllCommodities } = await import('./commodity.service.js');
   const { syncCryptoPrices } = await import('./crypto.service.js');
   const { syncFxRates } = await import('./fx.service.js');
-  const { refreshAllHoldingPrices } = await import('../services/holdings.service.js');
+  const { refreshAllHoldingPrices } = await import('../services/holdings/holdings.service.js');
 
   const steps: [string, () => Promise<unknown>][] = [
     ['nseUniverse', async () => {
@@ -172,7 +172,7 @@ export async function runPriceSync(): Promise<MasterSyncResult> {
   const { syncAllCommodities } = await import('./commodity.service.js');
   const { syncCryptoPrices } = await import('./crypto.service.js');
   const { syncFxRates } = await import('./fx.service.js');
-  const { refreshAllHoldingPrices } = await import('../services/holdings.service.js');
+  const { refreshAllHoldingPrices } = await import('../services/holdings/holdings.service.js');
 
   const steps: [string, () => Promise<unknown>][] = [
     ['stockPrices', () => updateStockPricesFromYahoo()],

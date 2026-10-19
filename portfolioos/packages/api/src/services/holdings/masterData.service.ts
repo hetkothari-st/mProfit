@@ -1,7 +1,7 @@
 import type { Exchange, StockMaster, MutualFundMaster } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
-import { BadRequestError, NotFoundError } from '../lib/errors.js';
-import { fetchQuote, searchYahoo } from '../priceFeeds/yahoo.service.js';
+import { prisma } from '../../lib/prisma.js';
+import { BadRequestError, NotFoundError } from '../../lib/errors.js';
+import { fetchQuote, searchYahoo } from '../../priceFeeds/yahoo.service.js';
 
 export interface EnsureStockInput {
   symbol: string;

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createTransaction } from '../../src/services/transaction.service.js';
+import { createTransaction } from '../../src/services/holdings/transaction.service.js';
 import { createTestScope, seedStockMaster, prisma, type TestScope } from '../helpers/db.js';
 
 /**

@@ -5,7 +5,7 @@ import { logger } from '../../lib/logger.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
 import { readPdfText, getUserPdfPasswords } from '../../lib/pdf.js';
 import { writeIngestionFailure } from '../ingestionFailures.service.js';
-import { createTransaction } from '../transaction.service.js';
+import { createTransaction } from '../holdings/transaction.service.js';
 import { parseMfCasText } from '../../ingestion/fileImport/parsers/mfCas.parser.js';
 import {
   initiateMFCentralSync,

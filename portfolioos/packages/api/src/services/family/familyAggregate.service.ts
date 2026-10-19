@@ -57,7 +57,7 @@ import {
 import { buildAmortizationSchedule, computeLoanSummary, type StoredLoan } from '../loans.service.js';
 import { computeCardSummary } from '../creditCards.service.js';
 import { activeMonthlyIncomeTotal } from '../income.service.js';
-import { isPriceStale } from '../priceStaleness.js';
+import { isPriceStale } from '../holdings/priceStaleness.js';
 
 /**
  * Family dashboard aggregates — the household's whole financial picture,

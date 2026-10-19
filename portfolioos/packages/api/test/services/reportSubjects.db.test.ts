@@ -4,7 +4,7 @@ import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
 import { fakeRequest, fakeResponse } from '../helpers/fakeResponse.js';
 import { getHoldingsExport, getStatementCapitalGains } from '../../src/controllers/reports.controller.js';
-import { recomputeForPortfolio } from '../../src/services/holdingsProjection.js';
+import { recomputeForPortfolio } from '../../src/services/holdings/holdingsProjection.js';
 
 /**
  * Reports about somebody else in a family, against the database.

@@ -67,8 +67,8 @@ import {
   listAccountsFlat,
 } from '../../accounting.service.js';
 import { computeUserXirr } from '../../xirr.service.js';
-import { resolveMutualFundId } from '../../masterData.service.js';
-import { acquisitionDates, holdingsAsOf, sortHoldings } from '../../holdingsAsOf.service.js';
+import { resolveMutualFundId } from '../../holdings/masterData.service.js';
+import { acquisitionDates, holdingsAsOf, sortHoldings } from '../../holdings/holdingsAsOf.service.js';
 import { cashDirection } from '../../cashDirection.js';
 import { inrAmount, transactionInrNet } from '../../investmentIncome.service.js';
 import { availableTaxFys, buildTaxSummary } from '../../tax.service.js';

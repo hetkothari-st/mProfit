@@ -10,7 +10,7 @@
  */
 
 import { prisma } from '../src/lib/prisma.js';
-import { recomputeAllPortfolios } from '../src/services/holdingsProjection.js';
+import { recomputeAllPortfolios } from '../src/services/holdings/holdingsProjection.js';
 
 async function main() {
   const beforeHolding = await prisma.holding.count();

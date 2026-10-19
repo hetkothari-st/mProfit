@@ -1,9 +1,9 @@
 import { Prisma, type AssetClass, type HoldingProjection, type Transaction } from '@prisma/client';
 import { Decimal } from 'decimal.js';
-import { prisma } from '../lib/prisma.js';
+import { prisma } from '../../lib/prisma.js';
 import { replayTransactions } from './holdingsProjection.js';
-import { computeOpenLots, isCapitalAssetClass, loadFundCategoryMap } from './capitalGains.service.js';
-import { getCryptoPriceAt } from '../priceFeeds/crypto.service.js';
+import { computeOpenLots, isCapitalAssetClass, loadFundCategoryMap } from '../capitalGains.service.js';
+import { getCryptoPriceAt } from '../../priceFeeds/crypto.service.js';
 
 export interface PriceMeta {
   assetClass: AssetClass;

@@ -16,7 +16,7 @@ import {
 } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { getFmvForUser } from './fmvOverride.service.js';
-import { computeAssetKey } from './assetKey.js';
+import { computeAssetKey } from './holdings/assetKey.js';
 
 // ─── Indian tax constants ───────────────────────────────────────────
 

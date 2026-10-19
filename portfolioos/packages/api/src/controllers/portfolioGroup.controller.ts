@@ -12,7 +12,7 @@ import {
   listGroups,
   setGroupMembers,
   updateGroup,
-} from '../services/portfolioGroup.service.js';
+} from '../services/holdings/portfolioGroup.service.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 

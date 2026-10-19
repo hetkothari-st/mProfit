@@ -3,7 +3,7 @@ import { Decimal } from 'decimal.js';
 import type { AssetClass, Transaction } from '@prisma/client';
 import { createTestScope, prisma } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { recomputeForPortfolio } from '../../src/services/holdingsProjection.js';
+import { recomputeForPortfolio } from '../../src/services/holdings/holdingsProjection.js';
 import {
   computeHoldingXirrs,
   computePortfolioXirr,

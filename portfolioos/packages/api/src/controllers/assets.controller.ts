@@ -6,7 +6,7 @@ import {
   searchAssets,
   searchStocks,
   searchMutualFunds,
-} from '../services/masterData.service.js';
+} from '../services/holdings/masterData.service.js';
 import {
   fetchQuote,
   getLatestStockPrice,
@@ -20,7 +20,7 @@ import { syncAllCommodities, getLatestCommodityPrice, fetchLivePrices } from '..
 import { syncCryptoPrices, searchCrypto, fetchLiveCryptoPrices } from '../priceFeeds/crypto.service.js';
 import { syncFxRates, getLatestFxRate } from '../priceFeeds/fx.service.js';
 import { runMasterSync, runPriceSync } from '../priceFeeds/router.service.js';
-import { refreshAllHoldingPrices, refreshPortfolioPrices } from '../services/holdings.service.js';
+import { refreshAllHoldingPrices, refreshPortfolioPrices } from '../services/holdings/holdings.service.js';
 import { prisma } from '../lib/prisma.js';
 import { ok, created } from '../lib/response.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';

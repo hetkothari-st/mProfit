@@ -5,7 +5,7 @@ import { AppError } from '../lib/errors.js';
 import { getFnoConnector } from '../ingestion/fno/broker-registry.js';
 import type { FnoNormalizedTrade } from '../ingestion/fno/types.js';
 import { ensureFoInstrument } from '../priceFeeds/nseFoMaster.service.js';
-import { computeAssetKey } from './assetKey.js';
+import { computeAssetKey } from './holdings/assetKey.js';
 import { findDuplicateTransaction } from './duplicateMatch.js';
 import { recomputeDerivativePosition } from './derivativePosition.service.js';
 

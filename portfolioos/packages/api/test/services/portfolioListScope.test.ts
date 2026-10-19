@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { listPortfoliosForScope } from '../../src/services/portfolio.service.js';
+import { listPortfoliosForScope } from '../../src/services/holdings/portfolio.service.js';
 
 /**
  * The family portfolio list is built from two sources: a fan-out over each

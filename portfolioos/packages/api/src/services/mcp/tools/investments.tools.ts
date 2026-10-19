@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { serializeMoney, toDecimal } from '@everypaisa/shared';
-import { getPortfolioHoldings } from '../../portfolio.service.js';
-import { listTransactions } from '../../transaction.service.js';
+import { getPortfolioHoldings } from '../../holdings/portfolio.service.js';
+import { listTransactions } from '../../holdings/transaction.service.js';
 import { getAllocationByClass, getAssetClassXirr, getCgByFy, getKpis, type AnalyticsScope } from '../../analytics.service.js';
 import { listForexBalances } from '../../forex.service.js';
 import { MAX_ROWS, ToolUserError, type ConnectorTool } from './types.js';

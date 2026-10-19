@@ -13,8 +13,8 @@ import {
   computeUserRollingXirr,
   computeUserXirr,
 } from './xirr.service.js';
-import { priceAt } from './holdingsAsOf.service.js';
-import { replayTransactions } from './holdingsProjection.js';
+import { priceAt } from './holdings/holdingsAsOf.service.js';
+import { replayTransactions } from './holdings/holdingsProjection.js';
 import { grandfatheredCost } from './specialReports.service.js';
 import { listedEquityLtcgExemptionFor } from '@everypaisa/shared';
 import { computeCapitalGainsTax } from './taxComputation.js';
