@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigationType } from 'react-router-dom';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { MobileNavDrawer } from './MobileNavDrawer';
@@ -103,7 +104,9 @@ export function AppShell() {
               key={`${viewingAsFamilyId ?? '__personal__'}:${actingId ?? '__self__'}`}
               className="mx-auto w-full max-w-[1480px] px-4 py-5 sm:px-6 sm:py-7 lg:px-10 pb-[calc(3.5rem+env(safe-area-inset-bottom)+5rem)] md:pb-7"
             >
-              <Outlet />
+              <ErrorBoundary resetKey={location.pathname}>
+                <Outlet />
+              </ErrorBoundary>
             </div>
           </main>
         </div>

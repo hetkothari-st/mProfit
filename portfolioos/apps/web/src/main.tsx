@@ -9,6 +9,7 @@ import { useFamilyScopeStore } from './stores/familyScope.store';
 import { useActingAsStore } from './stores/actingAs.store';
 import { bindSessionBoundary } from './lib/sessionBoundary';
 import { installNoAutoKeyboard } from './lib/noAutoKeyboard';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles/globals.css';
 
 /**
@@ -63,7 +64,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <App />
+        <ErrorBoundary variant="app">
+          <App />
+        </ErrorBoundary>
       </BrowserRouter>
       <Toaster
         position="top-right"

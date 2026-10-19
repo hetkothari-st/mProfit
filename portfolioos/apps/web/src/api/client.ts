@@ -7,12 +7,30 @@ import { getApiBaseUrl } from './baseUrl';
 
 const baseURL = getApiBaseUrl();
 
+/**
+ * Axios's default timeout is 0 — wait forever — so a request stuck behind a
+ * stalled upstream spun its loading state indefinitely. Two minutes covers the
+ * slowest JSON endpoints; uploads and file downloads get longer, since their
+ * duration depends on the user's connection rather than on the server.
+ */
+export const DEFAULT_TIMEOUT_MS = 120_000;
+export const TRANSFER_TIMEOUT_MS = 10 * 60_000;
+
 export const api: AxiosInstance = axios.create({
   baseURL,
   withCredentials: false,
+  timeout: DEFAULT_TIMEOUT_MS,
 });
 
+/** Uploads (FormData) and downloads (blob) left at the default get the transfer budget. */
+export function applyTransferTimeout(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
+  const isTransfer = config.data instanceof FormData || config.responseType === 'blob';
+  if (isTransfer && config.timeout === DEFAULT_TIMEOUT_MS) config.timeout = TRANSFER_TIMEOUT_MS;
+  return config;
+}
+
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  applyTransferTimeout(config);
   const token = useAuthStore.getState().accessToken;
   if (token) {
     config.headers.set('Authorization', `Bearer ${token}`);
@@ -52,7 +70,7 @@ export function isAuthRejection(err: unknown): boolean {
 async function doRefresh(): Promise<string> {
   const refreshToken = useAuthStore.getState().refreshToken;
   if (!refreshToken) throw new NoRefreshTokenError();
-  const response = await axios.post(`${baseURL}/api/auth/refresh`, { refreshToken });
+  const response = await axios.post(`${baseURL}/api/auth/refresh`, { refreshToken }, { timeout: DEFAULT_TIMEOUT_MS });
   const { user, tokens } = response.data.data;
   useAuthStore.getState().setSession(user, tokens);
   return tokens.accessToken as string;
