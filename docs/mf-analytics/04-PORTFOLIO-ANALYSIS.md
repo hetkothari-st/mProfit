@@ -1,6 +1,6 @@
 # 04 — Portfolio-Level Analysis
 
-`services/mfAnalytics/mfPortfolioAnalysis.service.ts`. This is the layer no fund
+`services/mf/mfAnalytics/mfPortfolioAnalysis.service.ts`. This is the layer no fund
 website can offer, because they don't have the user's holdings. Runs under the
 caller's RLS context (`runAsUser` in the job, request context in the API) and
 must honour `EffectiveScope` in family view (`CONTEXT.md §6`).
@@ -157,7 +157,7 @@ export interface MfPortfolioAnalysisDto {
 
 ---
 
-## 9. Tests (`test/services/mfAnalytics/mfPortfolioAnalysis.test.ts`)
+## 9. Tests (`test/services/mf/mfAnalytics/mfPortfolioAnalysis.test.ts`)
 
 All inside `scope.runAs(...)` (`CONTEXT.md §12`).
 

@@ -1,6 +1,6 @@
 # 03 — Scoring
 
-`services/mfAnalytics/mfScoring/`. Produces one `MfSchemeScore` row per scheme
+`services/mf/mfAnalytics/mfScoring/`. Produces one `MfSchemeScore` row per scheme
 per month per methodology version. Every number in a score must be traceable
 to a metric percentile, and every percentile to a universe.
 
@@ -183,7 +183,7 @@ so the UI and the findings engine can say "Sortino 1.12 vs category median 0.87
 
 ---
 
-## 11. Tests (`test/services/mfAnalytics/mfScoring/`)
+## 11. Tests (`test/services/mf/mfAnalytics/mfScoring/`)
 
 1. **Percentile math**: 5 values with ties ⇒ exact expected percentiles.
 2. **Direction table**: every input named in a model has a direction entry

@@ -109,11 +109,11 @@ packages/api/src/
 │   ├── nseIndices.ts                  TRI series for benchmark indices
 │   ├── rbiRiskFree.ts                 91-day T-bill / overnight MIBOR
 │   └── amfiSchemeMaster.ts            scheme master + category mapping
-├── adapters/mfFactsheet/
+├── ingestion/mfFactsheet/
 │   ├── registry.ts                    AMC → adapter
 │   ├── <amc>.parse.ts                 pure parsers, fixture-tested
 │   └── <amc>.v1.ts                    fetch/DOM, versioned
-├── services/mfAnalytics/
+├── services/mf/mfAnalytics/
 │   ├── mfMetricsMath.ts               pure metric functions (Decimal)
 │   ├── mfMetrics.service.ts           orchestrates per-scheme metric computation
 │   ├── mfPeerRank.service.ts          category universes + percentiles

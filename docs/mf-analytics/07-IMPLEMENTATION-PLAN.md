@@ -78,7 +78,7 @@ Task sizes: **S** ≤ 2h, **M** ≤ 1 day, **L** 2–3 days.
   on > 2% quarantined.
 
 ### Task 1.5 — Factsheet adapters: first three AMCs (L)
-- `adapters/mfFactsheet/registry.ts` + interface (`01 §4`).
+- `ingestion/mfFactsheet/registry.ts` + interface (`01 §4`).
 - Adapters for SBI, ICICI Pru, HDFC: `<amc>.parse.ts` (≥ 5 fixtures each —
   factsheet PDF/Excel and monthly portfolio Excel) + `<amc>.v1.ts`.
 - Normalisation: ISIN → `StockMaster`, AMFI cap list seed (`AmfiMarketCapList`),
