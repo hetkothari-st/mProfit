@@ -18,6 +18,11 @@ import { XA_08 } from './xa-08-investing-in-stocks.js';
 import { XA_09 } from './xa-09-fixed-income.js';
 import { XA_10 } from './xa-10-derivatives.js';
 import { XA_11 } from './xa-11-mutual-funds.js';
+import { XA_12 } from './xa-12-portfolio-manager.js';
+import { XA_13 } from './xa-13-aif.js';
+import { XA_14 } from './xa-14-modern-portfolio-theory.js';
+import { XA_15 } from './xa-15-portfolio-construction.js';
+import { XA_16 } from './xa-16-performance-evaluation.js';
 import { XB_16 } from './xb-16-behavioural-finance-basics.js';
 import { XB_17 } from './xb-17-behavioural-finance-practice.js';
 
@@ -33,6 +38,11 @@ export const NISM_LIBRARY: readonly KnowledgeEntry[] = [
   ...XA_09,
   ...XA_10,
   ...XA_11,
+  ...XA_12,
+  ...XA_13,
+  ...XA_14,
+  ...XA_15,
+  ...XA_16,
   ...XB_16,
   ...XB_17,
 ];

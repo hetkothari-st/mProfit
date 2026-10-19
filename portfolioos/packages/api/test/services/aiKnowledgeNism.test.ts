@@ -108,6 +108,45 @@ describe('NISM retrieval, chapter by chapter', () => {
   it('X-A 11: SWP', () => {
     expect(ids('systematic withdrawal plan for monthly income from mutual fund')).toContain('xa-11-swp-stp-dtp-vip');
   });
+  it('X-A 12: PMS high watermark', () => {
+    expect(ids('how does high watermark work for PMS performance fee')).toContain('xa-12-fees-hurdle-high-watermark');
+  });
+  it('X-A 12: PMS minimum', () => {
+    expect(ids('minimum investment for portfolio management service, discretionary PMS')).toContain('xa-12-responsibilities');
+  });
+  it('X-A 13: AIF categories', () => {
+    expect(ids('difference between AIF category I II and III')).toContain('xa-13-categories');
+  });
+  it('X-A 13: accredited investor', () => {
+    expect(ids('who qualifies as an accredited investor for AIF')).toContain('xa-13-accredited-investors');
+  });
+  it('X-A 14: efficient frontier', () => {
+    expect(ids('what is the efficient frontier in portfolio optimisation')).toContain('xa-14-efficient-frontier-optimisation');
+  });
+  it('X-A 14: portfolio variance', () => {
+    expect(ids('how does correlation reduce portfolio standard deviation of two assets')).toContain('xa-14-portfolio-return-variance');
+  });
+  it('X-A 15: strategic vs tactical', () => {
+    expect(ids('strategic versus tactical asset allocation')).toContain('xa-15-strategic-vs-tactical');
+  });
+  it('X-A 15: rebalancing', () => {
+    expect(ids('how often should I rebalance my portfolio')).toContain('xa-15-rebalancing');
+  });
+  it('X-A 15: investor personality', () => {
+    expect(ids('BB&K investor personality types guardian adventurer')).toContain('xa-15-psychographic-bbk');
+  });
+  it('X-A 16: TWRR vs XIRR', () => {
+    expect(ids('time weighted return versus XIRR money weighted return')).toContain('xa-16-twrr-vs-mwrr');
+  });
+  it('X-A 16: Sharpe ratio', () => {
+    expect(ids('what does a Sharpe ratio tell me, compare with Treynor')).toContain('xa-16-sharpe-treynor');
+  });
+  it('X-A 16: information ratio', () => {
+    expect(ids('information ratio and tracking error of a fund')).toContain('xa-16-sortino-information-m2');
+  });
+  it('X-A 16: CAGR', () => {
+    expect(ids('how to calculate CAGR of my investment')).toContain('xa-16-cagr-annualising');
+  });
   it('X-B 16: prospect theory', () => {
     expect(ids('why do people hold losing stocks and sell winners early, prospect theory')).toContain('xb-16-prospect-theory');
   });
