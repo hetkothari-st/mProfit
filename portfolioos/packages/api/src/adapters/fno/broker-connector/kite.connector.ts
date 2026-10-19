@@ -7,6 +7,7 @@ import { getActiveBrokerSession } from '../../../services/brokerOauth/index.js';
 import { parseKiteTradingSymbol, resolveLotSize } from '../symbol-parser.js';
 import type { BrokerConnector, SyncResult } from './types.js';
 import type { FnoNormalizedTrade } from '../types.js';
+import { boundedAgent } from '../../../lib/httpDispatcher.js';
 
 const KITE_BASE = 'https://api.kite.trade';
 const ADAPTER_ID = 'fno.kite.v1';
@@ -42,6 +43,7 @@ interface KiteMargins {
 async function kiteGet<T>(apiKey: string, accessToken: string, path: string): Promise<T> {
   const res = await request(`${KITE_BASE}${path}`, {
     method: 'GET',
+    dispatcher: boundedAgent,
     headers: {
       authorization: `token ${apiKey}:${accessToken}`,
       'x-kite-version': '3',

@@ -52,8 +52,9 @@ mcpRouter.post('/mcp', mcpBearer, mcpMinuteLimiter, mcpDayLimiter, async (req: R
     const server = buildMcpServer({ userId: ctx.userId, grantId: ctx.grantId, areas: ctx.areas, memberUserIds: ctx.memberUserIds, planOk, now: new Date() });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on('close', () => {
-      void transport.close();
-      void server.close();
+      // Unawaited: a rejection here would be unhandled and exit the process.
+      transport.close().catch((err: unknown) => logger.warn({ err }, 'mcp.transport_close_failed'));
+      server.close().catch((err: unknown) => logger.warn({ err }, 'mcp.server_close_failed'));
     });
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);

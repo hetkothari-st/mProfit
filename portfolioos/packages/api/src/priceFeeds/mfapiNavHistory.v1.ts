@@ -87,6 +87,7 @@
  */
 
 import { request } from 'undici';
+import { followRedirects } from '../lib/httpDispatcher.js';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { gunzipSync, inflateSync } from 'node:zlib';
 import { logger } from '../lib/logger.js';
@@ -202,7 +203,9 @@ async function undiciTransport(
 ): Promise<{ statusCode: number; body: unknown }> {
   const res = await request(url, {
     method: 'GET',
-    maxRedirections: 3,
+    // Redirects via the interceptor, not `maxRedirections`: undici v7 (Node
+    // 24's bundled fetch) rejects that option. See lib/httpDispatcher.ts.
+    dispatcher: followRedirects,
     headersTimeout: timeoutMs,
     bodyTimeout: timeoutMs,
     headers: {

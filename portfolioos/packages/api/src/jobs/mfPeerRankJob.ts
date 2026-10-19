@@ -240,6 +240,16 @@ export function startMfPeerRankJob(): void {
   // started. That job is ~15 chunks at roughly 40-100s each, so it can run
   // 10-25 minutes; 75 minutes leaves real headroom. Starting early would not
   // error — it would silently rank against a partial universe, which is worse.
-  cron.schedule('30 0 * * *', () => void runMfPeerRankJob(), { timezone: TZ });
+  // runMfPeerRankJob rethrows (the monthly rating chain relies on it), so the
+  // cron tick must catch: an unhandled rejection here exits the whole API.
+  cron.schedule(
+    '30 0 * * *',
+    () =>
+      runMfPeerRankJob().then(
+        () => undefined,
+        (err: unknown) => logger.error({ err }, '[cron] mf peer rank job failed'),
+      ),
+    { timezone: TZ },
+  );
   logger.info('[cron] scheduled: mf peer rank @00:30 IST');
 }

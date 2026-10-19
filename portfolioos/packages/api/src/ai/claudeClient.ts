@@ -14,6 +14,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { ANTHROPIC_CLIENT_OPTIONS } from '../lib/anthropicOptions.js';
 import { Decimal } from 'decimal.js';
 import { env } from '../config/env.js';
 import { prisma } from '../lib/prisma.js';
@@ -47,7 +48,7 @@ function getClient(): Anthropic {
   if (!env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY missing — AI assistant is disabled.');
   }
-  anthropicClient = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  anthropicClient = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, ...ANTHROPIC_CLIENT_OPTIONS });
   return anthropicClient;
 }
 

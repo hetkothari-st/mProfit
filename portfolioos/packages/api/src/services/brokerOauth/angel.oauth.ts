@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { logger } from '../../lib/logger.js';
 import { AppError } from '../../lib/errors.js';
+import { OUTBOUND_FETCH_TIMEOUT_MS } from '../../lib/httpDispatcher.js';
 
 /**
  * Angel One SmartAPI auth:
@@ -33,6 +34,7 @@ export async function angelLoginWithTotp(input: {
 }): Promise<AngelSession> {
   const totp = generateTotp(input.totpSecret);
   const res = await fetch(ANGEL_LOGIN_URL, {
+    signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
     method: 'POST',
     headers: angelHeaders(input.apiKey),
     body: JSON.stringify({
@@ -49,6 +51,7 @@ export async function refreshAngelSession(input: {
   refreshToken: string;
 }): Promise<AngelSession> {
   const res = await fetch(ANGEL_REFRESH_URL, {
+    signal: AbortSignal.timeout(OUTBOUND_FETCH_TIMEOUT_MS),
     method: 'POST',
     headers: angelHeaders(input.apiKey),
     body: JSON.stringify({ refreshToken: input.refreshToken }),

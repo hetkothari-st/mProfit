@@ -2,6 +2,7 @@ import { request } from 'undici';
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
+import { boundedAgent } from '../lib/httpDispatcher.js';
 
 const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
 
@@ -41,6 +42,7 @@ export async function fetchCoinGeckoPrices(coinIds: string[]): Promise<CoinGecko
   try {
     const res = await request(url, {
       method: 'GET',
+      dispatcher: boundedAgent,
       headers: {
         accept: 'application/json',
         'user-agent': 'EveryPaisa/0.2',
@@ -128,6 +130,7 @@ export async function backfillCryptoHistory(
   try {
     const res = await request(url, {
       method: 'GET',
+      dispatcher: boundedAgent,
       headers: { accept: 'application/json', 'user-agent': 'EveryPaisa/0.2' },
     });
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -251,6 +254,7 @@ async function fetchLiveCryptoPricesUncached(): Promise<LiveCryptoPriceRow[]> {
   try {
     const res = await request(url, {
       method: 'GET',
+      dispatcher: boundedAgent,
       headers: { accept: 'application/json', 'user-agent': 'EveryPaisa/0.2' },
     });
     if (res.statusCode >= 200 && res.statusCode < 300) {

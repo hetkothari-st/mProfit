@@ -7,6 +7,7 @@ import { logger } from '../lib/logger.js';
 import { encryptSecret, decryptSecret } from '../lib/secrets.js';
 import { createTransaction } from '../services/transaction.service.js';
 import type { AssetClass, TransactionType } from '@prisma/client';
+import { boundedAgent } from '../lib/httpDispatcher.js';
 
 const KITE_BASE = 'https://api.kite.trade';
 
@@ -43,6 +44,7 @@ export async function exchangeKiteRequestToken(requestToken: string): Promise<Ki
   });
   const res = await request(`${KITE_BASE}/session/token`, {
     method: 'POST',
+    dispatcher: boundedAgent,
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
       'x-kite-version': '3',
@@ -60,6 +62,7 @@ async function kiteGet<T>(accessToken: string, path: string): Promise<T> {
   if (!env.KITE_API_KEY) throw new Error('KITE_API_KEY not configured');
   const res = await request(`${KITE_BASE}${path}`, {
     method: 'GET',
+    dispatcher: boundedAgent,
     headers: {
       authorization: `token ${env.KITE_API_KEY}:${accessToken}`,
       'x-kite-version': '3',

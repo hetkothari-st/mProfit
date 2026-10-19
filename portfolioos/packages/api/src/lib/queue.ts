@@ -28,16 +28,47 @@ const LOCK_DURATION_MS = 5 * 60 * 1000;
 
 let _importQueue: Bull.Queue<ImportJobPayload> | null = null;
 
+/**
+ * One attempt. Bull's `timeout` fails the job but cannot cancel the promise
+ * still running in this process, so a second attempt ran *beside* the timed-out
+ * first one: two workers committing the same ImportJob and racing its status.
+ * Same reasoning as the doc-sort queue below. A job interrupted by a crash or
+ * deploy is still recovered — that is the stalled-job path (`maxStalledCount`),
+ * which only fires when no process holds the lock.
+ */
+export const IMPORT_JOB_OPTIONS: Bull.JobOptions = {
+  attempts: 1,
+  removeOnComplete: { count: 200 },
+  removeOnFail: { count: 500 },
+  timeout: JOB_TIMEOUT_MS,
+};
+
+const QUEUE_ERROR_LOG_INTERVAL_MS = 60_000;
+
+/**
+ * Bull attaches a no-op `error` listener so a Redis outage cannot crash the
+ * process — which also means nothing is ever logged while Redis is down. Log
+ * it, at most once a minute per queue, with a count of what was suppressed.
+ */
+export function logQueueErrors(queue: Pick<Bull.Queue, 'on'>, name: string, now: () => number = Date.now): void {
+  let lastLoggedAt = -Infinity;
+  let suppressed = 0;
+  queue.on('error', (err: Error) => {
+    const t = now();
+    if (t - lastLoggedAt < QUEUE_ERROR_LOG_INTERVAL_MS) {
+      suppressed++;
+      return;
+    }
+    logger.warn({ err, queue: name, suppressed }, '[queue] redis error');
+    lastLoggedAt = t;
+    suppressed = 0;
+  });
+}
+
 export function getImportQueue(): Bull.Queue<ImportJobPayload> {
   if (!_importQueue) {
     _importQueue = new Bull<ImportJobPayload>('imports', env.REDIS_URL, {
-      defaultJobOptions: {
-        attempts: 2,
-        backoff: { type: 'exponential', delay: 5_000 },
-        removeOnComplete: { count: 200 },
-        removeOnFail: { count: 500 },
-        timeout: JOB_TIMEOUT_MS,
-      },
+      defaultJobOptions: IMPORT_JOB_OPTIONS,
       settings: {
         lockDuration: LOCK_DURATION_MS,
         lockRenewTime: LOCK_DURATION_MS / 2,
@@ -46,6 +77,7 @@ export function getImportQueue(): Bull.Queue<ImportJobPayload> {
       },
     });
 
+    logQueueErrors(_importQueue, 'imports');
     _importQueue.on('failed', (job, err) => {
       logger.error({ jobId: job?.id, err }, '[queue] import job failed');
     });
@@ -91,6 +123,7 @@ export function getGmailScanQueue(): Bull.Queue<GmailScanJobPayload> {
       },
     });
 
+    logQueueErrors(_gmailScanQueue, 'gmail-scan');
     _gmailScanQueue.on('failed', (job, err) => {
       logger.error({ jobId: job?.id, err }, '[queue] gmail-scan job failed');
     });
@@ -127,6 +160,7 @@ export function getDocSortQueue(): Bull.Queue<DocSortJobPayload> {
         removeOnFail: true,
       },
     });
+    logQueueErrors(_docSortQueue, 'doc-sort');
     _docSortQueue.on('failed', (job, err) => {
       logger.error({ jobId: job?.id, err }, '[queue] doc-sort job failed');
     });

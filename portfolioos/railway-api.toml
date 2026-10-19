@@ -7,7 +7,9 @@ dockerfilePath = "packages/api/Dockerfile"
 # starts, so every deploy has a window where requests reach the edge instead of
 # the app. Edge responses carry no CORS headers, so that window surfaces in the
 # browser as a CORS error rather than as the deploy it actually is.
-healthcheckPath = "/health"
+# /ready, not /health: it also proves the database is reachable, so a deploy
+# that cannot reach Postgres is never switched to and the old one keeps serving.
+healthcheckPath = "/ready"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5

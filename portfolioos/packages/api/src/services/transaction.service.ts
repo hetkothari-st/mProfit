@@ -84,7 +84,16 @@ export interface CreateTransactionInput {
 
 function d(v: number | string | undefined | null, fallback = 0): Decimal {
   if (v === undefined || v === null || v === '') return new Decimal(fallback);
-  return new Decimal(v);
+  // Callers outside the HTTP schema (CA workspace, imports) reach here too.
+  // Decimal() accepts "NaN"/"Infinity", which Postgres numeric would store.
+  let out: Decimal;
+  try {
+    out = new Decimal(v);
+  } catch {
+    throw new BadRequestError(`Invalid number: ${String(v).slice(0, 40)}`);
+  }
+  if (!out.isFinite()) throw new BadRequestError(`Invalid number: ${String(v).slice(0, 40)}`);
+  return out;
 }
 
 function toDateOnly(str: string): Date {

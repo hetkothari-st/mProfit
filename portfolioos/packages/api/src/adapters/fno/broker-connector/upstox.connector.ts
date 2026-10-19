@@ -7,6 +7,7 @@ import { getActiveBrokerSession } from '../../../services/brokerOauth/index.js';
 import { parseKiteTradingSymbol, resolveLotSize } from '../symbol-parser.js';
 import type { BrokerConnector, SyncResult } from './types.js';
 import type { FnoNormalizedTrade } from '../types.js';
+import { boundedAgent } from '../../../lib/httpDispatcher.js';
 
 /**
  * Upstox v2 REST adapter.
@@ -34,6 +35,7 @@ interface UpstoxTrade {
 async function upstoxGet<T>(accessToken: string, path: string): Promise<T> {
   const res = await request(`${UPSTOX_BASE}${path}`, {
     method: 'GET',
+    dispatcher: boundedAgent,
     headers: {
       authorization: `Bearer ${accessToken}`,
       accept: 'application/json',

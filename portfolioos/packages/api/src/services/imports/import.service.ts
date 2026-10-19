@@ -97,7 +97,12 @@ export async function createImportJob(input: CreateImportJobInput) {
     try {
       const q = getImportQueue();
       const enqueued = await enqueueBounded(
-        q.add({ importJobId: job.id, userId: input.userId, pdfPassword: input.pdfPassword ?? null }),
+        // jobId = ImportJob id: the boot-time rescue can then re-add without
+        // creating a second Bull job, and can ask Bull whether one exists.
+        q.add(
+          { importJobId: job.id, userId: input.userId, pdfPassword: input.pdfPassword ?? null },
+          { jobId: job.id },
+        ),
         `import:${job.id}`,
       );
       if (enqueued) logger.info({ jobId: job.id }, '[import] enqueued');
