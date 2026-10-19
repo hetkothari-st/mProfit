@@ -45,6 +45,36 @@ describe('NISM retrieval, chapter by chapter', () => {
   it('X-A 4: prepay or invest', () => {
     expect(ids('should I prepay my home loan or invest the bonus')).toContain('xa-04-invest-or-prepay');
   });
+  it('X-A 5: regulators', () => {
+    expect(ids('who regulates insurance and pension in India, IRDAI PFRDA')).toContain('xa-05-irdai-pfrda-sro');
+  });
+  it('X-A 5: depositories', () => {
+    expect(ids('what do NSDL and CDSL do, depository participant')).toContain('xa-05-market-infrastructure');
+  });
+  it('X-A 6: book building cut-off', () => {
+    expect(ids('how is the cut-off price decided in a book built IPO')).toContain('xa-06-book-building');
+  });
+  it('X-A 6: circuit breakers', () => {
+    expect(ids('market wide circuit breaker levels')).toContain('xa-06-circuit-breakers-price-bands');
+  });
+  it('X-A 6: stock split', () => {
+    expect(ids('what happens to face value in a stock split')).toContain('xa-06-split-buyback-delisting');
+  });
+  it('X-A 7: investment grade rating', () => {
+    expect(ids('which credit ratings are investment grade and which are junk')).toContain('xa-07-govt-vs-corporate-debt-ratings');
+  });
+  it('X-A 7: preference shares', () => {
+    expect(ids('cumulative vs non cumulative preference shares')).toContain('xa-07-equity-and-preference-shares');
+  });
+  it('X-A 8: PEG ratio', () => {
+    expect(ids('how to use the PEG ratio')).toContain('xa-08-peg-eva-mva');
+  });
+  it('X-A 8: systematic risk', () => {
+    expect(ids('which equity risk cannot be diversified away')).toContain('xa-08-equity-risks');
+  });
+  it('X-A 8: EV/EBITDA', () => {
+    expect(ids('how is enterprise value calculated for EV/EBITDA')).toContain('xa-08-enterprise-value-multiples');
+  });
   it('X-B 16: prospect theory', () => {
     expect(ids('why do people hold losing stocks and sell winners early, prospect theory')).toContain('xb-16-prospect-theory');
   });

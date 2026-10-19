@@ -12,7 +12,9 @@ describe('knowledge library', () => {
     expect(new Set(ids).size).toBe(ids.length);
     for (const e of KNOWLEDGE_LIBRARY) {
       expect(e.principle.length, e.id).toBeGreaterThan(40);
-      expect(e.principle.length, e.id).toBeLessThanOrEqual(700);
+      // 900: NISM entries pack a rule with its numbers; inPractice shares the cap so it is no loophole.
+      expect(e.principle.length, e.id).toBeLessThanOrEqual(900);
+      expect((e.inPractice ?? "").length, e.id).toBeLessThanOrEqual(500);
       expect(e.keywords.length, e.id).toBeGreaterThan(0);
       if (e.source.kind === 'BOOK') {
         const book = e.source.book;

@@ -11,6 +11,10 @@ import { XA_01 } from './xa-01-financial-planning.js';
 import { XA_02 } from './xa-02-time-value-of-money.js';
 import { XA_03 } from './xa-03-financial-position.js';
 import { XA_04 } from './xa-04-debt-management.js';
+import { XA_05 } from './xa-05-indian-financial-markets.js';
+import { XA_06 } from './xa-06-securities-market-segments.js';
+import { XA_07 } from './xa-07-introduction-to-investment.js';
+import { XA_08 } from './xa-08-investing-in-stocks.js';
 import { XB_16 } from './xb-16-behavioural-finance-basics.js';
 import { XB_17 } from './xb-17-behavioural-finance-practice.js';
 
@@ -19,6 +23,10 @@ export const NISM_LIBRARY: readonly KnowledgeEntry[] = [
   ...XA_02,
   ...XA_03,
   ...XA_04,
+  ...XA_05,
+  ...XA_06,
+  ...XA_07,
+  ...XA_08,
   ...XB_16,
   ...XB_17,
 ];
