@@ -1,3 +1,5 @@
+> Historical document — superseded by `portfolioos/ARCHITECTURE.md` and the root `CLAUDE.md` as of 2026-10-19. Kept for reference.
+
 # Phase 4.5 — Hardening Sprint Progress
 
 Tracks every task in CLAUDE.md §5.1. Update when a task flips status (in

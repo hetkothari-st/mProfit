@@ -2,7 +2,7 @@ name: desktop-release
 
 # Builds the desktop installers and uploads them to a DRAFT GitHub release
 # named after apps/desktop/package.json "version". Nothing reaches users until
-# that draft is published by hand. Steps: portfolioos/docs/desktop/RELEASING.md
+# that draft is published by hand. Steps: docs/desktop/RELEASING.md
 on:
   workflow_dispatch:
 

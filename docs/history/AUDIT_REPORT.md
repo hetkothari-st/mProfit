@@ -1,3 +1,5 @@
+> Historical document — superseded by `portfolioos/ARCHITECTURE.md` and the root `CLAUDE.md` as of 2026-10-19. Kept for reference.
+
 # EveryPaisa v2 — AUDIT REPORT
 
 **Generated:** 2026-04-21

@@ -1,3 +1,5 @@
+> Historical document — superseded by `portfolioos/ARCHITECTURE.md` and the root `CLAUDE.md` as of 2026-10-19. Kept for reference.
+
 # CLAUDE.md — Build a Full MProfit-Replica Portfolio Management Platform
 
 > **Purpose:** This file instructs Claude Code to build an end-to-end, production-grade, multi-asset portfolio management & accounting platform that replicates all features of MProfit (India's leading portfolio management software), plus additional enhancements. Read every section before writing a single line of code.

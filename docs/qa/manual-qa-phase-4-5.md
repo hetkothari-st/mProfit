@@ -111,7 +111,7 @@ bug ID and a commit that fixes it before the sprint can exit.
 | 42 | User A cannot GET user B's portfolio by ID → 404 or 403, never 200 | api | ✅ | User B → GET /portfolios/{user-A-portfolio} returns 404 "Portfolio not found". Also /portfolios/:id/holdings → 404. |
 | 43 | User A cannot POST transaction with user B's portfolioId → rejected | api | ✅ | Cross-tenant POST /transactions → 404 "Portfolio not found" (RLS drops row before the insert). |
 | 44 | Unauthenticated query to Prisma returns empty (fail-closed) | api | ✅ | No-auth request → 401; Prisma middleware requires userContext to match any user-scoped read (invariant covered by `test/invariants/rls-isolation.test.ts`). |
-| 45 | Worker job runs under runAsUser → hook stamps app.current_user_id | db | ✅ | `importWorker.ts`, `mailboxPoller.ts`, `priceJobs.ts` wrap job bodies in `runAsUser`/`runAsSystem`; code-verified (PROGRESS.md task 11 notes). |
+| 45 | Worker job runs under runAsUser → hook stamps app.current_user_id | db | ✅ | `importWorker.ts`, `mailboxPoller.ts`, `priceJobs.ts` wrap job bodies in `runAsUser`/`runAsSystem`; code-verified (`docs/history/PROGRESS.md` task 11 notes). |
 
 ## K. Dev-loop + infra
 

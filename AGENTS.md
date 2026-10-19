@@ -1,3 +1,7 @@
+> **Current guidance (2026-10-19):** start with `portfolioos/ARCHITECTURE.md` for the folder map and the root `CLAUDE.md`
+> for the working rules. The plan below is the historical v2 execution plan, kept for reference; its audit and phase steps are
+> already done.
+
 # AGENTS.md — EveryPaisa v2 Execution Plan
 
 > **Instructions for Codex:** This file supersedes all prior plans. The original AGENTS.md (greenfield spec) should be preserved as `CLAUDE_v1_archive.md` for reference — do not execute against it.

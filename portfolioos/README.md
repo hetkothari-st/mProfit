@@ -12,18 +12,8 @@
 
 ## Repository layout
 
-```
-portfolioos/
-├── apps/
-│   └── web/                 # React frontend (Vite)
-├── packages/
-│   ├── api/                 # Express + Prisma backend
-│   │   └── prisma/
-│   └── shared/              # Shared TS types & utilities
-├── docker-compose.yml
-├── pnpm-workspace.yaml
-└── package.json
-```
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the folder map, request flow, where new code goes, and a feature index
+(every area's route, controller, service, job, page and client files).
 
 ## Quick start
 
