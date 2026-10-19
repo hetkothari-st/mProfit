@@ -12,8 +12,8 @@ vi.mock('../../src/services/ingestionFailures.service.js', () => ({
   writeIngestionFailure: writeFailure,
 }));
 
-const { runVehicleChain } = await import('../../src/adapters/vehicle/chain.js');
-import type { VehicleAdapter } from '../../src/adapters/vehicle/types.js';
+const { runVehicleChain } = await import('../../src/ingestion/vehicle/chain.js');
+import type { VehicleAdapter } from '../../src/ingestion/vehicle/types.js';
 
 function makeAdapter(
   id: string,

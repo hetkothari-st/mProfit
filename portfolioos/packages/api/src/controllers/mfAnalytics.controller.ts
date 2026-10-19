@@ -146,7 +146,7 @@ function isoDate(d: Date): string {
 }
 
 /**
- * `MfSchemeMeta.exitLoadRules` is written by `adapters/mfFactsheet` as exactly
+ * `MfSchemeMeta.exitLoadRules` is written by `ingestion/mfFactsheet` as exactly
  * `[{ daysUpTo: number, pct: Pct-string }]` — the JSON form of
  * `MfExitLoadRule`. Passed through rather than rebuilt: `pct` is already a
  * Decimal string at 6 places and re-serialising it could only lose precision.

@@ -23,9 +23,9 @@ import { logger } from '../lib/logger.js';
 import {
   runVehicleChain,
   type VehicleFetchMode,
-} from '../adapters/vehicle/chain.js';
-import type { VehicleRecord } from '../adapters/vehicle/types.js';
-import { resolveVehiclePhoto } from '../adapters/vehicle/photo.js';
+} from '../ingestion/vehicle/chain.js';
+import type { VehicleRecord } from '../ingestion/vehicle/types.js';
+import { resolveVehiclePhoto } from '../ingestion/vehicle/photo.js';
 import {
   engineNoColumns,
   findVehicleByPlate,
@@ -407,7 +407,7 @@ export async function applyVahanSms(
     mode: 'interactive',
     context: { smsBody },
     // Force SMS-only — we already have the body in hand.
-    adapters: [(await import('../adapters/vehicle/sms.js')).smsVehicleAdapter],
+    adapters: [(await import('../ingestion/vehicle/sms.js')).smsVehicleAdapter],
   });
 
   if (!outcome.ok || !outcome.record) {

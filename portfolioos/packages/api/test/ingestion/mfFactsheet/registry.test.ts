@@ -24,7 +24,7 @@ import {
   normaliseAmcCode,
   normaliseAmcName,
   resolveFactsheetAdapter,
-} from '../../../src/adapters/mfFactsheet/registry.js';
+} from '../../../src/ingestion/mfFactsheet/registry.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const FIXTURE_ROOT = resolve(here, '../../fixtures/mf/factsheet');

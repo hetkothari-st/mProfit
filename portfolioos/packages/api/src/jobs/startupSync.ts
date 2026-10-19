@@ -9,14 +9,14 @@ import { syncFxRates } from '../priceFeeds/fx.service.js';
 import { refreshAllHoldingPrices } from '../services/holdings.service.js';
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
 // Self-registering PF adapters — import side-effects call registerPfAdapter()
-import '../adapters/pf/epf/epfo.v1.js';
-import '../adapters/pf/ppf/sbi.v1.js';
-import '../adapters/pf/ppf/indiapost.v1.js';
-import '../adapters/pf/ppf/hdfc.v1.js';
-import '../adapters/pf/ppf/icici.v1.js';
-import '../adapters/pf/ppf/axis.v1.js';
-import '../adapters/pf/ppf/pnb.v1.js';
-import '../adapters/pf/ppf/bob.v1.js';
+import '../ingestion/pf/epf/epfo.v1.js';
+import '../ingestion/pf/ppf/sbi.v1.js';
+import '../ingestion/pf/ppf/indiapost.v1.js';
+import '../ingestion/pf/ppf/hdfc.v1.js';
+import '../ingestion/pf/ppf/icici.v1.js';
+import '../ingestion/pf/ppf/axis.v1.js';
+import '../ingestion/pf/ppf/pnb.v1.js';
+import '../ingestion/pf/ppf/bob.v1.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 

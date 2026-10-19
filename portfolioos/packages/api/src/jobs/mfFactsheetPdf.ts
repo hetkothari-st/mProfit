@@ -34,10 +34,10 @@
 
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
-import { ENDPOINTS as ICICI_ENDPOINTS } from '../adapters/mfFactsheet/icici.v1.js';
-import { ENDPOINTS as NIPPON_ENDPOINTS } from '../adapters/mfFactsheet/nippon.v1.js';
-import { ENDPOINTS as KOTAK_ENDPOINTS } from '../adapters/mfFactsheet/kotak.v1.js';
-import type { FactsheetFetchContext } from '../adapters/mfFactsheet/types.js';
+import { ENDPOINTS as ICICI_ENDPOINTS } from '../ingestion/mfFactsheet/icici.v1.js';
+import { ENDPOINTS as NIPPON_ENDPOINTS } from '../ingestion/mfFactsheet/nippon.v1.js';
+import { ENDPOINTS as KOTAK_ENDPOINTS } from '../ingestion/mfFactsheet/kotak.v1.js';
+import type { FactsheetFetchContext } from '../ingestion/mfFactsheet/types.js';
 
 /** One document's pages, in order, keyed by the URL it came from. */
 const pdfCache = new Map<string, Promise<string[] | null>>();

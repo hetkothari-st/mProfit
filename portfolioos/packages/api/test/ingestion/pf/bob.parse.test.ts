@@ -2,31 +2,27 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tokenizePassbookPdf } from '../../../src/adapters/pf/shared/pdfPassbookParser.js';
-import { parseEpfoPassbook } from '../../../src/adapters/pf/epf/epfo.v1.parse.js';
+import { tokenizePassbookPdf } from '../../../src/ingestion/pf/shared/pdfPassbookParser.js';
+import { parseBobPpfPassbook } from '../../../src/ingestion/pf/ppf/bob.v1.parse.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 
-describe('parseEpfoPassbook', () => {
-  it('parses the synthetic fixture into canonical events', async () => {
-    const buf = await readFile(
-      resolve(here, '../../fixtures/pf/epfo/passbook-uan-100123456789.pdf'),
-    );
+describe('parseBobPpfPassbook', () => {
+  it('parses synthetic Bank of Baroda PPF statement', async () => {
+    const buf = await readFile(resolve(here, '../../fixtures/pf/bob/passbook-acct-12345678901234.pdf'));
     const tokens = await tokenizePassbookPdf(buf);
-    const result = parseEpfoPassbook({ userId: 'fixture-user', memberId: 'DLCPM00123450000012345', tokens });
+    const result = parseBobPpfPassbook({ userId: 'u', accountIdentifier: '12345678901234', tokens });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.events.length).toBeGreaterThan(0);
-    expect(result.events.every((e) => typeof e.amount === 'string')).toBe(true);
     expect(result.events.every((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.eventDate))).toBe(true);
-    // snapshot for regression detection
     expect(result.events).toMatchSnapshot();
   });
 
   it('returns ok:false on empty tokens', () => {
-    const result = parseEpfoPassbook({
+    const result = parseBobPpfPassbook({
       userId: 'u',
-      memberId: 'MEMBER1',
+      accountIdentifier: '0',
       tokens: { pageCount: 0, rawText: '', lines: [] },
     });
     expect(result.ok).toBe(false);

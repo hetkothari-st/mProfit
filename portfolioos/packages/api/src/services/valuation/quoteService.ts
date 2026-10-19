@@ -24,8 +24,8 @@ import {
 } from '@everypaisa/shared';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
-import { runValuationChain } from '../../adapters/valuation/chain.js';
-import type { ValuationQueryInput } from '../../adapters/valuation/types.js';
+import { runValuationChain } from '../../ingestion/valuation/chain.js';
+import type { ValuationQueryInput } from '../../ingestion/valuation/types.js';
 import { BadRequestError } from '../../lib/errors.js';
 
 const KMS_BUCKET_SIZE = 5000;

@@ -2,16 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tokenizePassbookPdf } from '../../../src/adapters/pf/shared/pdfPassbookParser.js';
-import { parseAxisPpfPassbook } from '../../../src/adapters/pf/ppf/axis.v1.parse.js';
+import { tokenizePassbookPdf } from '../../../src/ingestion/pf/shared/pdfPassbookParser.js';
+import { parseIndiaPostPpfPassbook } from '../../../src/ingestion/pf/ppf/indiapost.v1.parse.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 
-describe('parseAxisPpfPassbook', () => {
-  it('parses synthetic Axis PPF statement', async () => {
-    const buf = await readFile(resolve(here, '../../fixtures/pf/axis/passbook-acct-123456789012345.pdf'));
+describe('parseIndiaPostPpfPassbook', () => {
+  it('parses synthetic India Post PPF statement', async () => {
+    const buf = await readFile(resolve(here, '../../fixtures/pf/indiapost/passbook-acct-12345678901.pdf'));
     const tokens = await tokenizePassbookPdf(buf);
-    const result = parseAxisPpfPassbook({ userId: 'u', accountIdentifier: '123456789012345', tokens });
+    const result = parseIndiaPostPpfPassbook({ userId: 'u', accountIdentifier: '12345678901', tokens });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.events.length).toBeGreaterThan(0);
@@ -20,7 +20,7 @@ describe('parseAxisPpfPassbook', () => {
   });
 
   it('returns ok:false on empty tokens', () => {
-    const result = parseAxisPpfPassbook({
+    const result = parseIndiaPostPpfPassbook({
       userId: 'u',
       accountIdentifier: '0',
       tokens: { pageCount: 0, rawText: '', lines: [] },

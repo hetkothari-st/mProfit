@@ -70,7 +70,7 @@ docker run -d --name ep-test-redis -p 6379:6379 redis:7-alpine
 
 - `test/invariants` — the architecture rules (RLS isolation and context
   coverage, idempotency, decimal precision, capital-gains recompute).
-- `test/services`, `test/adapters`, `test/ingestion` — behaviour, per unit.
+- `test/services`, `test/ingestion` — behaviour, per unit.
 - `test/smoke/reportRoutes.smoke.test.ts` — every report route driven in every
   format against a seeded user. Catches reports that compute correctly and
   then fail to render, which unit tests cannot see.

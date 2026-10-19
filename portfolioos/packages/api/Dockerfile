@@ -24,8 +24,8 @@ RUN pnpm --filter @everypaisa/api build
 # LLM system prompts are inlined as TS string constants now — no .txt
 # copy needed. Vehicle fixture JSON still has to ship beside the compiled
 # adapter since the adapter reads it at runtime.
-RUN mkdir -p packages/api/dist/adapters/vehicle/fixtures && \
-    cp packages/api/src/adapters/vehicle/fixtures/dev.json packages/api/dist/adapters/vehicle/fixtures/
+RUN mkdir -p packages/api/dist/ingestion/vehicle/fixtures && \
+    cp packages/api/src/ingestion/vehicle/fixtures/dev.json packages/api/dist/ingestion/vehicle/fixtures/
 
 FROM node:22-alpine AS runtime
 WORKDIR /app

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseParivahanPortalPayload } from '../../src/adapters/vehicle/portal.js';
+import { parseParivahanPortalPayload } from '../../src/ingestion/vehicle/portal.js';
 
 /**
  * §7.3 portal parse — the browser flow is gated by §16 G6, but the

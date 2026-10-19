@@ -41,7 +41,7 @@ nobody can read in a diff is a fixture nobody checks. The conversion applied the
 cell's *formatted* value, with percent-formatted cells scaled to a percent
 string. See below for why that rule is the whole ballgame.
 
-Exercised by `test/adapters/mfFactsheet/parsers.real.test.ts`.
+Exercised by `test/ingestion/mfFactsheet/parsers.real.test.ts`.
 
 ### The synthetic fixtures
 
@@ -85,7 +85,7 @@ disambiguates them: a cell storing a fraction is always marked as a percent
 format, because that is the only way Excel renders it as `9.21%` to the human
 who published it. Production therefore reads the formatted value, and both
 conventions converge. Pinned by
-`test/adapters/mfFactsheet/workbookExtraction.test.ts`.
+`test/ingestion/mfFactsheet/workbookExtraction.test.ts`.
 
 ### 2. Units: every one of the ten quotes lakhs
 

@@ -41,7 +41,7 @@ import {
   type ParsedSchemeRow,
 } from './amfiSchemeMaster.parse.js';
 import { fetchAmfiNavText } from './amfi.service.js';
-import { normaliseAmcName, normaliseAmcCode } from '../adapters/mfFactsheet/registry.js';
+import { normaliseAmcName, normaliseAmcCode } from '../ingestion/mfFactsheet/registry.js';
 import {
   SEBI_SUBCATEGORY_MAP,
   UNMAPPED_SUBCATEGORY,

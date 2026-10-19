@@ -5,7 +5,7 @@
  * thin: resolve a URL, fetch it, hand the bytes to a pure parser, translate a
  * thrown transport error into a typed failure. The less judgement lives here,
  * the less breaks when an AMC moves a page (`CONTEXT.md §14`, and the same
- * rationale written out in `adapters/pf/epf/uanLookup.v1.ts`).
+ * rationale written out in `ingestion/pf/epf/uanLookup.v1.ts`).
  *
  * URL status per AMC is recorded in each `.v1.ts` header. As of 2026-09-07 all
  * ten were walked against the live sites; see `ENDPOINTS` in each file for what

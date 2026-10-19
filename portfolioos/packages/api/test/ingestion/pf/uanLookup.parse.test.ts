@@ -4,7 +4,7 @@ import {
   parseLookupResponse,
   maskUan,
   type UanLookupInput,
-} from '../../../src/adapters/pf/epf/uanLookup.parse.js';
+} from '../../../src/ingestion/pf/epf/uanLookup.parse.js';
 
 function input(over: Partial<UanLookupInput> = {}): UanLookupInput {
   return { mobile: '9876543210', pan: 'ABCDE1234F', name: 'Asha Rao', dob: '1990-04-12', ...over };

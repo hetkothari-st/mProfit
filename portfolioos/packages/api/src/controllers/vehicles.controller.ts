@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { resolveVehiclePhoto } from '../adapters/vehicle/photo.js';
+import { resolveVehiclePhoto } from '../ingestion/vehicle/photo.js';
 import {
   listVehicles,
   getVehicle,
@@ -12,7 +12,7 @@ import {
   refreshVehiclePhoto,
   applyVahanSms,
 } from '../services/vehicles.service.js';
-import { initiateCarInfoScrape, verifyCarInfoOtp } from '../adapters/vehicle/carinfoPlaywright.js';
+import { initiateCarInfoScrape, verifyCarInfoOtp } from '../ingestion/vehicle/carinfoPlaywright.js';
 import { scanChallansForVehicle } from '../services/challans.service.js';
 import { getFuelPricesForState, getAllStateFuelPrices } from '../priceFeeds/fuel.service.js';
 import { listUniqueStates } from '../priceFeeds/fuelStates.js';
