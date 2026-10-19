@@ -77,7 +77,7 @@ export const XA_05: readonly KnowledgeEntry[] = [
     id: 'xa-05-what-are-securities',
     title: 'What counts as a security under SCRA',
     principle:
-      'Section 2(h) of the Securities Contracts (Regulation) Act 1956 defines securities to include shares, bonds, debentures and similar marketable instruments of companies; derivatives; units of collective investment schemes and mutual funds; security receipts of asset reconstruction; securitised debt instruments; government securities; rights or interests in securities; and others the government notifies (such as electronic gold receipts). Unit-linked insurance policies are expressly excluded.',
+      'The SCRA 1956 (section 2(h)) defines securities to include shares, bonds, debentures and similar marketable instruments of companies; derivatives; units of collective investment schemes and mutual funds; security receipts of asset reconstruction; securitised debt instruments; government securities; rights or interests in securities; and others the government notifies (such as electronic gold receipts). Unit-linked insurance policies are expressly excluded.',
     source: SRC,
     topics: ['regulation', 'markets'],
     keywords: ['definition of securities', 'SCRA', 'Securities Contracts Regulation Act', 'ULIP not a security', 'electronic gold receipt', 'security receipt'],

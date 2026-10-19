@@ -55,7 +55,7 @@ export const XA_16: readonly KnowledgeEntry[] = [
     id: 'xa-16-gross-net-tax',
     title: 'Gross versus net, pre-tax versus post-tax return',
     principle:
-      'Gross return is before fees, expenses and commissions; net return is after them and is what the investor keeps. In a PMS-style example, a 20% gross year, after 0.5% other expenses, a 1.5% fixed fee, a 20% performance fee above a 10% hurdle and a 2% exit load, nets about 13.9%. Post-tax return = pre-tax return x (1 - tax rate), so 5% pre-tax at a 15% tax rate is 4.25%. Products are quoted pre-tax because investors’ brackets differ, but decisions should rest on post-tax, post-cost returns.',
+      'Gross return is before fees, expenses and commissions; net return is after them and is what the investor keeps. In a PMS-style example, a 20% gross year, after 0.5% other expenses, a 1.5% fixed fee, a 20% performance fee above a 10% hurdle and a 2% exit load, nets about 13.9%. To get the post-tax figure, multiply by (1 - tax rate): 5% pre-tax at a 15% tax rate is 4.25%. Products are quoted pre-tax because investors’ brackets differ, but decisions should rest on post-tax, post-cost returns.',
     source: SRC,
     asOf: '2025-06',
     topics: ['performance', 'costs', 'tax'],
