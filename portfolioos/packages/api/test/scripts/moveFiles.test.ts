@@ -1,3 +1,4 @@
+// moveFiles:ignore — fixture paths below are test data, not imports to rewrite.
 import { describe, it, expect } from 'vitest';
 import { expandMoves, findUnresolved, rewriteSpecifiers } from '../../scripts/moveFiles.js';
 

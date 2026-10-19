@@ -155,6 +155,9 @@ export function findUnresolved(
   return out;
 }
 
+// A file containing this marker is never rewritten or checked (e.g. this tool's own test fixtures).
+const IGNORE_MARKER = 'moveFiles:' + 'ignore';
+
 const SOURCE_EXT = /\.(ts|tsx|mts|cts)$/;
 
 function main(argv: string[]): void {
@@ -187,7 +190,9 @@ function main(argv: string[]): void {
   if (checkOnly) {
     let bad = 0;
     for (const file of tracked.filter(isScanned)) {
-      for (const spec of findUnresolved(readFileSync(real(file), 'utf8'), file, (p) => trackedSet.has(p), aliases)) {
+      const code = readFileSync(real(file), 'utf8');
+      if (code.includes(IGNORE_MARKER)) continue;
+      for (const spec of findUnresolved(code, file, (p) => trackedSet.has(p), aliases)) {
         console.log(`${file.slice(1)}: ${spec}`);
         bad++;
       }
@@ -222,6 +227,7 @@ function main(argv: string[]): void {
     const newPath = fileMap.get(oldPath) ?? oldPath;
     if (!isScanned(newPath)) continue;
     const code = readFileSync(real(newPath), 'utf8');
+    if (code.includes(IGNORE_MARKER)) continue;
     const next = rewriteSpecifiers(code, {
       importerOld: reverse.get(newPath) ?? newPath,
       importerNew: newPath,
