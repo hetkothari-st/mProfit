@@ -163,7 +163,12 @@ function makeAdapter(
         const events = result.transactions.map((pt) =>
           toTransactionEvent(pt, adapterId, adapterVer, input.filePath),
         );
-        return { ok: true, events, warnings: result.warnings };
+        return {
+          ok: true,
+          events,
+          warnings: result.warnings,
+          ...(result.statement ? { metadata: { statement: result.statement } } : {}),
+        };
       } catch (err) {
         return {
           ok: false,

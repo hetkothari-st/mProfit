@@ -9,6 +9,7 @@ import { createTransaction } from '../holdings/transaction.service.js';
 import { hashBytes, positionalHash } from '../sourceHash.js';
 import { enqueueBounded, getImportQueue } from '../../lib/queue.js';
 import { writeIngestionFailure } from '../ingestionFailures.service.js';
+import { parseStatementSnapshot } from '../integrity/statementReconciliation.service.js';
 import { runAsUser } from '../../lib/requestContext.js';
 import { hookAutoLinkImportedPremium } from '../insuranceExtras.service.js';
 import { dropLocalFile, ensureLocalFile, persistLocalFile } from '../../lib/fileStore.js';
@@ -279,6 +280,7 @@ async function processImportJobFromDisk(importJobId: string, pdfPassword?: strin
 
   const events = result.events;
   const warnings = result.warnings ?? [];
+  const statementSnapshot = parseStatementSnapshot(result.metadata?.statement);
   const adapterId = adapter?.id ?? 'none';
   const adapterVer = adapter?.version ?? '1';
 
@@ -454,6 +456,9 @@ async function processImportJobFromDisk(importJobId: string, pdfPassword?: strin
         rowErrors: errors,
         skippedAsDuplicates: skipped,
       },
+      // The statement's own closing position, for the data-quality check to
+      // reconcile against (services/integrity/statementReconciliation.service.ts).
+      ...(statementSnapshot ? { statementSnapshot } : {}),
       completedAt: new Date(),
     },
   });

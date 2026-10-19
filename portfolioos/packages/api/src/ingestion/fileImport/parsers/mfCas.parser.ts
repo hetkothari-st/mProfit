@@ -1,5 +1,11 @@
 import { Decimal } from '@everypaisa/shared';
-import type { Parser, ParserResult, ParsedTransaction } from './types.js';
+import type {
+  Parser,
+  ParserResult,
+  ParsedTransaction,
+  StatementHolding,
+  StatementSnapshot,
+} from './types.js';
 import { logger } from '../../../lib/logger.js';
 import { readPdfText, getUserPdfPasswords, isPdfPasswordError } from '../../../lib/pdf.js';
 
@@ -15,6 +21,12 @@ const DATE_RE = /^(\d{1,2})[-/]([A-Za-z]{3})[-/](\d{4})/;
 const FOLIO_RE = /Folio No[:\s]*([A-Z0-9/-]+)/i;
 const AMC_RE = /^([A-Z][A-Za-z0-9 &.'-]{2,}(?:Mutual Fund|MF|Asset Management))/m;
 const SCHEME_RE = /ISIN[:\s]*(IN[EF][0-9A-Z]{9})[\s\S]*?(?:Scheme|Advisor|Registrar)/i;
+// "Closing Unit Balance: 1,234.567" (CAMS/KFintech detailed CAS) and the
+// shorter "Closing Units: 434.814" / "Closing Balance: …" variants.
+const CLOSING_RE = /^Closing\s+(?:Unit\s+Balance|Units|Balance)\s*:?\s*(-?[\d,]+(?:\.\d+)?)/i;
+// Statement closing date: "… as on 31-Mar-2024" or "01-Apr-2023 to 31-Mar-2024".
+const AS_ON_RE = /as\s+on\s+(\d{1,2})[-/ ]([A-Za-z]{3})[-/ ](\d{4})/i;
+const PERIOD_RE = /\d{1,2}[-/ ][A-Za-z]{3}[-/ ]\d{4}\s+to\s+(\d{1,2})[-/ ]([A-Za-z]{3})[-/ ](\d{4})/i;
 
 function toIso(d: string, mo: string, y: string): string | null {
   const months: Record<string, string> = {
@@ -97,7 +109,7 @@ export const mfCasParser: Parser = {
     // Parsed once. Only `warnings` is appended to (by the AI fallback below),
     // so the two bindings differ.
     const parsed = parseMfCasText(text);
-    const { transactions } = parsed;
+    const { transactions, statement } = parsed;
     let warnings = parsed.warnings;
     
     // AI Fallback: If regex parsing found no trades, try the Gemini-powered AI parser
@@ -126,6 +138,7 @@ export const mfCasParser: Parser = {
       adapterVer: '1',
       transactions,
       warnings,
+      statement,
     };
   },
 };
@@ -139,6 +152,7 @@ import { aiMfCasParser } from './aiMfCas.parser.js';
 export function parseMfCasText(text: string): {
   transactions: ParsedTransaction[];
   warnings: string[];
+  statement?: StatementSnapshot;
 } {
   const lines = text.split(/\r?\n/);
 
@@ -157,11 +171,31 @@ export function parseMfCasText(text: string): {
 
   const txs: ParsedTransaction[] = [];
   const warnings: string[] = [];
+  const closing: StatementHolding[] = [];
+  let statementAsOf: string | null = null;
   let sawValidCasStructure = false; // true once we see a folio or ISIN — confirms it's a real CAS
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) continue;
+
+    if (!statementAsOf) {
+      const d = line.match(AS_ON_RE) ?? line.match(PERIOD_RE);
+      if (d) statementAsOf = toIso(d[1]!, d[2]!, d[3]!);
+    }
+
+    const closingMatch = line.match(CLOSING_RE);
+    if (closingMatch) {
+      if (currentScheme.isin) {
+        closing.push({
+          isin: currentScheme.isin,
+          folio: currentScheme.folio,
+          schemeName: currentScheme.name || null,
+          units: asDecimal(closingMatch[1]!).toString(),
+        });
+      }
+      continue;
+    }
 
     const folioMatch = line.match(FOLIO_RE);
     if (folioMatch) {
@@ -257,5 +291,10 @@ export function parseMfCasText(text: string): {
     }
   }
 
-  return { transactions: txs, warnings };
+  // A closing position is only useful with the date it applies to: without
+  // one, later transactions could not be told apart from missing ones.
+  const statement =
+    statementAsOf && closing.length > 0 ? { asOf: statementAsOf, holdings: closing } : undefined;
+
+  return { transactions: txs, warnings, statement };
 }

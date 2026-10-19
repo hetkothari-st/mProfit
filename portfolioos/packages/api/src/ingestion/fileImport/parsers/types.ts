@@ -74,6 +74,27 @@ export interface ParserResult {
   adapterVer?: string;
   transactions: ParsedTransaction[];
   warnings: string[];
+  /**
+   * What the statement itself says was held at its closing date, when the
+   * format prints it (CAS "Closing Unit Balance"). Stored on the ImportJob
+   * and reconciled against the app's own transactions — see
+   * services/integrity/statementReconciliation.service.ts.
+   */
+  statement?: StatementSnapshot;
+}
+
+export interface StatementHolding {
+  isin: string;
+  folio: string | null;
+  schemeName: string | null;
+  /** Units as printed, decimal string. */
+  units: string;
+}
+
+export interface StatementSnapshot {
+  /** Closing date of the statement, YYYY-MM-DD. */
+  asOf: string;
+  holdings: StatementHolding[];
 }
 
 export interface ParserContext {
