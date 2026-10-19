@@ -104,3 +104,22 @@ describe('advisor prose prompt stays stricter', () => {
     expect(ADVISOR_PROSE_SYSTEM_PROMPT).toMatch(/Never add advice of your own/i);
   });
 });
+
+describe('assistant prompt — help vs advice, and the NISM library', () => {
+  it('tells help from advice and names both modes', () => {
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toContain('HOW TO TELL HELP FROM ADVICE');
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/Help:/);
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/Advice:/);
+  });
+
+  it('describes the library as the NISM syllabus plus the books still enabled', () => {
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/NISM Investment Adviser/);
+    for (const off of ['Benjamin Graham', 'Bogle', 'Malkiel', 'Housel']) {
+      expect(AI_ASSISTANT_SYSTEM_PROMPT, off).not.toContain(off);
+    }
+  });
+
+  it('says to name the edition when a passage states a dated rule', () => {
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/edition/i);
+  });
+});
