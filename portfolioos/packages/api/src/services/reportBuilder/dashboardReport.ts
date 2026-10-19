@@ -32,7 +32,7 @@ import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { fmtNum, fmtDatePdf } from '../export.service.js';
 import { computePortfolioXirr, computeUserXirr } from '../xirr.service.js';
-import { computePortfolioCapitalGains } from '../capitalGains.service.js';
+import { computePortfolioCapitalGains } from '../tax/capitalGains.service.js';
 import { computePortfolioFoPnl } from '../foPnl.service.js';
 import { derivativePositionValue } from '../derivativePosition.service.js';
 import { replayTransactions } from '../holdings/holdingsProjection.js';

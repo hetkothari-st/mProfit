@@ -10,15 +10,15 @@ describe('FY classification', () => {
   // financialYearOf is re-exported from capitalGains.service via forex.service.
   // April 1 → March 31 boundary for Indian FY.
   it('March is in prior FY', async () => {
-    const { financialYearOf } = await import('./capitalGains.service.js');
+    const { financialYearOf } = await import('./tax/capitalGains.service.js');
     expect(financialYearOf(new Date('2026-03-31T00:00:00Z'))).toBe('2025-26');
   });
   it('April is in current FY', async () => {
-    const { financialYearOf } = await import('./capitalGains.service.js');
+    const { financialYearOf } = await import('./tax/capitalGains.service.js');
     expect(financialYearOf(new Date('2026-04-01T00:00:00Z'))).toBe('2026-27');
   });
   it('mid-year is in current FY', async () => {
-    const { financialYearOf } = await import('./capitalGains.service.js');
+    const { financialYearOf } = await import('./tax/capitalGains.service.js');
     expect(financialYearOf(new Date('2025-09-15T00:00:00Z'))).toBe('2025-26');
   });
 });

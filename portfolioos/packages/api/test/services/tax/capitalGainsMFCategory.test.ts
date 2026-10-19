@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
 import type { MFCategory, Transaction } from '@prisma/client';
-import { computeFIFOGains } from '../../src/services/capitalGains.service.js';
+import { computeFIFOGains } from '../../../src/services/tax/capitalGains.service.js';
 
 /**
  * TASK-01 fix-mf-debt-equity-tax-classification: capitalGains.service.ts

@@ -20,7 +20,7 @@ import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { getAllocationByClass, getConcentrationRisk } from '../analytics.service.js';
-import { taxHarvestReport, ratesForDate } from '../tax.service.js';
+import { taxHarvestReport, ratesForDate } from '../tax/tax.service.js';
 import { listGoals } from '../goals.service.js';
 import { getEmergencyFundInputs } from '../healthScore.service.js';
 import { isPriceStale } from '../holdings/priceStaleness.js';

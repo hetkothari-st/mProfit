@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
-import type { CapitalGainRow } from '../../src/services/capitalGains.service.js';
+import type { CapitalGainRow } from '../../../src/services/tax/capitalGains.service.js';
 import { listedEquityLtcgExemptionFor } from '@everypaisa/shared';
-import { computeCapitalGainsTax } from '../../src/services/taxComputation.js';
+import { computeCapitalGainsTax } from '../../../src/services/tax/taxComputation.js';
 
 function row(p: {
   type: CapitalGainRow['capitalGainType'];

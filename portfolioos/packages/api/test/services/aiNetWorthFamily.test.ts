@@ -31,8 +31,8 @@ vi.mock('../../src/services/analytics.service.js', () => ({
 }));
 vi.mock('../../src/services/familyScope.service.js', () => ({ getEffectiveScope: vi.fn() }));
 vi.mock('../../src/services/xirr.service.js', () => ({ computeUserXirr: vi.fn() }));
-vi.mock('../../src/services/capitalGains.service.js', () => ({ computeUserCapitalGains: vi.fn() }));
-vi.mock('../../src/services/tax.service.js', () => ({ taxHarvestReport: vi.fn() }));
+vi.mock('../../src/services/tax/capitalGains.service.js', () => ({ computeUserCapitalGains: vi.fn() }));
+vi.mock('../../src/services/tax/tax.service.js', () => ({ taxHarvestReport: vi.fn() }));
 vi.mock('../../src/services/goals.service.js', () => ({ listGoals: vi.fn() }));
 vi.mock('../../src/services/loans.service.js', () => ({ listLoans: vi.fn() }));
 vi.mock('../../src/services/creditCards.service.js', () => ({ listCards: vi.fn() }));

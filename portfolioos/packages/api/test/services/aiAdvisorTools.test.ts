@@ -11,7 +11,7 @@ const svc = vi.hoisted(() => ({
   computeHealthScore: vi.fn(),
   buildInsuranceData: vi.fn(),
 }));
-vi.mock('../../src/services/tax.service.js', () => ({ buildTaxSummary: svc.buildTaxSummary }));
+vi.mock('../../src/services/tax/tax.service.js', () => ({ buildTaxSummary: svc.buildTaxSummary }));
 vi.mock('../../src/services/advisor/advisorRecommendations.service.js', () => ({
   listRecommendations: svc.listRecommendations,
 }));

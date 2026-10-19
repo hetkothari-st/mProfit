@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
 import type { MFCategory, Transaction } from '@prisma/client';
-import { computeFIFOGains, type CapitalGainRow } from '../../src/services/capitalGains.service.js';
+import { computeFIFOGains, type CapitalGainRow } from '../../../src/services/tax/capitalGains.service.js';
 
 /**
  * Capital gains engine against the holding-period, 23-Jul-2024, sec 50AA,

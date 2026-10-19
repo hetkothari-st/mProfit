@@ -13,7 +13,7 @@
  */
 import { Decimal } from 'decimal.js';
 import { prisma } from '../../lib/prisma.js';
-import { computeUserCapitalGains } from '../capitalGains.service.js';
+import { computeUserCapitalGains } from '../tax/capitalGains.service.js';
 import type { TallyIssue, TallySources } from './tallyBook.js';
 
 type Num = { toString(): string };

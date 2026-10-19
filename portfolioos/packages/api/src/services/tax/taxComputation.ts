@@ -24,7 +24,7 @@ import {
   SLAB_RATE_ESTIMATE_PCT,
 } from '@everypaisa/shared';
 import type { CapitalGainRow } from './capitalGains.service.js';
-import { prisma } from '../lib/prisma.js';
+import { prisma } from '../../lib/prisma.js';
 
 const ZERO = new Decimal(0);
 

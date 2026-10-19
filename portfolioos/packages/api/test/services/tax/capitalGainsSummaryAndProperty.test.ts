@@ -3,8 +3,8 @@ import { Decimal } from 'decimal.js';
 import {
   summarizeCapitalGains,
   type CapitalGainRow,
-} from '../../src/services/capitalGains.service.js';
-import { computePropertyCapitalGain } from '../../src/services/propertyCapitalGain.js';
+} from '../../../src/services/tax/capitalGains.service.js';
+import { computePropertyCapitalGain } from '../../../src/services/propertyCapitalGain.js';
 
 function row(type: CapitalGainRow['capitalGainType'], gain: string, assetClass: CapitalGainRow['assetClass'] = 'EQUITY'): CapitalGainRow {
   const g = new Decimal(gain);

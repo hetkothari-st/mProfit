@@ -1,9 +1,9 @@
 import { Decimal } from 'decimal.js';
 import { ltcg112aExemptionForDate } from '@everypaisa/shared';
 import type { AssetClass, TransactionType } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
-import { investmentIncome } from './investmentIncome.service.js';
-import { logger } from '../lib/logger.js';
+import { prisma } from '../../lib/prisma.js';
+import { investmentIncome } from '../investmentIncome.service.js';
+import { logger } from '../../lib/logger.js';
 import {
   computeOpenLots,
   computeUserCapitalGains,
@@ -13,7 +13,7 @@ import {
   lotTaxStatus,
   type CapitalGainRow,
 } from './capitalGains.service.js';
-import { buildSchedule43Report } from './reports/schedule43.report.js';
+import { buildSchedule43Report } from '../reports/schedule43.report.js';
 import { computeHarvestSavings } from './taxHarvestMath.js';
 import { getFmvForUser } from './fmvOverride.service.js';
 import {

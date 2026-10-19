@@ -4,7 +4,7 @@ import { prisma } from '../../../lib/prisma.js';
 import { logger } from '../../../lib/logger.js';
 import { openForUser } from '../../../lib/userKeys.js';
 import { listGoals } from '../../goals.service.js';
-import { availableTaxFys, buildTaxSummary } from '../../tax.service.js';
+import { availableTaxFys, buildTaxSummary } from '../../tax/tax.service.js';
 import { listFriends, groupBalances } from '../../split/ledger.service.js';
 import { listGroups } from '../../split/groups.service.js';
 import { getWillOverview } from '../../will/will.service.js';

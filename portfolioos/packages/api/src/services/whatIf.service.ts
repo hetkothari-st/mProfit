@@ -1,9 +1,9 @@
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { NotFoundError, ForbiddenError, BadRequestError } from '../lib/errors.js';
-import { ratesForDate } from './tax.service.js';
-import { slabRateForUser } from './taxComputation.js';
-import { computeOpenLots, lotTaxStatus, loadFundCategoryMap } from './capitalGains.service.js';
+import { ratesForDate } from './tax/tax.service.js';
+import { slabRateForUser } from './tax/taxComputation.js';
+import { computeOpenLots, lotTaxStatus, loadFundCategoryMap } from './tax/capitalGains.service.js';
 import { simulateSale, type SaleLot } from './whatIfMath.js';
 
 /**

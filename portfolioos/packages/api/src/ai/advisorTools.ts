@@ -10,7 +10,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { Decimal } from 'decimal.js';
 import { logger } from '../lib/logger.js';
-import { buildTaxSummary } from '../services/tax.service.js';
+import { buildTaxSummary } from '../services/tax/tax.service.js';
 import { listRecommendations } from '../services/advisor/advisorRecommendations.service.js';
 import { computeHealthScore } from '../services/healthScore.service.js';
 import { requiredMonthlySip } from '../services/goalMath.js';

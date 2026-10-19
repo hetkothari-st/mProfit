@@ -4,7 +4,7 @@ import {
   createTransaction,
   updateTransaction,
 } from '../../src/services/holdings/transaction.service.js';
-import { persistCapitalGainsForPortfolio } from '../../src/services/capitalGains.service.js';
+import { persistCapitalGainsForPortfolio } from '../../src/services/tax/capitalGains.service.js';
 import { createTestScope, seedStockMaster, prisma, type TestScope } from '../helpers/db.js';
 
 /**

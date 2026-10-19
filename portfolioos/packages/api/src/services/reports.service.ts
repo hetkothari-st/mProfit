@@ -6,7 +6,7 @@ import {
   computePortfolioCapitalGains,
   computeUserCapitalGains,
   type CapitalGainRow,
-} from './capitalGains.service.js';
+} from './tax/capitalGains.service.js';
 import {
   computePortfolioXirr,
   computeRollingXirr,
@@ -17,7 +17,7 @@ import { priceAt } from './holdings/holdingsAsOf.service.js';
 import { replayTransactions } from './holdings/holdingsProjection.js';
 import { grandfatheredCost } from './specialReports.service.js';
 import { listedEquityLtcgExemptionFor } from '@everypaisa/shared';
-import { computeCapitalGainsTax } from './taxComputation.js';
+import { computeCapitalGainsTax } from './tax/taxComputation.js';
 
 async function listUserPortfolioIds(userId: string): Promise<string[]> {
   const ps = await prisma.portfolio.findMany({ where: { userId }, select: { id: true } });

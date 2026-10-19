@@ -6,7 +6,7 @@ import {
   computeFIFOGains,
   qualifiesForIndexation,
   type CapitalGainRow,
-} from '../../src/services/capitalGains.service.js';
+} from '../../../src/services/tax/capitalGains.service.js';
 
 /**
  * TASK 02 — CII table gap must never silently disappear indexation.

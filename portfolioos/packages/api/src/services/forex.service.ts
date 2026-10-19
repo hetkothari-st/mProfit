@@ -26,7 +26,7 @@ import {
   SUPPORTED_FX_CURRENCIES,
   DEFAULT_TICKER_PAIRS,
 } from '../priceFeeds/fx.service.js';
-import { financialYearOf } from './capitalGains.service.js';
+import { financialYearOf } from './tax/capitalGains.service.js';
 
 // ─── Constants ──────────────────────────────────────────────────────
 

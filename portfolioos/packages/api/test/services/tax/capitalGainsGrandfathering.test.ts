@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
 import type { Transaction } from '@prisma/client';
-import { computeFIFOGains } from '../../src/services/capitalGains.service.js';
+import { computeFIFOGains } from '../../../src/services/tax/capitalGains.service.js';
 
 /**
  * Sec 55(2)(ac) grandfathering: cost of acquisition for pre-31-Jan-2018

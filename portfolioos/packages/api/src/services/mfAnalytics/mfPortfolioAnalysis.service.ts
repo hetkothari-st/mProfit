@@ -120,9 +120,9 @@ import {
   GRANDFATHERING_CUTOFF,
   financialYearOf,
   computeUserCapitalGains,
-} from '../capitalGains.service.js';
-import { getFmvForUser } from '../fmvOverride.service.js';
-import { ratesForDate } from '../tax.service.js';
+} from '../tax/capitalGains.service.js';
+import { getFmvForUser } from '../tax/fmvOverride.service.js';
+import { ratesForDate } from '../tax/tax.service.js';
 import { inflationAdjustedTarget } from '../goalMath.js';
 import type { EffectiveScope } from '../familyScope.service.js';
 

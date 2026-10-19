@@ -456,7 +456,7 @@ Transaction CRUD → `recomputeForTransaction` → FIFO replay → `HoldingProje
 + `CapitalGain` rows. Editing or deleting a transaction cascades a recompute
 (`test/invariants/cg-recompute.test.ts`).
 
-`services/capitalGains.service.ts` implements Indian CG law: STCG/LTCG
+`services/tax/capitalGains.service.ts` implements Indian CG law: STCG/LTCG
 classification by asset class and holding period, indexation via CII, §112A
 grandfathering. **CII is derived from the single shared table `CII_BY_FY` in
 `@everypaisa/shared`** — there used to be a second hand-maintained copy here

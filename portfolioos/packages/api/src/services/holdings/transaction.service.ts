@@ -9,7 +9,7 @@ import { recomputeForAsset } from './holdingsProjection.js';
 import { computeAssetKey, extractUnderlyingFromAssetName } from './assetKey.js';
 import { naturalKeyHash } from '../sourceHash.js';
 import { findDuplicateTransaction } from '../duplicateMatch.js';
-import { persistCapitalGainsForAsset } from '../capitalGains.service.js';
+import { persistCapitalGainsForAsset } from '../tax/capitalGains.service.js';
 import { updateStockPricesFromYahoo } from '../../priceFeeds/yahoo.service.js';
 import { refreshAllHoldingPrices } from './holdings.service.js';
 import { getEffectiveScope, portfolioChildReadableWhere, assetClassWhere } from '../familyScope.service.js';

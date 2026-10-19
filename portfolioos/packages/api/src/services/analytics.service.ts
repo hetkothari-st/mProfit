@@ -11,11 +11,11 @@ import {
 import {
   computePortfolioCapitalGains,
   computeUserCapitalGains,
-} from './capitalGains.service.js';
+} from './tax/capitalGains.service.js';
 import { historicalValuation, unrealisedReport, incomeReport } from './reports.service.js';
 import { ensureHistoricalPricesForPortfolio } from './analytics.priceBackfill.js';
 import { getDashboardNetWorth } from './dashboard.service.js';
-import { taxHarvestReport } from './tax.service.js';
+import { taxHarvestReport } from './tax/tax.service.js';
 import { yahooProfile } from '../priceFeeds/yahooClient.js';
 import { sectorFor } from '../data/nseSectors.js';
 import type { MonthlyPositions } from './analytics.risk.js';

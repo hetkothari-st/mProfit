@@ -1,8 +1,8 @@
 import { CAPITAL_GAINS_KEY_DATES, Decimal, isOnOrAfter, toDecimal } from '@everypaisa/shared';
 import type { Prisma } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
-import { BadRequestError } from '../lib/errors.js';
-import { logger } from '../lib/logger.js';
+import { prisma } from '../../lib/prisma.js';
+import { BadRequestError } from '../../lib/errors.js';
+import { logger } from '../../lib/logger.js';
 import {
   computeUserCapitalGains,
   persistCapitalGainsForPortfolio,

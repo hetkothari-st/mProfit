@@ -9,8 +9,8 @@ import {
   deleteUserFmv,
   type FmvRecord,
   type GrandfatheringRow,
-} from '../services/fmvOverride.service.js';
-import { schedule112ACsv, ratesForDate } from '../services/tax.service.js';
+} from '../services/tax/fmvOverride.service.js';
+import { schedule112ACsv, ratesForDate } from '../services/tax/tax.service.js';
 
 function getFy(req: Request): string | undefined {
   const fy = (req.query.fy as string | undefined)?.trim();

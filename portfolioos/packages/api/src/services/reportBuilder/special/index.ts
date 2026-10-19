@@ -52,7 +52,7 @@ import {
   loadFundCategoryMap,
   transactionIsEquityOriented,
   type CapitalGainRow,
-} from '../../capitalGains.service.js';
+} from '../../tax/capitalGains.service.js';
 import {
   ADVANCE_TAX_INSTALMENTS,
   CAPITAL_GAINS_KEY_DATES,
@@ -71,7 +71,7 @@ import { resolveMutualFundId } from '../../holdings/masterData.service.js';
 import { acquisitionDates, holdingsAsOf, sortHoldings } from '../../holdings/holdingsAsOf.service.js';
 import { cashDirection } from '../../cashDirection.js';
 import { inrAmount, transactionInrNet } from '../../investmentIncome.service.js';
-import { availableTaxFys, buildTaxSummary } from '../../tax.service.js';
+import { availableTaxFys, buildTaxSummary } from '../../tax/tax.service.js';
 import { readPan } from '../../security/piiAtRest.service.js';
 
 async function userMember(userId: string): Promise<{ family: string; member: string; pan: string | undefined }> {

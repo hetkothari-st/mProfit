@@ -26,8 +26,8 @@ import {
 } from '../services/analytics.service.js';
 import { getDashboardNetWorthForScope } from '../services/dashboard.service.js';
 import { computeUserXirr } from '../services/xirr.service.js';
-import { computeUserCapitalGains } from '../services/capitalGains.service.js';
-import { taxHarvestReport } from '../services/tax.service.js';
+import { computeUserCapitalGains } from '../services/tax/capitalGains.service.js';
+import { taxHarvestReport } from '../services/tax/tax.service.js';
 import { listGoals } from '../services/goals.service.js';
 import { listLoans } from '../services/loans.service.js';
 import { listCards } from '../services/creditCards.service.js';
