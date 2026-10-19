@@ -81,6 +81,13 @@ export interface ParserResult {
    * services/integrity/statementReconciliation.service.ts.
    */
   statement?: StatementSnapshot;
+  /**
+   * Set by parsers that read the document with a language model: the text
+   * the model was given. Every figure it returned is checked against this
+   * (ingestion/verify/sourceVerification) and a transaction whose figures are
+   * not in the document is not imported.
+   */
+  sourceText?: string;
 }
 
 export interface StatementHolding {

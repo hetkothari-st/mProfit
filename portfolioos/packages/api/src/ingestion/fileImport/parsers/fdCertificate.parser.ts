@@ -182,6 +182,6 @@ export const fdCertificateParser: Parser = {
     });
 
     logger.info({ fileName: ctx.fileName, count: transactions.length }, '[fdCertificate] parsed');
-    return { adapter: ADAPTER_ID, adapterVer: ADAPTER_VER, transactions, warnings: [] };
+    return { adapter: ADAPTER_ID, adapterVer: ADAPTER_VER, transactions, warnings: [], sourceText: pdfText };
   },
 };

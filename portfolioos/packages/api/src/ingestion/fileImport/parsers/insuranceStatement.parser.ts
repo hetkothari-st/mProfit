@@ -187,6 +187,6 @@ export const insuranceStatementParser: Parser = {
     });
 
     logger.info({ fileName: ctx.fileName, count: transactions.length }, '[insuranceStatement] parsed');
-    return { adapter: ADAPTER_ID, adapterVer: ADAPTER_VER, transactions, warnings: [] };
+    return { adapter: ADAPTER_ID, adapterVer: ADAPTER_VER, transactions, warnings: [], sourceText: pdfText };
   },
 };

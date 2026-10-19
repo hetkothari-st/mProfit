@@ -54,8 +54,32 @@ describe('invariant: report data-quality check', () => {
     const fresh = await stockWithPrice(dirty, 'DQ Fresh', new Date());
     const old = await stockWithPrice(dirty, 'DQ Old Price', new Date(Date.now() - 30 * DAY));
     const unpriced = await stockWithPrice(dirty, 'DQ No Price', null);
+    // Close 100 two days ago, 1000 yesterday: a 10x move with no split.
+    const jumpy = (await seedStockMaster(dirty, { name: 'DQ Jumpy' })).symbol;
+    const twoDaysAgo = dateOnly(new Date(Date.now() - 2 * DAY));
+    const yesterday = dateOnly(new Date(Date.now() - DAY));
+    await runAsSystem(async () => {
+      const stock = await prisma.stockMaster.findUniqueOrThrow({ where: { symbol: jumpy } });
+      await prisma.stockPrice.createMany({
+        data: [
+          { stockId: stock.id, date: twoDaysAgo, open: '100', high: '100', low: '100', close: '100' },
+          { stockId: stock.id, date: yesterday, open: '1000', high: '1000', low: '1000', close: '1000' },
+        ],
+      });
+    });
 
     await dirty.runAs(async () => {
+      // Bought at 300 on a day the market closed at 100 — a typo, three times over.
+      await createTransaction(dirty.userId, {
+        portfolioId: dirty.portfolioId,
+        transactionType: 'BUY',
+        assetClass: 'EQUITY',
+        stockSymbol: jumpy,
+        exchange: 'NSE',
+        tradeDate: twoDaysAgo.toISOString().slice(0, 10),
+        quantity: '1',
+        price: '300',
+      });
       await buy(dirty, fresh, '10');
       await buy(dirty, old, '5');
       await buy(dirty, unpriced, '2');
@@ -184,9 +208,14 @@ describe('invariant: report data-quality check', () => {
           'OVERSOLD',
           'STALE_PRICE',
           'STATEMENT_MISMATCH',
+          'SUSPICIOUS_PRICE',
+          'TRADE_PRICE_OFF_MARKET',
           'UNRESOLVED_FAILURES',
         ].sort(),
       );
+      expect(byCode.get('SUSPICIOUS_PRICE')!.items.map((i) => i.label)).toEqual(['DQ Jumpy']);
+      expect(byCode.get('TRADE_PRICE_OFF_MARKET')!.items).toHaveLength(1);
+      expect(byCode.get('TRADE_PRICE_OFF_MARKET')!.items[0]!.detail).toMatch(/^buy on .* at 300; market price that day 100$/);
       expect(byCode.get('UNRESOLVED_FAILURES')!.count).toBe(1);
       expect(byCode.get('UNRESOLVED_FAILURES')!.items).toEqual([{ label: 'gmail.generic.v1', detail: '1 unresolved' }]);
       const oversold = byCode.get('OVERSOLD')!;
@@ -209,7 +238,7 @@ describe('invariant: report data-quality check', () => {
       expect(byCode.get('STATEMENT_MISMATCH')!.items[0]!.detail).toBe(
         'statement (2024-03-31): 150 units, transactions: 100 units',
       );
-      expect(q.dataAsOf.lastTransactionDate).toBe('2024-05-02');
+      expect(q.dataAsOf.lastTransactionDate).toBe(new Date(Date.now() - 2 * DAY).toISOString().slice(0, 10));
     }), 120_000);
 
   it('notices stored holdings that no longer match the transactions', () =>

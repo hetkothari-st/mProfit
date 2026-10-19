@@ -124,6 +124,8 @@ export interface DataQualityIssue {
     | 'GAINS_NEED_REVIEW'
     | 'MISSING_PRICE'
     | 'STALE_PRICE'
+    | 'SUSPICIOUS_PRICE'
+    | 'TRADE_PRICE_OFF_MARKET'
     | 'HOLDINGS_OUT_OF_SYNC'
     | 'STATEMENT_MISMATCH'
     | 'IMPORTS_NOT_FINISHED'

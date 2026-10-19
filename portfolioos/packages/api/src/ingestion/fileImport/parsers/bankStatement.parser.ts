@@ -207,6 +207,6 @@ export const bankStatementParser: Parser = {
       .filter(<T>(x: T | null): x is T => x !== null);
 
     logger.info({ fileName: ctx.fileName, count: transactions.length }, '[bankStatement] parsed');
-    return { broker: effectiveBankName, adapter: ADAPTER_ID, adapterVer: ADAPTER_VER, transactions, warnings: [] };
+    return { broker: effectiveBankName, adapter: ADAPTER_ID, adapterVer: ADAPTER_VER, transactions, warnings: [], sourceText: pdfText };
   },
 };

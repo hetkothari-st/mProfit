@@ -46,6 +46,9 @@ export interface TransactionEventMetadata extends Record<string, unknown> {
   narration?: string;
   settlementDate?: string;
 
+  /** Model-read rows whose figures are not in the source document. Not imported. */
+  verificationProblems?: string[];
+
   // F&O — populated when assetClass is FUTURES or OPTIONS.
   strikePrice?: string;
   expiryDate?: string; // YYYY-MM-DD

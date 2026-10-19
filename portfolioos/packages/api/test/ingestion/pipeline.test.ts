@@ -376,6 +376,94 @@ describe('processEmail pipeline', () => {
     expect(row!.reviewedAt).not.toBeNull();
   });
 
+  // Source verification: a figure the email does not contain is a misread or
+  // an invention. Sender trust does not cover that — it goes to review.
+  it('holds an event for review when its amount is not in the email, even from a trusted sender', async () => {
+    const outcome = await scope.runAs(() =>
+      processEmail(
+        {
+          userId: scope.userId,
+          senderAddress: 'alerts@hdfcbank.net',
+          autoCommitEnabled: true,
+          messageId: 'ev-misread-1',
+          message: textMessage('UPI credit of Rs 500.00 on 15-04-2026 from Rajesh'),
+        },
+        {
+          parseEmail: successLlm([
+            {
+              event_type: 'UPI_CREDIT',
+              event_date: '2026-04-15',
+              amount: '5000.00',
+              quantity: null,
+              price: null,
+              counterparty: 'Rajesh',
+              instrument_isin: null,
+              instrument_symbol: null,
+              instrument_name: null,
+              account_last4: null,
+              currency: 'INR',
+              confidence: 0.97,
+              notes: null,
+            },
+          ]),
+          checkGate: gateOpen,
+        },
+      ),
+    );
+
+    if (outcome.kind !== 'created') throw new Error(`expected created, got ${outcome.kind}`);
+    const row = await runAsSystem(() =>
+      prisma.canonicalEvent.findUnique({ where: { id: outcome.eventIds[0]! } }),
+    );
+    expect(row!.status).toBe('PENDING_REVIEW');
+    expect(row!.projectedTransactionId).toBeNull();
+    expect(row!.parserNotes).toContain('amount 5000 does not appear in the document');
+    expect((row!.metadata as { verificationProblems: string[] }).verificationProblems).toEqual([
+      'amount 5000 does not appear in the document',
+    ]);
+  });
+
+  it('moves a low-confidence event from a trusted sender into the review queue', async () => {
+    const outcome = await scope.runAs(() =>
+      processEmail(
+        {
+          userId: scope.userId,
+          senderAddress: 'alerts@hdfcbank.net',
+          autoCommitEnabled: true,
+          messageId: 'ev-unsure-1',
+          message: textMessage('UPI credit of Rs 500 on 15-04-2026'),
+        },
+        {
+          parseEmail: successLlm([
+            {
+              event_type: 'UPI_CREDIT',
+              event_date: '2026-04-15',
+              amount: '500.00',
+              quantity: null,
+              price: null,
+              counterparty: null,
+              instrument_isin: null,
+              instrument_symbol: null,
+              instrument_name: null,
+              account_last4: null,
+              currency: 'INR',
+              confidence: 0.4,
+              notes: null,
+            },
+          ]),
+          checkGate: gateOpen,
+        },
+      ),
+    );
+
+    if (outcome.kind !== 'created') throw new Error(`expected created, got ${outcome.kind}`);
+    const row = await runAsSystem(() =>
+      prisma.canonicalEvent.findUnique({ where: { id: outcome.eventIds[0]! } }),
+    );
+    // Was left in PARSED — neither committed nor in the review queue.
+    expect(row!.status).toBe('PENDING_REVIEW');
+  });
+
   it('creates one row per parsed event with distinct hashes for multi-event messages', async () => {
     const outcome = await scope.runAs(() =>
       processEmail(
