@@ -147,6 +147,24 @@ describe('NISM retrieval, chapter by chapter', () => {
   it('X-A 16: CAGR', () => {
     expect(ids('how to calculate CAGR of my investment')).toContain('xa-16-cagr-annualising');
   });
+  it('X-A 17: transmission after death', () => {
+    expect(ids('my father died, how do I claim his shares and mutual funds, transmission')).toContain('xa-17-transmission');
+  });
+  it('X-A 17: NRI repatriation', () => {
+    expect(ids('can an NRI repatriate money from NRO account')).toContain('xa-17-nri-residency-repatriation');
+  });
+  it('X-A 17: minor turns 18', () => {
+    expect(ids('what happens to my child SIP when minor turns major at 18')).toContain('xa-17-minors');
+  });
+  it('X-A 17: nomination', () => {
+    expect(ids('how many nominees can I add to my demat account')).toContain('xa-17-nomination');
+  });
+  it('X-A 17: KYC', () => {
+    expect(ids('what is CKYC and KRA KYC registration')).toContain('xa-17-kyc-ckyc');
+  });
+  it('X-A 17: MITC', () => {
+    expect(ids('MITC most important terms in investment advisory agreement')).toContain('xa-17-advice-documentation-mitc');
+  });
   it('X-B 16: prospect theory', () => {
     expect(ids('why do people hold losing stocks and sell winners early, prospect theory')).toContain('xb-16-prospect-theory');
   });
