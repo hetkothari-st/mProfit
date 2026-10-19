@@ -61,8 +61,8 @@ export async function ensureLocalFile(
   if (!blobKey) return path; // legacy row from before the store; caller sees the missing file
   const bytes = await readBuffer(userId, blobKey);
   try {
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, bytes);
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await writeFile(path, bytes, { mode: 0o600 });
     return path;
   } catch (err) {
     // The bytes come from the database, so any location will do: an
@@ -70,8 +70,8 @@ export async function ensureLocalFile(
     logger.warn({ err, path }, '[fileStore] original location not writable; restoring under the upload root');
     const relocated = join(uploadRoot(), 'restored', `${blobKey}-${basename(path)}`);
     if (await exists(relocated)) return relocated;
-    await mkdir(dirname(relocated), { recursive: true });
-    await writeFile(relocated, bytes);
+    await mkdir(dirname(relocated), { recursive: true, mode: 0o700 });
+    await writeFile(relocated, bytes, { mode: 0o600 });
     return relocated;
   }
 }

@@ -306,11 +306,11 @@ async function saveAttachment(buf: Buffer, originalName: string): Promise<string
   const year = new Date().getUTCFullYear();
   const month = String(new Date().getUTCMonth() + 1).padStart(2, '0');
   const dir = join(uploadRoot(), 'mailbox', `${year}-${month}`);
-  await mkdir(dir, { recursive: true });
+  await mkdir(dir, { recursive: true, mode: 0o700 });
   const safe = originalName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
   const unique = `${Date.now()}-${randomUUID().slice(0, 8)}`;
   const filePath = join(dir, `${unique}-${safe}`);
-  await writeFile(filePath, buf);
+  await writeFile(filePath, buf, { mode: 0o600 });
   return filePath;
 }
 
