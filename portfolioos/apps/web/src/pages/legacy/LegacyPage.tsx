@@ -15,7 +15,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { apiErrorMessage } from '@/api/client';
-import { LEGACY_KEYS, legacyApi, type NomineeInput } from '@/api/legacy.api';
+import { LEGACY_KEYS, legacyApi, type NomineeInput } from '@/api/legacy/legacy.api';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { useAuthStore } from '@/stores/auth.store';
 import { StepUpDialog } from './StepUpDialog';

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { formatINR } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import type { InsurancePolicyDTO } from '@/api/insurance.api';
+import type { InsurancePolicyDTO } from '@/api/insurance/insurance.api';
 import { TONE_DOT, TONE_TEXT, formatDay, policyTitle, premiumDueMeta, urgencyRank } from '@/lib/insurance';
 import { InsurerLogo } from './InsurerLogo';
 

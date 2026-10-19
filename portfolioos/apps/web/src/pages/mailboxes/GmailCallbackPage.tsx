@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
-import { gmailApi } from '@/api/gmail.api';
+import { gmailApi } from '@/api/gmail/gmail.api';
 import { apiErrorMessage } from '@/api/client';
 
 export function GmailCallbackPage() {

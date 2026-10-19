@@ -2,7 +2,7 @@ import { useRef, useState, type DragEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Camera, ImagePlus, Images, Loader2 } from 'lucide-react';
-import { propertyPhotosApi, type PropertyOwnerType, type PropertyPhotoDTO } from '@/api/propertyMedia.api';
+import { propertyPhotosApi, type PropertyOwnerType, type PropertyPhotoDTO } from '@/api/realEstate/propertyMedia.api';
 import { apiErrorMessage } from '@/api/client';
 import { prepareImage } from '@/lib/imageResize';
 import { Button } from '@/components/ui/button';

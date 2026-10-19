@@ -3,11 +3,11 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { premiumDueOn } from '@everypaisa/shared';
-import type { InsurancePolicyDTO } from '@/api/insurance.api';
+import type { InsurancePolicyDTO } from '@/api/insurance/insurance.api';
 import { SurrenderValueCard } from './SurrenderValueCard';
 
 const api = vi.hoisted(() => ({ updatePolicy: vi.fn() }));
-vi.mock('@/api/insurance.api', () => ({ insuranceApi: api }));
+vi.mock('@/api/insurance/insurance.api', () => ({ insuranceApi: api }));
 
 afterEach(() => {
   cleanup();

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { Decimal } from 'decimal.js';
 import { dashboardApi } from '@/api/dashboard.api';
 import { bankAccountsApi } from '@/api/bankAccounts.api';
-import { realEstateApi } from '@/api/realEstate.api';
+import { realEstateApi } from '@/api/realEstate/realEstate.api';
 import { computeSidebarValues } from '@/lib/sidebarClassValues';
 
 /**

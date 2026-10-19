@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FamilyTreeBoard } from './FamilyTreeBoard';
-import type { FamilyMemberRow } from '@/api/families.api';
+import type { FamilyMemberRow } from '@/api/family/families.api';
 
 /**
  * The board around the layout: what a family sees on the tree, and what
@@ -12,10 +12,10 @@ import type { FamilyMemberRow } from '@/api/families.api';
 
 const saveTreeLayout = vi.fn(async () => ({}));
 const managedProfiles = vi.fn(async () => [{ id: 'kavya', name: 'Kavya Shah' }]);
-vi.mock('@/api/managedProfiles.api', () => ({
+vi.mock('@/api/family/managedProfiles.api', () => ({
   managedProfilesApi: { list: () => managedProfiles() },
 }));
-vi.mock('@/api/families.api', () => ({
+vi.mock('@/api/family/families.api', () => ({
   familiesApi: {
     getTreeLayout: async () => ({
       parents: { harish: null, rajesh: 'harish', kavya: 'rajesh' },

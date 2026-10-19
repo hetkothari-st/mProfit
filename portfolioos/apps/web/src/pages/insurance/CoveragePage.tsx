@@ -6,7 +6,7 @@ import { Decimal, computeCoverage, type CoverageAssumptions, type NextStep } fro
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { insuranceCoverageApi } from '@/api/insuranceCoverage.api';
+import { insuranceCoverageApi } from '@/api/insurance/insuranceCoverage.api';
 import { PolicyFormDialog } from '@/components/insurance/PolicyFormDialog';
 import { CoverageSummary } from '@/components/insurance/coverage/CoverageSummary';
 import { FlagList } from '@/components/insurance/coverage/FlagList';

@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { loanRatesApi } from '@/api/loanRates.api';
+import { loanRatesApi } from '@/api/loans/loanRates.api';
 import { bestRowId, rateRange, repoLine } from './liveRates';
 import { useElementWidth } from './useElementWidth';
 

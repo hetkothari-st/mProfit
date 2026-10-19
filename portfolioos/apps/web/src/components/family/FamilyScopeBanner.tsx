@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Users, X } from 'lucide-react';
-import { familiesApi } from '@/api/families.api';
+import { familiesApi } from '@/api/family/families.api';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
 import { useQueryClient } from '@tanstack/react-query';
 

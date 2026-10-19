@@ -13,7 +13,7 @@ import {
   type CreateMonitoredSenderInput,
   type MonitoredSenderDTO,
   type UpdateMonitoredSenderInput,
-} from '@/api/monitoredSenders.api';
+} from '@/api/gmail/monitoredSenders.api';
 import { apiErrorMessage } from '@/api/client';
 
 import { formatDateTimeIST } from '@everypaisa/shared';

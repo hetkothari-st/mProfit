@@ -37,10 +37,10 @@ import { DownloadReportButton } from '@/components/reports/DownloadReportButton'
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
-import { realEstateApi } from '@/api/realEstate.api';
+import { realEstateApi } from '@/api/realEstate/realEstate.api';
 import { apiErrorMessage } from '@/api/client';
 import { PropertyFormDialog } from './PropertyFormDialog';
-import { propertyPhotosApi, type PhotoCover } from '@/api/propertyMedia.api';
+import { propertyPhotosApi, type PhotoCover } from '@/api/realEstate/propertyMedia.api';
 import { PropertySlideshow } from '@/components/property/PropertySlideshow';
 import { PropertiesMap } from '@/components/property/PropertiesMap';
 import { ViewToggle } from '@/components/property/ViewToggle';

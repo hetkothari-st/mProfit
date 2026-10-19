@@ -15,8 +15,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
-import { rentalApi, type RentReminderDTO } from '@/api/rental.api';
-import { gmailApi } from '@/api/gmail.api';
+import { rentalApi, type RentReminderDTO } from '@/api/rental/rental.api';
+import { gmailApi } from '@/api/gmail/gmail.api';
 
 // Map raw provider/server error codes to landlord-friendly text. Anything
 // not matched falls through unchanged so genuine carrier errors still

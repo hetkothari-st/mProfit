@@ -10,7 +10,7 @@ import {
   memberLabel,
   type FamilyGoal,
   type FamilyGoals,
-} from '@/api/familyDashboard.api';
+} from '@/api/family/familyDashboard.api';
 import { PartialDataNotice } from './RestrictedNotice';
 import { isPositiveMoney } from './money';
 

@@ -22,7 +22,7 @@ import { Select } from '@/components/ui/select';
 import {
   mfCasparserApi,
   type KfintechMailbackResult,
-} from '@/api/mfCasparser.api';
+} from '@/api/mf/mfCasparser.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
 

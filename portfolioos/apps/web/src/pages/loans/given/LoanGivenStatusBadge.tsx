@@ -1,4 +1,4 @@
-import type { LoanGivenStatus } from '@/api/loansGiven.api';
+import type { LoanGivenStatus } from '@/api/loans/loansGiven.api';
 
 const STATUS_STYLES: Record<LoanGivenStatus, { label: string; className: string }> = {
   ACTIVE: { label: 'Active', className: 'bg-positive/15 text-positive' },

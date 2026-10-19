@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
 import { apiErrorMessage } from '@/api/client';
-import { realEstateApi } from '@/api/realEstate.api';
+import { realEstateApi } from '@/api/realEstate/realEstate.api';
 import { INDIA_STATES, citiesForState } from '@/data/indiaLocations';
 import type {
   CreateOwnedPropertyInput,

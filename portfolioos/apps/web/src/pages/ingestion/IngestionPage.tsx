@@ -29,19 +29,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { mailboxesApi, type MailboxDTO } from '@/api/mailboxes.api';
-import { gmailApi } from '@/api/gmail.api';
+import { gmailApi } from '@/api/gmail/gmail.api';
 import {
   ingestionApi,
   type DiscoveredSenderDTO,
-} from '@/api/ingestion.api';
+} from '@/api/imports/ingestion.api';
 import {
   monitoredSendersApi,
   type MonitoredSenderDTO,
-} from '@/api/monitoredSenders.api';
+} from '@/api/gmail/monitoredSenders.api';
 import {
   canonicalEventsApi,
   type CanonicalEventDTO,
-} from '@/api/canonicalEvents.api';
+} from '@/api/imports/canonicalEvents.api';
 import { apiErrorMessage } from '@/api/client';
 
 import { formatDateTimeIST, formatDateOnly } from '@everypaisa/shared';

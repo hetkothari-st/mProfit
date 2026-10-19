@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Users, ChevronDown, User, Check } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { familiesApi } from '@/api/families.api';
+import { familiesApi } from '@/api/family/families.api';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
 
 /**

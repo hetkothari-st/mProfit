@@ -8,7 +8,7 @@ import {
   type AttentionItem,
   type AttentionUrgency,
   type FamilyAttention,
-} from '@/api/familyDashboard.api';
+} from '@/api/family/familyDashboard.api';
 import { PartialDataNotice } from './RestrictedNotice';
 
 /**

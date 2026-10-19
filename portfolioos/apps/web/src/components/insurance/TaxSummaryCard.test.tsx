@@ -6,7 +6,7 @@ import { buildTaxSummary, type TaxPolicyInput } from '@everypaisa/shared';
 import { TaxSummaryCard } from './TaxSummaryCard';
 
 const api = vi.hoisted(() => ({ taxSummary: vi.fn(), updatePolicy: vi.fn() }));
-vi.mock('@/api/insurance.api', () => ({ insuranceApi: api }));
+vi.mock('@/api/insurance/insurance.api', () => ({ insuranceApi: api }));
 
 afterEach(() => {
   cleanup();

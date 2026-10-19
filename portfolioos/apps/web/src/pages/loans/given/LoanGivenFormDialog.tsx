@@ -23,7 +23,7 @@ import {
   type LoanGivenInput,
   type LoanGivenMode,
   type Relationship,
-} from '@/api/loansGiven.api';
+} from '@/api/loans/loansGiven.api';
 
 const RELATIONSHIPS: Array<{ value: Relationship; label: string }> = [
   { value: 'FRIEND', label: 'Friend' },

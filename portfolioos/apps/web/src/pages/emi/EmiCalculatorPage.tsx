@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { emiApi } from '@/api/emi.api';
+import { emiApi } from '@/api/loans/emi.api';
 import { copyText } from '@/pages/split/clipboard';
 import { apiErrorMessage } from '@/api/client';
 import { CalculateTab } from './CalculateTab';

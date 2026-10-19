@@ -3,7 +3,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ChevronLeft, ChevronRight, Loader2, Star, Trash2, X } from 'lucide-react';
-import { propertyPhotosApi, type PropertyPhotoDTO } from '@/api/propertyMedia.api';
+import { propertyPhotosApi, type PropertyPhotoDTO } from '@/api/realEstate/propertyMedia.api';
 import { apiErrorMessage } from '@/api/client';
 import { usePhotoUrl } from './usePhotoUrl';
 

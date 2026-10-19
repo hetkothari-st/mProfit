@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { familyClaimApi } from '@/api/families.api';
+import { familyClaimApi } from '@/api/family/families.api';
 import { apiErrorMessage } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
 

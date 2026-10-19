@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
-import { legacyApi } from '@/api/legacy.api';
+import { legacyApi } from '@/api/legacy/legacy.api';
 
 /** Asks for a 2FA code (or an emailed code) and calls onDone once a grant is held. */
 export function StepUpDialog({ open, onDone, onCancel }: { open: boolean; onDone: () => void; onCancel: () => void }) {

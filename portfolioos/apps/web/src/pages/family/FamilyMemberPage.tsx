@@ -21,7 +21,7 @@ import { AutoFitText } from '@/components/ui/AutoFitText';
 import { cn } from '@/lib/cn';
 import { useThemeStore } from '@/stores/theme.store';
 import { useAuthStore } from '@/stores/auth.store';
-import { familiesApi } from '@/api/families.api';
+import { familiesApi } from '@/api/family/families.api';
 import { ASSET_CLASS_LABEL, type AssetClassToken } from '@/lib/assetClasses';
 import {
   familyDashboardApi,
@@ -32,7 +32,7 @@ import {
   type AttentionItem,
   type FamilyGoal,
   type FamilyMemberProtection,
-} from '@/api/familyDashboard.api';
+} from '@/api/family/familyDashboard.api';
 import {
   NotSharedPanel,
   RestrictedChip,

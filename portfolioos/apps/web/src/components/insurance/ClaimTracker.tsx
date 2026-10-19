@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
-import { insuranceApi, type InsuranceClaimDTO, type UpdateClaimInput } from '@/api/insurance.api';
+import { insuranceApi, type InsuranceClaimDTO, type UpdateClaimInput } from '@/api/insurance/insurance.api';
 import { TONE_TEXT, formatDay, type Tone } from '@/lib/insurance';
 import { ClaimGuideView } from './ClaimGuideView';
 import { EscalationPanel } from './EscalationPanel';

@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Figure } from '@/components/receipt/Receipt';
 import { apiErrorMessage } from '@/api/client';
-import { insuranceApi, type InsurancePolicyDTO, type UpdatePolicyInput } from '@/api/insurance.api';
+import { insuranceApi, type InsurancePolicyDTO, type UpdatePolicyInput } from '@/api/insurance/insurance.api';
 import { formatDay, plural, TONE_TEXT } from '@/lib/insurance';
 import { SourceLink } from './SourceLink';
 

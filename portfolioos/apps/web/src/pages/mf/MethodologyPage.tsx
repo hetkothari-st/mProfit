@@ -3,12 +3,12 @@ import { Loader2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
-import { mfAnalyticsKeys } from '@/api/mfAnalyticsKeys';
+import { mfAnalyticsKeys } from '@/api/mf/mfAnalyticsKeys';
 import {
   mfMethodologyApi,
   type MfMethodologyModel,
   type MfMetricDirection,
-} from '@/api/mfMethodology.api';
+} from '@/api/mf/mfMethodology.api';
 import { AnalyticsDisclaimer } from './components/AnalyticsDisclaimer';
 import { SectionUnavailable } from './components/MetricValue';
 import { RatioPctCell } from './components/MetricCells';
@@ -39,7 +39,7 @@ import { humanizeKey, known } from './mfFormat';
  * move the weight tables into `packages/shared`, which would be cleaner still —
  * one import, no endpoint, a compile-time guarantee instead of a runtime one —
  * and it is the right end state. It was not taken here only because that package
- * is frozen for this change; `api/mfMethodology.api.ts` records the compromise
+ * is frozen for this change; `api/mf/mfMethodology.api.ts` records the compromise
  * and the promotion path.
  *
  * The one thing this page DOES state in its own words is prose: what a pillar

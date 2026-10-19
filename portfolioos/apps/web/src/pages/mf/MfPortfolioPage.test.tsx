@@ -33,7 +33,7 @@ import { MfPortfolioPage } from './MfPortfolioPage';
  * a total.
  */
 
-vi.mock('@/api/mfAnalytics.api', () => ({
+vi.mock('@/api/mf/mfAnalytics.api', () => ({
   mfAnalyticsApi: {
     analytics: vi.fn(),
     meta: vi.fn(),
@@ -45,7 +45,7 @@ vi.mock('@/api/mfAnalytics.api', () => ({
   },
 }));
 
-const { mfAnalyticsApi } = await import('@/api/mfAnalytics.api');
+const { mfAnalyticsApi } = await import('@/api/mf/mfAnalytics.api');
 const portfolioMock = vi.mocked(mfAnalyticsApi.portfolio);
 
 function plusUser(): AuthUser {

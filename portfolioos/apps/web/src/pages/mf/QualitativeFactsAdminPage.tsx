@@ -9,14 +9,14 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { apiErrorMessage } from '@/api/client';
-import { mfAnalyticsKeys } from '@/api/mfAnalyticsKeys';
+import { mfAnalyticsKeys } from '@/api/mf/mfAnalyticsKeys';
 import {
   mfQualitativeFactsApi,
   type MfQualitativeFactAdmin,
   type MfQualitativeFactCatalogEntry,
   type MfQualitativeFactCreateResult,
   type MfQualitativeScoringImpact,
-} from '@/api/mfQualitativeFacts.api';
+} from '@/api/mf/mfQualitativeFacts.api';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**

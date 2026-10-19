@@ -1,5 +1,5 @@
 import { normalizePartners, partnersOf, type PartnerPair } from '@everypaisa/shared';
-import type { FamilyMemberRow, FamilyRole } from '@/api/families.api';
+import type { FamilyMemberRow, FamilyRole } from '@/api/family/families.api';
 
 /**
  * Laying a family out as an indented tree.

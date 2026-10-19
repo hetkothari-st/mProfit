@@ -3,16 +3,16 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { LoanDTO, LoanSummaryDTO } from '@/api/loans.api';
+import type { LoanDTO, LoanSummaryDTO } from '@/api/loans/loans.api';
 import { LoanListPage } from './LoanListPage';
 
 const api = vi.hoisted(() => ({ list: vi.fn(), getSummary: vi.fn(), remove: vi.fn() }));
-vi.mock('@/api/loans.api', () => ({
+vi.mock('@/api/loans/loans.api', () => ({
   loansApi: { list: api.list, getSummary: api.getSummary, remove: api.remove, create: vi.fn(), update: vi.fn() },
 }));
 vi.mock('@/components/reports/DownloadReportButton', () => ({ DownloadReportButton: () => null }));
 const givenApi = vi.hoisted(() => ({ list: vi.fn() }));
-vi.mock('@/api/loansGiven.api', () => ({
+vi.mock('@/api/loans/loansGiven.api', () => ({
   loansGivenApi: { list: givenApi.list },
   LOANS_GIVEN_KEYS: [['loans-given'], ['dashboard']],
 }));

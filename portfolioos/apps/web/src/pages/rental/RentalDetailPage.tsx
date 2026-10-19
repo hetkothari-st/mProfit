@@ -42,8 +42,8 @@ import {
   type CreateTenancyInput,
   type MarkReceivedInput,
   type CreateExpenseInput,
-} from '@/api/rental.api';
-import { invalidateRentalCaches } from '@/api/rentalCache';
+} from '@/api/rental/rental.api';
+import { invalidateRentalCaches } from '@/api/rental/rentalCache';
 import { RentAccountPicker } from '@/components/rental/RentAccountPicker';
 import { apiErrorCode, apiErrorMessage } from '@/api/client';
 import { DocumentVault } from '@/components/documents/DocumentVault';

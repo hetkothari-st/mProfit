@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { mfCentralApi, type SubmitOtpResult } from '@/api/mfCentral.api';
+import { mfCentralApi, type SubmitOtpResult } from '@/api/mf/mfCentral.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
 

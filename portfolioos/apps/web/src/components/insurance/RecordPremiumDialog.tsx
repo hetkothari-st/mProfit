@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
-import { insuranceApi, type AddPremiumInput } from '@/api/insurance.api';
+import { insuranceApi, type AddPremiumInput } from '@/api/insurance/insurance.api';
 
 const MONEY = /^\d+(\.\d+)?$/;
 const EMPTY: AddPremiumInput = { paidOn: '', amount: '', periodFrom: '', periodTo: '' };

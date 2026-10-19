@@ -3,11 +3,11 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, cleanup } from '@testing-library/react';
 import type { LegacyViewDTO } from '@everypaisa/shared';
 import { renderWithProviders } from '@/pages/split/testUtils';
-import { legacyPublic } from '@/api/legacyPublic.api';
+import { legacyPublic } from '@/api/legacy/legacyPublic.api';
 import { LegacyAccessPage } from './LegacyAccessPage';
 
 vi.mock('react-hot-toast', () => ({ default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
-vi.mock('@/api/legacyPublic.api', () => ({ legacyPublic: { view: vi.fn() } }));
+vi.mock('@/api/legacy/legacyPublic.api', () => ({ legacyPublic: { view: vi.fn() } }));
 
 afterEach(() => {
   cleanup();

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { casApi, type CasProvider } from '@/api/cas.api';
+import { casApi, type CasProvider } from '@/api/imports/cas.api';
 import { apiErrorMessage } from '@/api/client';
 
 export function CasPage() {

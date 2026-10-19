@@ -3,7 +3,7 @@ import { FAMILY_RELATIONS, relationPlacement } from '@everypaisa/shared';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
-import type { FamilyMemberRow } from '@/api/families.api';
+import type { FamilyMemberRow } from '@/api/family/families.api';
 
 export interface RelationValue {
   relatedToId: string;

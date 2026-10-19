@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { InsurancePolicyDTO } from '@/api/insurance.api';
+import type { InsurancePolicyDTO } from '@/api/insurance/insurance.api';
 import { InsuranceListPage } from './InsuranceListPage';
 
 const api = vi.hoisted(() => ({
@@ -12,7 +12,7 @@ const api = vi.hoisted(() => ({
   revealPolicyNumber: vi.fn(),
   addPremium: vi.fn(),
 }));
-vi.mock('@/api/insurance.api', () => ({ insuranceApi: api }));
+vi.mock('@/api/insurance/insurance.api', () => ({ insuranceApi: api }));
 vi.mock('@/components/reports/DownloadReportButton', () => ({ DownloadReportButton: () => null }));
 
 afterEach(() => {

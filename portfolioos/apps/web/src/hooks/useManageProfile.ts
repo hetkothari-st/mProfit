@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores/auth.store';
 import { useActingAsStore } from '@/stores/actingAs.store';
-import { managedProfilesApi } from '@/api/managedProfiles.api';
+import { managedProfilesApi } from '@/api/family/managedProfiles.api';
 import { apiErrorMessage } from '@/api/client';
 
 /**

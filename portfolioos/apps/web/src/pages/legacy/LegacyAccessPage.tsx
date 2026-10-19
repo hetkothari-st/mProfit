@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { apiErrorMessage } from '@/api/client';
-import { legacyPublic } from '@/api/legacyPublic.api';
+import { legacyPublic } from '@/api/legacy/legacyPublic.api';
 
 // The nominee session lives in sessionStorage (per tab, gone when it closes).
 // Storage can throw in private mode; then it lives in React state only.

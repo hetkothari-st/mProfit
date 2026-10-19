@@ -46,7 +46,7 @@ import {
   type AmortizationRowDTO,
   type AddPaymentInput,
   type CreateLoanInput,
-} from '@/api/loans.api';
+} from '@/api/loans/loans.api';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 

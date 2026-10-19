@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { familiesApi, NON_AC_CATEGORIES } from '@/api/families.api';
+import { familiesApi, NON_AC_CATEGORIES } from '@/api/family/families.api';
 import { ALL_ASSET_CLASSES } from '@/lib/assetClasses';
 import { useAuthStore } from '@/stores/auth.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';

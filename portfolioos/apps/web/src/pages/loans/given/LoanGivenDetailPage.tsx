@@ -45,7 +45,7 @@ import {
   loansGivenApi,
   type LoanGivenDTO,
   type LoanGivenEntryKind,
-} from '@/api/loansGiven.api';
+} from '@/api/loans/loansGiven.api';
 import { LoanGivenFormDialog } from './LoanGivenFormDialog';
 import { EmiScheduleCard } from './EmiScheduleCard';
 import { ENTRY_KIND_LABELS, formatDay, relationshipLabel } from './loanGivenFormat';

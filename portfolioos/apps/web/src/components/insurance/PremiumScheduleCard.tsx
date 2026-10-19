@@ -11,7 +11,7 @@ import { Decimal, GRACE_PERIOD_BASIS, buildPremiumSchedule, formatINR } from '@e
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
-import { insuranceApi, type AddPremiumInput, type InsurancePolicyDTO } from '@/api/insurance.api';
+import { insuranceApi, type AddPremiumInput, type InsurancePolicyDTO } from '@/api/insurance/insurance.api';
 import { formatDay, plural } from '@/lib/insurance';
 
 const SHOW_FIRST = 12;

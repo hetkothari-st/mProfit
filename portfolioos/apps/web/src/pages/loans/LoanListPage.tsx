@@ -25,7 +25,7 @@ import { InstitutionField } from '@/components/common/InstitutionField';
 import { LoansGivenSection } from './given/LoansGivenSection';
 import { LoanSectionHeader, LoanSectionNav, LoansOverview, type LoanSectionKey } from './LoanSections';
 import { LoanRateFields, rateFieldsFrom, rateFieldsPayload, type RateFieldsValue } from './LoanRateFields';
-import { loansGivenApi } from '@/api/loansGiven.api';
+import { loansGivenApi } from '@/api/loans/loansGiven.api';
 import { InstallmentProgress, InstallmentTracker } from './InstallmentTracker';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';
@@ -49,7 +49,7 @@ import {
   loansApi,
   type LoanDTO,
   type CreateLoanInput,
-} from '@/api/loans.api';
+} from '@/api/loans/loans.api';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 

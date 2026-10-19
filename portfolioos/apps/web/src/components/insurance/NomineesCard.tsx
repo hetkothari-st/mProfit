@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
-import { insuranceApi, type InsurancePolicyDTO, type Nominee } from '@/api/insurance.api';
+import { insuranceApi, type InsurancePolicyDTO, type Nominee } from '@/api/insurance/insurance.api';
 import { needsNominee } from '@/lib/insurance';
 
 const RELATIONS = ['Spouse', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister'];

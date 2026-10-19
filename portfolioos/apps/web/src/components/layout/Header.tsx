@@ -9,7 +9,7 @@ import { authApi } from '@/api/auth.api';
 import { alertsApi } from '@/api/alerts.api';
 import { cn } from '@/lib/cn';
 import { FamilyScopeSwitcher } from '@/components/family/FamilyScopeSwitcher';
-import { managedProfilesApi } from '@/api/managedProfiles.api';
+import { managedProfilesApi } from '@/api/family/managedProfiles.api';
 import { useActingAsStore } from '@/stores/actingAs.store';
 import { useManageProfile } from '@/hooks/useManageProfile';
 import { DesktopDownloadButton } from './DesktopDownloadButton';
