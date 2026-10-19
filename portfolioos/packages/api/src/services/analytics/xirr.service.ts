@@ -1,13 +1,13 @@
 import { Decimal, toDecimal, xirr } from '@everypaisa/shared';
 import type { AssetClass, Prisma, Transaction, TransactionType } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
-import { routePriceLookup } from '../priceFeeds/router.service.js';
+import { prisma } from '../../lib/prisma.js';
+import { routePriceLookup } from '../../priceFeeds/router.service.js';
 import { spanDays, isXirrReliable } from './xirr.reliability.js';
-import { assetKeyFromTransaction } from './holdings/assetKey.js';
-import { cashDirection } from './cashDirection.js';
-import { transactionInrNet } from './investmentIncome.service.js';
-import { holdingsAsOf, isCurrent } from './holdings/holdingsAsOf.service.js';
-import { replayForFoPnl } from './foPnl.service.js';
+import { assetKeyFromTransaction } from '../holdings/assetKey.js';
+import { cashDirection } from '../cashDirection.js';
+import { transactionInrNet } from '../investmentIncome.service.js';
+import { holdingsAsOf, isCurrent } from '../holdings/holdingsAsOf.service.js';
+import { replayForFoPnl } from '../foPnl.service.js';
 
 /**
  * Internal cashflow representation. Amounts are Decimal to avoid IEEE-754

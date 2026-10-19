@@ -24,7 +24,7 @@ import { INVESTABLE_BUCKETS } from '../assetBuckets.js';
 import { CATEGORY_BASE_PRIORITY, MIN_SIP_TOPUP_INR } from '../constants.js';
 import { computeDrift, unitsFor, type DriftRow } from '../allocationMath.js';
 import { resolveProduct } from '../productResolution.js';
-import { requiredMonthlySip } from '../../goalMath.js';
+import { requiredMonthlySip } from '../../goals/goalMath.js';
 import type {
   AdvisorAssetBucketValue,
   AdvisorFacts,

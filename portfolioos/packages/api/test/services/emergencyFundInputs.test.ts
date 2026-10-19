@@ -18,7 +18,7 @@ vi.mock('../../src/lib/prisma.js', () => ({
   },
 }));
 
-import { getEmergencyFundInputs } from '../../src/services/healthScore.service.js';
+import { getEmergencyFundInputs } from '../../src/services/analytics/healthScore.service.js';
 
 const holdings = [
   { assetClass: 'CASH', currentValue: '50000', totalCost: '50000' },

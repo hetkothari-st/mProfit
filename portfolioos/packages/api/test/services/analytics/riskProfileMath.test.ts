@@ -6,7 +6,7 @@ import {
   AGGRESSIVE_AGE_CAP,
   TAX_SLAB_PCT,
   type RiskAnswers,
-} from '../../src/services/riskProfileMath.js';
+} from '../../../src/services/analytics/riskProfileMath.js';
 
 function answers(overrides: Partial<RiskAnswers> = {}): RiskAnswers {
   return {

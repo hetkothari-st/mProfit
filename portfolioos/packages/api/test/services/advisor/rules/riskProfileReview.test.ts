@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { riskProfileReviewRule } from '../../../../src/services/advisor/rules/riskProfileReview.rule.js';
 import { d, emptyPortfolioFacts, makeFacts } from './fixtures.js';
-import type { RiskCategoryValue } from '../../../../src/services/riskProfileMath.js';
+import type { RiskCategoryValue } from '../../../../src/services/analytics/riskProfileMath.js';
 
 const AS_OF = new Date('2026-01-15T00:00:00.000Z');
 

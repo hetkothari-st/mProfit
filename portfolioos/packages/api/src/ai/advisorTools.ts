@@ -12,8 +12,8 @@ import { Decimal } from 'decimal.js';
 import { logger } from '../lib/logger.js';
 import { buildTaxSummary } from '../services/tax/tax.service.js';
 import { listRecommendations } from '../services/advisor/advisorRecommendations.service.js';
-import { computeHealthScore } from '../services/healthScore.service.js';
-import { requiredMonthlySip } from '../services/goalMath.js';
+import { computeHealthScore } from '../services/analytics/healthScore.service.js';
+import { requiredMonthlySip } from '../services/goals/goalMath.js';
 import type { AdvisorAssetBucketValue, AdvisorFacts } from '../services/advisor/types.js';
 import { buildInsuranceData } from './contextBuilder.js';
 import { QueryIntent } from './queryClassifier.js';
@@ -40,7 +40,7 @@ import type {
   CapacityAnswer,
   ObjectiveAnswer,
   TaxSlabAnswer,
-} from '../services/riskProfileMath.js';
+} from '../services/analytics/riskProfileMath.js';
 
 export interface ToolContext {
   userId: string;

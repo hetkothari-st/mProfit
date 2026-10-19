@@ -38,7 +38,7 @@ import {
   memberPortfolioWhere,
   type MemberVisibilityCaps,
   type DashboardNetWorth,
-} from '../dashboard.service.js';
+} from '../analytics/dashboard.service.js';
 import {
   listGoals,
   GOAL_CATEGORIES,
@@ -47,13 +47,13 @@ import {
   type GoalCategory,
   type GoalPriority,
   type GoalStatus,
-} from '../goals.service.js';
-import { progressPct, requiredMonthlySip } from '../goalMath.js';
+} from '../goals/goals.service.js';
+import { progressPct, requiredMonthlySip } from '../goals/goalMath.js';
 import {
   insuranceScore,
   requiredLifeCover,
   isLifePolicyType,
-} from '../healthScoreMath.js';
+} from '../analytics/healthScoreMath.js';
 import { buildAmortizationSchedule, computeLoanSummary, type StoredLoan } from '../loans.service.js';
 import { computeCardSummary } from '../creditCards.service.js';
 import { activeMonthlyIncomeTotal } from '../income.service.js';

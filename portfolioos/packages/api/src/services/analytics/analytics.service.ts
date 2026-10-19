@@ -1,6 +1,6 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
+import { prisma } from '../../lib/prisma.js';
 import { financialYearOf } from '@everypaisa/shared';
 import {
   computePortfolioXirr,
@@ -11,13 +11,13 @@ import {
 import {
   computePortfolioCapitalGains,
   computeUserCapitalGains,
-} from './tax/capitalGains.service.js';
-import { historicalValuation, unrealisedReport, incomeReport } from './reports.service.js';
+} from '../tax/capitalGains.service.js';
+import { historicalValuation, unrealisedReport, incomeReport } from '../reports.service.js';
 import { ensureHistoricalPricesForPortfolio } from './analytics.priceBackfill.js';
 import { getDashboardNetWorth } from './dashboard.service.js';
-import { taxHarvestReport } from './tax/tax.service.js';
-import { yahooProfile } from '../priceFeeds/yahooClient.js';
-import { sectorFor } from '../data/nseSectors.js';
+import { taxHarvestReport } from '../tax/tax.service.js';
+import { yahooProfile } from '../../priceFeeds/yahooClient.js';
+import { sectorFor } from '../../data/nseSectors.js';
 import type { MonthlyPositions } from './analytics.risk.js';
 
 /**

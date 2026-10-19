@@ -1,7 +1,7 @@
 import { Decimal } from 'decimal.js';
-import { prisma } from '../lib/prisma.js';
+import { prisma } from '../../lib/prisma.js';
 import { serializeMoney, formatINR, financialYearFromDate } from '@everypaisa/shared';
-import { taxHarvestReport } from './tax/tax.service.js';
+import { taxHarvestReport } from '../tax/tax.service.js';
 import { actionForCategory, type InsightAction } from './insightActions.js';
 import { classifyFdMaturity, isTaxLossHarvestWindow } from './deterministicInsightsRules.js';
 

@@ -15,7 +15,7 @@ import type { NetWorthSnapshot } from '@prisma/client';
 import { logger } from '../lib/logger.js';
 import { runAsSystem, runAsUser } from '../lib/requestContext.js';
 import { prisma } from '../lib/prisma.js';
-import { getDashboardNetWorth } from '../services/dashboard.service.js';
+import { getDashboardNetWorth } from '../services/analytics/dashboard.service.js';
 
 const TZ = 'Asia/Kolkata';
 let running = false;

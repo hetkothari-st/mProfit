@@ -1,8 +1,8 @@
-import { prisma, runInTransaction } from '../lib/prisma.js';
-import { logger } from '../lib/logger.js';
-import { fetchHistorical } from '../priceFeeds/yahoo.service.js';
-import { backfillCryptoHistory } from '../priceFeeds/crypto.service.js';
-import { backfillMfNavHistory } from '../priceFeeds/amfi.service.js';
+import { prisma, runInTransaction } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
+import { fetchHistorical } from '../../priceFeeds/yahoo.service.js';
+import { backfillCryptoHistory } from '../../priceFeeds/crypto.service.js';
+import { backfillMfNavHistory } from '../../priceFeeds/amfi.service.js';
 
 /**
  * On-demand historical price backfill for the analytics historical-valuation

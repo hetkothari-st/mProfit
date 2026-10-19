@@ -10,8 +10,8 @@
  */
 
 import { Decimal } from 'decimal.js';
-import { prisma } from '../lib/prisma.js';
-import { BadRequestError, NotFoundError } from '../lib/errors.js';
+import { prisma } from '../../lib/prisma.js';
+import { BadRequestError, NotFoundError } from '../../lib/errors.js';
 import {
   serializeMoney,
   GOAL_CATEGORIES,

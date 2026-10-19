@@ -1,6 +1,6 @@
 import { serializeMoney, toDecimal, type AiConnectorArea } from '@everypaisa/shared';
 import { prisma } from '../../../lib/prisma.js';
-import { getDashboardNetWorth } from '../../dashboard.service.js';
+import { getDashboardNetWorth } from '../../analytics/dashboard.service.js';
 import type { ConnectorTool } from './types.js';
 import { dmy, hasClientBooks, ownPortfolios } from './common.js';
 import { areaWholeFor, selfPerson } from '../people.js';

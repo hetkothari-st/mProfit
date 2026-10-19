@@ -1,10 +1,10 @@
 import { Decimal } from 'decimal.js';
 import { ageBasedEquityGuidelinePct } from './riskProfileMath.js';
 import { formatINR } from '@everypaisa/shared';
-import { prisma } from '../lib/prisma.js';
+import { prisma } from '../../lib/prisma.js';
 import { getDashboardNetWorth } from './dashboard.service.js';
-import { listGoals } from './goals.service.js';
-import { activeMonthlyIncomeTotal } from './income.service.js';
+import { listGoals } from '../goals/goals.service.js';
+import { activeMonthlyIncomeTotal } from '../income.service.js';
 import {
   emergencyFundScore, investmentRateScore, debtBurdenScore,
   diversificationScore, insuranceScore, goalProgressScore, weightedOverall,

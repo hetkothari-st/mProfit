@@ -10,7 +10,7 @@
 import { Decimal } from 'decimal.js';
 import { REBALANCE_BAND_PP, EMERGENCY_FUND_MONTHS } from '@everypaisa/shared';
 import type { AdvisorAssetBucketValue, AdvisorRecommendationCategoryValue } from './types.js';
-import type { RiskCategoryValue } from '../riskProfileMath.js';
+import type { RiskCategoryValue } from '../analytics/riskProfileMath.js';
 
 /** Bumped when engine-wide behaviour changes in a way rule versions do not
  *  capture. Stamped on every AdvisorRun. */

@@ -1,7 +1,7 @@
 import { Decimal } from '@everypaisa/shared';
 import type { CorporateActionType } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
-import { quantityHeldBefore } from './holdings/holdingsProjection.js';
+import { prisma } from '../../lib/prisma.js';
+import { quantityHeldBefore } from '../holdings/holdingsProjection.js';
 
 /**
  * Read model for the Corporate Actions page. Joins stored CorporateAction rows

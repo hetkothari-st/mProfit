@@ -28,7 +28,7 @@ import {
   computeRollingXirr,
   computeUserRollingXirr,
   computeUserXirr,
-} from '../services/xirr.service.js';
+} from '../services/analytics/xirr.service.js';
 import { persistCapitalGainsForPortfolio } from '../services/tax/capitalGains.service.js';
 import { streamExcel, streamPdf, fmtNum, fmtDate, type ExportColumn, type ExportPayload } from '../services/export.service.js';
 import { parseThemeQuery, themeFor, hexToArgb } from '../services/charts/pdfTheme.js';

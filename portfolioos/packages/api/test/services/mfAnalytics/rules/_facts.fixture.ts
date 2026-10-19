@@ -46,7 +46,7 @@ import type {
   MfHorizonKey,
   RiskProfileFacts,
 } from '../../../../src/services/mfAnalytics/types.js';
-import type { RiskCategoryValue } from '../../../../src/services/riskProfileMath.js';
+import type { RiskCategoryValue } from '../../../../src/services/analytics/riskProfileMath.js';
 
 export const AS_OF = '2026-08-31';
 export const SCHEME = 'FIXTURE_SCHEME_1';

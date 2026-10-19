@@ -1,6 +1,6 @@
 import { Decimal, istCalendarDate, toAmount2 } from '@everypaisa/shared';
 import { prisma } from '../../../../lib/prisma.js';
-import { ASSET_CLASS_LABELS } from '../../../dashboard.service.js';
+import { ASSET_CLASS_LABELS } from '../../../analytics/dashboard.service.js';
 import { clip, SOLE, type EstateAdapter, type EstateCandidate } from '../types.js';
 
 const ZERO = new Decimal(0);

@@ -11,7 +11,7 @@
  */
 
 import type { Decimal } from 'decimal.js';
-import type { RiskCategoryValue } from '../riskProfileMath.js';
+import type { RiskCategoryValue } from '../analytics/riskProfileMath.js';
 import type { SelectionConfig } from './fundRanking/types.js';
 
 export const ADVISOR_ASSET_BUCKETS = [

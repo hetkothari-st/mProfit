@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
-import { runAsSystem } from '../../src/lib/requestContext.js';
-import { getNetWorthHistory } from '../../src/services/netWorthHistory.service.js';
+import { createTestScope, prisma, type TestScope } from '../../helpers/db.js';
+import { runAsSystem } from '../../../src/lib/requestContext.js';
+import { getNetWorthHistory } from '../../../src/services/analytics/netWorthHistory.service.js';
 
 describe('netWorthHistory.service', () => {
   let scope: TestScope;

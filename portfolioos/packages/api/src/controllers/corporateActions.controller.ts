@@ -7,8 +7,8 @@ import {
   getCorporateActionsReport,
   type CorporateActionFilters,
   type CorporateActionStatus,
-} from '../services/corporateActionsReport.service.js';
-import { applyCorporateActionsForUser } from '../services/corporateActionApply.service.js';
+} from '../services/corporateActions/corporateActionsReport.service.js';
+import { applyCorporateActionsForUser } from '../services/corporateActions/corporateActionApply.service.js';
 import { loadNseCorporateActions } from '../priceFeeds/corporateActions.service.js';
 
 const VALID_TYPES = new Set<CorporateActionType>([

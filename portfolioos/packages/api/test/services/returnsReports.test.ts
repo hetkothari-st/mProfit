@@ -9,7 +9,7 @@ import {
   computePortfolioXirr,
   computeRollingXirr,
   modifiedDietzAnnualized,
-} from '../../src/services/xirr.service.js';
+} from '../../src/services/analytics/xirr.service.js';
 import { buildPerformanceLayout } from '../../src/services/reportBuilder/special/index.js';
 
 const cleanups: Array<() => Promise<void>> = [];

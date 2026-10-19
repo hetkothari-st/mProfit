@@ -66,7 +66,7 @@ import {
   getBalanceSheet,
   listAccountsFlat,
 } from '../../accounting.service.js';
-import { computeUserXirr } from '../../xirr.service.js';
+import { computeUserXirr } from '../../analytics/xirr.service.js';
 import { resolveMutualFundId } from '../../holdings/masterData.service.js';
 import { acquisitionDates, holdingsAsOf, sortHoldings } from '../../holdings/holdingsAsOf.service.js';
 import { cashDirection } from '../../cashDirection.js';
@@ -1231,7 +1231,7 @@ export async function buildPerformanceLayout(userId: string): Promise<MprofitLay
   // Reuse the per-portfolio XIRR engine; computeUserXirr already loops
   // through all portfolios, so we duplicate the loop only to get the
   // per-portfolio breakdown plus the user roll-up in a single layout.
-  const { computePortfolioXirr } = await import('../../xirr.service.js');
+  const { computePortfolioXirr } = await import('../../analytics/xirr.service.js');
 
   // Absolute return = current value + money received − money invested.
   // XIRR under the minimum history is too volatile to show.

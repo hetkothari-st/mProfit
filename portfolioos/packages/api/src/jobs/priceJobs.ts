@@ -18,7 +18,7 @@ import { loadNseCorporateActions } from '../priceFeeds/corporateActions.service.
 import { runCorporateActionApplyAll } from './corporateActionApplyJob.js';
 import { syncAllCommodities } from '../priceFeeds/commodity.service.js';
 import { syncCryptoPrices } from '../priceFeeds/crypto.service.js';
-import { refreshBenchmarks } from '../services/analytics.benchmark.js';
+import { refreshBenchmarks } from '../services/analytics/analytics.benchmark.js';
 import { syncFxRates } from '../priceFeeds/fx.service.js';
 import { syncFuelPrices } from '../priceFeeds/fuel.service.js';
 import { loadNseFoMaster } from '../priceFeeds/nseFoMaster.service.js';

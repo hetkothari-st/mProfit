@@ -1,19 +1,19 @@
 import { z } from 'zod';
 import Anthropic from '@anthropic-ai/sdk';
-import { ANTHROPIC_CLIENT_OPTIONS } from '../lib/anthropicOptions.js';
+import { ANTHROPIC_CLIENT_OPTIONS } from '../../lib/anthropicOptions.js';
 import { Decimal } from 'decimal.js';
-import { env } from '../config/env.js';
-import { prisma } from '../lib/prisma.js';
-import { logger } from '../lib/logger.js';
-import { checkBudget, type BudgetStatus } from '../ingestion/llm/budget.js';
-import { recordSpend, warnIfZeroRetentionUnconfirmed } from '../ingestion/llm/client.js';
+import { env } from '../../config/env.js';
+import { prisma } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
+import { checkBudget, type BudgetStatus } from '../../ingestion/llm/budget.js';
+import { recordSpend, warnIfZeroRetentionUnconfirmed } from '../../ingestion/llm/client.js';
 import {
   getAnalyticsSnapshot,
   type AnalyticsScope,
   type Period,
   type AnalyticsSnapshot,
 } from './analytics.service.js';
-import { actionForCategory, type InsightAction } from './insightActions.js';
+import { actionForCategory, type InsightAction } from '../insights/insightActions.js';
 
 /**
  * Phase 5-Analytics — AI Insights generator.

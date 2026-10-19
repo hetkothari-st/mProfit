@@ -1,7 +1,7 @@
 import { Decimal } from 'decimal.js';
-import { prisma } from '../lib/prisma.js';
-import { logger } from '../lib/logger.js';
-import { yahooHistorical, yahooChartDirect } from '../priceFeeds/yahooClient.js';
+import { prisma } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
+import { yahooHistorical, yahooChartDirect } from '../../priceFeeds/yahooClient.js';
 
 /**
  * Benchmark price series for NIFTY 50 + Sensex, rebased to 100 at period

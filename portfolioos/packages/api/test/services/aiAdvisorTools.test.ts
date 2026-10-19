@@ -15,7 +15,7 @@ vi.mock('../../src/services/tax/tax.service.js', () => ({ buildTaxSummary: svc.b
 vi.mock('../../src/services/advisor/advisorRecommendations.service.js', () => ({
   listRecommendations: svc.listRecommendations,
 }));
-vi.mock('../../src/services/healthScore.service.js', () => ({ computeHealthScore: svc.computeHealthScore }));
+vi.mock('../../src/services/analytics/healthScore.service.js', () => ({ computeHealthScore: svc.computeHealthScore }));
 vi.mock('../../src/ai/contextBuilder.js', () => ({ buildInsuranceData: svc.buildInsuranceData }));
 
 import { ADVISOR_TOOLS, runAdvisorTool } from '../../src/ai/advisorTools.js';

@@ -1,8 +1,8 @@
 import { Decimal } from '@everypaisa/shared';
 import type { Prisma } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
-import { quantityHeldBefore, recomputeForAsset } from './holdings/holdingsProjection.js';
-import { findDuplicateTransaction } from './duplicateMatch.js';
+import { prisma } from '../../lib/prisma.js';
+import { quantityHeldBefore, recomputeForAsset } from '../holdings/holdingsProjection.js';
+import { findDuplicateTransaction } from '../duplicateMatch.js';
 
 /**
  * Turn stored CorporateAction rows into idempotent Transaction rows so the

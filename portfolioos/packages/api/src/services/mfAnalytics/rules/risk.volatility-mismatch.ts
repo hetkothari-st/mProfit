@@ -6,7 +6,7 @@
  * ---------------------------------------------------------------------------
  * `05 §4` phrases the second half of this trigger as "user risk profile <=
  * MODERATE". This codebase has no MODERATE. `RISK_CATEGORIES` in
- * `services/riskProfileMath.ts` is
+ * `services/analytics/riskProfileMath.ts` is
  *
  *     CONSERVATIVE | BALANCED | GROWTH | AGGRESSIVE
  *

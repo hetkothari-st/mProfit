@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createTransaction } from '../../src/services/holdings/transaction.service.js';
-import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
+import { createTransaction } from '../../../src/services/holdings/transaction.service.js';
+import { createTestScope, prisma, type TestScope } from '../../helpers/db.js';
 import {
   generateFdMaturityInsights,
   generateTaxLossHarvestInsight,
-} from '../../src/services/deterministicInsights.js';
+} from '../../../src/services/insights/deterministicInsights.js';
 
 function daysFromNow(days: number): string {
   return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);

@@ -11,14 +11,14 @@ const { DAY, iso } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../src/lib/prisma.js', () => ({ prisma: {} }));
-vi.mock('../../src/services/dashboard.service.js', () => ({
+vi.mock('../../src/services/analytics/dashboard.service.js', () => ({
   getDashboardNetWorthForScope: vi.fn().mockResolvedValue({
     totalNetWorth: '4000000',
     totalLiabilities: '0',
     netWorthAfterLiabilities: '4000000',
   }),
 }));
-vi.mock('../../src/services/analytics.service.js', () => ({
+vi.mock('../../src/services/analytics/analytics.service.js', () => ({
   getAnalyticsSnapshot: vi.fn().mockResolvedValue({
     portfolioValueLine: [
       { date: iso(400 * DAY), value: '900000' },
@@ -30,10 +30,10 @@ vi.mock('../../src/services/analytics.service.js', () => ({
   }),
 }));
 vi.mock('../../src/services/familyScope.service.js', () => ({ getEffectiveScope: vi.fn() }));
-vi.mock('../../src/services/xirr.service.js', () => ({ computeUserXirr: vi.fn() }));
+vi.mock('../../src/services/analytics/xirr.service.js', () => ({ computeUserXirr: vi.fn() }));
 vi.mock('../../src/services/tax/capitalGains.service.js', () => ({ computeUserCapitalGains: vi.fn() }));
 vi.mock('../../src/services/tax/tax.service.js', () => ({ taxHarvestReport: vi.fn() }));
-vi.mock('../../src/services/goals.service.js', () => ({ listGoals: vi.fn() }));
+vi.mock('../../src/services/goals/goals.service.js', () => ({ listGoals: vi.fn() }));
 vi.mock('../../src/services/loans.service.js', () => ({ listLoans: vi.fn() }));
 vi.mock('../../src/services/creditCards.service.js', () => ({ listCards: vi.fn() }));
 vi.mock('../../src/services/insurance.service.js', () => ({ listPolicies: vi.fn() }));

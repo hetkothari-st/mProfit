@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
+import { prisma } from '../../lib/prisma.js';
 import { serializeMoney, toDecimal } from '@everypaisa/shared';
 
 export type NetWorthHistoryPeriod = '1M' | '3M' | '6M' | '1Y' | 'ALL';

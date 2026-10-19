@@ -4,7 +4,7 @@
  *
  * Kept in one place so the wording can be reviewed and edited without
  * touching the widgets. Each entry describes what the number ACTUALLY is, as
- * computed in packages/api/src/services/analytics.service.ts and
+ * computed in packages/api/src/services/analytics/analytics.service.ts and
  * analytics.risk.ts — including where that differs from what the title might
  * suggest (the benchmark line includes money you add; "inflow" means cash
  * coming back to you). Keep them in

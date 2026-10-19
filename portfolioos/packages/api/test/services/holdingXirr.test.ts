@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
 import type { Transaction } from '@prisma/client';
-import { computeHoldingXirrs } from '../../src/services/xirr.service.js';
+import { computeHoldingXirrs } from '../../src/services/analytics/xirr.service.js';
 
 /**
  * Fixture builder mirrors test/services/capitalGainsGrandfathering.test.ts so

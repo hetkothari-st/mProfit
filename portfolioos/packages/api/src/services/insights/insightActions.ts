@@ -1,4 +1,4 @@
-import type { InsightCategory } from './analytics.insights.js';
+import type { InsightCategory } from '../analytics/analytics.insights.js';
 
 /**
  * A neutral, code-derived next step for an insight card. SEBI constraint:
