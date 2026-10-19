@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { AUTO_SOURCES, LOAN_RATE_SOURCES, REPO_SOURCE_ID } from '../../src/services/loanRates/sourceList.js';
-import { PAGE_READERS, readerById } from '../../src/services/loanRates/sources/index.js';
+import { AUTO_SOURCES, LOAN_RATE_SOURCES, REPO_SOURCE_ID } from '../../src/services/loans/loanRates/sourceList.js';
+import { PAGE_READERS, readerById } from '../../src/services/loans/loanRates/sources/index.js';
 import { READER_FIXTURES, fixture } from './readerFixtures.js';
 
 describe('source list', () => {

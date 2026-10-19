@@ -9,7 +9,7 @@ import { AppError, BadRequestError, ConflictError, NotFoundError, ValidationErro
 import { logger } from '../../lib/logger.js';
 import { sealForUser } from '../../lib/userKeys.js';
 import { readBuffer } from '../../lib/documentStorage.js';
-import { createDocument, deleteDocument } from '../document.service.js';
+import { createDocument, deleteDocument } from '../documents/document.service.js';
 import { renderWillPdf, type WillPdfInput } from './willPdf.js';
 import { loadDraft, requireWillKeys, revisionConflict, todayIst } from './willStore.js';
 import { toVersionWire } from './will.service.js';

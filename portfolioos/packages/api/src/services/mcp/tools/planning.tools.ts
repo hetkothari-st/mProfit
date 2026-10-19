@@ -9,7 +9,7 @@ import { listFriends, groupBalances } from '../../split/ledger.service.js';
 import { listGroups } from '../../split/groups.service.js';
 import { getWillOverview } from '../../will/will.service.js';
 import { getOverview as getLegacyOverview } from '../../legacy/plan.service.js';
-import { listAllDocuments } from '../../document.service.js';
+import { listAllDocuments } from '../../documents/document.service.js';
 import { ToolUserError, type ConnectorTool } from './types.js';
 import { dmy, hasClientBooks, ownPortfolios } from './common.js';
 

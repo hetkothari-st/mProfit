@@ -730,7 +730,7 @@ describe('CA access boundary', () => {
     // default chart is seeded on first view. It went unrecorded, so a client
     // would have seen twenty accounts appear with nothing in their activity
     // feed. Asserted because the write is invisible from the CA's side.
-    const { ensureDefaultAccounts } = await import('../../src/services/accounting.service.js');
+    const { ensureDefaultAccounts } = await import('../../src/services/accounting/accounting.service.js');
 
     const firstOpen = await runAsVerified(ca.userId, () => ensureDefaultAccounts(client.userId));
     expect(firstOpen.length).toBeGreaterThan(0);
@@ -752,7 +752,7 @@ describe('CA access boundary', () => {
     // own identity, so this asserts three things at once: RLS permits it, it
     // produces figures, and it lands on the client's audit trail.
     const { projectBooks } = await import('../../src/services/ca/caProjection.service.js');
-    const { getTrialBalance } = await import('../../src/services/accounting.service.js');
+    const { getTrialBalance } = await import('../../src/services/accounting/accounting.service.js');
 
     const audit = {
       actorUserId: ca.userId,

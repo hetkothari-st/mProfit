@@ -4,7 +4,7 @@ import { formatINR } from '@everypaisa/shared';
 import { prisma } from '../../lib/prisma.js';
 import { getDashboardNetWorth } from './dashboard.service.js';
 import { listGoals } from '../goals/goals.service.js';
-import { activeMonthlyIncomeTotal } from '../income.service.js';
+import { activeMonthlyIncomeTotal } from '../income/income.service.js';
 import {
   emergencyFundScore, investmentRateScore, debtBurdenScore,
   diversificationScore, insuranceScore, goalProgressScore, weightedOverall,

@@ -38,7 +38,7 @@ import {
 import {
   getEffectiveScope,
   type EffectiveScope,
-} from '../../../../src/services/familyScope.service.js';
+} from '../../../../src/services/family/familyScope.service.js';
 import { createTestScope, type TestScope } from '../../../helpers/db.js';
 
 // ---------------------------------------------------------------------------

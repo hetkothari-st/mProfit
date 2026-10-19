@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
-import { addManagedMember, createFamily, revokeMember } from '../../src/services/family.service.js';
+import { addManagedMember, createFamily, revokeMember } from '../../src/services/family/family.service.js';
 import {
   claimProfile,
   inviteProfileClaim,

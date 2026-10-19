@@ -10,7 +10,7 @@ import jwt from 'jsonwebtoken';
  */
 
 const svc = vi.hoisted(() => ({ replaceDocumentBytes: vi.fn() }));
-vi.mock('../services/document.service.js', async (orig) => ({
+vi.mock('../services/documents/document.service.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   replaceDocumentBytes: svc.replaceDocumentBytes,
 }));

@@ -13,7 +13,7 @@ const svc = vi.hoisted(() => ({
 vi.mock('../../src/lib/prisma.js', () => ({ prisma: {} }));
 vi.mock('../../src/services/analytics/analytics.service.js', () => ({ getAnalyticsSnapshot: svc.getAnalyticsSnapshot }));
 vi.mock('../../src/services/goals/goals.service.js', () => ({ listGoals: svc.listGoals }));
-vi.mock('../../src/services/insurance.service.js', () => ({ listPolicies: svc.listPolicies }));
+vi.mock('../../src/services/insurance/insurance.service.js', () => ({ listPolicies: svc.listPolicies }));
 
 import { computeSuggestedQuestions, INSURANCE_EXAMPLE_QUESTIONS } from '../../src/ai/suggestedQuestions.js';
 import { classifyQuery, QueryIntent } from '../../src/ai/queryClassifier.js';

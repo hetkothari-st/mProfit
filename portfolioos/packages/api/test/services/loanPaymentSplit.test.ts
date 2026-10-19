@@ -5,7 +5,7 @@ import {
   computeLoanSummary,
   splitLoanPayment,
   type StoredLoan,
-} from '../../src/services/loans.service.js';
+} from '../../src/services/loans/loans.service.js';
 
 const D = (v: string) => new Prisma.Decimal(v);
 const date = (iso: string) => new Date(`${iso}T00:00:00Z`);

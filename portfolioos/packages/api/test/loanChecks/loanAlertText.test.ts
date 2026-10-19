@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal, type PassThroughEstimate } from '@everypaisa/shared';
-import { benchmarkAlertText, loanLabel, refinanceAlertText } from '../../src/services/loanChecks/loanAlertText.js';
+import { benchmarkAlertText, loanLabel, refinanceAlertText } from '../../src/services/loans/loanChecks/loanAlertText.js';
 
 const D = (v: string | number) => new Decimal(v);
 const estimate = (newEmi: string, tenureDeltaMonths: number | null): PassThroughEstimate =>

@@ -11,9 +11,9 @@ import {
   refreshVehicle,
   refreshVehiclePhoto,
   applyVahanSms,
-} from '../services/vehicles.service.js';
+} from '../services/vehicles/vehicles.service.js';
 import { initiateCarInfoScrape, verifyCarInfoOtp } from '../ingestion/vehicle/carinfoPlaywright.js';
-import { scanChallansForVehicle } from '../services/challans.service.js';
+import { scanChallansForVehicle } from '../services/vehicles/challans.service.js';
 import { getFuelPricesForState, getAllStateFuelPrices } from '../priceFeeds/fuel.service.js';
 import { listUniqueStates } from '../priceFeeds/fuelStates.js';
 import { ok } from '../lib/response.js';

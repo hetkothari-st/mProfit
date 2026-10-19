@@ -8,7 +8,7 @@ import {
   deleteAlert,
   createCustomAlert,
   runAllAlertScans,
-} from '../services/alerts.service.js';
+} from '../services/notifications/alerts.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import type { AlertType } from '@prisma/client';

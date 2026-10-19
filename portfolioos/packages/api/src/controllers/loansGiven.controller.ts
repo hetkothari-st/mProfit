@@ -18,7 +18,7 @@ import {
   INSTALLMENT_ACTIONS,
   updateLoanGiven,
   writeOffLoanGiven,
-} from '../services/loansGiven.service.js';
+} from '../services/loans/loansGiven.service.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const moneyString = z.string().regex(/^\d+(\.\d+)?$/, 'Expected positive decimal string');

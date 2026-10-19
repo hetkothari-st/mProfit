@@ -32,7 +32,7 @@ import {
   type EffectiveScope,
   type NonAcCategory,
   NON_AC_CATEGORIES,
-} from '../familyScope.service.js';
+} from './familyScope.service.js';
 import {
   getDashboardNetWorth,
   memberPortfolioWhere,
@@ -54,9 +54,9 @@ import {
   requiredLifeCover,
   isLifePolicyType,
 } from '../analytics/healthScoreMath.js';
-import { buildAmortizationSchedule, computeLoanSummary, type StoredLoan } from '../loans.service.js';
-import { computeCardSummary } from '../creditCards.service.js';
-import { activeMonthlyIncomeTotal } from '../income.service.js';
+import { buildAmortizationSchedule, computeLoanSummary, type StoredLoan } from '../loans/loans.service.js';
+import { computeCardSummary } from '../banking/creditCards.service.js';
+import { activeMonthlyIncomeTotal } from '../income/income.service.js';
 import { isPriceStale } from '../holdings/priceStaleness.js';
 
 /**

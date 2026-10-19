@@ -7,7 +7,7 @@ import {
   listVouchers,
   createVoucher,
   getTrialBalance,
-} from '../../src/services/accounting.service.js';
+} from '../../src/services/accounting/accounting.service.js';
 
 /**
  * A client's books, read by their CA.

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
   cellRate, datesIn, findMclr, latestDate, loadPage, minMax, normPct, pageTables, percentRange, percents, tenorOf,
   type PageTable,
-} from '../../src/services/loanRates/sources/parseUtil.js';
+} from '../../src/services/loans/loanRates/sources/parseUtil.js';
 
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/loanRates/${name}`, import.meta.url), 'utf8');
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import ExcelJS from 'exceljs';
 import { summariseLoan, loanFromWire, taxFromWire, type LoanInputWire, type TaxInputWire } from '@everypaisa/shared';
-import { buildEmiXlsx, buildEmiPdf, CARRIED_FORWARD_LABEL } from '../../src/services/emi/emiExport.js';
+import { buildEmiXlsx, buildEmiPdf, CARRIED_FORWARD_LABEL } from '../../src/services/loans/emi/emiExport.js';
 
 const input: LoanInputWire = { principal: '100000', annualRatePct: '12', tenureMonths: 12, firstEmiDate: '2026-11-05' };
 const summary = summariseLoan(loanFromWire(input));

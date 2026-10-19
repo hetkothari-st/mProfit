@@ -23,7 +23,7 @@ import {
   listAccounts,
   getAccount,
   revealAccountNumber,
-} from '../../src/services/bankAccounts.service.js';
+} from '../../src/services/banking/bankAccounts.service.js';
 import {
   encryptIdentifier,
   decryptIdentifier,

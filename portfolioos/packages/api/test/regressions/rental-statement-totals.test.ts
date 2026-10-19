@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Prisma } from '@prisma/client';
-import { getTenancyLedger, createLedgerEntry } from '../../src/services/rentalLedger.service.js';
+import { getTenancyLedger, createLedgerEntry } from '../../src/services/rental/rentalLedger.service.js';
 import { buildStatementTotals } from '../../src/controllers/rental.controller.js';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 

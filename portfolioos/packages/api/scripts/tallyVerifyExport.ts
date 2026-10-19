@@ -14,10 +14,10 @@ import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { Decimal } from 'decimal.js';
 import { prisma } from '../src/lib/prisma.js';
 import { runAsSystem, runAsUser } from '../src/lib/requestContext.js';
-import { buildUserTallyBook } from '../src/services/tally/tallyZip.service.js';
-import { tallyZipEntries } from '../src/services/tally/tallyPackage.js';
-import { validateTallyBook } from '../src/services/tally/tallyValidate.js';
-import { TALLY_RESERVED_GROUPS } from '../src/services/tally/tallyNames.js';
+import { buildUserTallyBook } from '../src/services/accounting/tally/tallyZip.service.js';
+import { tallyZipEntries } from '../src/services/accounting/tally/tallyPackage.js';
+import { validateTallyBook } from '../src/services/accounting/tally/tallyValidate.js';
+import { TALLY_RESERVED_GROUPS } from '../src/services/accounting/tally/tallyNames.js';
 import { financialYearRange } from '@everypaisa/shared';
 
 function arg(name: string): string | undefined {

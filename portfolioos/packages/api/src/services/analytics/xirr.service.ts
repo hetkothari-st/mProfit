@@ -4,8 +4,8 @@ import { prisma } from '../../lib/prisma.js';
 import { routePriceLookup } from '../../priceFeeds/router.service.js';
 import { spanDays, isXirrReliable } from './xirr.reliability.js';
 import { assetKeyFromTransaction } from '../holdings/assetKey.js';
-import { cashDirection } from '../cashDirection.js';
-import { transactionInrNet } from '../investmentIncome.service.js';
+import { cashDirection } from '../banking/cashDirection.js';
+import { transactionInrNet } from '../income/investmentIncome.service.js';
 import { holdingsAsOf, isCurrent } from '../holdings/holdingsAsOf.service.js';
 import { replayForFoPnl } from '../fo/foPnl.service.js';
 

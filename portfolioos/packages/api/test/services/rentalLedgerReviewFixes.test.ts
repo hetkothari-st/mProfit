@@ -4,13 +4,13 @@ import {
   getTenancyLedger,
   buildReminderMessage,
   recomputeTenancy,
-} from '../../src/services/rentalLedger.service.js';
+} from '../../src/services/rental/rentalLedger.service.js';
 import {
   updateTenancy,
   markReceiptReceived,
   unmarkReceived,
   undoAutoMatch,
-} from '../../src/services/rental.service.js';
+} from '../../src/services/rental/rental.service.js';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 
 /**

@@ -3,8 +3,8 @@ import { PassThrough } from 'node:stream';
 import ExcelJS from 'exceljs';
 import type { Response } from 'express';
 import { isValidFinancialYear } from '@everypaisa/shared';
-import { excelSheetName, setExcelValue } from '../../src/services/excelCells.js';
-import { streamExcel, fmtNum, type ExportPayload } from '../../src/services/export.service.js';
+import { excelSheetName, setExcelValue } from '../../src/services/reports/excelCells.js';
+import { streamExcel, fmtNum, type ExportPayload } from '../../src/services/reports/export.service.js';
 import { buildPayloadForSubjects } from '../../src/services/reports/reportSubjects.js';
 import { passbookBalance } from '../../src/services/reportBuilder/statement/providentFund.js';
 

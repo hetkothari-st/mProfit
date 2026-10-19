@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { describe, it, expect } from 'vitest';
 import { prisma } from '../../src/lib/prisma.js';
-import { ensureLoanRateSources, LOAN_RATE_SOURCES } from '../../src/services/loanRates/sourceList.js';
+import { ensureLoanRateSources, LOAN_RATE_SOURCES } from '../../src/services/loans/loanRates/sourceList.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';
 if (!/localhost|127\.0\.0\.1/.test(DB_URL)) throw new Error('Refusing to run: DATABASE_URL must point at a local database');

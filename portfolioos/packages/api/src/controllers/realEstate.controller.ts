@@ -11,7 +11,7 @@ import {
   computeSummary,
   unlinkFromRental,
   updateProperty,
-} from '../services/realEstate.service.js';
+} from '../services/realEstate/realEstate.service.js';
 import {
   createOwnedPropertySchema,
   markSoldSchema,

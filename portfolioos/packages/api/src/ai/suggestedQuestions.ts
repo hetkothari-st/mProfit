@@ -11,7 +11,7 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { getAnalyticsSnapshot } from '../services/analytics/analytics.service.js';
 import { listGoals } from '../services/goals/goals.service.js';
-import { listPolicies } from '../services/insurance.service.js';
+import { listPolicies } from '../services/insurance/insurance.service.js';
 
 export interface SuggestedQuestion {
   question: string;

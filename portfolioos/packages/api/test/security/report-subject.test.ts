@@ -169,7 +169,7 @@ describe('resolveReportSubjects', () => {
     // about the role — a fully-granted member is not being protected from
     // data they can already see in full.
     const { AssetClass } = await import('@prisma/client');
-    const { NON_AC_CATEGORIES } = await import('../../src/services/familyScope.service.js');
+    const { NON_AC_CATEGORIES } = await import('../../src/services/family/familyScope.service.js');
     await setCaps(viewer.userId, Object.values(AssetClass), [...NON_AC_CATEGORIES]);
 
     const resolved = await viewer.runAs(() =>

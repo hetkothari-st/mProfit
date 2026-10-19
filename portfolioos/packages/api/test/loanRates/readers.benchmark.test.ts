@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import type { MclrTenor, RateReading } from '../../src/services/loanRates/types.js';
-import { rbiHomeReader } from '../../src/services/loanRates/sources/rbi.js';
-import { sbiRatesReader } from '../../src/services/loanRates/sources/sbi.js';
-import { bobRetailReader, pnbMclrReader, unionRatesReader } from '../../src/services/loanRates/sources/psuMclr.js';
+import type { MclrTenor, RateReading } from '../../src/services/loans/loanRates/types.js';
+import { rbiHomeReader } from '../../src/services/loans/loanRates/sources/rbi.js';
+import { sbiRatesReader } from '../../src/services/loans/loanRates/sources/sbi.js';
+import { bobRetailReader, pnbMclrReader, unionRatesReader } from '../../src/services/loans/loanRates/sources/psuMclr.js';
 
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/loanRates/${name}`, import.meta.url), 'utf8');
 

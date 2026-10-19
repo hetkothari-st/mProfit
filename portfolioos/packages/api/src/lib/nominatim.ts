@@ -4,7 +4,7 @@
  * Nominatim's usage policy (operations.osmfoundation.org/policies/nominatim)
  * asks for an identifying User-Agent, at most one request per second, and
  * caching. Callers cache per address in the database
- * (services/propertyLocation.service); this module identifies the app and
+ * (services/realEstate/propertyLocation.service); this module identifies the app and
  * spaces requests. Chosen over paid geocoders because it needs no API key or
  * account — the address text is the only thing sent.
  */

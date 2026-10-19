@@ -8,7 +8,7 @@
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { runAsSystem } from '../../lib/requestContext.js';
-import { deleteDocument } from '../document.service.js';
+import { deleteDocument } from '../documents/document.service.js';
 
 export const ORPHAN_WILL_DOCUMENT_AGE_MS = 60 * 60 * 1000;
 const PAGE = 200;

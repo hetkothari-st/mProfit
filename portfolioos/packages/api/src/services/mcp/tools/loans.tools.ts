@@ -1,5 +1,5 @@
-import { getLoanSummary, listLoans } from '../../loans.service.js';
-import { listLoansGiven } from '../../loansGiven.service.js';
+import { getLoanSummary, listLoans } from '../../loans/loans.service.js';
+import { listLoansGiven } from '../../loans/loansGiven.service.js';
 import { last4 } from '../mask.js';
 import type { ConnectorTool } from './types.js';
 import { dmy, money } from './common.js';

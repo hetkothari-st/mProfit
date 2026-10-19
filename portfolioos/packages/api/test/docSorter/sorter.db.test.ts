@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
-import { acceptUploads, processDocument } from '../../src/services/docSorter/sorter.service.js';
+import { acceptUploads, processDocument } from '../../src/services/documents/docSorter/sorter.service.js';
 import { makeEncryptedPdf, makeTextPdf } from './makeFiles.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';

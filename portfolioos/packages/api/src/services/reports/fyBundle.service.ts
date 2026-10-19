@@ -27,7 +27,7 @@ import { logger } from '../../lib/logger.js';
 import {
   streamExcel,
   type ExportPayload,
-} from '../export.service.js';
+} from './export.service.js';
 import type { ThemeName } from '../charts/pdfTheme.js';
 import { buildHoldingsStatement } from '../reportBuilder/statement/holdings.js';
 import { buildCapitalGainsStatement } from '../reportBuilder/statement/capitalGains.js';
@@ -35,11 +35,11 @@ import { buildIncomeStatement } from '../reportBuilder/statement/income.js';
 import { buildLedgerStatement } from '../reportBuilder/statement/ledger.js';
 import { buildProvidentFundStatement } from '../reportBuilder/statement/providentFund.js';
 import { renderToBuffer } from './renderToBuffer.js';
-import type { TallyBook } from '../tally/tallyBook.js';
-import { TallyExportBlockedError } from '../tally/tallyPackage.js';
-import { validateTallyBook } from '../tally/tallyValidate.js';
-import { renderMastersXml, renderVouchersXml } from '../tally/tallyXml.js';
-import { buildUserTallyBook } from '../tally/tallyZip.service.js';
+import type { TallyBook } from '../accounting/tally/tallyBook.js';
+import { TallyExportBlockedError } from '../accounting/tally/tallyPackage.js';
+import { validateTallyBook } from '../accounting/tally/tallyValidate.js';
+import { renderMastersXml, renderVouchersXml } from '../accounting/tally/tallyXml.js';
+import { buildUserTallyBook } from '../accounting/tally/tallyZip.service.js';
 
 interface BundlePart {
   name: string;

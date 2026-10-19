@@ -292,7 +292,7 @@ string[]` (non-asset-class tokens — `VEHICLE`, `LOAN`, `GOAL`, `INSURANCE`, �
 
 ### `EffectiveScope` — the single authority
 
-`services/familyScope.service.ts` is the only module in the codebase that knows
+`services/family/familyScope.service.ts` is the only module in the codebase that knows
 about `FamilyMember` rows. Everything else consumes an `EffectiveScope`:
 
 ```ts

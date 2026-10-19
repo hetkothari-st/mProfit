@@ -15,13 +15,13 @@ import {
   makeCover,
   readPhoto,
   type PropertyRef,
-} from '../services/propertyPhotos.service.js';
+} from '../services/realEstate/propertyPhotos.service.js';
 import {
   listLocations,
   locateProperty,
   resetLocation,
   setManualLocation,
-} from '../services/propertyLocation.service.js';
+} from '../services/realEstate/propertyLocation.service.js';
 
 const ownerType = z.enum(['OWNED_PROPERTY', 'RENTAL_PROPERTY']);
 const ownerQuery = z.object({ ownerType, ownerId: z.string().min(1).max(64) });

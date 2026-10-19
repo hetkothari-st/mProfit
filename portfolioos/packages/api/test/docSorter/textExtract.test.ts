@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractText, MIN_TEXT_CHARS } from '../../src/services/docSorter/textExtract.js';
+import { extractText, MIN_TEXT_CHARS } from '../../src/services/documents/docSorter/textExtract.js';
 import { makeEncryptedPdf, makeImageOnlyPdf, makeTextPdf, makeTextPng } from './makeFiles.js';
 
 const LONG_TEXT = 'Bank Statement\nAccount Holder: TEST USER\nStatement Period 01/01/2026 to 31/03/2026\nWithdrawal Deposit Balance';

@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { DOC_TYPES } from '@everypaisa/shared';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import { created, ok } from '../lib/response.js';
-import { acceptUploads, submitPassword } from '../services/docSorter/sorter.service.js';
-import { buildFolderZip, createPerson, getTree, mergePeople, renamePerson, updateFile } from '../services/docSorter/sorterEdit.service.js';
-import { isRealIsoDate } from '../services/docSorter/naming.js';
+import { acceptUploads, submitPassword } from '../services/documents/docSorter/sorter.service.js';
+import { buildFolderZip, createPerson, getTree, mergePeople, renamePerson, updateFile } from '../services/documents/docSorter/sorterEdit.service.js';
+import { isRealIsoDate } from '../services/documents/docSorter/naming.js';
 
 function userId(req: Request): string {
   if (!req.user) throw new UnauthorizedError();

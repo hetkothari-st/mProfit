@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import type { RateReading } from '../../src/services/loanRates/types.js';
-import { kotakRatesReader } from '../../src/services/loanRates/sources/kotak.js';
-import { canaraRangeReader } from '../../src/services/loanRates/sources/canara.js';
-import { licHomeReader } from '../../src/services/loanRates/sources/lic.js';
-import { PAGE_READERS, READER_URLS, readerById } from '../../src/services/loanRates/sources/index.js';
+import type { RateReading } from '../../src/services/loans/loanRates/types.js';
+import { kotakRatesReader } from '../../src/services/loans/loanRates/sources/kotak.js';
+import { canaraRangeReader } from '../../src/services/loans/loanRates/sources/canara.js';
+import { licHomeReader } from '../../src/services/loans/loanRates/sources/lic.js';
+import { PAGE_READERS, READER_URLS, readerById } from '../../src/services/loans/loanRates/sources/index.js';
 import { READER_FIXTURES, fixture } from './readerFixtures.js';
 
 const range = (sourceId: string, basis: RateReading['basis'], min: string, max: string, extra: Partial<RateReading> = {}): RateReading => ({

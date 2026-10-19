@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Prisma } from '@prisma/client';
-import { recomputeTenancy } from '../../src/services/rentalLedger.service.js';
+import { recomputeTenancy } from '../../src/services/rental/rentalLedger.service.js';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 
 /**

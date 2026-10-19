@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { getAccount, listAccounts } from '../../bankAccounts.service.js';
-import { getCardSummary, listCards } from '../../creditCards.service.js';
-import { listIncomes } from '../../income.service.js';
+import { getAccount, listAccounts } from '../../banking/bankAccounts.service.js';
+import { getCardSummary, listCards } from '../../banking/creditCards.service.js';
+import { listIncomes } from '../../income/income.service.js';
 import { MAX_ROWS, type ConnectorTool } from './types.js';
 import { dmy, money } from './common.js';
 

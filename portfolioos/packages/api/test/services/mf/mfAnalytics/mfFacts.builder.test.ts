@@ -45,7 +45,7 @@ import { runAsSystem } from '../../../../src/lib/requestContext.js';
 import { buildMfAnalysisFacts } from '../../../../src/services/mf/mfAnalytics/mfFacts.builder.js';
 import { MF_HORIZON_KEYS } from '../../../../src/services/mf/mfAnalytics/types.js';
 import { UNPERSISTED_RUN_ID } from '../../../../src/services/mf/mfAnalytics/mfPortfolioAnalysis.service.js';
-import { getEffectiveScope } from '../../../../src/services/familyScope.service.js';
+import { getEffectiveScope } from '../../../../src/services/family/familyScope.service.js';
 import { createTestScope, type TestScope } from '../../../helpers/db.js';
 
 // ---------------------------------------------------------------------------

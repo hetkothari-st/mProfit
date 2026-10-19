@@ -11,7 +11,7 @@ import { enqueueBounded, getImportQueue } from '../../lib/queue.js';
 import { writeIngestionFailure } from './ingestionFailures.service.js';
 import { parseStatementSnapshot } from '../integrity/statementReconciliation.service.js';
 import { runAsUser } from '../../lib/requestContext.js';
-import { hookAutoLinkImportedPremium } from '../insuranceExtras.service.js';
+import { hookAutoLinkImportedPremium } from '../insurance/insuranceExtras.service.js';
 import { dropLocalFile, ensureLocalFile, persistLocalFile } from '../../lib/fileStore.js';
 import { deleteFile } from '../../lib/documentStorage.js';
 

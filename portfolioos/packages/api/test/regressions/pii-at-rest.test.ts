@@ -12,7 +12,7 @@ import {
   loanAccountNumberColumns,
   readLoanAccountNumber,
 } from '../../src/services/security/piiAtRest.service.js';
-import { isMaskedAccountNumber, withMaskedAccount } from '../../src/services/loans.service.js';
+import { isMaskedAccountNumber, withMaskedAccount } from '../../src/services/loans/loans.service.js';
 
 /**
  * SEC-14 — PAN and vehicle registration numbers were plain text at rest.

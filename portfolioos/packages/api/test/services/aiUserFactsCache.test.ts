@@ -17,10 +17,10 @@ const svc = vi.hoisted(() => ({
 vi.mock('../../src/services/advisor/advisorFacts.builder.js', () => ({ buildAdvisorFacts: svc.buildAdvisorFacts }));
 vi.mock('../../src/services/advisor/advisorRecommendations.service.js', () => ({ listRecommendations: svc.listRecommendations }));
 vi.mock('../../src/services/analytics/healthScore.service.js', () => ({ computeHealthScore: svc.computeHealthScore }));
-vi.mock('../../src/services/income.service.js', () => ({ activeMonthlyIncomeTotal: svc.activeMonthlyIncomeTotal }));
-vi.mock('../../src/services/insurance.service.js', () => ({ listPolicies: svc.listPolicies }));
+vi.mock('../../src/services/income/income.service.js', () => ({ activeMonthlyIncomeTotal: svc.activeMonthlyIncomeTotal }));
+vi.mock('../../src/services/insurance/insurance.service.js', () => ({ listPolicies: svc.listPolicies }));
 vi.mock('../../src/services/analytics/dashboard.service.js', () => ({ getDashboardNetWorthForScope: svc.getDashboardNetWorthForScope }));
-vi.mock('../../src/services/realEstate.service.js', () => ({ computeSummary: svc.computeSummary }));
+vi.mock('../../src/services/realEstate/realEstate.service.js', () => ({ computeSummary: svc.computeSummary }));
 vi.mock('../../src/lib/prisma.js', () => ({ prisma: { bankAccount: { findMany: svc.bankAccountFindMany } } }));
 
 import { loadAdvisorContext } from '../../src/ai/userFacts.js';

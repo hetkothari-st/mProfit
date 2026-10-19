@@ -3,7 +3,7 @@ import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { runInTransaction } from '../../src/lib/prisma.js';
 import { getOverview, saveSettings, addNominee, updateNominee, activate, pause, revoke, removeNominee } from '../../src/services/legacy/plan.service.js';
-import { createDocument, deleteDocument } from '../../src/services/document.service.js';
+import { createDocument, deleteDocument } from '../../src/services/documents/document.service.js';
 import { imOk, answerVerify } from '../../src/services/legacy/publicLinks.service.js';
 import { createLinkToken, createNomineeSession, resolveNomineeSession } from '../../src/services/legacy/tokens.service.js';
 

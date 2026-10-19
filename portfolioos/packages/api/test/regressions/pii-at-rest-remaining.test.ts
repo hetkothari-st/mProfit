@@ -9,9 +9,9 @@ import {
   revealVehicle,
   sealText,
 } from '../../src/services/security/piiAtRest.service.js';
-import { createVehicle, getVehicle, listVehicles } from '../../src/services/vehicles.service.js';
-import { createAccount, getAccount } from '../../src/services/bankAccounts.service.js';
-import { createProperty, createTenancy, getProperty, updateTenancy } from '../../src/services/rental.service.js';
+import { createVehicle, getVehicle, listVehicles } from '../../src/services/vehicles/vehicles.service.js';
+import { createAccount, getAccount } from '../../src/services/banking/bankAccounts.service.js';
+import { createProperty, createTenancy, getProperty, updateTenancy } from '../../src/services/rental/rental.service.js';
 
 /**
  * The identifiers still stored as plain text after the PAN / plate / loan

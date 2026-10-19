@@ -54,9 +54,9 @@ import {
 } from '@everypaisa/shared';
 
 import { prisma } from '../../../lib/prisma.js';
-import type { EffectiveScope } from '../../familyScope.service.js';
+import type { EffectiveScope } from '../../family/familyScope.service.js';
 import { getCurrentRiskProfile } from '../../advisor/riskProfile.service.js';
-import { activeMonthlyIncomeTotal } from '../../income.service.js';
+import { activeMonthlyIncomeTotal } from '../../income/income.service.js';
 import type { RiskCategoryValue } from '../../analytics/riskProfileMath.js';
 import {
   computeMfPortfolioAnalysis,

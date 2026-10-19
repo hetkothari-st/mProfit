@@ -9,7 +9,7 @@ import {
   listMembers,
   listMyFamilies,
   seatUsage,
-} from '../../src/services/family.service.js';
+} from '../../src/services/family/family.service.js';
 import { inviteProfileClaim } from '../../src/services/family/familyClaim.service.js';
 
 /**

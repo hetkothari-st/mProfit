@@ -4,7 +4,7 @@ import {
   applyAutoMatch,
   hookAutoMatchRentalCredit,
   type AutoMatchCandidateEvent,
-} from '../../src/services/rental.service.js';
+} from '../../src/services/rental/rental.service.js';
 import { createTestScope, prisma } from '../helpers/db.js';
 
 /**

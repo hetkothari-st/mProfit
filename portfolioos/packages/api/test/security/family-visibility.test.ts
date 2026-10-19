@@ -28,7 +28,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Decimal } from 'decimal.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { getEffectiveScope } from '../../src/services/familyScope.service.js';
+import { getEffectiveScope } from '../../src/services/family/familyScope.service.js';
 import { getDashboardNetWorthForScope } from '../../src/services/analytics/dashboard.service.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 

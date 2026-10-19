@@ -11,7 +11,7 @@ import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { fakeResponse } from '../helpers/fakeResponse.js';
-import { createDocument } from '../../src/services/document.service.js';
+import { createDocument } from '../../src/services/documents/document.service.js';
 import { createWillDraft } from '../../src/services/will/will.service.js';
 import type { SubjectVia } from '../../src/services/reports/reportSubjects.js';
 

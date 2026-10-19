@@ -124,7 +124,7 @@ import {
 import { getFmvForUser } from '../../tax/fmvOverride.service.js';
 import { ratesForDate } from '../../tax/tax.service.js';
 import { inflationAdjustedTarget } from '../../goals/goalMath.js';
-import type { EffectiveScope } from '../../familyScope.service.js';
+import type { EffectiveScope } from '../../family/familyScope.service.js';
 
 // ---------------------------------------------------------------------------
 // Constants

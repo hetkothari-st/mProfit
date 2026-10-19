@@ -4,8 +4,8 @@ import type { Request, Response } from 'express';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { acceptUploads, failStuckDocument, processDocument } from '../../src/services/docSorter/sorter.service.js';
-import { buildFolderZip, createPerson, mergePeople, renamePerson, updateFile } from '../../src/services/docSorter/sorterEdit.service.js';
+import { acceptUploads, failStuckDocument, processDocument } from '../../src/services/documents/docSorter/sorter.service.js';
+import { buildFolderZip, createPerson, mergePeople, renamePerson, updateFile } from '../../src/services/documents/docSorter/sorterEdit.service.js';
 import { patchFile } from '../../src/controllers/documentSorter.controller.js';
 import { makeTextPdf } from './makeFiles.js';
 

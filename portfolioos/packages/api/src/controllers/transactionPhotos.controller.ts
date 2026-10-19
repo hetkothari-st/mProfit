@@ -6,7 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import { env } from '../config/env.js';
 import { ok, noContent } from '../lib/response.js';
 import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
-import { sniffImage } from '../services/propertyPhotos.service.js';
+import { sniffImage } from '../services/realEstate/propertyPhotos.service.js';
 import { persistLocalFile } from '../lib/fileStore.js';
 import { deleteFile, readBuffer } from '../lib/documentStorage.js';
 

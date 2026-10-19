@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { MCLR_TENORS, RATE_BASES, RATE_LOAN_TYPES } from '@everypaisa/shared';
 import { created, ok } from '../lib/response.js';
 import { writeAuditLog } from '../lib/audit.js';
-import { listLoanRates } from '../services/loanRates/loanRates.service.js';
+import { listLoanRates } from '../services/loans/loanRates/loanRates.service.js';
 import {
   approveSuspect, clearManualRate, listAdminLoanRates, rejectSuspect, runNow, setManualRate,
-} from '../services/loanRates/admin.service.js';
+} from '../services/loans/loanRates/admin.service.js';
 
 const listQuery = z.object({ loanType: z.enum(RATE_LOAN_TYPES).default('HOME') });
 

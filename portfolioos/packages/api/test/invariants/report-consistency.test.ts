@@ -15,7 +15,7 @@ import {
   userIncomeReport,
   userUnrealisedReport,
   userSummary,
-} from '../../src/services/reports.service.js';
+} from '../../src/services/reports/reports.service.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { createTestScope, seedStockMaster, prisma, type TestScope } from '../helpers/db.js';
 

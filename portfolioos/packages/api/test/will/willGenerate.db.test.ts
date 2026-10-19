@@ -4,7 +4,7 @@ import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { saveBuffer } from '../../src/lib/documentStorage.js';
-import { createDocument, deleteDocument } from '../../src/services/document.service.js';
+import { createDocument, deleteDocument } from '../../src/services/documents/document.service.js';
 import { sweepOrphanWillDocuments } from '../../src/services/will/willOrphanSweep.js';
 import { createWillDraft, saveWillSection } from '../../src/services/will/will.service.js';
 import {

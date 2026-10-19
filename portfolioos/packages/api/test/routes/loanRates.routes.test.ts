@@ -9,7 +9,7 @@ import { runAsSystem } from '../../src/lib/requestContext.js';
 import { loanRatesRouter } from '../../src/routes/loanRates.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
 import { signAccessToken } from '../../src/services/auth/jwt.service.js';
-import { ensureLoanRateSources } from '../../src/services/loanRates/sourceList.js';
+import { ensureLoanRateSources } from '../../src/services/loans/loanRates/sourceList.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { clearLoanRateTables } from '../helpers/loanRates.js';
 

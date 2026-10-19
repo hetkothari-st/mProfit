@@ -2,7 +2,7 @@ import { Decimal } from 'decimal.js';
 import { ltcg112aExemptionForDate } from '@everypaisa/shared';
 import type { AssetClass, TransactionType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
-import { investmentIncome } from '../investmentIncome.service.js';
+import { investmentIncome } from '../income/investmentIncome.service.js';
 import { logger } from '../../lib/logger.js';
 import {
   computeOpenLots,

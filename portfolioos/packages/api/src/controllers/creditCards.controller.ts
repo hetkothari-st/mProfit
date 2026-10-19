@@ -15,7 +15,7 @@ import {
   getCardSummary,
   revealCardNumber,
   type RevealAuditContext,
-} from '../services/creditCards.service.js';
+} from '../services/banking/creditCards.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { isoDate, isoMonth, positiveMoneyString as moneyString } from '../lib/zodMoney.js';

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { load } from 'cheerio';
-import type { MclrTenor, RateReading } from '../../src/services/loanRates/types.js';
-import { hdfcHomeReader, hdfcRatesReader } from '../../src/services/loanRates/sources/hdfc.js';
-import { iciciHomeReader, iciciPersonalReader, iciciRatesReader } from '../../src/services/loanRates/sources/icici.js';
-import { axisHomeReader, axisMclrReader } from '../../src/services/loanRates/sources/axis.js';
+import type { MclrTenor, RateReading } from '../../src/services/loans/loanRates/types.js';
+import { hdfcHomeReader, hdfcRatesReader } from '../../src/services/loans/loanRates/sources/hdfc.js';
+import { iciciHomeReader, iciciPersonalReader, iciciRatesReader } from '../../src/services/loans/loanRates/sources/icici.js';
+import { axisHomeReader, axisMclrReader } from '../../src/services/loans/loanRates/sources/axis.js';
 
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/loanRates/${name}`, import.meta.url), 'utf8');
 

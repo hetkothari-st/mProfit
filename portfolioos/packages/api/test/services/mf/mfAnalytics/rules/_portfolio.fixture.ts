@@ -44,7 +44,7 @@ import {
   type MfTaxSummary,
 } from '@everypaisa/shared';
 
-import type { EffectiveScope } from '../../../../../src/services/familyScope.service.js';
+import type { EffectiveScope } from '../../../../../src/services/family/familyScope.service.js';
 import type { MfAnalysisFacts, MfFundFacts } from '../../../../../src/services/mf/mfAnalytics/types.js';
 
 /**

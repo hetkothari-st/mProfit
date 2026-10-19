@@ -10,8 +10,8 @@ import { runAsSystem } from '../../src/lib/requestContext.js';
 import { loansRouter } from '../../src/routes/loans.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
 import { signAccessToken } from '../../src/services/auth/jwt.service.js';
-import { computeLoanSummary, type StoredLoan } from '../../src/services/loans.service.js';
-import { ensureLoanRateSources } from '../../src/services/loanRates/sourceList.js';
+import { computeLoanSummary, type StoredLoan } from '../../src/services/loans/loans.service.js';
+import { ensureLoanRateSources } from '../../src/services/loans/loanRates/sourceList.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { clearLoanRateTables } from '../helpers/loanRates.js';
 

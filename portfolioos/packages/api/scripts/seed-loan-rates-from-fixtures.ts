@@ -45,7 +45,7 @@ const FIRST_CAPTURE: Record<string, string> = {
   'lic.home': 'lic-HOME.html',
 };
 
-const { PAGE_READERS } = await import('../src/services/loanRates/sources/index.js');
+const { PAGE_READERS } = await import('../src/services/loans/loanRates/sources/index.js');
 const { runLoanRates } = await import('../src/jobs/loanRatesJob.js');
 const { prisma } = await import('../src/lib/prisma.js');
 

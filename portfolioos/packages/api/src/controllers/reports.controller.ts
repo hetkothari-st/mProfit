@@ -22,7 +22,7 @@ import {
   userUnrealisedReport,
   userHistoricalValuation,
   userSummary,
-} from '../services/reports.service.js';
+} from '../services/reports/reports.service.js';
 import {
   computePortfolioXirr,
   computeRollingXirr,
@@ -30,7 +30,7 @@ import {
   computeUserXirr,
 } from '../services/analytics/xirr.service.js';
 import { persistCapitalGainsForPortfolio } from '../services/tax/capitalGains.service.js';
-import { streamExcel, streamPdf, fmtNum, fmtDate, type ExportColumn, type ExportPayload } from '../services/export.service.js';
+import { streamExcel, streamPdf, fmtNum, fmtDate, type ExportColumn, type ExportPayload } from '../services/reports/export.service.js';
 import { parseThemeQuery, themeFor, hexToArgb } from '../services/charts/pdfTheme.js';
 import { buildHoldingsExport } from '../services/reportBuilder/holdingsReport.js';
 import { streamDashboardPdf, streamDashboardExcel, type DashboardScope } from '../services/reportBuilder/dashboardReport.js';
@@ -978,7 +978,7 @@ import {
   grandfatheringReport,
   dematHoldingReport,
   m2mReport,
-} from '../services/specialReports.service.js';
+} from '../services/reports/specialReports.service.js';
 import { projectBooks, caProjectionAudit } from '../services/ca/caProjection.service.js';
 
 /**
@@ -1083,8 +1083,8 @@ import {
   streamMprofitExcel,
   type MprofitLayout,
 } from '../services/reportBuilder/mprofitStyle.js';
-import { TallyExportBlockedError } from '../services/tally/tallyPackage.js';
-import { buildTallyZip } from '../services/tally/tallyZip.service.js';
+import { TallyExportBlockedError } from '../services/accounting/tally/tallyPackage.js';
+import { buildTallyZip } from '../services/accounting/tally/tallyZip.service.js';
 import {
   resolveReportSubjects,
   buildLayoutForSubjects,
@@ -1405,12 +1405,12 @@ export async function downloadBankReconciliation(req: Request, res: Response) {
 }
 
 // ─── Tally export — one ZIP, file download only (no live push) ──
-// See services/tally/. Not a banded report: bypasses emitMprofit.
+// See services/accounting/tally/. Not a banded report: bypasses emitMprofit.
 
 /**
  * "Export to Tally": the whole record as one ZIP — masters, one transactions
  * file per financial year, holdings at each year end, and an import guide —
- * built straight from the user's records (services/tally/) and checked
+ * built straight from the user's records (services/accounting/tally/) and checked
  * against Tally's import rules before it is sent.
  *
  * Subject-aware, and `requireSingleSubject` because a Tally company file

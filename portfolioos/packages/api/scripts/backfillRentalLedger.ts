@@ -95,7 +95,7 @@ import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { prisma, runInTransaction } from '../src/lib/prisma.js';
 import { runAsSystem } from '../src/lib/requestContext.js';
-import { recomputeTenancyLedger } from '../src/services/rentalLedger.service.js';
+import { recomputeTenancyLedger } from '../src/services/rental/rentalLedger.service.js';
 
 /**
  * A drift row tagged `OVERDUE_CATCHUP` is a receipt the overdue cron should

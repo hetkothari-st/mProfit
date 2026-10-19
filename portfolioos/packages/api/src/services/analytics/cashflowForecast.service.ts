@@ -17,7 +17,7 @@ import { prisma } from '../../lib/prisma.js';
 import {
   buildAmortizationSchedule,
   type StoredLoan,
-} from '../loans.service.js';
+} from '../loans/loans.service.js';
 import { serializeMoney } from '@everypaisa/shared';
 
 const ZERO = new Decimal(0);

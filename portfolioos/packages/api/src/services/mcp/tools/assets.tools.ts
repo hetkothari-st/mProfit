@@ -1,7 +1,7 @@
-import { listPolicies } from '../../insurance.service.js';
-import { listProperties as listOwned } from '../../realEstate.service.js';
-import { listExpenses, listProperties as listRentals } from '../../rental.service.js';
-import { listVehicles } from '../../vehicles.service.js';
+import { listPolicies } from '../../insurance/insurance.service.js';
+import { listProperties as listOwned } from '../../realEstate/realEstate.service.js';
+import { listExpenses, listProperties as listRentals } from '../../rental/rental.service.js';
+import { listVehicles } from '../../vehicles/vehicles.service.js';
 import { financialYearOf } from '../../tax/capitalGains.service.js';
 import { serializeMoney, toDecimal } from '@everypaisa/shared';
 import type { ConnectorTool } from './types.js';

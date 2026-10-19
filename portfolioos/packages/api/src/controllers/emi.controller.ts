@@ -5,7 +5,7 @@ import {
   type LoanInputWire, type TaxInputWire,
 } from '@everypaisa/shared';
 import { BadRequestError } from '../lib/errors.js';
-import { buildEmiPdf, buildEmiXlsx } from '../services/emi/emiExport.js';
+import { buildEmiPdf, buildEmiXlsx } from '../services/loans/emi/emiExport.js';
 
 const mode = z.enum(['REDUCE_EMI', 'REDUCE_TENURE']);
 // Shape only; value rules live in the shared validator so web and API agree.

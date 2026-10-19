@@ -8,7 +8,7 @@ import {
   inviteMember,
   listMembers,
   peekInvitation,
-} from '../../src/services/family.service.js';
+} from '../../src/services/family/family.service.js';
 import {
   authenticateExtension,
   completePairing,

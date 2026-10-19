@@ -15,8 +15,8 @@ import {
   deleteSnapshot,
   listAccountCashFlows,
   type RevealAuditContext,
-} from '../services/bankAccounts.service.js';
-import { lookupIfsc, normaliseIfsc } from '../services/ifscLookup.service.js';
+} from '../services/banking/bankAccounts.service.js';
+import { lookupIfsc, normaliseIfsc } from '../services/banking/ifscLookup.service.js';
 import { ok } from '../lib/response.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
 import { isoDate, signedMoneyString, last4Digits, mmYY } from '../lib/zodMoney.js';

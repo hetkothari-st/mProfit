@@ -9,7 +9,7 @@ import {
   getBalanceSheet,
   getPnL,
   getTrialBalance,
-} from '../../src/services/accounting.service.js';
+} from '../../src/services/accounting/accounting.service.js';
 import { Decimal } from 'decimal.js';
 import { computeOpenLots, computePortfolioCapitalGains } from '../../src/services/tax/capitalGains.service.js';
 import { replayTransactions } from '../../src/services/holdings/holdingsProjection.js';

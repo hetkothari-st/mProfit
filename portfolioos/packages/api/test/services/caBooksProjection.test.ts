@@ -4,7 +4,7 @@ import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
 import {
   generateVouchersFromActivity,
   listVouchers,
-} from '../../src/services/accounting.service.js';
+} from '../../src/services/accounting/accounting.service.js';
 
 /**
  * The projection a CA's books tab runs before it reads.

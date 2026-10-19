@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { recomputeTenancyLedger } from '../../src/services/rentalLedger.service.js';
+import { recomputeTenancyLedger } from '../../src/services/rental/rentalLedger.service.js';
 import { runInTransaction } from '../../src/lib/prisma.js';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 
