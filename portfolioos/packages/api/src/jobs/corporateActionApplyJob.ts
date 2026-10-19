@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma.js';
-import { applyCorporateActionsForPortfolio } from '../services/corporateActionApply.service.js';
+import { applyCorporateActionsForPortfolio } from '../services/corporateActions/corporateActionApply.service.js';
 
 /**
  * Sweep every portfolio and fold any newly-fetched corporate actions (splits,

@@ -24,9 +24,9 @@ const svc = vi.hoisted(() => ({
   listRentalProperties: vi.fn(),
 }));
 vi.mock('../../src/services/income.service.js', () => ({ activeMonthlyIncomeTotal: svc.activeMonthlyIncomeTotal }));
-vi.mock('../../src/services/healthScore.service.js', () => ({ getEmergencyFundInputs: svc.getEmergencyFundInputs }));
-vi.mock('../../src/services/dashboard.service.js', () => ({ getDashboardNetWorth: svc.getDashboardNetWorth }));
-vi.mock('../../src/services/goals.service.js', () => ({ listGoals: svc.listGoals }));
+vi.mock('../../src/services/analytics/healthScore.service.js', () => ({ getEmergencyFundInputs: svc.getEmergencyFundInputs }));
+vi.mock('../../src/services/analytics/dashboard.service.js', () => ({ getDashboardNetWorth: svc.getDashboardNetWorth }));
+vi.mock('../../src/services/goals/goals.service.js', () => ({ listGoals: svc.listGoals }));
 vi.mock('../../src/services/insurance.service.js', () => ({ listPolicies: svc.listPolicies }));
 vi.mock('../../src/services/vehicles.service.js', () => ({ listVehicles: svc.listVehicles }));
 vi.mock('../../src/services/realEstate.service.js', () => ({ listProperties: svc.listOwnedProperties }));

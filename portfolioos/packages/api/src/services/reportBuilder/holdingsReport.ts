@@ -377,7 +377,7 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
   // ────────────────────────────────────────────────────────────────────
   if (!isFoOnly && resolvedIds.length > 0) {
     try {
-      const { computePortfolioCapitalGains } = await import('../capitalGains.service.js');
+      const { computePortfolioCapitalGains } = await import('../tax/capitalGains.service.js');
       const cgRows: Array<Record<string, unknown>> = [];
       for (const pid of resolvedIds) {
         try {

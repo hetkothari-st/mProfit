@@ -12,7 +12,7 @@
 
 import { Decimal } from 'decimal.js';
 import { prisma } from '../../../lib/prisma.js';
-import { computeFIFOGains, financialYearOf, loadFundCategoryMap } from '../../capitalGains.service.js';
+import { computeFIFOGains, financialYearOf, loadFundCategoryMap } from '../../tax/capitalGains.service.js';
 import { fmtNum, fmtDate, type ExportPayload, type ExportSection } from '../../export.service.js';
 
 export interface CapitalGainsStatementParams {

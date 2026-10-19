@@ -45,7 +45,7 @@ const populatedHarvestRow = {
   classification: 'STCG_LOSS' as const,
 };
 
-vi.mock('../../src/services/tax.service.js', () => ({
+vi.mock('../../src/services/tax/tax.service.js', () => ({
   buildTaxSummary: vi.fn(async () => baseTaxSummary),
   taxHarvestReport: vi.fn(async () => ({
     rows: [populatedHarvestRow],
@@ -128,7 +128,7 @@ describe('streamCapitalGainsTaxReport smoke test', () => {
 
   it('renders without crashing when every detail section is empty', async () => {
     vi.resetModules();
-    vi.doMock('../../src/services/tax.service.js', () => ({
+    vi.doMock('../../src/services/tax/tax.service.js', () => ({
       buildTaxSummary: vi.fn(async () => ({ ...baseTaxSummary, totalRealisedGain: '0', totalEstimatedTax: '0' })),
       taxHarvestReport: vi.fn(async () => ({ rows: [], totals: {}, savings: {} })),
     }));

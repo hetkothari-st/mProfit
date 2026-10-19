@@ -17,7 +17,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Decimal } from 'decimal.js';
 import { prisma } from '../../../src/lib/prisma.js';
 import { runAsSystem } from '../../../src/lib/requestContext.js';
-import { getDashboardNetWorthForScope } from '../../../src/services/dashboard.service.js';
+import { getDashboardNetWorthForScope } from '../../../src/services/analytics/dashboard.service.js';
 import { getFamilyWealth } from '../../../src/services/family/familyAggregate.service.js';
 import { createTestScope, type TestScope } from '../../helpers/db.js';
 

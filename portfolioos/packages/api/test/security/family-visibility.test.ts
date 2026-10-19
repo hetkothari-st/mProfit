@@ -29,7 +29,7 @@ import { Decimal } from 'decimal.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { getEffectiveScope } from '../../src/services/familyScope.service.js';
-import { getDashboardNetWorthForScope } from '../../src/services/dashboard.service.js';
+import { getDashboardNetWorthForScope } from '../../src/services/analytics/dashboard.service.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 
 let owner: TestScope;

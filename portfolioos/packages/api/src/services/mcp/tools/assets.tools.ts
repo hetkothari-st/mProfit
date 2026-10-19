@@ -2,7 +2,7 @@ import { listPolicies } from '../../insurance.service.js';
 import { listProperties as listOwned } from '../../realEstate.service.js';
 import { listExpenses, listProperties as listRentals } from '../../rental.service.js';
 import { listVehicles } from '../../vehicles.service.js';
-import { financialYearOf } from '../../capitalGains.service.js';
+import { financialYearOf } from '../../tax/capitalGains.service.js';
 import { serializeMoney, toDecimal } from '@everypaisa/shared';
 import type { ConnectorTool } from './types.js';
 import { dmy, money } from './common.js';

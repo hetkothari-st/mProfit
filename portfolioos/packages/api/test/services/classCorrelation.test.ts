@@ -5,7 +5,7 @@ import {
   pearson,
   MIN_CORRELATION_OBSERVATIONS,
   type MonthlyPositions,
-} from '../../src/services/analytics.risk.js';
+} from '../../src/services/analytics/analytics.risk.js';
 
 /**
  * Return correlation between asset classes, replacing the "Asset class weight

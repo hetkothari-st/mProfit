@@ -18,17 +18,17 @@
  */
 
 import { prisma } from '../lib/prisma.js';
-import { ageBasedEquityGuidelinePct } from '../services/riskProfileMath.js';
+import { ageBasedEquityGuidelinePct } from '../services/analytics/riskProfileMath.js';
 import { logger } from '../lib/logger.js';
 import {
   getAnalyticsSnapshot,
   type AnalyticsScope,
-} from '../services/analytics.service.js';
-import { getDashboardNetWorthForScope } from '../services/dashboard.service.js';
-import { computeUserXirr } from '../services/xirr.service.js';
-import { computeUserCapitalGains } from '../services/capitalGains.service.js';
-import { taxHarvestReport } from '../services/tax.service.js';
-import { listGoals } from '../services/goals.service.js';
+} from '../services/analytics/analytics.service.js';
+import { getDashboardNetWorthForScope } from '../services/analytics/dashboard.service.js';
+import { computeUserXirr } from '../services/analytics/xirr.service.js';
+import { computeUserCapitalGains } from '../services/tax/capitalGains.service.js';
+import { taxHarvestReport } from '../services/tax/tax.service.js';
+import { listGoals } from '../services/goals/goals.service.js';
 import { listLoans } from '../services/loans.service.js';
 import { listCards } from '../services/creditCards.service.js';
 import {

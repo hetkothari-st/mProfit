@@ -12,7 +12,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../../lib/errors.js';
-import type { RiskCategoryValue } from '../riskProfileMath.js';
+import type { RiskCategoryValue } from '../analytics/riskProfileMath.js';
 import type { AdvisorTargetFact } from './types.js';
 import { validateTargetWeights } from './modelPortfolioMath.js';
 import { parseTargetWeights } from './riskProfile.service.js';

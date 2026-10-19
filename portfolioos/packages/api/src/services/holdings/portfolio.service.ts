@@ -21,7 +21,7 @@ import {
   type EffectiveScope,
 } from '../familyScope.service.js';
 import { runAsSystem, runAsUser } from '../../lib/requestContext.js';
-import { computePortfolioXirr, computeHoldingXirrs } from '../xirr.service.js';
+import { computePortfolioXirr, computeHoldingXirrs } from '../analytics/xirr.service.js';
 
 function toPortfolioDTO(p: Portfolio) {
   return {

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
-import { getCashflowForecast } from '../services/cashflowForecast.service.js';
+import { getCashflowForecast } from '../services/analytics/cashflowForecast.service.js';
 
 const forecastQuery = z.object({
   horizonMonths: z.coerce.number().int().min(1).max(36).default(12),

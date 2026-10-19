@@ -9,7 +9,7 @@ import {
   createGoal,
   updateGoal,
   deleteGoal,
-} from '../services/goals.service.js';
+} from '../services/goals/goals.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { decimalInput } from '../lib/zodMoney.js';

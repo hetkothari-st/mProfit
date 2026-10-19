@@ -14,7 +14,7 @@ import {
   type AdvisorAssetBucketValue,
   type AdvisorTargetFact,
 } from './types.js';
-import type { RiskCategoryValue } from '../riskProfileMath.js';
+import type { RiskCategoryValue } from '../analytics/riskProfileMath.js';
 
 /** Float tolerance on the 100% sum. Weights arrive as JSON numbers, so an
  *  adviser splitting a bucket into thirds must not be rejected for the last

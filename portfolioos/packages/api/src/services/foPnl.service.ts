@@ -1,7 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { Transaction } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { financialYearOf } from './capitalGains.service.js';
+import { financialYearOf } from './tax/capitalGains.service.js';
 import { replayFoTransactions } from './derivativePosition.service.js';
 
 /**

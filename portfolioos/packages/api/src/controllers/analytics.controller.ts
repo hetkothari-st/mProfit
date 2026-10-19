@@ -8,22 +8,22 @@ import {
   periodToDays,
   type AnalyticsScope,
   type Period,
-} from '../services/analytics.service.js';
+} from '../services/analytics/analytics.service.js';
 import {
   classCorrelationMatrix,
   classMonthlyReturns,
   computeRiskMetrics,
   monthlyFromDaily,
-} from '../services/analytics.risk.js';
-import { getBenchmarkSeries, getNiftyMonthlyCloses } from '../services/analytics.benchmark.js';
+} from '../services/analytics/analytics.risk.js';
+import { getBenchmarkSeries, getNiftyMonthlyCloses } from '../services/analytics/analytics.benchmark.js';
 import {
   getOrGenerateInsights,
   getLatestInsight,
-} from '../services/analytics.insights.js';
-import { generateDeterministicInsights } from '../services/deterministicInsights.js';
+} from '../services/analytics/analytics.insights.js';
+import { generateDeterministicInsights } from '../services/insights/deterministicInsights.js';
 import { checkBudget } from '../ingestion/llm/budget.js';
 import { getMfOverlap } from '../services/mfOverlap.service.js';
-import { simulateWhatIf } from '../services/whatIf.service.js';
+import { simulateWhatIf } from '../services/analytics/whatIf.service.js';
 
 export async function postWhatIf(req: Request, res: Response): Promise<void> {
   if (!req.user) throw new UnauthorizedError();

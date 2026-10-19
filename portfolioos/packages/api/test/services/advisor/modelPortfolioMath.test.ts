@@ -5,7 +5,7 @@ import {
 } from '../../../src/services/advisor/modelPortfolioMath.js';
 import { DEFAULT_TARGET_WEIGHTS } from '../../../src/services/advisor/constants.js';
 import { ADVISOR_ASSET_BUCKETS } from '../../../src/services/advisor/types.js';
-import { RISK_CATEGORIES } from '../../../src/services/riskProfileMath.js';
+import { RISK_CATEGORIES } from '../../../src/services/analytics/riskProfileMath.js';
 import type { AdvisorTargetFact } from '../../../src/services/advisor/types.js';
 
 describe('DEFAULT_TARGET_WEIGHTS', () => {

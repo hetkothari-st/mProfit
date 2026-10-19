@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { computeHealthScore } from '../services/healthScore.service.js';
-import { getNetWorthHistory, type NetWorthHistoryPeriod } from '../services/netWorthHistory.service.js';
+import { computeHealthScore } from '../services/analytics/healthScore.service.js';
+import { getNetWorthHistory, type NetWorthHistoryPeriod } from '../services/analytics/netWorthHistory.service.js';
 import { runNetWorthSnapshotForUser } from '../jobs/netWorthSnapshotJob.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError, BadRequestError } from '../lib/errors.js';

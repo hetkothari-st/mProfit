@@ -14,7 +14,7 @@ import {
   schedule112ACsv,
   taxHarvestReport,
   availableTaxFys,
-} from '../services/tax.service.js';
+} from '../services/tax/tax.service.js';
 import { buildSchedule43Report } from '../services/reports/schedule43.report.js';
 import { streamCapitalGainsTaxReport } from '../services/reportBuilder/statement/capitalGainsTaxReport.js';
 import { parseThemeQuery } from '../services/charts/pdfTheme.js';
@@ -23,7 +23,7 @@ import {
   requireSingleSubject,
 } from '../services/reports/reportSubjects.js';
 import { runAsUser } from '../lib/requestContext.js';
-import { advanceTaxReport } from '../services/advanceTax.service.js';
+import { advanceTaxReport } from '../services/tax/advanceTax.service.js';
 import { readPan } from '../services/security/piiAtRest.service.js';
 
 /**

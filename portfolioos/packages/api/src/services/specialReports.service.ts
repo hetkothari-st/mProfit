@@ -17,8 +17,8 @@ import {
   computeOpenLots,
   computeUserCapitalGains,
   type CapitalGainRow,
-} from './capitalGains.service.js';
-import { getFmvForUser } from './fmvOverride.service.js';
+} from './tax/capitalGains.service.js';
+import { getFmvForUser } from './tax/fmvOverride.service.js';
 
 // ─── 1. Grandfathering LTCG report ─────────────────────────────────
 //

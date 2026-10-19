@@ -4,7 +4,7 @@ import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
-import { getDashboardNetWorthForScope } from '../services/dashboard.service.js';
+import { getDashboardNetWorthForScope } from '../services/analytics/dashboard.service.js';
 import { parseFamilyId } from '../lib/familyHeader.js';
 
 export const dashboardRouter = Router();

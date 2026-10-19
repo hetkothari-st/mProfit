@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { schedule112ACsvCellForTest } from '../../src/services/tax.service.js';
+import { schedule112ACsvCellForTest } from '../../src/services/tax/tax.service.js';
 
 /**
  * SEC-20 — CSV formula injection in the Schedule 112A export.

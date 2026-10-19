@@ -14,7 +14,7 @@ import { createPolicy } from '../../src/services/insurance.service.js';
 import { createProperty as createOwned } from '../../src/services/realEstate.service.js';
 import { createProperty as createRental, createTenancy } from '../../src/services/rental.service.js';
 import { createVehicle } from '../../src/services/vehicles.service.js';
-import { createGoal } from '../../src/services/goals.service.js';
+import { createGoal } from '../../src/services/goals/goals.service.js';
 import type { AiConnectorArea } from '@everypaisa/shared';
 
 const DB_URL = process.env.DATABASE_URL ?? '';

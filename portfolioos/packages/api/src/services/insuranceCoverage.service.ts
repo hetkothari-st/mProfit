@@ -28,14 +28,14 @@ import {
   type VehicleFact,
 } from '@everypaisa/shared';
 import { activeMonthlyIncomeTotal } from './income.service.js';
-import { getEmergencyFundInputs } from './healthScore.service.js';
-import { getDashboardNetWorth } from './dashboard.service.js';
-import { listGoals } from './goals.service.js';
+import { getEmergencyFundInputs } from './analytics/healthScore.service.js';
+import { getDashboardNetWorth } from './analytics/dashboard.service.js';
+import { listGoals } from './goals/goals.service.js';
 import { listPolicies } from './insurance.service.js';
 import { listVehicles } from './vehicles.service.js';
 import { listProperties as listOwnedProperties } from './realEstate.service.js';
 import { listProperties as listRentalProperties } from './rental.service.js';
-import { isLifePolicyType } from './healthScoreMath.js';
+import { isLifePolicyType } from './analytics/healthScoreMath.js';
 
 const ZERO = new Decimal(0);
 

@@ -3,7 +3,7 @@ import { Decimal } from '@everypaisa/shared';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { getDashboardNetWorth } from '../../src/services/dashboard.service.js';
+import { getDashboardNetWorth } from '../../src/services/analytics/dashboard.service.js';
 import { collectEstate, MAX_ESTATE_CANDIDATES } from '../../src/services/will/estate/registry.js';
 import { CASH_MAY_DUPLICATE_NOTE } from '../../src/services/will/estate/adapters/financial.js';
 import { loanCandidate, LOAN_SCHEDULE_FAILED_NOTE } from '../../src/services/will/estate/adapters/credit.js';

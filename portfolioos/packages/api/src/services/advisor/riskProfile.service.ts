@@ -22,7 +22,7 @@ import {
   type RiskAnswers,
   type RiskAssessmentOutcome,
   type RiskCategoryValue,
-} from '../riskProfileMath.js';
+} from '../analytics/riskProfileMath.js';
 import { MODEL_PORTFOLIO_NAMES } from './constants.js';
 import { targetsForCategory } from './modelPortfolioMath.js';
 import { ADVISOR_ASSET_BUCKETS, type AdvisorTargetFact } from './types.js';

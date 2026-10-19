@@ -49,7 +49,7 @@ import type {
 import { serializeRatio, toDecimal } from '@everypaisa/shared';
 import type { SebiSubCategory } from '@everypaisa/shared';
 import type { EffectiveScope } from '../familyScope.service.js';
-import type { RiskCategoryValue } from '../riskProfileMath.js';
+import type { RiskCategoryValue } from '../analytics/riskProfileMath.js';
 
 // ---------------------------------------------------------------------------
 // Horizon keys

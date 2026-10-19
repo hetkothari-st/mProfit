@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
 import { goalShortfallSipRule } from '../../../../src/services/advisor/rules/goalShortfallSip.rule.js';
-import { requiredMonthlySip } from '../../../../src/services/goalMath.js';
+import { requiredMonthlySip } from '../../../../src/services/goals/goalMath.js';
 import {
   d,
   driftedPortfolioFacts,

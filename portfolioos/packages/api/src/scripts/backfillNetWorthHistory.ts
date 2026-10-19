@@ -19,7 +19,7 @@
 import 'dotenv/config';
 import { opsPrisma } from '../lib/opsDatabase.js';
 import { runAsUser } from '../lib/requestContext.js';
-import { getDashboardNetWorth } from '../services/dashboard.service.js';
+import { getDashboardNetWorth } from '../services/analytics/dashboard.service.js';
 
 const { prisma: directPrisma, disconnect } = opsPrisma();
 

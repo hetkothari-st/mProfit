@@ -3,7 +3,7 @@ import { prisma, runInTransaction } from '../lib/prisma.js';
 import { NotFoundError, BadRequestError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import type { AccountType, VoucherType, Prisma, TransactionType } from '@prisma/client';
-import { computeUserCapitalGains } from './capitalGains.service.js';
+import { computeUserCapitalGains } from './tax/capitalGains.service.js';
 import { replayForFoPnl } from './foPnl.service.js';
 import { transactionInrNet } from './investmentIncome.service.js';
 

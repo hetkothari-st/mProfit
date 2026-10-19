@@ -17,7 +17,7 @@
  *    else removes both halves of that guard and puts unverified prescriptive
  *    text in front of a user under a licence.
  *
- * 3. `services/analytics.insights.ts` MUST NOT be loosened to match this one:
+ * 3. `services/analytics/analytics.insights.ts` MUST NOT be loosened to match this one:
  *    it is deliberately descriptive-only ("DESCRIBE, never PRESCRIBE") and has
  *    no deterministic engine behind it and no consistency guard in front of
  *    it. The in-app assistant (`ai/systemPrompt.ts`) was deliberately given an

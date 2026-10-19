@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Decimal } from 'decimal.js';
 import { createTransaction } from '../../src/services/holdings/transaction.service.js';
-import { computePortfolioXirr } from '../../src/services/xirr.service.js';
+import { computePortfolioXirr } from '../../src/services/analytics/xirr.service.js';
 import { createTestScope, seedStockMaster, prisma, type TestScope } from '../helpers/db.js';
 
 /**

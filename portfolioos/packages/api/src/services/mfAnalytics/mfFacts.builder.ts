@@ -57,7 +57,7 @@ import { prisma } from '../../lib/prisma.js';
 import type { EffectiveScope } from '../familyScope.service.js';
 import { getCurrentRiskProfile } from '../advisor/riskProfile.service.js';
 import { activeMonthlyIncomeTotal } from '../income.service.js';
-import type { RiskCategoryValue } from '../riskProfileMath.js';
+import type { RiskCategoryValue } from '../analytics/riskProfileMath.js';
 import {
   computeMfPortfolioAnalysis,
   type MfPortfolioAnalysisOptions,
