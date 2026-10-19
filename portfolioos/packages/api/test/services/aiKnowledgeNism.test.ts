@@ -18,6 +18,33 @@ describe('NISM library', () => {
 });
 
 describe('NISM retrieval, chapter by chapter', () => {
+  it('X-A 1: six-step planning process', () => {
+    expect(ids('what are the steps of the financial planning process')).toContain('xa-01-six-step-process');
+  });
+  it('X-A 1: advice vs distribution', () => {
+    expect(ids('can an investment adviser also earn distribution commission')).toContain('xa-01-advice-vs-distribution');
+  });
+  it('X-A 2: CAGR', () => {
+    expect(ids('how do I calculate CAGR of my fund')).toContain('xa-02-cagr');
+  });
+  it('X-A 2: annuity due', () => {
+    expect(ids('difference between ordinary annuity and annuity due')).toContain('xa-02-annuity-types');
+  });
+  it('X-A 3: liquidity ratio', () => {
+    expect(ids('what is the liquidity ratio and what counts as liquid assets')).toContain('xa-03-liquidity-ratio');
+  });
+  it('X-A 3: debt to income', () => {
+    expect(ids('what debt to income ratio is too high')).toContain('xa-03-debt-to-income');
+  });
+  it('X-A 4: avalanche vs snowball', () => {
+    expect(ids('avalanche or snowball method to pay off my loans')).toContain('xa-04-avalanche-snowball-blizzard');
+  });
+  it('X-A 4: hypothecation', () => {
+    expect(ids('is a car loan a pledge or hypothecation')).toContain('xa-04-mortgage-pledge-hypothecation');
+  });
+  it('X-A 4: prepay or invest', () => {
+    expect(ids('should I prepay my home loan or invest the bonus')).toContain('xa-04-invest-or-prepay');
+  });
   it('X-B 16: prospect theory', () => {
     expect(ids('why do people hold losing stocks and sell winners early, prospect theory')).toContain('xb-16-prospect-theory');
   });
