@@ -7,7 +7,7 @@ import { runAsSystem, runAsUser } from '../../lib/requestContext.js';
 import { decryptSecret } from '../../lib/secrets.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { readBuffer } from '../../lib/documentStorage.js';
-import { willDocumentTags } from '../document.service.js';
+import { willDocumentTags } from '../documents/document.service.js';
 
 /**
  * The nominee's read-only view. Owner data is read under runAsUser(owner) so

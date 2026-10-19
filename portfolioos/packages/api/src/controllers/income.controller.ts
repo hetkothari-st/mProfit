@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import {
   INCOME_TYPES, listIncomes, getIncome, createIncome, updateIncome, deleteIncome, getIncomeSuggestions,
-} from '../services/income.service.js';
+} from '../services/income/income.service.js';
 import { ok } from '../lib/response.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 

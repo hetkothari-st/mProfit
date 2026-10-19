@@ -11,8 +11,8 @@
 
 import { Decimal } from 'decimal.js';
 import { prisma } from '../../../lib/prisma.js';
-import { investmentIncome, type IncomeRow } from '../../investmentIncome.service.js';
-import { fmtNum, fmtDate, type ExportPayload, type ExportSection } from '../../export.service.js';
+import { investmentIncome, type IncomeRow } from '../../income/investmentIncome.service.js';
+import { fmtNum, fmtDate, type ExportPayload, type ExportSection } from '../../reports/export.service.js';
 
 export interface IncomeStatementParams {
   userId: string;

@@ -18,7 +18,7 @@ import {
   getBalanceSheet,
   suggestVoucherForTransaction,
   generateVouchersFromActivity,
-} from '../services/accounting.service.js';
+} from '../services/accounting/accounting.service.js';
 import { ok } from '../lib/response.js';
 import { NotFoundError, UnauthorizedError } from '../lib/errors.js';
 import { buildReceipt } from '../services/receipts/receiptData.js';

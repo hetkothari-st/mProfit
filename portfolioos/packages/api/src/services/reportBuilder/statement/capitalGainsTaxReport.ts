@@ -17,7 +17,7 @@ import type { Response } from 'express';
 import { pdfSafe } from '../../charts/pdfCharts.js';
 import { themeFor, type ThemeName } from '../../charts/pdfTheme.js';
 import { drawBrandLockup } from '../../charts/pdfBrand.js';
-import { fmtNum } from '../../export.service.js';
+import { fmtNum } from '../../reports/export.service.js';
 import { buildTaxSummary, taxHarvestReport } from '../../tax/tax.service.js';
 import { buildCapitalGainsStatement } from './capitalGains.js';
 

@@ -12,7 +12,7 @@ import { findDuplicateTransaction } from '../imports/duplicateMatch.js';
 import { persistCapitalGainsForAsset } from '../tax/capitalGains.service.js';
 import { updateStockPricesFromYahoo } from '../../priceFeeds/yahoo.service.js';
 import { refreshAllHoldingPrices } from './holdings.service.js';
-import { getEffectiveScope, portfolioChildReadableWhere, assetClassWhere } from '../familyScope.service.js';
+import { getEffectiveScope, portfolioChildReadableWhere, assetClassWhere } from '../family/familyScope.service.js';
 import { runAsUser } from '../../lib/requestContext.js';
 
 export interface CreateTransactionInput {

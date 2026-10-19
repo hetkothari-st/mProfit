@@ -19,7 +19,7 @@ import {
   getEffectiveScope,
   portfolioReadableWhere,
   type EffectiveScope,
-} from '../familyScope.service.js';
+} from '../family/familyScope.service.js';
 import { runAsSystem, runAsUser } from '../../lib/requestContext.js';
 import { computePortfolioXirr, computeHoldingXirrs } from '../analytics/xirr.service.js';
 

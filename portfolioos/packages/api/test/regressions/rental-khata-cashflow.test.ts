@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { markReceiptReceived } from '../../src/services/rental.service.js';
-import { createLedgerEntry, deleteLedgerEntry } from '../../src/services/rentalLedger.service.js';
+import { markReceiptReceived } from '../../src/services/rental/rental.service.js';
+import { createLedgerEntry, deleteLedgerEntry } from '../../src/services/rental/rentalLedger.service.js';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 
 /**

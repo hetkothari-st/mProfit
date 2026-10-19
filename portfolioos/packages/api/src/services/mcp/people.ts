@@ -2,8 +2,8 @@ import { AREA_CATEGORY, type AiConnectorArea, type AiConnectorMemberWire } from 
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
-import { getEffectiveScope } from '../familyScope.service.js';
-import { listMembers, listMyFamilies } from '../family.service.js';
+import { getEffectiveScope } from '../family/familyScope.service.js';
+import { listMembers, listMyFamilies } from '../family/family.service.js';
 import { listProfilesIManage, resolveActAs } from '../family/managedProfile.service.js';
 
 /**

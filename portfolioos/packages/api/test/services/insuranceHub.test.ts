@@ -35,7 +35,7 @@ import {
   hookAutoMatchPremiumPayment,
   backfillPolicyNumberEncryption,
   hashPolicyNumber,
-} from '../../src/services/insurance.service.js';
+} from '../../src/services/insurance/insurance.service.js';
 import { decryptIdentifier, encryptIdentifier } from '../../src/services/pf/pfCredentials.service.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../src/lib/errors.js';
 

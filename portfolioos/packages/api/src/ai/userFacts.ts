@@ -17,13 +17,13 @@ import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { userDataVersion } from '../lib/userDataVersion.js';
 import { getDashboardNetWorthForScope } from '../services/analytics/dashboard.service.js';
-import { computeSummary } from '../services/realEstate.service.js';
+import { computeSummary } from '../services/realEstate/realEstate.service.js';
 import { buildAdvisorFacts } from '../services/advisor/advisorFacts.builder.js';
 import { listRecommendations } from '../services/advisor/advisorRecommendations.service.js';
 import { computeHealthScore } from '../services/analytics/healthScore.service.js';
 import { UNGRADED } from '../services/analytics/healthScoreMath.js';
-import { activeMonthlyIncomeTotal } from '../services/income.service.js';
-import { listPolicies } from '../services/insurance.service.js';
+import { activeMonthlyIncomeTotal } from '../services/income/income.service.js';
+import { listPolicies } from '../services/insurance/insurance.service.js';
 import type { AdvisorAssetBucketValue, AdvisorFacts } from '../services/advisor/types.js';
 
 const NOT_ON_FILE = 'not on file';

@@ -6,7 +6,7 @@ import {
   getTenancyLedger,
   listCollections,
   buildReminderMessage,
-} from '../../src/services/rentalLedger.service.js';
+} from '../../src/services/rental/rentalLedger.service.js';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 
 describe('rental ledger entries', () => {

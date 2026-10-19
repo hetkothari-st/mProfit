@@ -12,9 +12,9 @@ const db = vi.hoisted(() => ({
 const lookupIfsc = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/lib/prisma.js', () => ({ prisma: db }));
-vi.mock('../../src/services/ifscLookup.service.js', () => ({ lookupIfsc }));
+vi.mock('../../src/services/banking/ifscLookup.service.js', () => ({ lookupIfsc }));
 
-import { shareAccountDetails } from '../../src/services/bankAccounts.service.js';
+import { shareAccountDetails } from '../../src/services/banking/bankAccounts.service.js';
 import { encryptIdentifier } from '../../src/services/pf/pfCredentials.service.js';
 import { BadRequestError, NotFoundError } from '../../src/lib/errors.js';
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createCanvas } from '@napi-rs/canvas';
-import { MAX_OCR_PIXELS, capImageForOcr, extractText, renderScale } from '../../src/services/docSorter/textExtract.js';
+import { MAX_OCR_PIXELS, capImageForOcr, extractText, renderScale } from '../../src/services/documents/docSorter/textExtract.js';
 import { getDocSortQueue, closeQueues } from '../../src/lib/queue.js';
 import { SORTER_MAX_FILES, SORTER_MAX_FILE_MB } from '../../src/middleware/documentUpload.js';
 import { makeImageOnlyPdf } from './makeFiles.js';

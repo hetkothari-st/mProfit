@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runRules } from '../../src/services/docSorter/rules.js';
+import { runRules } from '../../src/services/documents/docSorter/rules.js';
 import { FIXTURES } from './fixtures.js';
 
 const NOW = new Date('2026-10-14');

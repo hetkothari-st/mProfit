@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nameKey, matchPerson } from '../../src/services/docSorter/personMatch.js';
+import { nameKey, matchPerson } from '../../src/services/documents/docSorter/personMatch.js';
 
 const c = (id: string, name: string, pan: string | null = null, aliasKeys: string[] = []) => ({ id, nameKey: nameKey(name), panLast4: pan, aliasKeys });
 const match = (cands: ReturnType<typeof c>[], name: string, pan: string | null = null) => matchPerson(cands, nameKey(name), pan);

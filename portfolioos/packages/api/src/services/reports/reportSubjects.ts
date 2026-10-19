@@ -33,7 +33,7 @@ import {
   getEffectiveScope,
   NON_AC_CATEGORIES,
   type EffectiveScope,
-} from '../familyScope.service.js';
+} from '../family/familyScope.service.js';
 import type { MprofitLayout, ReportSection } from '../reportBuilder/mprofitStyle.js';
 
 export interface ReportSubject {

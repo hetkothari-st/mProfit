@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 import JSZip from 'jszip';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
-import { acceptUploads, processDocument } from '../../src/services/docSorter/sorter.service.js';
-import { buildFolderZip, getTree } from '../../src/services/docSorter/sorterEdit.service.js';
+import { acceptUploads, processDocument } from '../../src/services/documents/docSorter/sorter.service.js';
+import { buildFolderZip, getTree } from '../../src/services/documents/docSorter/sorterEdit.service.js';
 import { makeTextPdf, makeTextPng } from './makeFiles.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';

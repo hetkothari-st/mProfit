@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { markReceiptReceived, propertyPnL } from '../../src/services/rental.service.js';
+import { markReceiptReceived, propertyPnL } from '../../src/services/rental/rental.service.js';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 
 /**

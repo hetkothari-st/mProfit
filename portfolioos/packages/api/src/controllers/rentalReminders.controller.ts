@@ -9,7 +9,7 @@ import {
   enqueuePendingReminders,
   REMINDER_STATUS,
   type ReminderStatus,
-} from '../services/rental.reminders.service.js';
+} from '../services/rental/rental.reminders.service.js';
 
 function userId(req: Request): string {
   if (!req.user) throw new Error('auth middleware missing');

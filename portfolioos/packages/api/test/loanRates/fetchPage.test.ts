@@ -1,9 +1,9 @@
 import { createServer } from 'node:http';
 import { describe, it, expect } from 'vitest';
-import { robotsAllows } from '../../src/services/loanRates/robots.js';
+import { robotsAllows } from '../../src/services/loans/loanRates/robots.js';
 import {
   FetchPageError, LOAN_RATES_USER_AGENT, fetchPage, isPrivateAddress, type HttpGet,
-} from '../../src/services/loanRates/fetchPage.js';
+} from '../../src/services/loans/loanRates/fetchPage.js';
 import { fixture } from './readerFixtures.js';
 
 describe('robotsAllows on real robots.txt files', () => {

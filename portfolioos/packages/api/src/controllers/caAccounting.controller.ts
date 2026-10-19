@@ -51,7 +51,7 @@ import {
   getTrialBalance,
   getPnL,
   getBalanceSheet,
-} from '../services/accounting.service.js';
+} from '../services/accounting/accounting.service.js';
 import type { AccountType, VoucherType } from '@prisma/client';
 import {
   createAccountSchema,

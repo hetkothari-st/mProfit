@@ -6,7 +6,7 @@ import {
   createFamily,
   getFamilyTreeLayout,
   listMembers,
-} from '../../src/services/family.service.js';
+} from '../../src/services/family/family.service.js';
 
 /**
  * Adding a branch of the family in one pass: relations that point at people

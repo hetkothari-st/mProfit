@@ -18,13 +18,13 @@ import {
   updateClaim,
   removeClaim,
   generateRenewalAlerts,
-} from '../services/insurance.service.js';
+} from '../services/insurance/insurance.service.js';
 import {
   dismissImportSuggestion,
   getTaxSummary,
   linkImportedPremium,
   listImportSuggestions,
-} from '../services/insuranceExtras.service.js';
+} from '../services/insurance/insuranceExtras.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 

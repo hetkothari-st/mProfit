@@ -29,13 +29,13 @@ import { computeUserXirr } from '../services/analytics/xirr.service.js';
 import { computeUserCapitalGains } from '../services/tax/capitalGains.service.js';
 import { taxHarvestReport } from '../services/tax/tax.service.js';
 import { listGoals } from '../services/goals/goals.service.js';
-import { listLoans } from '../services/loans.service.js';
-import { listCards } from '../services/creditCards.service.js';
+import { listLoans } from '../services/loans/loans.service.js';
+import { listCards } from '../services/banking/creditCards.service.js';
 import {
   getEffectiveScope,
   type EffectiveScope,
-} from '../services/familyScope.service.js';
-import { listPolicies } from '../services/insurance.service.js';
+} from '../services/family/familyScope.service.js';
+import { listPolicies } from '../services/insurance/insurance.service.js';
 import { Decimal, HELP_TOPICS, matchHelpTopics } from '@everypaisa/shared';
 import { QueryIntent, type ClassifiedQuery } from './queryClassifier.js';
 import { effectivePlan } from '../lib/effectivePlan.js';

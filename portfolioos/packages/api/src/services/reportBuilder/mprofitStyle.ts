@@ -24,7 +24,7 @@ import type { Response } from 'express';
 import { Decimal, istCalendarDate } from '@everypaisa/shared';
 import { pdfSafe } from '../charts/pdfCharts.js';
 import { DARK_THEME, LIGHT_THEME, hexToArgb, type ThemeName } from '../charts/pdfTheme.js';
-import { excelSheetName, setExcelValue } from '../excelCells.js';
+import { excelSheetName, setExcelValue } from '../reports/excelCells.js';
 
 // ─── Palette — pulled from the screenshots ───────────────────────
 //

@@ -23,7 +23,7 @@ import {
   listCards,
   getCard,
   revealCardNumber,
-} from '../../src/services/creditCards.service.js';
+} from '../../src/services/banking/creditCards.service.js';
 import {
   encryptIdentifier,
   decryptIdentifier,

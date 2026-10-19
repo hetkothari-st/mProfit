@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSortedName, uniqueName, safeExt } from '../../src/services/docSorter/naming.js';
+import { buildSortedName, uniqueName, safeExt } from '../../src/services/documents/docSorter/naming.js';
 
 const up = new Date('2026-10-14T10:00:00Z');
 

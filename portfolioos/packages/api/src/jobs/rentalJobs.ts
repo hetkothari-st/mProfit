@@ -12,8 +12,8 @@
 import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { markOverdueReceipts } from '../services/rental.service.js';
-import { enqueuePendingReminders } from '../services/rental.reminders.service.js';
+import { markOverdueReceipts } from '../services/rental/rental.service.js';
+import { enqueuePendingReminders } from '../services/rental/rental.reminders.service.js';
 
 const TZ = 'Asia/Kolkata';
 let running = false;

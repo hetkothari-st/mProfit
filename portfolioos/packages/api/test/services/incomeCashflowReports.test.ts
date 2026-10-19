@@ -3,7 +3,7 @@ import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { createTestScope, prisma } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { userIncomeReport } from '../../src/services/reports.service.js';
+import { userIncomeReport } from '../../src/services/reports/reports.service.js';
 import { buildLedgerStatement } from '../../src/services/reportBuilder/statement/ledger.js';
 import {
   buildCashFlowStatementLayout,

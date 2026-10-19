@@ -45,12 +45,12 @@ import { logger } from '../lib/logger.js';
 import { recomputeForAsset } from '../services/holdings/holdingsProjection.js';
 import { findDuplicateTransaction } from '../services/imports/duplicateMatch.js';
 import { computeAssetKey } from '../services/holdings/assetKey.js';
-import { hookAutoMatchRentalCredit } from '../services/rental.service.js';
-import { hookAutoMatchPremiumPayment } from '../services/insurance.service.js';
+import { hookAutoMatchRentalCredit } from '../services/rental/rental.service.js';
+import { hookAutoMatchPremiumPayment } from '../services/insurance/insurance.service.js';
 import {
   findAccountByLast4,
   applyEventToBalance,
-} from '../services/bankAccounts.service.js';
+} from '../services/banking/bankAccounts.service.js';
 import { ensureFoInstrument } from '../priceFeeds/nseFoMaster.service.js';
 import { recomputeDerivativePosition } from '../services/fo/derivativePosition.service.js';
 

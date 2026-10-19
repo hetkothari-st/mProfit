@@ -49,7 +49,7 @@ import type {
 import { logger } from '../../../lib/logger.js';
 import { runInTransaction } from '../../../lib/prisma.js';
 import { enqueueMfProse } from '../../../jobs/mfProseJob.js';
-import { getEffectiveScope, type EffectiveScope } from '../../familyScope.service.js';
+import { getEffectiveScope, type EffectiveScope } from '../../family/familyScope.service.js';
 import { buildMfAnalysisFacts, toSnapshotSafe } from './mfFacts.builder.js';
 import { getRules, MF_RULES } from './rules/registry.js';
 import { decideVerdicts, type MfVerdictDecision } from './mfVerdict.js';

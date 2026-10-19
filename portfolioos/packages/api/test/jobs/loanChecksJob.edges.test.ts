@@ -5,7 +5,7 @@ import type { MarketRateWire, RateLoanType } from '@everypaisa/shared';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { runLoanChecks } from '../../src/jobs/loanChecksJob.js';
-import { ensureLoanRateSources } from '../../src/services/loanRates/sourceList.js';
+import { ensureLoanRateSources } from '../../src/services/loans/loanRates/sourceList.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { clearLoanRateTables } from '../helpers/loanRates.js';
 

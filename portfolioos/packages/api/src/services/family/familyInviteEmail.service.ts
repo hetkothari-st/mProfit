@@ -16,7 +16,7 @@ import { logger } from '../../lib/logger.js';
 import { env } from '../../config/env.js';
 import { sendEmail } from '../notifications/email.service.js';
 import { renderInviteShell } from '../notifications/caInviteEmail.template.js';
-import { assertOwnerOf } from '../familyScope.service.js';
+import { assertOwnerOf } from './familyScope.service.js';
 import { openInviteToken } from '../../lib/inviteToken.js';
 
 import { formatDateIST } from '@everypaisa/shared';

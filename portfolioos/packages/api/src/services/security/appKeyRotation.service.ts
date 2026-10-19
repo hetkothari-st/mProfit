@@ -32,7 +32,7 @@ import {
   type CredentialBlob,
 } from '../pf/pfCredentials.service.js';
 import { panHash, registrationNoHash } from './piiAtRest.service.js';
-import { hashPolicyNumber } from '../insurance.service.js';
+import { hashPolicyNumber } from '../insurance/insurance.service.js';
 
 type Kind = 'text' | 'bytes' | 'credentials';
 

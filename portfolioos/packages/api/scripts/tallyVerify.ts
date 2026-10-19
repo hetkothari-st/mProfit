@@ -20,9 +20,9 @@
  * mode, which may restrict voucher dates. Add --send to import it straight away.
  */
 import { readFile, writeFile } from 'node:fs/promises';
-import { buildTallyBook, emptyTallySources, type TallySources } from '../src/services/tally/tallyBook.js';
-import { tallyZipEntries } from '../src/services/tally/tallyPackage.js';
-import { parseTallyImportResponse } from '../src/services/tally/tallyResponse.js';
+import { buildTallyBook, emptyTallySources, type TallySources } from '../src/services/accounting/tally/tallyBook.js';
+import { tallyZipEntries } from '../src/services/accounting/tally/tallyPackage.js';
+import { parseTallyImportResponse } from '../src/services/accounting/tally/tallyResponse.js';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(name);

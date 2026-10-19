@@ -37,8 +37,8 @@ import {
   addManagedMembersBulk,
   BULK_MANAGED_MAX,
   setManagedMemberManager,
-} from '../services/family.service.js';
-import { NON_AC_CATEGORIES } from '../services/familyScope.service.js';
+} from '../services/family/family.service.js';
+import { NON_AC_CATEGORIES } from '../services/family/familyScope.service.js';
 import {
   buildFamilyInviteEmail,
   sendFamilyInviteEmail,

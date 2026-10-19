@@ -8,7 +8,7 @@ import { ForbiddenError } from '../../src/lib/errors.js';
 import { purgeUser } from '../../src/services/account/accountDeletion.service.js';
 import {
   createDocument, deleteDocument, replaceDocumentBytes, updateDocumentMeta,
-} from '../../src/services/document.service.js';
+} from '../../src/services/documents/document.service.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';
 if (!/localhost|127\.0\.0\.1/.test(DB_URL)) throw new Error('Refusing to run: DATABASE_URL must point at a local database');

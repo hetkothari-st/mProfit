@@ -25,7 +25,7 @@ import { runInTransaction } from '../../lib/prisma.js';
 import {
   generateVouchersFromActivity,
   type GenerateFromActivityResult,
-} from '../accounting.service.js';
+} from '../accounting/accounting.service.js';
 import { getCaScope } from './caAccess.service.js';
 import { recordProjectionIfAny, type CaAuditContext } from './caAudit.service.js';
 import { parseClientId } from '../../lib/clientHeader.js';

@@ -1,8 +1,8 @@
 import { Decimal, toAmount2 } from '@everypaisa/shared';
 import { prisma } from '../../../../lib/prisma.js';
-import { loanGivenOutstanding } from '../../../loansGiven.service.js';
-import { loanPosition, type LoanPosition, type StoredLoan } from '../../../loans.service.js';
-import { computeCardSummary } from '../../../creditCards.service.js';
+import { loanGivenOutstanding } from '../../../loans/loansGiven.service.js';
+import { loanPosition, type LoanPosition, type StoredLoan } from '../../../loans/loans.service.js';
+import { computeCardSummary } from '../../../banking/creditCards.service.js';
 import { clip, SOLE, type EstateAdapter, type EstateCandidate } from '../types.js';
 
 const LOAN_WORDS: Record<string, string> = {

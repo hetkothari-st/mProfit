@@ -19,7 +19,7 @@ import {
   updateDocumentMeta,
   listAllDocuments,
   zipDocuments,
-} from '../services/document.service.js';
+} from '../services/documents/document.service.js';
 import { readBuffer } from '../lib/documentStorage.js';
 import { downloadHeaders, storedMimeFor } from '../lib/documentMime.js';
 import { created, noContent, ok } from '../lib/response.js';

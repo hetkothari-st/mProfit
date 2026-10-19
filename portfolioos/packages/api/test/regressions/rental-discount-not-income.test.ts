@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { propertyPnL } from '../../src/services/rental.service.js';
-import { createLedgerEntry } from '../../src/services/rentalLedger.service.js';
+import { propertyPnL } from '../../src/services/rental/rental.service.js';
+import { createLedgerEntry } from '../../src/services/rental/rentalLedger.service.js';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 
 /**

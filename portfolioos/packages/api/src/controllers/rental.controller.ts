@@ -21,7 +21,7 @@ import {
   removeExpense,
   propertyPnL,
   markOverdueReceipts,
-} from '../services/rental.service.js';
+} from '../services/rental/rental.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 
@@ -273,8 +273,8 @@ import {
   listCollections,
   buildReminderMessage,
   LEDGER_ENTRY_TYPES,
-} from '../services/rentalLedger.service.js';
-import { streamPdf, fmtNum, fmtDate, type ExportColumn } from '../services/export.service.js';
+} from '../services/rental/rentalLedger.service.js';
+import { streamPdf, fmtNum, fmtDate, type ExportColumn } from '../services/reports/export.service.js';
 import { parseThemeQuery } from '../services/charts/pdfTheme.js';
 
 const ledgerEntrySchema = z.object({

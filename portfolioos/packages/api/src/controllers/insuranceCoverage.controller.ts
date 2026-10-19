@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { getCoverage } from '../services/insuranceCoverage.service.js';
+import { getCoverage } from '../services/insurance/insuranceCoverage.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 

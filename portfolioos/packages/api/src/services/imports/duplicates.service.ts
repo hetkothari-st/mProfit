@@ -5,7 +5,7 @@
 
 import { prisma } from '../../lib/prisma.js';
 import { deleteTransaction } from '../holdings/transaction.service.js';
-import { deleteLedgerEntry } from '../rentalLedger.service.js';
+import { deleteLedgerEntry } from '../rental/rentalLedger.service.js';
 import { computeAssetKey } from '../holdings/assetKey.js';
 import {
   groupRentDuplicates,

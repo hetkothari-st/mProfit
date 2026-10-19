@@ -10,7 +10,7 @@ import {
   setManagedMemberManager,
   updateMemberPermissions,
   updateFamilyTreeLayout,
-} from '../../src/services/family.service.js';
+} from '../../src/services/family/family.service.js';
 import {
   isAccountRoute,
   listProfilesIManage,

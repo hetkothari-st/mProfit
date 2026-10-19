@@ -31,7 +31,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors
 import { logger } from '../../lib/logger.js';
 import { hashPassword } from '../auth/password.service.js';
 import { issueSession } from '../auth/auth.service.js';
-import { assertOwnerOf } from '../familyScope.service.js';
+import { assertOwnerOf } from './familyScope.service.js';
 import { inviteTokenHash, newInviteToken } from '../../lib/inviteToken.js';
 
 const CLAIM_TOKEN_BYTES = 32;

@@ -22,8 +22,8 @@ import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { refreshVehicle } from '../services/vehicles.service.js';
-import { scanChallansMonthlyForAllActiveVehicles } from '../services/challans.service.js';
+import { refreshVehicle } from '../services/vehicles/vehicles.service.js';
+import { scanChallansMonthlyForAllActiveVehicles } from '../services/vehicles/challans.service.js';
 
 const TZ = 'Asia/Kolkata';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;

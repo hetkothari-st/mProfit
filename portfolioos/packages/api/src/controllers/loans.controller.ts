@@ -15,9 +15,9 @@ import {
   getLoanSummary,
   getAmortization,
   computeEmi,
-} from '../services/loans.service.js';
-import { revealLoanAccountNumber } from '../services/loans.service.js';
-import { getLoanMarketCheck } from '../services/loanChecks/marketCheck.service.js';
+} from '../services/loans/loans.service.js';
+import { revealLoanAccountNumber } from '../services/loans/loans.service.js';
+import { getLoanMarketCheck } from '../services/loans/loanChecks/marketCheck.service.js';
 import { writeAuditLog } from '../lib/audit.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';

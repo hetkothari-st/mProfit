@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import pino from 'pino';
-import { runAllAlertScans } from '../services/alerts.service.js';
+import { runAllAlertScans } from '../services/notifications/alerts.service.js';
 
 const logger = pino({ name: 'alertJobs' });
 

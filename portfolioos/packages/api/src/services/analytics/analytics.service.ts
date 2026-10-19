@@ -12,7 +12,7 @@ import {
   computePortfolioCapitalGains,
   computeUserCapitalGains,
 } from '../tax/capitalGains.service.js';
-import { historicalValuation, unrealisedReport, incomeReport } from '../reports.service.js';
+import { historicalValuation, unrealisedReport, incomeReport } from '../reports/reports.service.js';
 import { ensureHistoricalPricesForPortfolio } from './analytics.priceBackfill.js';
 import { getDashboardNetWorth } from './dashboard.service.js';
 import { taxHarvestReport } from '../tax/tax.service.js';

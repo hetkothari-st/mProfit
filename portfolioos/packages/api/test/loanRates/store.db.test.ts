@@ -2,11 +2,11 @@ import 'dotenv/config';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { ensureLoanRateSources } from '../../src/services/loanRates/sourceList.js';
+import { ensureLoanRateSources } from '../../src/services/loans/loanRates/sourceList.js';
 import {
   activateSuspect, effectiveRates, rateKey, recordReading, writeBenchmark, type StoreSource,
-} from '../../src/services/loanRates/store.js';
-import type { RateReading } from '../../src/services/loanRates/types.js';
+} from '../../src/services/loans/loanRates/store.js';
+import type { RateReading } from '../../src/services/loans/loanRates/types.js';
 import { clearLoanRateTables } from '../helpers/loanRates.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';

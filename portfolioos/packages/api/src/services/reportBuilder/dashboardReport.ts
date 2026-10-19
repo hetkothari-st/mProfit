@@ -30,7 +30,7 @@ import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
-import { fmtNum, fmtDatePdf } from '../export.service.js';
+import { fmtNum, fmtDatePdf } from '../reports/export.service.js';
 import { computePortfolioXirr, computeUserXirr } from '../analytics/xirr.service.js';
 import { computePortfolioCapitalGains } from '../tax/capitalGains.service.js';
 import { computePortfolioFoPnl } from '../fo/foPnl.service.js';

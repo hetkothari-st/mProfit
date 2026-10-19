@@ -1,6 +1,6 @@
 import { getDocSortQueue } from '../lib/queue.js';
 import { logger } from '../lib/logger.js';
-import { failStuckDocument, processDocument } from '../services/docSorter/sorter.service.js';
+import { failStuckDocument, processDocument } from '../services/documents/docSorter/sorter.service.js';
 
 /**
  * Wire the Documents sorter worker to its Bull queue. Called once at API boot.

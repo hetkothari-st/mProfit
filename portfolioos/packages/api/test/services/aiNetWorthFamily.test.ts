@@ -29,14 +29,14 @@ vi.mock('../../src/services/analytics/analytics.service.js', () => ({
     ],
   }),
 }));
-vi.mock('../../src/services/familyScope.service.js', () => ({ getEffectiveScope: vi.fn() }));
+vi.mock('../../src/services/family/familyScope.service.js', () => ({ getEffectiveScope: vi.fn() }));
 vi.mock('../../src/services/analytics/xirr.service.js', () => ({ computeUserXirr: vi.fn() }));
 vi.mock('../../src/services/tax/capitalGains.service.js', () => ({ computeUserCapitalGains: vi.fn() }));
 vi.mock('../../src/services/tax/tax.service.js', () => ({ taxHarvestReport: vi.fn() }));
 vi.mock('../../src/services/goals/goals.service.js', () => ({ listGoals: vi.fn() }));
-vi.mock('../../src/services/loans.service.js', () => ({ listLoans: vi.fn() }));
-vi.mock('../../src/services/creditCards.service.js', () => ({ listCards: vi.fn() }));
-vi.mock('../../src/services/insurance.service.js', () => ({ listPolicies: vi.fn() }));
+vi.mock('../../src/services/loans/loans.service.js', () => ({ listLoans: vi.fn() }));
+vi.mock('../../src/services/banking/creditCards.service.js', () => ({ listCards: vi.fn() }));
+vi.mock('../../src/services/insurance/insurance.service.js', () => ({ listPolicies: vi.fn() }));
 
 import { buildNetWorthData } from '../../src/ai/contextBuilder.js';
 

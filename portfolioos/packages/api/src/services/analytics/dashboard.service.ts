@@ -3,10 +3,10 @@ import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { financialYearOf, financialYearRange } from '@everypaisa/shared';
 import { serializeMoney, financialYearFromDate, toDecimal, premiumToAnnual } from '@everypaisa/shared';
-import { loanPosition, type StoredLoan } from '../loans.service.js';
-import { outstandingLoansGiven } from '../loansGiven.service.js';
-import { computeCardSummary } from '../creditCards.service.js';
-import { getEffectiveScope, type EffectiveScope } from '../familyScope.service.js';
+import { loanPosition, type StoredLoan } from '../loans/loans.service.js';
+import { outstandingLoansGiven } from '../loans/loansGiven.service.js';
+import { computeCardSummary } from '../banking/creditCards.service.js';
+import { getEffectiveScope, type EffectiveScope } from '../family/familyScope.service.js';
 import { runAsUser } from '../../lib/requestContext.js';
 import { plateOf } from '../security/piiAtRest.service.js';
 

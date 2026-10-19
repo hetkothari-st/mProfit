@@ -6,10 +6,10 @@ import { runAsSystem } from '../../src/lib/requestContext.js';
 import {
   DLQ_EXCERPT_BYTES, runLoanRates as runLoanRatesRaw, sanitizedExcerpt, startLoanRatesJob, truncateUtf8, type SourceStateWriter,
 } from '../../src/jobs/loanRatesJob.js';
-import { FetchPageError } from '../../src/services/loanRates/fetchPage.js';
-import { hdfcRatesReader } from '../../src/services/loanRates/sources/hdfc.js';
-import { PAGE_READERS, readerById } from '../../src/services/loanRates/sources/index.js';
-import { effectiveRates, rateKey } from '../../src/services/loanRates/store.js';
+import { FetchPageError } from '../../src/services/loans/loanRates/fetchPage.js';
+import { hdfcRatesReader } from '../../src/services/loans/loanRates/sources/hdfc.js';
+import { PAGE_READERS, readerById } from '../../src/services/loans/loanRates/sources/index.js';
+import { effectiveRates, rateKey } from '../../src/services/loans/loanRates/store.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { clearLoanRateTables } from '../helpers/loanRates.js';
 import { READER_FIXTURES, fixture } from '../loanRates/readerFixtures.js';

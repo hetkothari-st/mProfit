@@ -9,10 +9,10 @@
  */
 
 import { Decimal } from 'decimal.js';
-import { cashDirection } from '../../cashDirection.js';
-import { inrAmount, transactionInrNet } from '../../investmentIncome.service.js';
+import { cashDirection } from '../../banking/cashDirection.js';
+import { inrAmount, transactionInrNet } from '../../income/investmentIncome.service.js';
 import { prisma } from '../../../lib/prisma.js';
-import { fmtNum, fmtDate, type ExportPayload } from '../../export.service.js';
+import { fmtNum, fmtDate, type ExportPayload } from '../../reports/export.service.js';
 
 export interface LedgerStatementParams {
   userId: string;

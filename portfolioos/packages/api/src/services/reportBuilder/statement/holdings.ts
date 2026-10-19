@@ -15,7 +15,7 @@ import { holdingsAsOf, sortHoldings } from '../../holdings/holdingsAsOf.service.
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
-import { fmtNum, fmtDate, type ExportPayload, type ExportSection } from '../../export.service.js';
+import { fmtNum, fmtDate, type ExportPayload, type ExportSection } from '../../reports/export.service.js';
 
 const ASSET_CLASS_LABELS: Record<string, string> = {
   EQUITY: 'Equity', MUTUAL_FUND: 'Mutual Funds', ETF: 'ETFs',

@@ -73,7 +73,7 @@ describe('SEC-15: sensitive operations write an audit trail', () => {
 });
 
 describe('SEC-30: loan account numbers are masked in list/detail', () => {
-  const svc = read('services/loans.service.ts');
+  const svc = read('services/loans/loans.service.ts');
 
   it('masks on both read paths', () => {
     // List and detail each pass the row through withMaskedAccount.

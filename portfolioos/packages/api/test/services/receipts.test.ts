@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
-import { generateVouchersFromActivity } from '../../src/services/accounting.service.js';
+import { generateVouchersFromActivity } from '../../src/services/accounting/accounting.service.js';
 import { buildReceipt } from '../../src/services/receipts/receiptData.js';
 import { renderReceiptPdf } from '../../src/services/receipts/receiptPdf.js';
 import {

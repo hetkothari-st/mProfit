@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseLlmSortOutput } from '../../src/services/docSorter/llmFallback.js';
+import { parseLlmSortOutput } from '../../src/services/documents/docSorter/llmFallback.js';
 
 describe('parseLlmSortOutput', () => {
   it('accepts a valid verdict and sanitises the name', () => {

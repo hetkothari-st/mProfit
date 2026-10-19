@@ -3,9 +3,9 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { runLoanChecks } from '../../src/jobs/loanChecksJob.js';
-import { findBenchmarkChanges } from '../../src/services/loanChecks/loanAlerts.service.js';
-import { bestMarketRate } from '../../src/services/loanChecks/marketCheck.service.js';
-import { ensureLoanRateSources } from '../../src/services/loanRates/sourceList.js';
+import { findBenchmarkChanges } from '../../src/services/loans/loanChecks/loanAlerts.service.js';
+import { bestMarketRate } from '../../src/services/loans/loanChecks/marketCheck.service.js';
+import { ensureLoanRateSources } from '../../src/services/loans/loanRates/sourceList.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { clearLoanRateTables } from '../helpers/loanRates.js';
 

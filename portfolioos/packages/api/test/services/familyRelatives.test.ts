@@ -9,9 +9,9 @@ import {
   revokeMember,
   setManagedMemberManager,
   updateMemberPermissions,
-} from '../../src/services/family.service.js';
+} from '../../src/services/family/family.service.js';
 import { buildFamilyInviteEmail } from '../../src/services/family/familyInviteEmail.service.js';
-import { inviteMember } from '../../src/services/family.service.js';
+import { inviteMember } from '../../src/services/family/family.service.js';
 
 /**
  * Relatives on the family tree: who someone is related to, where that puts

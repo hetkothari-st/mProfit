@@ -3,7 +3,7 @@ import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { encryptSecret } from '../../src/lib/secrets.js';
-import { createDocument, listDocuments } from '../../src/services/document.service.js';
+import { createDocument, listDocuments } from '../../src/services/documents/document.service.js';
 import { recordWillExecution } from '../../src/services/will/willExecute.service.js';
 import { buildLegacyView } from '../../src/services/legacy/view.service.js';
 import { legacyDocumentLine } from '../../src/services/legacy/viewPdf.js';

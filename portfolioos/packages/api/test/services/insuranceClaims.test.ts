@@ -16,7 +16,7 @@ vi.mock('../../src/lib/prisma.js', () => ({
   runInTransaction: (fn: (tx: typeof db) => unknown) => fn(db),
 }));
 
-import { addClaim, updateClaim, generateClaimAlerts } from '../../src/services/insurance.service.js';
+import { addClaim, updateClaim, generateClaimAlerts } from '../../src/services/insurance/insurance.service.js';
 import { BadRequestError, NotFoundError } from '../../src/lib/errors.js';
 
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`);

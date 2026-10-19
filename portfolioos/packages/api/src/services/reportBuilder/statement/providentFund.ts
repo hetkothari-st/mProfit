@@ -21,7 +21,7 @@
 
 import { Decimal } from 'decimal.js';
 import { prisma } from '../../../lib/prisma.js';
-import { fmtNum, fmtDate, type ExportPayload, type ExportSection } from '../../export.service.js';
+import { fmtNum, fmtDate, type ExportPayload, type ExportSection } from '../../reports/export.service.js';
 
 const TYPE_LABEL: Record<string, string> = {
   EPF: 'Employees’ Provident Fund',

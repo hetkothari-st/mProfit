@@ -5,7 +5,7 @@ import {
   computeLoanGivenSummary,
   type LoanTerms,
   type LedgerEntry,
-} from '../../src/services/loansGiven.service.js';
+} from '../../src/services/loans/loansGiven.service.js';
 
 const d = (iso: string) => new Date(`${iso}T00:00:00Z`);
 

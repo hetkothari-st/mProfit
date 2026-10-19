@@ -30,7 +30,7 @@ import {
   residualLots,
   BUY_TXN_TYPES,
   SELL_TXN_TYPES,
-} from '../../specialReports.service.js';
+} from '../../reports/specialReports.service.js';
 import {
   intradayReport,
   stcgReport,
@@ -42,7 +42,7 @@ import {
   userSchedule112AReport,
   userIncomeReport,
   incomeReport,
-} from '../../reports.service.js';
+} from '../../reports/reports.service.js';
 import {
   GRANDFATHERING_CUTOFF,
   computeOpenLots,
@@ -65,12 +65,12 @@ import {
   getPnL,
   getBalanceSheet,
   listAccountsFlat,
-} from '../../accounting.service.js';
+} from '../../accounting/accounting.service.js';
 import { computeUserXirr } from '../../analytics/xirr.service.js';
 import { resolveMutualFundId } from '../../holdings/masterData.service.js';
 import { acquisitionDates, holdingsAsOf, sortHoldings } from '../../holdings/holdingsAsOf.service.js';
-import { cashDirection } from '../../cashDirection.js';
-import { inrAmount, transactionInrNet } from '../../investmentIncome.service.js';
+import { cashDirection } from '../../banking/cashDirection.js';
+import { inrAmount, transactionInrNet } from '../../income/investmentIncome.service.js';
 import { availableTaxFys, buildTaxSummary } from '../../tax/tax.service.js';
 import { readPan } from '../../security/piiAtRest.service.js';
 

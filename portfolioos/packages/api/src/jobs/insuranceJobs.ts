@@ -1,6 +1,6 @@
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { backfillPolicyNumberEncryption } from '../services/insurance.service.js';
+import { backfillPolicyNumberEncryption } from '../services/insurance/insurance.service.js';
 
 /**
  * Insurance startup work. Premium reminders run in the daily alert scan

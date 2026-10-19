@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { checkReading, istDate, isSourceStale } from '../../src/services/loanRates/sanity.js';
-import type { RateReading } from '../../src/services/loanRates/types.js';
+import { checkReading, istDate, isSourceStale } from '../../src/services/loans/loanRates/sanity.js';
+import type { RateReading } from '../../src/services/loans/loanRates/types.js';
 
 const TODAY = '2026-10-12';
 const r = (over: Partial<RateReading> = {}): RateReading => ({

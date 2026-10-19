@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { getCurrentUserId, runAsSystem } from '../../src/lib/requestContext.js';
-import { deleteAlert } from '../../src/services/alerts.service.js';
+import { deleteAlert } from '../../src/services/notifications/alerts.service.js';
 import {
   dueWillReviewUserIds, markWillReviewed, syncWillReviewAlerts, willReviewKey,
 } from '../../src/services/will/willReview.service.js';

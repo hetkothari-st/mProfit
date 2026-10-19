@@ -49,7 +49,7 @@ import {
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { parseFamilyId } from '../lib/familyHeader.js';
-import { getEffectiveScope } from '../services/familyScope.service.js';
+import { getEffectiveScope } from '../services/family/familyScope.service.js';
 import { computeMfPortfolioAnalysis } from '../services/mf/mfAnalytics/mfPortfolioAnalysis.service.js';
 import { MF_SCORING_MODELS } from '../services/mf/mfAnalytics/mfScoring/models/registry.js';
 import {

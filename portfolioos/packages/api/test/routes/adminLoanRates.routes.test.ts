@@ -11,10 +11,10 @@ import { generateTotpSecret } from '../../src/lib/totp.js';
 import { adminLoanRatesRouter } from '../../src/routes/adminLoanRates.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
 import { signAccessToken } from '../../src/services/auth/jwt.service.js';
-import { listLoanRates } from '../../src/services/loanRates/loanRates.service.js';
-import { ensureLoanRateSources } from '../../src/services/loanRates/sourceList.js';
+import { listLoanRates } from '../../src/services/loans/loanRates/loanRates.service.js';
+import { ensureLoanRateSources } from '../../src/services/loans/loanRates/sourceList.js';
 import { isLoanRatesRunning, runLoanRates, runLoanRatesJob } from '../../src/jobs/loanRatesJob.js';
-import { recordReading } from '../../src/services/loanRates/store.js';
+import { recordReading } from '../../src/services/loans/loanRates/store.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { clearLoanRateTables } from '../helpers/loanRates.js';
 

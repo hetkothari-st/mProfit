@@ -16,7 +16,7 @@ import { logger } from '../../lib/logger.js';
 import { openForUser, sealForUser } from '../../lib/userKeys.js';
 import { sniff } from '../../lib/decryptIfNeeded.js';
 import { readBuffer } from '../../lib/documentStorage.js';
-import { createDocument, deleteDocument } from '../document.service.js';
+import { createDocument, deleteDocument } from '../documents/document.service.js';
 import { dayOf, isoDay, loadOwnedWill, openWillPayload, requireWillKeys, todayIst, zodIssues } from './willStore.js';
 
 export interface WillExecuteDeps {
