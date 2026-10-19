@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
-import { purgeUser } from '../../src/services/accountDeletion.service.js';
+import { purgeUser } from '../../src/services/account/accountDeletion.service.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';
 if (!/localhost|127\.0\.0\.1/.test(DB_URL)) throw new Error('Refusing to run: DATABASE_URL must point at a local database');

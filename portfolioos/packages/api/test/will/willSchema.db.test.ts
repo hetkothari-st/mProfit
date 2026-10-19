@@ -5,7 +5,7 @@ import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { ForbiddenError } from '../../src/lib/errors.js';
-import { purgeUser } from '../../src/services/accountDeletion.service.js';
+import { purgeUser } from '../../src/services/account/accountDeletion.service.js';
 import {
   createDocument, deleteDocument, replaceDocumentBytes, updateDocumentMeta,
 } from '../../src/services/document.service.js';

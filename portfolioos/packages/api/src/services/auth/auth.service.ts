@@ -21,7 +21,7 @@ import {
   signAccessToken,
 } from './jwt.service.js';
 import { panColumns } from '../security/piiAtRest.service.js';
-import { assertNotPendingDeletion } from '../accountDeletion.service.js';
+import { assertNotPendingDeletion } from '../account/accountDeletion.service.js';
 import { linkContactsForUser } from '../split/linking.service.js';
 import { effectivePlan } from '../../lib/effectivePlan.js';
 import { completeChallenge, createChallenge, isTwoFactorEnabled } from './twoFactor.service.js';

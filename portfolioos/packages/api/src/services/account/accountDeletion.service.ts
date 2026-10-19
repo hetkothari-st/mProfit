@@ -16,21 +16,21 @@ import crypto from 'node:crypto';
 import { rm, unlink } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { User } from '@prisma/client';
-import { prisma, runInTransaction } from '../lib/prisma.js';
-import { runAsSystem } from '../lib/requestContext.js';
+import { prisma, runInTransaction } from '../../lib/prisma.js';
+import { runAsSystem } from '../../lib/requestContext.js';
 import {
   AppError,
   BadRequestError,
   ConflictError,
   NotFoundError,
   TooManyRequestsError,
-} from '../lib/errors.js';
-import { env } from '../config/env.js';
-import { logger } from '../lib/logger.js';
-import { verifyPassword } from './auth/password.service.js';
-import { sendEmail } from './notifications/email.service.js';
-import { renderCodeEmail } from './notifications/codeEmail.template.js';
-import { writeAuditLog } from '../lib/audit.js';
+} from '../../lib/errors.js';
+import { env } from '../../config/env.js';
+import { logger } from '../../lib/logger.js';
+import { verifyPassword } from '../auth/password.service.js';
+import { sendEmail } from '../notifications/email.service.js';
+import { renderCodeEmail } from '../notifications/codeEmail.template.js';
+import { writeAuditLog } from '../../lib/audit.js';
 
 export const DELETION_GRACE_DAYS = 30;
 export const DELETE_CONFIRM_TEXT = 'DELETE';

@@ -1,10 +1,10 @@
 /**
  * Daily purge of accounts whose 30-day deletion grace period has ended.
- * See services/accountDeletion.service.ts.
+ * See services/account/accountDeletion.service.ts.
  */
 import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
-import { purgeDueAccounts } from '../services/accountDeletion.service.js';
+import { purgeDueAccounts } from '../services/account/accountDeletion.service.js';
 
 const TZ = 'Asia/Kolkata';
 let running = false;

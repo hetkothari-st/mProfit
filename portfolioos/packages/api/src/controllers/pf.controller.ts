@@ -57,7 +57,7 @@ import {
   revokePairingById,
   revokePairingByBearer,
   PairingError,
-} from '../services/extensionPairing.service.js';
+} from '../services/account/extensionPairing.service.js';
 import { snoozeNudge } from '../services/pfNudges.service.js';
 import { enterUserContext } from '../lib/requestContext.js';
 import type { CanonicalEventType } from '@prisma/client';

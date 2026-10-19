@@ -1,5 +1,5 @@
 import { OPTIONAL_ASSET_SECTION_KEYS, type AssetSectionPref, type UserPreferences } from '@everypaisa/shared';
-import { prisma } from '../lib/prisma.js';
+import { prisma } from '../../lib/prisma.js';
 
 /**
  * Master list of asset class nav keys — must match ASSET_CLASS_ITEMS in

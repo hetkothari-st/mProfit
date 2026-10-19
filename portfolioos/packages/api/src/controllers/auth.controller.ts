@@ -22,7 +22,7 @@ import {
   getDeletionBlockers,
   requestAccountDeletion,
   sendDeletionCode,
-} from '../services/accountDeletion.service.js';
+} from '../services/account/accountDeletion.service.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { writeAuditLog } from '../lib/audit.js';
 import { readPan } from '../services/security/piiAtRest.service.js';
