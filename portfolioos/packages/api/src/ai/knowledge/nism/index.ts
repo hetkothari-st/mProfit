@@ -24,6 +24,9 @@ import { XA_14 } from './xa-14-modern-portfolio-theory.js';
 import { XA_15 } from './xa-15-portfolio-construction.js';
 import { XA_16 } from './xa-16-performance-evaluation.js';
 import { XA_17 } from './xa-17-operations.js';
+import { XA_18 } from './xa-18-key-regulations.js';
+import { XA_19 } from './xa-19-ethics.js';
+import { XA_20 } from './xa-20-grievance-redress.js';
 import { XB_16 } from './xb-16-behavioural-finance-basics.js';
 import { XB_17 } from './xb-17-behavioural-finance-practice.js';
 
@@ -45,6 +48,9 @@ export const NISM_LIBRARY: readonly KnowledgeEntry[] = [
   ...XA_15,
   ...XA_16,
   ...XA_17,
+  ...XA_18,
+  ...XA_19,
+  ...XA_20,
   ...XB_16,
   ...XB_17,
 ];

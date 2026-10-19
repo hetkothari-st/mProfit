@@ -165,6 +165,33 @@ describe('NISM retrieval, chapter by chapter', () => {
   it('X-A 17: MITC', () => {
     expect(ids('MITC most important terms in investment advisory agreement')).toContain('xa-17-advice-documentation-mitc');
   });
+  it('X-A 18: registration exemption', () => {
+    expect(ids('does a CA giving investment advice need SEBI investment adviser registration')).toContain('xa-18-ia-definitions-exemptions');
+  });
+  it('X-A 18: advice vs distribution', () => {
+    expect(ids('can an investment adviser also earn commission as distributor')).toContain('xa-18-ia-fees-segregation');
+  });
+  it('X-A 18: suitability', () => {
+    expect(ids('adviser suitability rules for complex products and risk questionnaire')).toContain('xa-18-risk-profiling-suitability');
+  });
+  it('X-A 18: insider trading', () => {
+    expect(ids('what is insider trading and UPSI')).toContain('xa-18-pfutp-insider-trading');
+  });
+  it('X-A 19: fiduciary', () => {
+    expect(ids('what does fiduciary duty of an adviser mean')).toContain('xa-19-fiduciary-duty');
+  });
+  it('X-A 19: finfluencer warning', () => {
+    expect(ids('should I follow a finfluencer stock tips with assured returns')).toContain('xa-19-sebi-investor-dos-donts');
+  });
+  it('X-A 20: SCORES', () => {
+    expect(ids('how to file a complaint against my broker with SEBI SCORES')).toContain('xa-20-securities-scores-odr');
+  });
+  it('X-A 20: insurance claim rejected', () => {
+    expect(ids('my insurance claim was rejected, where can I complain')).toContain('xa-20-insurance-ombudsman');
+  });
+  it('X-A 20: banking ombudsman', () => {
+    expect(ids('bank not resolving my complaint, RBI ombudsman')).toContain('xa-20-banking-ombudsman');
+  });
   it('X-B 16: prospect theory', () => {
     expect(ids('why do people hold losing stocks and sell winners early, prospect theory')).toContain('xb-16-prospect-theory');
   });
