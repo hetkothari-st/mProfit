@@ -198,6 +198,7 @@ export const aiMfCasParser: Parser = {
         adapterVer: '1',
         transactions,
         warnings,
+        sourceText: text,
       };
 
     } catch (error: any) {

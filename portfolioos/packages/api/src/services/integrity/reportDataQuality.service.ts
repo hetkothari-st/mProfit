@@ -17,6 +17,7 @@
  * user's request context (RLS).
  */
 
+import { Decimal } from 'decimal.js';
 import type { AssetClass, Transaction } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import {
@@ -34,6 +35,8 @@ export type DataQualityCode =
   | 'GAINS_NEED_REVIEW'
   | 'MISSING_PRICE'
   | 'STALE_PRICE'
+  | 'SUSPICIOUS_PRICE'
+  | 'TRADE_PRICE_OFF_MARKET'
   | 'HOLDINGS_OUT_OF_SYNC'
   | 'STATEMENT_MISMATCH'
   | 'IMPORTS_NOT_FINISHED'
@@ -141,6 +144,8 @@ export async function checkReportDataQuality(
           assetKey: true,
           assetClass: true,
           assetName: true,
+          stockId: true,
+          fundId: true,
           quantity: true,
           totalCost: true,
           currentValue: true,
@@ -238,6 +243,30 @@ export async function checkReportDataQuality(
       label: h.assetName ?? h.assetKey,
       detail: h.priceAsOf ? `price from ${day(h.priceAsOf)}` : 'price date unknown',
     })),
+  });
+
+  // 4b. Price feed sanity: the latest price far from the one before it, with
+  //     no split or bonus to explain it — a feed error values the holding
+  //     wrong in every report. 4c. A trade far from that day's market price
+  //     — usually a typo or a misread figure.
+  const priceChecks = await priceSanity(holdings, txs, now);
+  push({
+    code: 'SUSPICIOUS_PRICE',
+    severity: 'warning',
+    scope: 'portfolio',
+    count: priceChecks.suspicious.length,
+    message:
+      'Some holdings are valued at a price that moved sharply from the day before, with no split or bonus to explain it. The price feed may be wrong.',
+    items: priceChecks.suspicious,
+  });
+  push({
+    code: 'TRADE_PRICE_OFF_MARKET',
+    severity: 'warning',
+    scope: 'portfolio',
+    count: priceChecks.offMarket.length,
+    message:
+      "Some trades are at a price far from that day's market price. Check them for a typing or reading mistake.",
+    items: priceChecks.offMarket,
   });
 
   // 5. Stored holdings that no longer follow from the transactions.
@@ -408,6 +437,94 @@ async function oversoldActionsFor(
       onOrBefore: day(r.sellDate)!,
     };
   });
+}
+
+/** A move this large in one step, with no corporate action, is suspect. */
+const STOCK_JUMP = new Decimal('0.40');
+const NAV_JUMP = new Decimal('0.20');
+/** A trade this far from the day's close / NAV is probably mistyped or misread. */
+const OFF_MARKET = new Decimal('0.25');
+const TRADE_TYPES = new Set(['BUY', 'SELL']);
+const CORPORATE_TYPES = new Set(['SPLIT', 'BONUS', 'MERGER_IN', 'MERGER_OUT', 'DEMERGER_IN', 'DEMERGER_OUT']);
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function relDiff(a: Decimal, b: Decimal): Decimal {
+  return b.isZero() ? new Decimal(0) : a.minus(b).abs().dividedBy(b);
+}
+
+async function priceSanity(
+  holdings: Array<{ assetKey: string; assetName: string | null; stockId?: string | null; fundId?: string | null }>,
+  txs: Transaction[],
+  now: Date,
+): Promise<{ suspicious: DataQualityItem[]; offMarket: DataQualityItem[] }> {
+  // Assets with a split/bonus/merger: their price history is adjusted around
+  // it, so a jump there, and any older trade price, are expected to differ.
+  const corporateDates = new Map<string, Date[]>();
+  for (const tx of txs) {
+    if (!CORPORATE_TYPES.has(tx.transactionType)) continue;
+    const id = tx.stockId ?? tx.fundId;
+    if (!id) continue;
+    corporateDates.set(id, [...(corporateDates.get(id) ?? []), tx.tradeDate]);
+  }
+  const nearAction = (id: string, d: Date) =>
+    (corporateDates.get(id) ?? []).some((c) => Math.abs(c.getTime() - d.getTime()) <= 5 * DAY_MS);
+  const actionAfter = (id: string, d: Date) =>
+    (corporateDates.get(id) ?? []).some((c) => c.getTime() >= d.getTime());
+
+  const suspicious: DataQualityItem[] = [];
+  for (const h of holdings) {
+    const rows = h.stockId
+      ? (await prisma.stockPrice.findMany({ where: { stockId: h.stockId }, orderBy: { date: 'desc' }, take: 2, select: { date: true, close: true } })).map((r) => ({ date: r.date, v: new Decimal(r.close.toString()) }))
+      : h.fundId
+        ? (await prisma.mFNav.findMany({ where: { fundId: h.fundId }, orderBy: { date: 'desc' }, take: 2, select: { date: true, nav: true } })).map((r) => ({ date: r.date, v: new Decimal(r.nav.toString()) }))
+        : [];
+    if (rows.length < 2) continue;
+    const [latest, prev] = rows as [{ date: Date; v: Decimal }, { date: Date; v: Decimal }];
+    const id = (h.stockId ?? h.fundId)!;
+    const limit = h.stockId ? STOCK_JUMP : NAV_JUMP;
+    if (relDiff(latest.v, prev.v).greaterThan(limit) && !nearAction(id, latest.date)) {
+      suspicious.push({
+        label: h.assetName ?? h.assetKey,
+        detail: `${prev.v.toString()} on ${day(prev.date)} → ${latest.v.toString()} on ${day(latest.date)}`,
+      });
+    }
+  }
+
+  // Trades in the last year with a known market price that day.
+  const since = new Date(now.getTime() - 365 * DAY_MS);
+  const recent = txs.filter(
+    (t) => TRADE_TYPES.has(t.transactionType) && t.tradeDate >= since && (t.stockId || t.fundId),
+  );
+  const offMarket: DataQualityItem[] = [];
+  if (recent.length > 0) {
+    const stockIds = [...new Set(recent.map((t) => t.stockId).filter((s): s is string => Boolean(s)))];
+    const fundIds = [...new Set(recent.map((t) => t.fundId).filter((s): s is string => Boolean(s)))];
+    const [closes, navs] = await Promise.all([
+      stockIds.length
+        ? prisma.stockPrice.findMany({ where: { stockId: { in: stockIds }, date: { gte: since } }, select: { stockId: true, date: true, close: true } })
+        : Promise.resolve([]),
+      fundIds.length
+        ? prisma.mFNav.findMany({ where: { fundId: { in: fundIds }, date: { gte: since } }, select: { fundId: true, date: true, nav: true } })
+        : Promise.resolve([]),
+    ]);
+    const market = new Map<string, Decimal>();
+    for (const c of closes) market.set(`${c.stockId}|${day(c.date)}`, new Decimal(c.close.toString()));
+    for (const n of navs) market.set(`${n.fundId}|${day(n.date)}`, new Decimal(n.nav.toString()));
+    for (const t of recent) {
+      const id = (t.stockId ?? t.fundId)!;
+      if (actionAfter(id, t.tradeDate)) continue; // history adjusted since
+      const m = market.get(`${id}|${day(t.tradeDate)}`);
+      const p = new Decimal(t.price.toString());
+      if (!m || p.isZero()) continue;
+      if (relDiff(p, m).greaterThan(OFF_MARKET)) {
+        offMarket.push({
+          label: t.assetName ?? id,
+          detail: `${t.transactionType.toLowerCase()} on ${day(t.tradeDate)} at ${p.toString()}; market price that day ${m.toString()}`,
+        });
+      }
+    }
+  }
+  return { suspicious, offMarket };
 }
 
 /** Combine per-member checks for a household download into one verdict. */

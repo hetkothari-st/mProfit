@@ -33,6 +33,7 @@
 
 import type { gmail_v1 } from 'googleapis';
 import { Prisma } from '@prisma/client';
+import { indexSource, verifyFigures, type SourceIndex } from '../verify/sourceVerification.js';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import {
@@ -115,6 +116,7 @@ function canonicalRowFromParsed(
     autoCommitEnabled: boolean;
   },
   ev: ParsedEvent,
+  problems: string[] = [],
 ): Prisma.CanonicalEventCreateInput {
   // F&O event metadata is forwarded via the JSON `metadata` column so the
   // projection step (ingestion/projection.ts projectFnoTrade) can rebuild
@@ -151,15 +153,40 @@ function canonicalRowFromParsed(
     accountLast4: ev.account_last4,
     currency: ev.currency,
     confidence: ev.confidence,
-    parserNotes: ev.notes,
-    metadata: fnoMetadata as Prisma.InputJsonValue | undefined,
+    parserNotes: problems.length
+      ? [ev.notes, `Held for review — ${problems.join('; ')}.`].filter(Boolean).join(' ')
+      : ev.notes,
+    metadata: (problems.length
+      ? { ...(fnoMetadata ?? {}), verificationProblems: problems }
+      : fnoMetadata) as Prisma.InputJsonValue | undefined,
     // Auto-commit means "trust future events from this sender". A
     // confirmed auto-commit sender skips the review step and lands
     // directly in PARSED; otherwise the event waits for manual
     // approval in the Review UI. (§12 decision — 5-event threshold
     // handled upstream before the flag flips.)
-    status: base.autoCommitEnabled ? 'PARSED' : 'PENDING_REVIEW',
+    //
+    // A figure that does not appear in the email (sourceVerification) is
+    // never auto-committed, however trusted the sender: the model read
+    // something that is not there.
+    status: base.autoCommitEnabled && problems.length === 0 ? 'PARSED' : 'PENDING_REVIEW',
   };
+}
+
+const TRADE_EVENT_TYPES = new Set(['BUY', 'SELL', 'SIP_INSTALLMENT', 'FNO_TRADE']);
+
+/** Problems with one parsed event against the email it came from. */
+function verifyParsedEvent(ev: ParsedEvent, source: SourceIndex): string[] {
+  return verifyFigures(
+    {
+      amount: ev.amount ?? null,
+      quantity: ev.quantity ?? null,
+      price: ev.price ?? null,
+      isin: ev.instrument_isin ?? null,
+      date: ev.event_date,
+      isTrade: TRADE_EVENT_TYPES.has(ev.event_type),
+    },
+    source,
+  );
 }
 
 async function writeIngestionFailure(opts: {
@@ -261,6 +288,7 @@ export async function processEmail(
         metadata: {
           template: { id: promoted.templateId, version: promoted.version },
         },
+        sourceText: body,
       });
       await maybeAutoProject(persisted, input);
       return persisted;
@@ -309,6 +337,7 @@ export async function processEmail(
     events: llm.events,
     sourceAdapter: GMAIL_LLM_ADAPTER_ID,
     sourceAdapterVer: GMAIL_LLM_ADAPTER_VER,
+    sourceText: body,
   });
 
   // 6b. Phase B auto-project: when sender is trusted (autoCommitEnabled),
@@ -348,8 +377,11 @@ async function persistEvents(opts: {
   sourceAdapter: string;
   sourceAdapterVer: string;
   metadata?: Prisma.InputJsonValue;
+  /** The email text the events were read from; every figure is checked against it. */
+  sourceText: string;
 }): Promise<ProcessEmailOutcome> {
   const { input, sourceHash, events, sourceAdapter, sourceAdapterVer, metadata } = opts;
+  const source = indexSource(opts.sourceText);
   const eventIds: string[] = [];
   for (let i = 0; i < events.length; i++) {
     const ev = events[i]!;
@@ -375,8 +407,11 @@ async function persistEvents(opts: {
           autoCommitEnabled: input.autoCommitEnabled,
         },
         ev,
+        verifyParsedEvent(ev, source),
       );
-      if (metadata !== undefined) data.metadata = metadata;
+      if (metadata !== undefined) {
+        data.metadata = { ...(data.metadata as Record<string, unknown> | undefined), ...(metadata as Record<string, unknown>) } as Prisma.InputJsonValue;
+      }
       const row = await prisma.canonicalEvent.create({
         data,
         select: { id: true },
@@ -505,8 +540,10 @@ async function maybeAutoProject(
       // particular extraction is right".
       const event = await prisma.canonicalEvent.findUnique({
         where: { id },
-        select: { confidence: true },
+        select: { confidence: true, status: true },
       });
+      // PENDING_REVIEW here means verification held it back: leave it there.
+      if (event?.status !== 'PARSED') continue;
       // Compared as a Decimal: confidence is a Decimal(3,2) column, and the
       // project bans Number() coercion of Decimal values (§3.2).
       const confidence = event?.confidence ?? new Prisma.Decimal(0);
@@ -515,7 +552,10 @@ async function maybeAutoProject(
           { userId: input.userId, eventId: id, confidence: confidence.toString() },
           'gmail.pipeline.auto_commit_withheld_low_confidence',
         );
-        continue; // stays PENDING_REVIEW
+        // It was written as PARSED (trusted sender), which is not the review
+        // queue — move it there, or it waits in neither place.
+        await prisma.canonicalEvent.update({ where: { id }, data: { status: 'PENDING_REVIEW' } });
+        continue;
       }
 
       await prisma.canonicalEvent.update({

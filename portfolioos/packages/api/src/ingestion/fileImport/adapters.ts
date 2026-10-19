@@ -28,6 +28,7 @@ import type {
   TransactionEventMetadata,
 } from './types.js';
 import type { CanonicalEventType } from '../types.js';
+import { indexSource, verifyFigures } from '../verify/sourceVerification.js';
 
 /**
  * Map a legacy ParsedTransaction (output of a Parser) into a TransactionEvent.
@@ -160,9 +161,25 @@ function makeAdapter(
         });
         const adapterId = result.adapter ?? fallbackId;
         const adapterVer = result.adapterVer ?? fallbackVer;
-        const events = result.transactions.map((pt) =>
-          toTransactionEvent(pt, adapterId, adapterVer, input.filePath),
-        );
+        const source = result.sourceText ? indexSource(result.sourceText) : null;
+        const events = result.transactions.map((pt) => {
+          const event = toTransactionEvent(pt, adapterId, adapterVer, input.filePath);
+          // Model-read rows only: a figure that is not in the document is
+          // held back from import (import.service turns it into a failed row).
+          if (source) {
+            const problems = verifyFigures(
+              {
+                quantity: pt.quantity,
+                price: pt.price,
+                isin: pt.isin ?? null,
+                date: pt.tradeDate,
+              },
+              source,
+            );
+            if (problems.length) event.metadata.verificationProblems = problems;
+          }
+          return event;
+        });
         return {
           ok: true,
           events,

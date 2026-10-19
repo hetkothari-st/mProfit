@@ -348,6 +348,23 @@ async function processImportJobFromDisk(
     : null;
 
   for (const [i, event] of events.entries()) {
+    // A model-read row whose figures are not in the document is not imported:
+    // it becomes a failed row with the reason, for a person to check.
+    const unverified = event.metadata.verificationProblems;
+    if (unverified?.length) {
+      failed++;
+      const reason = `Not imported — figures not found in the document: ${unverified.join('; ')}`;
+      errors.push({ row: i + 1, reason });
+      await writeIngestionFailure({
+        userId: job.userId,
+        sourceAdapter: adapterId,
+        adapterVersion: adapterVer,
+        sourceRef: `${job.filePath}#row-${i + 1}`,
+        error: reason,
+        rawPayload: { rowIndex: i + 1, event },
+      });
+      continue;
+    }
     try {
       if (allowedClasses) {
         const cls = projectTransactionEvent(event, portfolioId).assetClass;
