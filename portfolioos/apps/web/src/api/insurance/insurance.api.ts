@@ -304,6 +304,22 @@ export const insuranceApi = {
     });
     return unwrap(data);
   },
+  /** Which Gmail accounts may be searched for insurance documents. */
+  async gmailFetchStatus(): Promise<InsuranceGmailFetchStatus> {
+    const { data } = await api.get<ApiResponse<InsuranceGmailFetchStatus>>('/api/insurance/gmail-fetch');
+    return unwrap(data);
+  },
+  /** Give or withdraw permission for one Gmail account. Turning it on starts a scan. */
+  async setGmailFetch(mailboxId: string, enabled: boolean): Promise<{ enabled: boolean }> {
+    const { data } = await api.put<ApiResponse<{ enabled: boolean }>>(
+      `/api/insurance/gmail-fetch/${mailboxId}`,
+      { enabled },
+    );
+    return unwrap(data);
+  },
+  async scanGmailNow(mailboxId: string): Promise<void> {
+    await api.post(`/api/insurance/gmail-fetch/${mailboxId}/scan`);
+  },
   async triggerRenewalAlerts(): Promise<{ created: number }> {
     const { data } = await api.post<ApiResponse<{ created: number }>>(
       '/api/insurance/alerts/trigger',
@@ -311,3 +327,20 @@ export const insuranceApi = {
     return unwrap(data);
   },
 };
+
+export interface InsuranceGmailFetchStatus {
+  mailboxes: Array<{
+    mailboxId: string;
+    googleEmail: string | null;
+    enabled: boolean;
+    consentAt: string | null;
+    lastScan: {
+      status: string;
+      startedAt: string | null;
+      completedAt: string | null;
+      attachmentsFound: number;
+      errorMessage: string | null;
+    } | null;
+  }>;
+  documentsFound: number;
+}

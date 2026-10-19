@@ -8,6 +8,8 @@ export interface CreateScanJobInput {
   mailboxId: string;
   lookbackFrom: Date;
   lookbackTo: Date;
+  /** FULL (default) or INSURANCE — see buildInsuranceScanQuery. */
+  kind?: 'FULL' | 'INSURANCE';
 }
 
 export async function createScanJob(input: CreateScanJobInput) {
@@ -25,6 +27,7 @@ export async function createScanJob(input: CreateScanJobInput) {
       mailboxId: input.mailboxId,
       lookbackFrom: input.lookbackFrom,
       lookbackTo: input.lookbackTo,
+      kind: input.kind ?? 'FULL',
       status: 'PENDING',
     },
   });

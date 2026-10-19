@@ -66,7 +66,9 @@ export type AuditAction =
   | 'mcp_revoked'
   | 'mcp_token_refreshed'
   | 'mcp_refresh_reuse'
-  | 'mcp_tool_called';
+  | 'mcp_tool_called'
+  | 'insurance_gmail_fetch_enabled'
+  | 'insurance_gmail_fetch_disabled';
 
 export interface AuditInput {
   userId?: string | null;
