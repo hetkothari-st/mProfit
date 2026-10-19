@@ -4,7 +4,7 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { PolicyNumberReveal } from './PolicyNumberReveal';
 
 const api = vi.hoisted(() => ({ revealPolicyNumber: vi.fn() }));
-vi.mock('@/api/insurance.api', () => ({ insuranceApi: api }));
+vi.mock('@/api/insurance/insurance.api', () => ({ insuranceApi: api }));
 
 afterEach(() => {
   cleanup();

@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { realEstateApi } from '@/api/realEstate.api';
+import { realEstateApi } from '@/api/realEstate/realEstate.api';
 import { apiErrorMessage } from '@/api/client';
 
 interface Props {

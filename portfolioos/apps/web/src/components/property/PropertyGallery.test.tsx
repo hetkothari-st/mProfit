@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { PropertyPhotoDTO } from '@/api/propertyMedia.api';
+import type { PropertyPhotoDTO } from '@/api/realEstate/propertyMedia.api';
 import { PropertyGallery } from './PropertyGallery';
 
 const api = vi.hoisted(() => ({
@@ -12,7 +12,7 @@ const api = vi.hoisted(() => ({
   makeCover: vi.fn(),
   remove: vi.fn(),
 }));
-vi.mock('@/api/propertyMedia.api', () => ({ propertyPhotosApi: api }));
+vi.mock('@/api/realEstate/propertyMedia.api', () => ({ propertyPhotosApi: api }));
 
 const prepareImage = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/imageResize', () => ({ prepareImage }));

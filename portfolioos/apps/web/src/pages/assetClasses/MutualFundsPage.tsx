@@ -16,7 +16,7 @@ import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { transactionsApi } from '@/api/transactions.api';
 import { apiErrorMessage } from '@/api/client';
-import { importsApi } from '@/api/imports.api';
+import { importsApi } from '@/api/imports/imports.api';
 import { useScan } from '@/context/ScanContext';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
 import { ImportDropzone } from '@/pages/imports/ImportDropzone';

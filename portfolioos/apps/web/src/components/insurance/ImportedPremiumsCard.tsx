@@ -11,7 +11,7 @@ import { formatINR } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
-import { insuranceApi, type ImportSuggestionDTO } from '@/api/insurance.api';
+import { insuranceApi, type ImportSuggestionDTO } from '@/api/insurance/insurance.api';
 import { formatDay, plural } from '@/lib/insurance';
 
 const MATCHED_BY: Record<ImportSuggestionDTO['matchedBy'], string> = {

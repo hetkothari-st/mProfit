@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, Building2, Loader2, MapPin, X } from 'lucide-react';
-import { propertyLocationApi, type PhotoCover, type PropertyOwnerType } from '@/api/propertyMedia.api';
+import { propertyLocationApi, type PhotoCover, type PropertyOwnerType } from '@/api/realEstate/propertyMedia.api';
 import { PropertyMap, type MapPin as Pin } from './PropertyMap';
 import { PropertyCover } from './PropertyCover';
 

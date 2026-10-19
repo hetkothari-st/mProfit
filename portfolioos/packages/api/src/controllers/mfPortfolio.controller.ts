@@ -108,7 +108,7 @@ export async function getPortfolioAnalysis(req: Request, res: Response) {
  * edits. Until then the mitigation is deliberate and stated in both places: the
  * client does not re-declare this interface as a bare TypeScript type it can
  * quietly drift from, it declares a **Zod schema** and infers its type from it
- * (`apps/web/src/api/mfMethodology.api.ts`), so a server change that this file
+ * (`apps/web/src/api/mf/mfMethodology.api.ts`), so a server change that this file
  * does not carry becomes a visible parse failure on the page instead of a
  * silent row of blank cells. That is weaker than a compile error and stronger
  * than nothing, which is the honest description of the situation.

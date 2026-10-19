@@ -17,7 +17,7 @@ import { Money } from '@/components/ui/money';
 import { cn } from '@/lib/cn';
 import { useThemeStore } from '@/stores/theme.store';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { memberLabel, type FamilyProtection } from '@/api/familyDashboard.api';
+import { memberLabel, type FamilyProtection } from '@/api/family/familyDashboard.api';
 import { PartialDataNotice } from './RestrictedNotice';
 import { isPositiveMoney, moneyToNumber, pluralMembers } from './money';
 

@@ -4,11 +4,11 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { claimProgress } from '@everypaisa/shared';
-import type { InsuranceClaimDTO } from '@/api/insurance.api';
+import type { InsuranceClaimDTO } from '@/api/insurance/insurance.api';
 import { ClaimTracker } from './ClaimTracker';
 
 const api = vi.hoisted(() => ({ updateClaim: vi.fn(), removeClaim: vi.fn() }));
-vi.mock('@/api/insurance.api', () => ({ insuranceApi: api }));
+vi.mock('@/api/insurance/insurance.api', () => ({ insuranceApi: api }));
 
 afterEach(() => {
   cleanup();

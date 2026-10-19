@@ -5,7 +5,7 @@
  * which then silently stop mocking.
  *
  *   pnpm --filter @everypaisa/api exec tsx scripts/moveFiles.ts --root . --map moves.json --scan src,test,scripts
- *   (web) ... --root ../../apps/web --scan src --alias @/=src/
+ *   (web) ... --root ../../apps/web --scan src --alias @/=src/   (Git Bash on Windows: prefix with MSYS_NO_PATHCONV=1)
  *   (gate) ... --root . --scan src,test,scripts --check   -> lists relative imports that point at nothing
  *
  * moves.json: [{ "from": "src/services/foPnl.service.ts", "to": "src/services/fo/foPnl.service.ts" }, ...]
@@ -197,6 +197,8 @@ function main(argv: string[]): void {
     if (a !== '--alias') return;
     const [from, to] = (argv[i + 1] ?? '').split('=');
     if (!from || !to) throw new Error('--alias expects <prefix>=<dir>, e.g. @/=src/');
+    // Git Bash rewrites "@/" into "@C:/Program Files/Git/" before we see it, which silently disables the alias.
+    if (from.includes(':')) throw new Error(`--alias prefix "${from}" was path-converted by the shell; rerun with MSYS_NO_PATHCONV=1`);
     aliases[from] = '/' + to.replace(/^\//, '');
   });
 

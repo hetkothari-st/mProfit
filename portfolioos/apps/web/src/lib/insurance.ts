@@ -4,7 +4,7 @@
  * premium the same way.
  */
 import { addMonthsIso, canHaveCriticalIllness, formatINR, PREMIUM_FREQUENCY_MONTHS, formatDateIST } from '@everypaisa/shared';
-import type { InsurancePolicyDTO } from '@/api/insurance.api';
+import type { InsurancePolicyDTO } from '@/api/insurance/insurance.api';
 
 export const POLICY_TYPE_LABELS: Record<string, string> = {
   TERM: 'Term life',

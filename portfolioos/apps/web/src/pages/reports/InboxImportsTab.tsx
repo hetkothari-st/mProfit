@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
-import { gmailScanApi } from '@/api/gmailScan.api';
+import { gmailScanApi } from '@/api/gmail/gmailScan.api';
 import { apiErrorMessage } from '@/api/client';
 import { InboxImportRow } from '@/components/upload/InboxImportRow';
 import { InboxImportPreviewSheet } from '@/components/upload/InboxImportPreviewSheet';

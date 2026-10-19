@@ -11,7 +11,7 @@ import { formatINR } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { insuranceApi, type InsurancePolicyDTO } from '@/api/insurance.api';
+import { insuranceApi, type InsurancePolicyDTO } from '@/api/insurance/insurance.api';
 import { insurerContactFor } from '@/lib/insurerContacts';
 import {
   FREQUENCY_LABELS,

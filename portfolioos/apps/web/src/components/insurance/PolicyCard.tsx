@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, Pencil, Trash2 } from 'lucide-react';
 import { formatINR } from '@everypaisa/shared';
 import { Figure, Guilloche, ReceiptShell } from '@/components/receipt/Receipt';
-import type { InsurancePolicyDTO } from '@/api/insurance.api';
+import type { InsurancePolicyDTO } from '@/api/insurance/insurance.api';
 import {
   FREQUENCY_LABELS,
   POLICY_STATUS_LABELS,

@@ -23,8 +23,8 @@ import {
   type LedgerRowDTO,
   type LedgerEntryType,
   type CreateLedgerEntryInput,
-} from '@/api/rental.api';
-import { invalidateRentalCaches } from '@/api/rentalCache';
+} from '@/api/rental/rental.api';
+import { invalidateRentalCaches } from '@/api/rental/rentalCache';
 import { RentAccountPicker } from '@/components/rental/RentAccountPicker';
 
 // ── Entry direction ──────────────────────────────────────────────────

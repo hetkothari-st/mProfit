@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { EmptyState } from '@/components/common/EmptyState';
 import { mailboxesApi, type MailboxCreateInput } from '@/api/mailboxes.api';
-import { gmailApi } from '@/api/gmail.api';
+import { gmailApi } from '@/api/gmail/gmail.api';
 import { apiErrorMessage } from '@/api/client';
 
 import { formatDateTimeIST } from '@everypaisa/shared';

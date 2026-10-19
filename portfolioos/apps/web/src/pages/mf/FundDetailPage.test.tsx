@@ -30,7 +30,7 @@ import { FundDetailPage } from './FundDetailPage';
  * assert on.
  */
 
-vi.mock('@/api/mfAnalytics.api', () => ({
+vi.mock('@/api/mf/mfAnalytics.api', () => ({
   mfAnalyticsApi: {
     analytics: vi.fn(),
     meta: vi.fn(),
@@ -52,7 +52,7 @@ vi.mock('@/api/mfAnalytics.api', () => ({
 }));
 
 // Imported after the mock factory so we get the mocked module object.
-const { mfAnalyticsApi } = await import('@/api/mfAnalytics.api');
+const { mfAnalyticsApi } = await import('@/api/mf/mfAnalytics.api');
 const analyticsMock = vi.mocked(mfAnalyticsApi.analytics);
 const latestRunMock = vi.mocked(mfAnalyticsApi.latestRun);
 const fundFindingsMock = vi.mocked(mfAnalyticsApi.fundFindings);

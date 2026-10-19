@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 import { apiErrorMessage } from '@/api/client';
-import { insuranceApi, type AddPremiumInput, type InsurancePolicyDTO } from '@/api/insurance.api';
+import { insuranceApi, type AddPremiumInput, type InsurancePolicyDTO } from '@/api/insurance/insurance.api';
 import { ComingUpPanel } from '@/components/insurance/ComingUpPanel';
 import { OpenClaimsPanel } from '@/components/insurance/OpenClaimsPanel';
 import { TaxSummaryCard } from '@/components/insurance/TaxSummaryCard';

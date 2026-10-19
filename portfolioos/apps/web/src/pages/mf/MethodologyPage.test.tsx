@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { AuthUser } from '@everypaisa/shared';
 import { MF_ANALYTICS_DISCLAIMER } from '@everypaisa/shared';
 import { useAuthStore } from '@/stores/auth.store';
-import type { MfMethodologyPayload } from '@/api/mfMethodology.api';
+import type { MfMethodologyPayload } from '@/api/mf/mfMethodology.api';
 import { MethodologyPage } from './MethodologyPage';
 
 /**
@@ -31,11 +31,11 @@ import { MethodologyPage } from './MethodologyPage';
  * stopped using 30.
  */
 
-vi.mock('@/api/mfMethodology.api', () => ({
+vi.mock('@/api/mf/mfMethodology.api', () => ({
   mfMethodologyApi: { get: vi.fn() },
 }));
 
-const { mfMethodologyApi } = await import('@/api/mfMethodology.api');
+const { mfMethodologyApi } = await import('@/api/mf/mfMethodology.api');
 const getMock = vi.mocked(mfMethodologyApi.get);
 
 function user(): AuthUser {

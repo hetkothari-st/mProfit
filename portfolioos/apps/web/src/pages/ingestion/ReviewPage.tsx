@@ -25,8 +25,8 @@ import {
   canonicalEventsApi,
   type CanonicalEventDTO,
   type CanonicalEventStatus,
-} from '@/api/canonicalEvents.api';
-import { monitoredSendersApi } from '@/api/monitoredSenders.api';
+} from '@/api/imports/canonicalEvents.api';
+import { monitoredSendersApi } from '@/api/gmail/monitoredSenders.api';
 import { apiErrorMessage } from '@/api/client';
 
 import { formatDateOnly } from '@everypaisa/shared';

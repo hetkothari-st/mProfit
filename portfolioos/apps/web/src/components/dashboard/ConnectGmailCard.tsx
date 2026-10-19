@@ -1,7 +1,7 @@
 import { Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
-import { gmailApi } from '@/api/gmail.api';
+import { gmailApi } from '@/api/gmail/gmail.api';
 import { apiErrorMessage } from '@/api/client';
 
 export function ConnectGmailCard() {

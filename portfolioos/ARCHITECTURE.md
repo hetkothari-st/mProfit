@@ -81,7 +81,7 @@ Background work runs as Bull jobs: `packages/api/src/jobs/*`, queued through `li
 |---|---|
 | `pages/<feature>/` | One folder per screen area. These are the route targets in `App.tsx`. |
 | `components/` | Reusable UI. `ui/` holds shadcn primitives, `layout/` holds the app shell and sidebar, and the other folders are feature-specific widgets. |
-| `api/` | Typed HTTP clients, one per backend area (`<feature>.api.ts`). |
+| `api/` | Typed HTTP clients, one per backend area (`<feature>.api.ts`). Areas with several clients get a folder (`api/mf/`, `api/loans/`, `api/family/`, …); `client.ts` (the shared axios instance) stays at the root. |
 | `stores/` | Zustand stores: auth, theme, privacy, family scope, acting-as. |
 | `hooks/`, `lib/`, `context/` | Shared hooks, pure helpers (each with a colocated `.test.ts`), and React context. |
 | `styles/`, `data/` | Global CSS and static data. |
@@ -105,6 +105,8 @@ paths that `tsc` doesn't check:
 pnpm --filter @everypaisa/api exec tsx scripts/moveFiles.ts --root . --map moves.json --scan src,test,scripts
 pnpm --filter @everypaisa/api exec tsx scripts/moveFiles.ts --root . --scan src,test,scripts --check   # 0 = good
 node scripts/feature-index.mjs --write      # from portfolioos/, refreshes the table below
+# web app (alias imports): --root ../../apps/web --scan src --alias @/=src/
+# On Windows Git Bash prefix the command with MSYS_NO_PATHCONV=1, or the shell mangles "@/" (the tool refuses it).
 ```
 
 Also grep for the old path in non-TS files (the Dockerfile, `package.json` scripts, `__dirname` joins, docs).
@@ -129,8 +131,8 @@ folder (for example `mf*` routes map to `pages/mf/` and `pages/mutualFunds/`).
 | bankAccounts | `bankAccounts.routes.ts` | `bankAccounts.controller.ts` | `services/banking/` | — | `bankAccounts/` | `bankAccounts.api.ts` |
 | billing | `billing.routes.ts` | — | `services/auth/`, `services/billing/` | — | — | `billing.api.ts` |
 | ca | `ca.routes.ts` | `ca.controller.ts`, `caAccounting.controller.ts` | `services/accounting/`, `services/ca/`, `services/holdings/`, `services/imports/`, `services/tax/` | `importWorker.ts`, `mailboxPoller.ts`, `pfFetchWorker.ts` | `ca/`, `cas/` | `ca.api.ts` |
-| canonicalEvents | `canonicalEvents.routes.ts` | `canonicalEvents.controller.ts` | `services/imports/` | — | — | `canonicalEvents.api.ts` |
-| cas | `cas.routes.ts` | `cas.controller.ts` | — | — | `ca/`, `cas/` | `cas.api.ts` |
+| canonicalEvents | `canonicalEvents.routes.ts` | `canonicalEvents.controller.ts` | `services/imports/` | — | — | `imports/canonicalEvents.api.ts` |
+| cas | `cas.routes.ts` | `cas.controller.ts` | — | — | `ca/`, `cas/` | `imports/cas.api.ts` |
 | cashflows | `cashflows.routes.ts` | `cashflows.controller.ts` | `services/analytics/` | — | `cashflows/` | `cashflows.api.ts` |
 | connect | `connect.routes.ts` | — | `services/mcp/` | `mcpCleanupJob.ts` | `connect/` | `connect.api.ts` |
 | connectors | `connectors.routes.ts` | `connectors.controller.ts` | `ingestion/zerodha/` | — | `connectors/` | `connectors.api.ts` |
@@ -139,42 +141,42 @@ folder (for example `mf*` routes map to `pages/mf/` and `pages/mutualFunds/`).
 | dashboard | `dashboard.routes.ts` | — | `services/analytics/` | `netWorthSnapshotJob.ts` | `dashboard/` | `dashboard.api.ts` |
 | documentSorter | `documentSorter.routes.ts` | `documentSorter.controller.ts` | `services/documents/` | `docSortWorker.ts` | `documentSorter/` | `documentSorter.api.ts` |
 | documents | `documents.routes.ts` | `document.controller.ts` | `services/documents/`, `services/reports/` | — | — | `documents.api.ts` |
-| emi | `emi.routes.ts` | `emi.controller.ts` | `services/loans/` | — | `emi/` | `emi.api.ts` |
-| families | `families.routes.ts` | `familyDashboard.controller.ts` | `services/family/` | — | — | `families.api.ts` |
+| emi | `emi.routes.ts` | `emi.controller.ts` | `services/loans/` | — | `emi/` | `loans/emi.api.ts` |
+| families | `families.routes.ts` | `familyDashboard.controller.ts` | `services/family/` | — | — | `family/families.api.ts` |
 | finfactor | `finfactor.routes.ts` | `finfactor.controller.ts` | `ingestion/finfactor/` | — | — | `finfactor.api.ts` |
 | fo | `fo.routes.ts` | `fo.controller.ts`, `brokerOauth.controller.ts` | `ingestion/fno/`, `priceFeeds/nseOptionChain.service.ts`, `services/fo/`, `services/reports/` | `priceJobs.ts` | — | `fo.api.ts` |
 | forex | `forex.routes.ts` | `forex.controller.ts` | `priceFeeds/fx.service.ts`, `services/forex/` | `priceJobs.ts`, `startupSync.ts` | `forex/` | `forex.api.ts` |
-| gmail | `gmail.routes.ts` | `gmail.controller.ts` | `ingestion/gmail/` | `mailboxPoller.ts` | — | `gmail.api.ts` |
-| gmailScan | `gmailScan.routes.ts` | `gmailScan.controller.ts` | `services/gmail/` | `gmailScanWorker.ts` | — | `gmailScan.api.ts` |
+| gmail | `gmail.routes.ts` | `gmail.controller.ts` | `ingestion/gmail/` | `mailboxPoller.ts` | — | `gmail/gmail.api.ts` |
+| gmailScan | `gmailScan.routes.ts` | `gmailScan.controller.ts` | `services/gmail/` | `gmailScanWorker.ts` | — | `gmail/gmailScan.api.ts` |
 | goals | `goals.routes.ts` | `goals.controller.ts` | `services/goals/` | — | `goals/` | `goals.api.ts` |
-| imports | `imports.routes.ts` | `imports.controller.ts` | `services/imports/`, `services/security/` | `benchmarkPriceJob.ts`, `importWorker.ts`, `loanRatesJob.ts`, `mailboxPoller.ts`, `mfFactsheetJob.ts`, `mfMetadataJob.ts`, `mfMetricsJob.ts`, `mfNavAdjustmentJob.ts`, `mfNavHistoryBackfillJob.ts`, `mfPeerRankJob.ts`, `mfReconciliationJob.ts`, `mfScoreJob.ts`, `pfFetchWorker.ts`, `piiAtRestJobs.ts`, `riskFreeRateJob.ts` | `imports/` | `imports.api.ts` |
+| imports | `imports.routes.ts` | `imports.controller.ts` | `services/imports/`, `services/security/` | `benchmarkPriceJob.ts`, `importWorker.ts`, `loanRatesJob.ts`, `mailboxPoller.ts`, `mfFactsheetJob.ts`, `mfMetadataJob.ts`, `mfMetricsJob.ts`, `mfNavAdjustmentJob.ts`, `mfNavHistoryBackfillJob.ts`, `mfPeerRankJob.ts`, `mfReconciliationJob.ts`, `mfScoreJob.ts`, `pfFetchWorker.ts`, `piiAtRestJobs.ts`, `riskFreeRateJob.ts` | `imports/` | `imports/imports.api.ts` |
 | income | `income.routes.ts` | `income.controller.ts` | `services/income/` | — | `income/` | `income.api.ts` |
-| ingestion | `ingestion.routes.ts` | `ingestion.controller.ts` | `ingestion/llm/` | `mfProseJob.ts` | `ingestion/` | `ingestion.api.ts` |
-| ingestionFailures | `ingestionFailures.routes.ts` | `ingestionFailures.controller.ts` | `services/imports/` | `benchmarkPriceJob.ts`, `loanRatesJob.ts`, `mfFactsheetJob.ts`, `mfMetadataJob.ts`, `mfMetricsJob.ts`, `mfNavAdjustmentJob.ts`, `mfNavHistoryBackfillJob.ts`, `mfPeerRankJob.ts`, `mfReconciliationJob.ts`, `mfScoreJob.ts`, `pfFetchWorker.ts`, `riskFreeRateJob.ts` | — | `ingestionFailures.api.ts` |
-| insurance | `insurance.routes.ts` | `insurance.controller.ts`, `insuranceCoverage.controller.ts` | `services/insurance/` | `insuranceJobs.ts` | `insurance/` | `insurance.api.ts` |
+| ingestion | `ingestion.routes.ts` | `ingestion.controller.ts` | `ingestion/llm/` | `mfProseJob.ts` | `ingestion/` | `imports/ingestion.api.ts` |
+| ingestionFailures | `ingestionFailures.routes.ts` | `ingestionFailures.controller.ts` | `services/imports/` | `benchmarkPriceJob.ts`, `loanRatesJob.ts`, `mfFactsheetJob.ts`, `mfMetadataJob.ts`, `mfMetricsJob.ts`, `mfNavAdjustmentJob.ts`, `mfNavHistoryBackfillJob.ts`, `mfPeerRankJob.ts`, `mfReconciliationJob.ts`, `mfScoreJob.ts`, `pfFetchWorker.ts`, `riskFreeRateJob.ts` | — | `imports/ingestionFailures.api.ts` |
+| insurance | `insurance.routes.ts` | `insurance.controller.ts`, `insuranceCoverage.controller.ts` | `services/insurance/` | `insuranceJobs.ts` | `insurance/` | `insurance/insurance.api.ts` |
 | intelligence | `intelligence.routes.ts` | `intelligence.controller.ts` | `services/analytics/` | — | `intelligence/` | `intelligence.api.ts` |
-| legacy | `legacy.routes.ts` | `legacy.controller.ts` | `services/legacy/`, `services/notifications/` | — | `legacy/` | `legacy.api.ts` |
-| loanRates | `loanRates.routes.ts` | `loanRates.controller.ts` | `services/loans/` | — | — | `loanRates.api.ts` |
-| loans | `loans.routes.ts` | `loans.controller.ts` | `services/loans/` | `loanChecksJob.ts` | `loans/` | `loans.api.ts` |
-| loansGiven | `loansGiven.routes.ts` | `loansGiven.controller.ts` | `services/loans/` | — | — | `loansGiven.api.ts` |
+| legacy | `legacy.routes.ts` | `legacy.controller.ts` | `services/legacy/`, `services/notifications/` | — | `legacy/` | `legacy/legacy.api.ts` |
+| loanRates | `loanRates.routes.ts` | `loanRates.controller.ts` | `services/loans/` | — | — | `loans/loanRates.api.ts` |
+| loans | `loans.routes.ts` | `loans.controller.ts` | `services/loans/` | `loanChecksJob.ts` | `loans/` | `loans/loans.api.ts` |
+| loansGiven | `loansGiven.routes.ts` | `loansGiven.controller.ts` | `services/loans/` | — | — | `loans/loansGiven.api.ts` |
 | mailboxes | `mailboxes.routes.ts` | `mailboxes.controller.ts` | `ingestion/gmail/` | `mailboxPoller.ts` | `mailboxes/` | `mailboxes.api.ts` |
-| managedProfiles | `managedProfiles.routes.ts` | — | `services/family/` | — | — | `managedProfiles.api.ts` |
+| managedProfiles | `managedProfiles.routes.ts` | — | `services/family/` | — | — | `family/managedProfiles.api.ts` |
 | mcp | `mcp.routes.ts` | — | `services/mcp/` | `mcpCleanupJob.ts` | — | — |
 | mcpOAuth | `mcpOAuth.routes.ts` | — | `services/mcp/` | `mcpCleanupJob.ts` | — | — |
-| mfAnalytics | `mfAnalytics.routes.ts` | `mfAnalytics.controller.ts`, `mfFindings.controller.ts` | `services/mf/` | `mfMetricsJob.ts`, `mfPeerRankJob.ts`, `mfScoreJob.ts` | — | `mfAnalytics.api.ts` |
-| mfCasMailback | `mfCasMailback.routes.ts` | `mfCasMailback.controller.ts` | `services/mf/` | — | — | `mfCasMailback.api.ts` |
-| mfCasparser | `mfCasparser.routes.ts` | `mfCasparser.controller.ts` | `ingestion/casparser/`, `services/mf/` | — | — | `mfCasparser.api.ts` |
-| mfCentral | `mfCentral.routes.ts` | `mfCentral.controller.ts` | `services/mf/` | — | — | `mfCentral.api.ts` |
+| mfAnalytics | `mfAnalytics.routes.ts` | `mfAnalytics.controller.ts`, `mfFindings.controller.ts` | `services/mf/` | `mfMetricsJob.ts`, `mfPeerRankJob.ts`, `mfScoreJob.ts` | — | `mf/mfAnalytics.api.ts` |
+| mfCasMailback | `mfCasMailback.routes.ts` | `mfCasMailback.controller.ts` | `services/mf/` | — | — | `mf/mfCasMailback.api.ts` |
+| mfCasparser | `mfCasparser.routes.ts` | `mfCasparser.controller.ts` | `ingestion/casparser/`, `services/mf/` | — | — | `mf/mfCasparser.api.ts` |
+| mfCentral | `mfCentral.routes.ts` | `mfCentral.controller.ts` | `services/mf/` | — | — | `mf/mfCentral.api.ts` |
 | mfPortfolio | `mfPortfolio.routes.ts` | `mfPortfolio.controller.ts` | `services/family/`, `services/mf/` | — | — | — |
-| mfQualitativeFacts | `mfQualitativeFacts.routes.ts` | `mfQualitativeFacts.controller.ts` | — | — | — | `mfQualitativeFacts.api.ts` |
-| monitoredSenders | `monitoredSenders.routes.ts` | `monitoredSenders.controller.ts` | `services/gmail/` | — | — | `monitoredSenders.api.ts` |
+| mfQualitativeFacts | `mfQualitativeFacts.routes.ts` | `mfQualitativeFacts.controller.ts` | — | — | — | `mf/mfQualitativeFacts.api.ts` |
+| monitoredSenders | `monitoredSenders.routes.ts` | `monitoredSenders.controller.ts` | `services/gmail/` | — | — | `gmail/monitoredSenders.api.ts` |
 | notifications | `notifications.routes.ts` | `notificationConfig.controller.ts`, `alertPrefs.controller.ts` | `services/notifications/` | — | — | `notifications.api.ts` |
 | pf | `pf.routes.ts` | `pf.controller.ts` | `ingestion/pf/`, `services/account/`, `services/holdings/`, `services/pf/` | `pfFetchWorker.ts`, `pfNudgeJob.ts` | `pf/` | `pf.ts` |
 | portfolioGroups | `portfolioGroups.routes.ts` | `portfolioGroup.controller.ts` | `services/holdings/` | — | — | `portfolioGroups.api.ts` |
 | portfolios | `portfolios.routes.ts` | `portfolio.controller.ts` | `services/holdings/` | — | `portfolios/` | `portfolios.api.ts` |
-| propertyMedia | `propertyMedia.routes.ts` | `propertyMedia.controller.ts` | `services/realEstate/` | — | — | `propertyMedia.api.ts` |
-| realEstate | `realEstate.routes.ts` | `realEstate.controller.ts` | `services/realEstate/` | — | `realEstate/` | `realEstate.api.ts` |
-| rental | `rental.routes.ts` | `rental.controller.ts`, `rentalReminders.controller.ts` | `services/charts/`, `services/rental/`, `services/reports/` | `rentalJobs.ts` | `rental/` | `rental.api.ts` |
+| propertyMedia | `propertyMedia.routes.ts` | `propertyMedia.controller.ts` | `services/realEstate/` | — | — | `realEstate/propertyMedia.api.ts` |
+| realEstate | `realEstate.routes.ts` | `realEstate.controller.ts` | `services/realEstate/` | — | `realEstate/` | `realEstate/realEstate.api.ts` |
+| rental | `rental.routes.ts` | `rental.controller.ts`, `rentalReminders.controller.ts` | `services/charts/`, `services/rental/`, `services/reports/` | `rentalJobs.ts` | `rental/` | `rental/rental.api.ts` |
 | reports | `reports.routes.ts` | `reports.controller.ts` | `services/accounting/`, `services/analytics/`, `services/ca/`, `services/charts/`, `services/integrity/`, `services/reportBuilder/`, `services/reports/`, `services/security/`, `services/tax/` | `dataIntegrityJob.ts`, `piiAtRestJobs.ts` | `reports/` | `reports.api.ts` |
 | split | `split.routes.ts` | `split.controller.ts` | `services/split/` | `splitDigestJobs.ts`, `splitShareLinkReconcileJob.ts` | `split/` | `split.api.ts` |
 | tax | `tax.routes.ts` | `tax.controller.ts`, `fmv.controller.ts` | `services/charts/`, `services/reportBuilder/`, `services/reports/`, `services/security/`, `services/tax/` | `piiAtRestJobs.ts` | `tax/` | `tax.api.ts` |

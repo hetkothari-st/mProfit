@@ -20,7 +20,7 @@ import { AutoFitText } from '@/components/ui/AutoFitText';
 import { cn } from '@/lib/cn';
 import { useThemeStore } from '@/stores/theme.store';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { memberLabel, type FamilyWealth } from '@/api/familyDashboard.api';
+import { memberLabel, type FamilyWealth } from '@/api/family/familyDashboard.api';
 import { PartialDataNotice, PartialSuffix, RestrictedChip } from './RestrictedNotice';
 import { isPositiveMoney, moneySign, moneyToNumber, pluralMembers } from './money';
 

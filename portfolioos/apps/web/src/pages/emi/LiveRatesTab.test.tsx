@@ -4,10 +4,10 @@ import { screen, fireEvent, waitFor, cleanup, within, render } from '@testing-li
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { LoanRatesWire } from '@everypaisa/shared';
 import { renderWithProviders } from '@/pages/split/testUtils';
-import { loanRatesApi } from '@/api/loanRates.api';
+import { loanRatesApi } from '@/api/loans/loanRates.api';
 import { LiveRatesTab } from './LiveRatesTab';
 
-vi.mock('@/api/loanRates.api', () => ({ loanRatesApi: { list: vi.fn() } }));
+vi.mock('@/api/loans/loanRates.api', () => ({ loanRatesApi: { list: vi.fn() } }));
 
 const DATA: LoanRatesWire = {
   loanType: 'HOME',

@@ -22,7 +22,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Figure } from '@/components/receipt/Receipt';
 import { apiErrorMessage } from '@/api/client';
-import { insuranceApi, type UpdatePolicyInput } from '@/api/insurance.api';
+import { insuranceApi, type UpdatePolicyInput } from '@/api/insurance/insurance.api';
 import { formatDay, policyTitle, TONE_TEXT } from '@/lib/insurance';
 import { SourceLink } from './SourceLink';
 

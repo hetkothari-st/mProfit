@@ -42,10 +42,10 @@ import {
   type RentalPropertyDTO,
   type CreatePropertyInput,
   type CollectionRowDTO,
-} from '@/api/rental.api';
-import { invalidateRentalCaches } from '@/api/rentalCache';
+} from '@/api/rental/rental.api';
+import { invalidateRentalCaches } from '@/api/rental/rentalCache';
 import { RentalRemindersPanel } from './RentalRemindersPanel';
-import { propertyPhotosApi, type PhotoCover } from '@/api/propertyMedia.api';
+import { propertyPhotosApi, type PhotoCover } from '@/api/realEstate/propertyMedia.api';
 import { PropertySlideshow } from '@/components/property/PropertySlideshow';
 import { PropertiesMap } from '@/components/property/PropertiesMap';
 import { ViewToggle } from '@/components/property/ViewToggle';

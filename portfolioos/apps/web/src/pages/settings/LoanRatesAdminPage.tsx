@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { apiErrorMessage } from '@/api/client';
-import { loanRatesAdminApi } from '@/api/loanRates.api';
+import { loanRatesAdminApi } from '@/api/loans/loanRates.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { rateRange } from '@/pages/emi/liveRates';
 import { useElementWidth } from '@/pages/emi/useElementWidth';

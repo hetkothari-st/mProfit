@@ -7,7 +7,7 @@ import { defaultAssumptions, type CoverageFacts, type CoverageResponse } from '@
 import { CoveragePage } from './CoveragePage';
 
 const api = vi.hoisted(() => ({ get: vi.fn() }));
-vi.mock('@/api/insuranceCoverage.api', () => ({ insuranceCoverageApi: api }));
+vi.mock('@/api/insurance/insuranceCoverage.api', () => ({ insuranceCoverageApi: api }));
 // The add-policy form has its own tests; here it only needs to open.
 vi.mock('@/components/insurance/PolicyFormDialog', () => ({
   PolicyFormDialog: ({ open }: { open: boolean }) => (open ? <div role="dialog">Add policy form</div> : null),

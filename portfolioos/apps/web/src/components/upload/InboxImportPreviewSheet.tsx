@@ -7,7 +7,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { gmailScanApi } from '@/api/gmailScan.api';
+import { gmailScanApi } from '@/api/gmail/gmailScan.api';
 import { api } from '@/api/client';
 import { classifyPreview, type PreviewMode } from '@/lib/safePreview';
 

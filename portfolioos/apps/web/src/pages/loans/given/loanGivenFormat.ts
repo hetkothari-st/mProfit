@@ -1,4 +1,4 @@
-import type { LoanGivenEntryKind, Relationship } from '@/api/loansGiven.api';
+import type { LoanGivenEntryKind, Relationship } from '@/api/loans/loansGiven.api';
 
 import { formatDateOnly } from '@everypaisa/shared';
 export function formatDay(iso: string | null | undefined): string {

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/common/EmptyState';
-import { importsApi } from '@/api/imports.api';
+import { importsApi } from '@/api/imports/imports.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
 import type { ImportJobDTO, ImportStatus } from '@everypaisa/shared';

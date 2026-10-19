@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { propertyPhotosApi } from '@/api/propertyMedia.api';
+import { propertyPhotosApi } from '@/api/realEstate/propertyMedia.api';
 
 /**
  * An object URL for a property photo. The bytes are fetched with the user's

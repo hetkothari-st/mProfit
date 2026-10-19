@@ -1,7 +1,7 @@
 import { useEffect, useState, type MouseEvent } from 'react';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { insuranceApi, type InsurancePolicyDTO } from '@/api/insurance.api';
+import { insuranceApi, type InsurancePolicyDTO } from '@/api/insurance/insurance.api';
 
 const NOT_SAVED_MSG = 'No policy number is saved. Edit the policy to add it.';
 

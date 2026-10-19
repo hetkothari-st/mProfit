@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { gmailScanApi } from '@/api/gmailScan.api';
+import { gmailScanApi } from '@/api/gmail/gmailScan.api';
 import { apiErrorMessage } from '@/api/client';
 
 function dateMinus(years = 0, days = 0): string {

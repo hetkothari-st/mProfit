@@ -4,11 +4,11 @@ import { screen, fireEvent, waitFor, cleanup, within } from '@testing-library/re
 import type { AdminLoanRateSourceWire, AuthUser, LoanRateReadingWire } from '@everypaisa/shared';
 import { renderWithProviders } from '@/pages/split/testUtils';
 import { useAuthStore } from '@/stores/auth.store';
-import { loanRatesAdminApi } from '@/api/loanRates.api';
+import { loanRatesAdminApi } from '@/api/loans/loanRates.api';
 import { LoanRatesAdminPage } from './LoanRatesAdminPage';
 
 vi.mock('react-hot-toast', () => ({ default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
-vi.mock('@/api/loanRates.api', () => ({
+vi.mock('@/api/loans/loanRates.api', () => ({
   loanRatesAdminApi: { list: vi.fn(), setManual: vi.fn(), clearManual: vi.fn(), approve: vi.fn(), reject: vi.fn(), run: vi.fn() },
 }));
 

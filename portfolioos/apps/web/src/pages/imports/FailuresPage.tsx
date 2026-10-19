@@ -26,10 +26,10 @@ import {
 } from '@/components/ui/dialog';
 import {
   ingestionFailuresApi,
-} from '@/api/ingestionFailures.api';
+} from '@/api/imports/ingestionFailures.api';
 import type {
   ListIngestionFailuresParams,
-} from '@/api/ingestionFailures.api';
+} from '@/api/imports/ingestionFailures.api';
 import { apiErrorMessage } from '@/api/client';
 import type {
   IngestionFailureDTO,

@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
-import { insuranceApi, type InsurancePolicyDTO, type PolicyContacts } from '@/api/insurance.api';
+import { insuranceApi, type InsurancePolicyDTO, type PolicyContacts } from '@/api/insurance/insurance.api';
 import { formatDay } from '@/lib/insurance';
 import { insurerContactFor, phoneKind, telHref, whatsappHref, type InsurerContact } from '@/lib/insurerContacts';
 

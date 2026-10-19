@@ -6,7 +6,7 @@ import { Decimal, formatINR } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
-import { loansGivenApi, type LoanGivenDTO } from '@/api/loansGiven.api';
+import { loansGivenApi, type LoanGivenDTO } from '@/api/loans/loansGiven.api';
 import { LoanGivenFormDialog } from './LoanGivenFormDialog';
 import { formatDay, relationshipLabel } from './loanGivenFormat';
 import { LoanGivenStatusBadge } from './LoanGivenStatusBadge';

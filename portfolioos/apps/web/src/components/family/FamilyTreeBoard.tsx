@@ -8,8 +8,8 @@ import {
   pairKey,
   type PartnerPair,
 } from '@everypaisa/shared';
-import { familiesApi, type FamilyMemberRow } from '@/api/families.api';
-import { managedProfilesApi } from '@/api/managedProfiles.api';
+import { familiesApi, type FamilyMemberRow } from '@/api/family/families.api';
+import { managedProfilesApi } from '@/api/family/managedProfiles.api';
 import { apiErrorMessage } from '@/api/client';
 import {
   chipWidth,

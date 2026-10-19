@@ -3,12 +3,12 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { LoanDTO } from '@/api/loans.api';
-import { loansApi } from '@/api/loans.api';
+import type { LoanDTO } from '@/api/loans/loans.api';
+import { loansApi } from '@/api/loans/loans.api';
 import { CreateLoanDialog } from './LoanListPage';
 import { EditLoanDialog } from './LoanDetailPage';
 
-vi.mock('@/api/loans.api', () => ({ loansApi: { create: vi.fn(), update: vi.fn() } }));
+vi.mock('@/api/loans/loans.api', () => ({ loansApi: { create: vi.fn(), update: vi.fn() } }));
 vi.mock('@/components/common/InstitutionField', () => ({
   InstitutionField: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
     <input aria-label="Lender" value={value} onChange={(e) => onChange(e.target.value)} />

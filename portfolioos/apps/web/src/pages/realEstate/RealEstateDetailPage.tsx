@@ -30,7 +30,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { DocumentVault } from '@/components/documents/DocumentVault';
-import { realEstateApi } from '@/api/realEstate.api';
+import { realEstateApi } from '@/api/realEstate/realEstate.api';
 import { apiErrorMessage } from '@/api/client';
 import { PropertyFormDialog } from './PropertyFormDialog';
 import { MarkSoldDialog } from './MarkSoldDialog';

@@ -30,7 +30,7 @@ import {
   type SeatUsage,
   familyInviteEmailApi,
   familyClaimApi,
-} from '@/api/families.api';
+} from '@/api/family/families.api';
 import { useManageProfile } from '@/hooks/useManageProfile';
 import { RelationPicker, type RelationValue } from '@/components/family/RelationPicker';
 import { InviteEmailComposer } from '@/components/ca/InviteEmailComposer';
@@ -46,7 +46,7 @@ import {
   ASSET_CLASS_LABEL,
   NON_AC_CATEGORY_LABEL,
 } from '@/lib/assetClasses';
-import { familyDashboardApi, familyDashboardKeys } from '@/api/familyDashboard.api';
+import { familyDashboardApi, familyDashboardKeys } from '@/api/family/familyDashboard.api';
 import { FamilyWealthCard } from './widgets/FamilyWealthCard';
 import { FamilyGoalsCard } from './widgets/FamilyGoalsCard';
 import { FamilyProtectionCard } from './widgets/FamilyProtectionCard';

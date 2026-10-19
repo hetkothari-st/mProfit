@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
-import { legacyPublic } from '@/api/legacyPublic.api';
+import { legacyPublic } from '@/api/legacy/legacyPublic.api';
 
 type Kind = 'ok' | 'ack' | 'verify';
 type State = 'idle' | 'busy' | 'done' | 'error';

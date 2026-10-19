@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Loader2, Inbox } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { gmailScanApi } from '@/api/gmailScan.api';
+import { gmailScanApi } from '@/api/gmail/gmailScan.api';
 import type { GmailScanJobDTO } from '@everypaisa/shared';
 
 const NON_TERMINAL = ['PENDING', 'LISTING', 'DOWNLOADING', 'CLASSIFYING'] as const;

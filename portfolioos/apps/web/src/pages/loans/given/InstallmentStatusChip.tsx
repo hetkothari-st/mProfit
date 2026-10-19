@@ -1,5 +1,5 @@
 import { cn } from '@/lib/cn';
-import type { InstallmentRow } from '@/api/loansGiven.api';
+import type { InstallmentRow } from '@/api/loans/loansGiven.api';
 
 const STYLES: Record<InstallmentRow['status'], { label: string; className: string }> = {
   PAID: { label: 'Paid', className: 'bg-positive/12 text-positive' },

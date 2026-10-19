@@ -24,7 +24,7 @@ import {
   type InstallmentAction,
   type InstallmentRow,
   type LoanGivenDTO,
-} from '@/api/loansGiven.api';
+} from '@/api/loans/loansGiven.api';
 import { InstallmentStatusChip } from './InstallmentStatusChip';
 import { formatDay } from './loanGivenFormat';
 

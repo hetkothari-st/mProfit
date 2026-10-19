@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PropertySlideshow } from './PropertySlideshow';
 
 const api = vi.hoisted(() => ({ image: vi.fn() }));
-vi.mock('@/api/propertyMedia.api', () => ({ propertyPhotosApi: api }));
+vi.mock('@/api/realEstate/propertyMedia.api', () => ({ propertyPhotosApi: api }));
 
 beforeEach(() => {
   URL.createObjectURL = vi.fn(() => 'blob:photo');

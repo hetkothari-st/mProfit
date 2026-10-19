@@ -18,7 +18,7 @@ import {
   mfCasMailbackApi,
   type InitiateResult,
   type SubmitResult,
-} from '@/api/mfCasMailback.api';
+} from '@/api/mf/mfCasMailback.api';
 import { authApi } from '@/api/auth.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';

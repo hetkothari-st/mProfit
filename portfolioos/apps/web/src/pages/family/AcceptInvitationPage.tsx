@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { Loader2, Users, CheckCircle2, AlertOctagon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { familiesApi } from '@/api/families.api';
+import { familiesApi } from '@/api/family/families.api';
 import { useResolvedSession } from '@/hooks/useResolvedSession';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
 import { apiErrorMessage } from '@/api/client';

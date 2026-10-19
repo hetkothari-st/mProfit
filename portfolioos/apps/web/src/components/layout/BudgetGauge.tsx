@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { toDecimal } from '@everypaisa/shared';
-import { ingestionApi } from '@/api/ingestion.api';
+import { ingestionApi } from '@/api/imports/ingestion.api';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**

@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { ChevronRight, Home, Loader2, User } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/cn';
-import { familiesApi, type MyFamily } from '@/api/families.api';
+import { familiesApi, type MyFamily } from '@/api/family/families.api';
 import { useAuthStore } from '@/stores/auth.store';
 
 /**

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ExternalLink, Loader2, LocateFixed, MapPin, Move, RotateCcw } from 'lucide-react';
-import { propertyLocationApi, type PropertyOwnerType, type PropertyLocationDTO } from '@/api/propertyMedia.api';
+import { propertyLocationApi, type PropertyOwnerType, type PropertyLocationDTO } from '@/api/realEstate/propertyMedia.api';
 import { apiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';

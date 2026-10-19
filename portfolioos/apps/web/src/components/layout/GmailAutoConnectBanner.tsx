@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { authApi } from '@/api/auth.api';
 import { mailboxesApi } from '@/api/mailboxes.api';
-import { gmailApi } from '@/api/gmail.api';
+import { gmailApi } from '@/api/gmail/gmail.api';
 import { apiErrorMessage } from '@/api/client';
 
 const DISMISS_KEY = 'gmail-auto-connect-dismissed';

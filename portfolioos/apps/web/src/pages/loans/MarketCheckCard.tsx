@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { loansApi, type LoanDTO } from '@/api/loans.api';
+import { loansApi, type LoanDTO } from '@/api/loans/loans.api';
 import { apiErrorMessage } from '@/api/client';
 import { moneyWhole } from '@/pages/emi/emiState';
 import { DEFAULT_SWITCHING_INPUT, benchmarkLine, calculatorHref, cardModel, type SwitchingInput } from './marketCheck';

@@ -8,7 +8,7 @@ import { encodeEmiUrl } from './emiUrl';
 import { defaultCalcState, defaultCompareState } from './emiState';
 
 vi.mock('react-hot-toast', () => ({ default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
-vi.mock('@/api/loanRates.api', () => ({
+vi.mock('@/api/loans/loanRates.api', () => ({
   loanRatesApi: {
     list: vi.fn().mockResolvedValue({
       loanType: 'HOME',
@@ -17,7 +17,7 @@ vi.mock('@/api/loanRates.api', () => ({
     }),
   },
 }));
-vi.mock('@/api/emi.api', () => ({ emiApi: { export: vi.fn().mockResolvedValue(undefined) } }));
+vi.mock('@/api/loans/emi.api', () => ({ emiApi: { export: vi.fn().mockResolvedValue(undefined) } }));
 vi.mock('recharts', async (orig) => {
   const actual = await orig<typeof import('recharts')>();
   return { ...actual, ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div style={{ width: 600, height: 300 }}>{children}</div> };
@@ -63,7 +63,7 @@ describe('EmiCalculatorPage', () => {
   });
 
   it('export calls the API with the validated wire input', async () => {
-    const { emiApi } = await import('@/api/emi.api');
+    const { emiApi } = await import('@/api/loans/emi.api');
     renderWithProviders(<EmiCalculatorPage />, { route: '/emi', path: '/emi' });
     await screen.findByTestId('emi-value');
     const btn = screen.getByRole('button', { name: /excel/i });

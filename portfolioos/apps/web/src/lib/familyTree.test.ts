@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { INDENT, layoutFamily, lineTo, PAD, ROW_PITCH, type Parents } from './familyTree';
-import type { FamilyMemberRow, FamilyRole } from '@/api/families.api';
+import type { FamilyMemberRow, FamilyRole } from '@/api/family/families.api';
 
 /**
  * The tree reads down the page: the head at the top, a husband or wife

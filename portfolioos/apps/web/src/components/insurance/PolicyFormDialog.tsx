@@ -13,7 +13,7 @@ import {
   type CreatePolicyInput,
   type InsurancePolicyDTO,
   type UpdatePolicyInput,
-} from '@/api/insurance.api';
+} from '@/api/insurance/insurance.api';
 import { documentsApi } from '@/api/documents.api';
 import { findCatalogProduct, type CatalogProduct } from '@/data/insuranceCatalog';
 import { FREQUENCY_LABELS, POLICY_TYPES, POLICY_TYPE_LABELS, plural } from '@/lib/insurance';
