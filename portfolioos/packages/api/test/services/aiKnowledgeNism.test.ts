@@ -75,6 +75,39 @@ describe('NISM retrieval, chapter by chapter', () => {
   it('X-A 8: EV/EBITDA', () => {
     expect(ids('how is enterprise value calculated for EV/EBITDA')).toContain('xa-08-enterprise-value-multiples');
   });
+  it('X-A 9: duration', () => {
+    expect(ids('what is modified duration of a bond')).toContain('xa-09-duration');
+  });
+  it('X-A 9: yield curve shapes', () => {
+    expect(ids('what does an inverted yield curve mean')).toContain('xa-09-yield-curve');
+  });
+  it('X-A 9: current yield and YTM', () => {
+    expect(ids('difference between current yield and yield to maturity')).toContain('xa-09-coupon-current-ytm');
+  });
+  it('X-A 9: senior citizens scheme', () => {
+    expect(ids('who can open SCSS senior citizens savings scheme')).toContain('xa-09-scss-pomis-td-rd');
+  });
+  it('X-A 9: Sukanya Samriddhi', () => {
+    expect(ids('Sukanya Samriddhi account rules for my daughter')).toContain('xa-09-kvp-sukanya');
+  });
+  it('X-A 10: option moneyness', () => {
+    expect(ids('when is a call option in the money, intrinsic value')).toContain('xa-10-options-basics');
+  });
+  it('X-A 10: futures pricing', () => {
+    expect(ids('how is a futures price related to spot, cost of carry')).toContain('xa-10-futures-pricing-basis-arbitrage');
+  });
+  it('X-A 11: mid cap definition', () => {
+    expect(ids('what rank is a mid cap company and how much must a mid cap fund hold')).toContain('xa-11-equity-categories-size');
+  });
+  it('X-A 11: ELSS lock-in', () => {
+    expect(ids('ELSS lock in period for SIP')).toContain('xa-11-elss');
+  });
+  it('X-A 11: credit risk fund', () => {
+    expect(ids('credit risk fund rating rule')).toContain('xa-11-debt-categories-long-credit');
+  });
+  it('X-A 11: SWP', () => {
+    expect(ids('systematic withdrawal plan for monthly income from mutual fund')).toContain('xa-11-swp-stp-dtp-vip');
+  });
   it('X-B 16: prospect theory', () => {
     expect(ids('why do people hold losing stocks and sell winners early, prospect theory')).toContain('xb-16-prospect-theory');
   });
