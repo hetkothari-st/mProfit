@@ -1,7 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass, Prisma, Transaction, TransactionType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
-import { routePriceLookup } from '../../priceFeeds/router.service.js';
+import { routePriceQuote, type PriceQuote } from '../../priceFeeds/router.service.js';
 import { getLatestFxRate } from '../../priceFeeds/fx.service.js';
 import { istCalendarDate } from '@everypaisa/shared';
 import { assetKeyFromTransaction } from './assetKey.js';
@@ -311,6 +311,39 @@ export function replayTransactions(txs: Transaction[]): ProjectionAggregate {
   };
 }
 
+export interface ExpectedProjection extends ProjectionAggregate {
+  assetClass: AssetClass;
+}
+
+/**
+ * What `recomputeForAsset` would leave in HoldingProjection for one
+ * portfolio's transactions, keyed by assetKey: one entry per asset still
+ * held, none for F&O (separate model) or for assets sold down to zero.
+ *
+ * Quantity and cost only — prices are not a function of the transactions.
+ * The integrity check compares this with the stored rows, so it must follow
+ * the same rules as `recomputeForAsset`: same grouping key, the class of the
+ * earliest transaction, the same replay.
+ */
+export function expectedProjections(txs: Transaction[]): Map<string, ExpectedProjection> {
+  const groups = new Map<string, Transaction[]>();
+  for (const tx of txs) {
+    const key = tx.assetKey ?? assetKeyFromTransaction(tx);
+    const list = groups.get(key);
+    if (list) list.push(tx);
+    else groups.set(key, [tx]);
+  }
+  const out = new Map<string, ExpectedProjection>();
+  for (const [key, group] of groups) {
+    const first = [...group].sort((a, b) => a.tradeDate.getTime() - b.tradeDate.getTime())[0]!;
+    if (SKIP_PROJECTION.has(first.assetClass)) continue;
+    const agg = replayTransactions(group);
+    if (agg.quantity.isZero() || agg.quantity.isNegative()) continue;
+    out.set(key, { ...agg, assetClass: first.assetClass });
+  }
+  return out;
+}
+
 interface AssetScope {
   portfolioId: string;
   assetKey: string;
@@ -350,8 +383,8 @@ async function currentPriceFor(opts: {
   stockId: string | null;
   fundId: string | null;
   isin: string | null;
-}): Promise<Decimal | null> {
-  return routePriceLookup({
+}): Promise<PriceQuote | null> {
+  return routePriceQuote({
     assetClass: opts.assetClass,
     stockId: opts.stockId,
     fundId: opts.fundId,
@@ -405,6 +438,7 @@ export async function recomputeForAsset(
   });
 
   let price: Decimal | null = null;
+  let priceAsOf: Date | null = null;
   let currentValue: Decimal | null = null;
 
   if (PO_COMPOUNDING_CLASSES.has(meta.assetClass)) {
@@ -419,12 +453,14 @@ export async function recomputeForAsset(
     // per-row compounding produces the correct maturity projection.
     currentValue = computeFdAccruedValue(meta.txs) ?? agg.totalCost;
   } else {
-    price = await currentPriceFor({
+    const quote = await currentPriceFor({
       assetClass: meta.assetClass,
       stockId: resolved.stockId,
       fundId: resolved.fundId,
       isin: meta.isin,
     });
+    price = quote?.price ?? null;
+    priceAsOf = quote?.asOf ?? null;
     currentValue = price ? agg.quantity.times(price) : null;
 
     // Foreign-currency native-price → INR conversion.
@@ -476,6 +512,9 @@ export async function recomputeForAsset(
     currentValue: currentValue ? currentValue.toString() : null,
     unrealisedPnL: unrealisedPnL ? unrealisedPnL.toString() : null,
     realisedPnL: agg.realisedPnL.toString(),
+    // Written on every recompute, not only on the price refresh: an edit that
+    // re-prices a holding must not leave the previous quote's date behind.
+    priceAsOf,
     sourceTxCount: agg.sourceTxCount,
     computedAt: new Date(),
   };
@@ -495,6 +534,7 @@ export async function recomputeForAsset(
       currentValue: data.currentValue,
       unrealisedPnL: data.unrealisedPnL,
       realisedPnL: data.realisedPnL,
+      priceAsOf: data.priceAsOf,
       sourceTxCount: data.sourceTxCount,
       computedAt: data.computedAt,
     },
@@ -574,12 +614,13 @@ async function refreshPricesForRows(rows: Array<{
       isin: row.isin,
       assetName: row.assetName,
     });
-    const price = await currentPriceFor({
+    const quote = await currentPriceFor({
       assetClass: row.assetClass,
       stockId: resolved.stockId,
       fundId: resolved.fundId,
       isin: row.isin,
     });
+    const price = quote?.price ?? null;
     const patch: Prisma.HoldingProjectionUpdateInput = { computedAt: new Date() };
     let didPatch = false;
     if (resolved.stockId !== row.stockId) {
@@ -598,9 +639,10 @@ async function refreshPricesForRows(rows: Array<{
       patch.currentPrice = price.toString();
       patch.currentValue = currentValue.toString();
       patch.unrealisedPnL = pnl.toString();
-      // Stamp when this market price was applied so the UI can flag stale
-      // quotes (isPriceStale). Refresh-time is a safe lower bound on freshness.
-      patch.priceAsOf = new Date();
+      // The date the price is FOR (trading day / NAV date), so a feed that
+      // stopped updating shows up as stale instead of being re-stamped fresh
+      // on every refresh.
+      patch.priceAsOf = quote!.asOf;
       didPatch = true;
     }
     if (!didPatch) continue;

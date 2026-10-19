@@ -15,11 +15,17 @@ const NON_MARKET: ReadonlySet<AssetClass> = new Set<AssetClass>([
 
 const DAY = 24 * 60 * 60 * 1000;
 
-/** Max age before a market price is considered stale, by class. */
+/**
+ * Max age before a market price is considered stale, by class.
+ *
+ * `asOf` is the date the price is FOR (a trading day or NAV date, stored at
+ * midnight UTC), not when we fetched it. So a Friday close read on Monday
+ * evening IST is already ~3.6 days "old" without anything being wrong. The
+ * budget is a weekend + one market holiday + the day itself: 5 days. Crypto
+ * prices are daily rows too, so one missed day plus the day itself: 2.
+ */
 function maxAgeDays(assetClass: AssetClass): number {
-  // Crypto trades 24x7; equities/MF/commodity refresh on trading sessions
-  // (allow a weekend + a holiday → 3 days).
-  return assetClass === 'CRYPTOCURRENCY' ? 1 : 3;
+  return assetClass === 'CRYPTOCURRENCY' ? 2 : 5;
 }
 
 /**
@@ -35,4 +41,9 @@ export function isPriceStale(
   if (NON_MARKET.has(assetClass)) return false;
   if (!asOf) return true;
   return now.getTime() - asOf.getTime() > maxAgeDays(assetClass) * DAY;
+}
+
+/** True for classes valued off a market price feed (so a missing price is a gap). */
+export function hasMarketPrice(assetClass: AssetClass): boolean {
+  return !NON_MARKET.has(assetClass);
 }

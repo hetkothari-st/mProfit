@@ -44,6 +44,12 @@ import { buildLedgerStatement } from '../services/reportBuilder/statement/ledger
 import { buildProvidentFundStatement } from '../services/reportBuilder/statement/providentFund.js';
 import { buildFyBundle } from '../services/reports/fyBundle.service.js';
 import type { AssetClass } from '@prisma/client';
+import {
+  checkReportDataQuality,
+  dataQualityMetaLines,
+  mergeDataQuality,
+} from '../services/integrity/reportDataQuality.service.js';
+import { checkPortfolioIntegrity } from '../services/integrity/storedDataIntegrity.service.js';
 
 async function assertOwnedPortfolio(req: Request): Promise<string> {
   const userId = req.user!.id;
@@ -314,6 +320,67 @@ export async function rebuildCapitalGains(req: Request, res: Response) {
   ok(res, { persisted: count });
 }
 
+// ─── Data quality ────────────────────────────────────────────────────────────
+
+/**
+ * Everything that makes the figures in a report wrong, incomplete or old —
+ * for the banner on the Reports page. `portfolioId` as everywhere else
+ * (`all` for every portfolio).
+ */
+export async function getDataQuality(req: Request, res: Response) {
+  const scope = await resolveScope(req);
+  ok(res, await checkReportDataQuality(scope.userId, scope.kind === 'one' ? scope.portfolioId : undefined));
+}
+
+/**
+ * Rebuild stored holdings and capital gains from the transactions, for the
+ * portfolio(s) in scope — the same repair the nightly check makes, on demand,
+ * so a user who sees "out of sync" does not have to wait for 02:15.
+ */
+export async function repairStoredData(req: Request, res: Response) {
+  const scope = await resolveScope(req);
+  const ids =
+    scope.kind === 'one'
+      ? [scope.portfolioId]
+      : (await prisma.portfolio.findMany({ where: { userId: scope.userId }, select: { id: true } })).map((p) => p.id);
+  let holdingsRebuilt = 0;
+  let portfoliosRepaired = 0;
+  for (const id of ids) {
+    const r = await checkPortfolioIntegrity(id, { repair: true });
+    holdingsRebuilt += r.holdingDrifts.length;
+    if (r.repaired) portfoliosRepaired++;
+  }
+  ok(res, { portfoliosChecked: ids.length, portfoliosRepaired, holdingsRebuilt });
+}
+
+/**
+ * "Data as of" and "Data checks" lines for a downloaded file, covering whoever
+ * the download is about. A file leaves the app, so it has to carry its own
+ * caveats. If the check itself fails, the file says so rather than claiming
+ * the data passed.
+ */
+async function downloadQualityLines(req: Request): Promise<Array<{ label: string; value: string }>> {
+  try {
+    const resolved = await resolveReportSubjects(req);
+    const raw = (req.query.portfolioId as string | undefined)?.trim();
+    const onlyCaller = resolved.subjects.length === 1 && resolved.subjects[0]!.userId === req.user!.id;
+    const portfolioId = onlyCaller && raw && raw !== 'all' && raw !== 'ALL' ? raw : undefined;
+    const reports = [];
+    for (const s of resolved.subjects) {
+      reports.push(await runForSubject(resolved.via, s.userId, () => checkReportDataQuality(s.userId, portfolioId)));
+    }
+    return dataQualityMetaLines(mergeDataQuality(reports));
+  } catch (err) {
+    logger.error({ err }, 'reports.data_quality_stamp_failed');
+    return [{ label: 'Data checks', value: 'Could not be run for this file' }];
+  }
+}
+
+async function stampPayload(req: Request, payload: ExportPayload): Promise<void> {
+  const lines = await downloadQualityLines(req);
+  payload.meta = { ...(payload.meta ?? {}), ...Object.fromEntries(lines.map((l) => [l.label, l.value])) };
+}
+
 // ─── Holdings / Transactions export (per-section download) ───────────────────
 
 export async function getHoldingsExport(req: Request, res: Response) {
@@ -368,6 +435,10 @@ export async function getHoldingsExport(req: Request, res: Response) {
   );
   holdingsPayload.theme = theme;
   transactionsPayload.theme = theme;
+  if (format !== 'json') {
+    await stampPayload(req, holdingsPayload);
+    transactionsPayload.meta = { ...(transactionsPayload.meta ?? {}), ...holdingsPayload.meta };
+  }
 
   if (format === 'xlsx') {
     // Multi-sheet workbook
@@ -795,6 +866,7 @@ async function emit(
   // to read it itself. `?theme=` only matters for pdf/xlsx; the json branch
   // ignores it.
   payload.theme = payload.theme ?? parseThemeQuery(req.query.theme);
+  if (format !== 'json') await stampPayload(req, payload);
   if (format === 'xlsx') return streamExcel(res, payload);
   if (format === 'pdf') return streamPdf(res, payload);
   ok(res, payload);
@@ -1027,6 +1099,7 @@ async function emitMprofit(req: Request, res: Response, layout: MprofitLayout) {
   // Threads `?theme=` through to every one of the ~40 mprofit-style
   // downloads below without touching each `downloadXxx` handler.
   layout.theme = layout.theme ?? parseThemeQuery(req.query.theme);
+  layout.meta = [...(layout.meta ?? []), ...(await downloadQualityLines(req))];
   if (format === 'xlsx') return streamMprofitExcel(res, layout);
   return streamMprofitPdf(res, layout);
 }

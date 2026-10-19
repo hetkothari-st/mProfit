@@ -236,9 +236,16 @@ export async function updateStockPricesFromYahoo(
 }
 
 export async function getLatestStockPrice(stockId: string): Promise<Decimal | null> {
+  return (await getLatestStockQuote(stockId))?.price ?? null;
+}
+
+/** Latest close and the trading day it belongs to. */
+export async function getLatestStockQuote(
+  stockId: string,
+): Promise<{ price: Decimal; asOf: Date } | null> {
   const latest = await prisma.stockPrice.findFirst({
     where: { stockId },
     orderBy: { date: 'desc' },
   });
-  return latest ? new Decimal(latest.close.toString()) : null;
+  return latest ? { price: new Decimal(latest.close.toString()), asOf: latest.date } : null;
 }

@@ -368,9 +368,16 @@ export async function backfillMfNavHistory(
 }
 
 export async function getLatestNavForFund(fundId: string): Promise<Decimal | null> {
+  return (await getLatestNavQuoteForFund(fundId))?.price ?? null;
+}
+
+/** Latest NAV and the date it was declared for. */
+export async function getLatestNavQuoteForFund(
+  fundId: string,
+): Promise<{ price: Decimal; asOf: Date } | null> {
   const latest = await prisma.mFNav.findFirst({
     where: { fundId },
     orderBy: { date: 'desc' },
   });
-  return latest ? new Decimal(latest.nav.toString()) : null;
+  return latest ? { price: new Decimal(latest.nav.toString()), asOf: latest.date } : null;
 }

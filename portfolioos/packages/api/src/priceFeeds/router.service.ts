@@ -2,10 +2,10 @@ import { Decimal } from 'decimal.js';
 import type { AssetClass, CommodityType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import { getLatestStockPrice } from './yahoo.service.js';
-import { getLatestNavForFund } from './amfi.service.js';
-import { getLatestCommodityPrice } from './commodity.service.js';
-import { getLatestCryptoPrice, getLatestCryptoPriceByCoinGeckoId } from './crypto.service.js';
+import { getLatestStockQuote } from './yahoo.service.js';
+import { getLatestNavQuoteForFund } from './amfi.service.js';
+import { getLatestCommodityQuote } from './commodity.service.js';
+import { getLatestCryptoQuote, getLatestCryptoQuoteByCoinGeckoId } from './crypto.service.js';
 import { getLatestFxRate } from './fx.service.js';
 
 /**
@@ -26,35 +26,53 @@ export interface PriceLookupInput {
 }
 
 export async function routePriceLookup(input: PriceLookupInput): Promise<Decimal | null> {
+  return (await routePriceQuote(input))?.price ?? null;
+}
+
+/**
+ * A price and the date it is for. `asOf` is the trading day / NAV date of
+ * the stored price, not the moment we looked it up: a holding priced off a
+ * two-week-old close must read as two weeks old, or the stale-price warning
+ * on every report would never fire. Sources without a stored date (FX
+ * fallbacks, F&O contract prices) report the lookup time — the old behaviour.
+ */
+export interface PriceQuote {
+  price: Decimal;
+  asOf: Date;
+}
+
+const now = (price: Decimal | null): PriceQuote | null => (price ? { price, asOf: new Date() } : null);
+
+export async function routePriceQuote(input: PriceLookupInput): Promise<PriceQuote | null> {
   switch (input.assetClass) {
     case 'EQUITY':
     case 'ETF':
-      return input.stockId ? getLatestStockPrice(input.stockId) : null;
+      return input.stockId ? getLatestStockQuote(input.stockId) : null;
 
     case 'FUTURES':
     case 'OPTIONS': {
       if (!input.assetKey) return null;
       const { getLatestFoContractPrice } = await import('./nseFoMaster.service.js');
       const r = await getLatestFoContractPrice(input.assetKey);
-      return r ? new Decimal(r.closePrice) : null;
+      return r ? now(new Decimal(r.closePrice)) : null;
     }
 
     case 'MUTUAL_FUND':
-      return input.fundId ? getLatestNavForFund(input.fundId) : null;
+      return input.fundId ? getLatestNavQuoteForFund(input.fundId) : null;
 
     case 'PHYSICAL_GOLD':
     case 'GOLD_BOND':
     case 'GOLD_ETF':
-      return getLatestCommodityPrice('GOLD');
+      return getLatestCommodityQuote('GOLD');
 
     case 'PHYSICAL_SILVER':
-      return getLatestCommodityPrice('SILVER');
+      return getLatestCommodityQuote('SILVER');
 
     case 'CRYPTOCURRENCY':
       // Crypto holdings store the CoinGecko slug in the `isin` field — no FK
       // exists on Transaction. If a direct cryptoId is supplied, prefer it.
-      if (input.cryptoId) return getLatestCryptoPrice(input.cryptoId);
-      if (input.isin) return getLatestCryptoPriceByCoinGeckoId(input.isin);
+      if (input.cryptoId) return getLatestCryptoQuote(input.cryptoId);
+      if (input.isin) return getLatestCryptoQuoteByCoinGeckoId(input.isin);
       return null;
 
     case 'FOREIGN_EQUITY':
@@ -62,14 +80,14 @@ export async function routePriceLookup(input: PriceLookupInput): Promise<Decimal
       // price feed — the same path as domestic EQUITY. Native price is in the
       // listed currency (typically USD); the projection layer converts to INR
       // via `convertToInr` at compute time.
-      return input.stockId ? getLatestStockPrice(input.stockId) : null;
+      return input.stockId ? getLatestStockQuote(input.stockId) : null;
 
     case 'FOREX_PAIR': {
       // Pair identity lives in `isin`: a 3-letter code (e.g. "USD") means
       // base→INR; a 6-letter code (e.g. "EURUSD") means base→quote.
       const code = (input.isin ?? '').toUpperCase();
-      if (code.length === 3) return getLatestFxRate(code, 'INR');
-      if (code.length === 6) return getLatestFxRate(code.slice(0, 3), code.slice(3, 6));
+      if (code.length === 3) return now(await getLatestFxRate(code, 'INR'));
+      if (code.length === 6) return now(await getLatestFxRate(code.slice(0, 3), code.slice(3, 6)));
       return null;
     }
 

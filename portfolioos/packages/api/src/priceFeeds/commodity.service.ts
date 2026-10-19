@@ -482,9 +482,16 @@ export async function syncAllCommodities(): Promise<CommoditySyncResult[]> {
 export async function getLatestCommodityPrice(
   commodity: CommodityType,
 ): Promise<Decimal | null> {
+  return (await getLatestCommodityQuote(commodity))?.price ?? null;
+}
+
+/** Latest price and the day it was recorded for. */
+export async function getLatestCommodityQuote(
+  commodity: CommodityType,
+): Promise<{ price: Decimal; asOf: Date } | null> {
   const row = await prisma.commodityPrice.findFirst({
     where: { commodity },
     orderBy: { date: 'desc' },
   });
-  return row ? new Decimal(row.price.toString()) : null;
+  return row ? { price: new Decimal(row.price.toString()), asOf: row.date } : null;
 }

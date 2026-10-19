@@ -27,6 +27,7 @@ import { startAlertJobs } from './jobs/alertJobs.js';
 import { startWillReviewJob } from './jobs/willReviewJob.js';
 import { startMcpCleanupJob } from './jobs/mcpCleanupJob.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
+import { startDataIntegrityJob } from './jobs/dataIntegrityJob.js';
 import { startFundScoringJob } from './jobs/fundScoring.job.js';
 import { assertNamedFundReleaseGate } from './services/advisor/fundRanking/releaseGate.js';
 import { evaluateDbRole, readDbRoleFacts } from './lib/dbRoleGuard.js';
@@ -235,6 +236,7 @@ const server = app.listen(env.PORT, '::', () => {
   startWillReviewJob();
   startMcpCleanupJob();
   startNetWorthSnapshotJob();
+  startDataIntegrityJob();
   startFoExpiryJob();
   /**
    * MF analytics pipeline. Each job only registers a cron schedule here; the
