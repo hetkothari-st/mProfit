@@ -69,7 +69,7 @@ describe('SEC-32: the API container does not run as root', () => {
 
 describe('SEC-28: untrusted spreadsheets are not parsed with npm xlsx', () => {
   it('the excel parser no longer imports xlsx', () => {
-    expect(read('services/imports/parsers/genericExcel.parser.ts')).not.toContain("from 'xlsx'");
+    expect(read('ingestion/fileImport/parsers/genericExcel.parser.ts')).not.toContain("from 'xlsx'");
   });
 
   it('xlsx is not a production dependency', () => {

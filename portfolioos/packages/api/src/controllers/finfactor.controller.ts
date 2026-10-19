@@ -13,8 +13,8 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { ok } from '../lib/response.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
-import { finfactorBaseUrl, isFinfactorConfigured } from '../integrations/finfactor/client.js';
-import { isFinfactorDemoMode } from '../integrations/finfactor/demo.js';
+import { finfactorBaseUrl, isFinfactorConfigured } from '../ingestion/finfactor/client.js';
+import { isFinfactorDemoMode } from '../ingestion/finfactor/demo.js';
 import {
   fetchBenchmarkPointToPoint,
   fetchBenchmarkTrailing,
@@ -25,21 +25,21 @@ import {
   fetchMfLinkedAccounts,
   fetchMfLinkedAccountsHoldingFolio,
   fetchMfStatement,
-} from '../integrations/finfactor/mf.service.js';
+} from '../ingestion/finfactor/mf.service.js';
 import {
   approveConsentDemo,
   decryptEcres,
   initiateConsent,
   listUserConsents,
   revokeConsent,
-} from '../integrations/finfactor/consent.service.js';
-import { syncFinvuMutualFunds } from '../integrations/finfactor/sync.service.js';
+} from '../ingestion/finfactor/consent.service.js';
+import { syncFinvuMutualFunds } from '../ingestion/finfactor/sync.service.js';
 import {
   fetchGeneralInsuranceLinkedAccounts,
   fetchGeneralInsuranceStatement,
   fetchLifeInsuranceLinkedAccounts,
   fetchLifeInsuranceStatement,
-} from '../integrations/finfactor/insurance.service.js';
+} from '../ingestion/finfactor/insurance.service.js';
 import {
   handleCohortWebhook,
   handleConsentWebhook,
@@ -48,7 +48,7 @@ import {
   handleSubscriptionWebhook,
   pickSignatureHeader,
   verifyWebhookSignature,
-} from '../integrations/finfactor/webhooks.service.js';
+} from '../ingestion/finfactor/webhooks.service.js';
 
 const baseSchema = z.object({
   uniqueIdentifier: z.string().min(1, 'uniqueIdentifier is required'),

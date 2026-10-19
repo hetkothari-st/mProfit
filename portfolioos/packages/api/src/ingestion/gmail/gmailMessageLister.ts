@@ -1,6 +1,6 @@
 import { google, type gmail_v1 } from 'googleapis';
-import { getAuthorizedClientFor } from '../connectors/gmail.connector.js';
-import { logger } from './logger.js';
+import { getAuthorizedClientFor } from './gmail.connector.js';
+import { logger } from '../../lib/logger.js';
 
 /**
  * Wraps the parts of the Gmail REST API the scan worker needs.

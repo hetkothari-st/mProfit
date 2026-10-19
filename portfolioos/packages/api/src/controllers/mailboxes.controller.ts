@@ -5,7 +5,7 @@ import { ok } from '../lib/response.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { encryptSecret } from '../lib/secrets.js';
 import { testMailboxConnection, pollMailboxNow } from '../jobs/mailboxPoller.js';
-import { syncGmailAccount } from '../connectors/gmail.connector.js';
+import { syncGmailAccount } from '../ingestion/gmail/gmail.connector.js';
 
 const CreateSchema = z.object({
   label: z.string().optional(),

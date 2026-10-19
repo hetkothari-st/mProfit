@@ -1,6 +1,6 @@
 /**
  * File-import adapter wrappers. Each one delegates parsing to the underlying
- * Parser implementation in services/imports/parsers/ — the adapter layer is
+ * Parser implementation in ingestion/fileImport/parsers/ — the adapter layer is
  * a thin shell that gives the existing code an Adapter-shaped interface and
  * converts ParsedTransaction rows into TransactionEvent[].
  *
@@ -10,17 +10,17 @@
  * can persist the error + raw context uniformly.
  */
 
-import type { Parser, ParsedTransaction } from '../../services/imports/parsers/types.js';
-import { zerodhaContractNoteParser } from '../../services/imports/parsers/zerodhaContractNote.parser.js';
-import { genericBrokerContractNoteParser } from '../../services/imports/parsers/genericBrokerContractNote.parser.js';
-import { nsdlCdslCasParser } from '../../services/imports/parsers/nsdlCdslCas.parser.js';
-import { mfCasParser } from '../../services/imports/parsers/mfCas.parser.js';
-import { genericExcelParser } from '../../services/imports/parsers/genericExcel.parser.js';
-import { genericCsvParser } from '../../services/imports/parsers/genericCsv.parser.js';
-import { bankStatementParser } from '../../services/imports/parsers/bankStatement.parser.js';
-import { fdCertificateParser } from '../../services/imports/parsers/fdCertificate.parser.js';
-import { insuranceStatementParser } from '../../services/imports/parsers/insuranceStatement.parser.js';
-import { salarySlipParser } from '../../services/imports/parsers/salarySlip.parser.js';
+import type { Parser, ParsedTransaction } from './parsers/types.js';
+import { zerodhaContractNoteParser } from './parsers/zerodhaContractNote.parser.js';
+import { genericBrokerContractNoteParser } from './parsers/genericBrokerContractNote.parser.js';
+import { nsdlCdslCasParser } from './parsers/nsdlCdslCas.parser.js';
+import { mfCasParser } from './parsers/mfCas.parser.js';
+import { genericExcelParser } from './parsers/genericExcel.parser.js';
+import { genericCsvParser } from './parsers/genericCsv.parser.js';
+import { bankStatementParser } from './parsers/bankStatement.parser.js';
+import { fdCertificateParser } from './parsers/fdCertificate.parser.js';
+import { insuranceStatementParser } from './parsers/insuranceStatement.parser.js';
+import { salarySlipParser } from './parsers/salarySlip.parser.js';
 import type {
   FileImportAdapter,
   FileImportInput,

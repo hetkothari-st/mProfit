@@ -575,7 +575,7 @@ export async function retryGmailFailure(
   // Re-fetch the message
   let message: gmail_v1.Schema$Message;
   try {
-    const { getAuthorizedClientFor } = await import('../../connectors/gmail.connector.js');
+    const { getAuthorizedClientFor } = await import('./gmail.connector.js');
     const { google } = await import('googleapis');
     const auth = await getAuthorizedClientFor(mailbox.id);
     const gmail = google.gmail({ version: 'v1', auth });

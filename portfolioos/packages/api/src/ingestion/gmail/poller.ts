@@ -26,7 +26,7 @@ import type { gmail_v1 } from 'googleapis';
 import type { MonitoredSender } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
-import { getAuthorizedClientFor } from '../../connectors/gmail.connector.js';
+import { getAuthorizedClientFor } from './gmail.connector.js';
 import { parseFromHeader } from './headers.js';
 import {
   processEmail,

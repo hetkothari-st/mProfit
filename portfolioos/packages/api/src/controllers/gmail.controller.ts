@@ -9,7 +9,7 @@ import {
   syncGmailAccount,
   disconnectGmailAccount,
   isGmailConfigured,
-} from '../connectors/gmail.connector.js';
+} from '../ingestion/gmail/gmail.connector.js';
 import { discoverFinancialSenders } from '../ingestion/gmail/discovery.js';
 import { consumeOAuthState } from '../lib/oauthState.js';
 

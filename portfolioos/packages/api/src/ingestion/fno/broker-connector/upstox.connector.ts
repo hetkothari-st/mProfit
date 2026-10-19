@@ -3,7 +3,7 @@ import { request } from 'undici';
 import { Decimal } from 'decimal.js';
 import { logger } from '../../../lib/logger.js';
 import { prisma } from '../../../lib/prisma.js';
-import { getActiveBrokerSession } from '../../../services/brokerOauth/index.js';
+import { getActiveBrokerSession } from '../brokerOauth/index.js';
 import { parseKiteTradingSymbol, resolveLotSize } from '../symbol-parser.js';
 import type { BrokerConnector, SyncResult } from './types.js';
 import type { FnoNormalizedTrade } from '../types.js';

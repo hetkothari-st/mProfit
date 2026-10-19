@@ -42,7 +42,7 @@ import type { AssetClass, Exchange, TransactionType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { bodyStructureHash } from './hash.js';
-import type { ParsedTransaction } from '../services/imports/parsers/types.js';
+import type { ParsedTransaction } from './fileImport/parsers/types.js';
 import { redactForLlm } from './pii.js';
 import type { BrokerDescriptor } from '../data/brokers.js';
 

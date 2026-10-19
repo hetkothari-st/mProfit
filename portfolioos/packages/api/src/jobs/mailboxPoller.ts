@@ -9,7 +9,7 @@ import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { decryptSecret } from '../lib/secrets.js';
 import { createImportJob } from '../services/imports/import.service.js';
-import { syncGmailAccount } from '../connectors/gmail.connector.js';
+import { syncGmailAccount } from '../ingestion/gmail/gmail.connector.js';
 import { pollMonitoredSendersForAccount } from '../ingestion/gmail/poller.js';
 import { runAsSystem, runAsUser } from '../lib/requestContext.js';
 import { detectBrokerFromEmail } from '../data/brokers.js';

@@ -15,7 +15,7 @@ import { logger } from './logger.js';
  * mailbox or broker account is bound to the VICTIM's account — after which
  * every scheduled sync pulls attacker-authored data into the victim's books.
  *
- * services/brokerOauth already did this correctly against a DB column. This
+ * ingestion/fno/brokerOauth already did this correctly against a DB column. This
  * module is the equivalent for the flows that had no state at all (Gmail,
  * and the older Kite path in connectors.controller), kept in Redis because
  * these have no natural row to hang it on.

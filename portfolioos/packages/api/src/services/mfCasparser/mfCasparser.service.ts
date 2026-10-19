@@ -13,7 +13,7 @@ import {
   CasparserError,
   type CasUnifiedResponse,
   type MfTxn,
-} from '../../lib/casparserClient.js';
+} from '../../ingestion/casparser/casparserClient.js';
 
 // Reuse MFCentralSyncJob row to track state — fields fit cleanly:
 //   panLast4 = last 4 of PAN
@@ -433,7 +433,7 @@ async function pollMailboxesForUser(userId: string): Promise<void> {
     select: { id: true },
   });
   // Lazy import to avoid circular dep with the connector.
-  const { syncGmailAccount } = await import('../../connectors/gmail.connector.js');
+  const { syncGmailAccount } = await import('../../ingestion/gmail/gmail.connector.js');
   for (const a of accounts) {
     try {
       await syncGmailAccount(a.id);

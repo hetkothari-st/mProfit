@@ -10,7 +10,7 @@ import {
   getBrokerStatus,
   refreshSession,
   type BrokerId,
-} from '../services/brokerOauth/index.js';
+} from '../ingestion/fno/brokerOauth/index.js';
 import { prisma } from '../lib/prisma.js';
 
 const brokerSchema = z.enum(['zerodha', 'upstox', 'angel']);

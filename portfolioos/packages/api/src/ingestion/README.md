@@ -7,10 +7,13 @@ parsing live here. What the app then *does* with the data lives in `services/<fe
   `projection.ts` (CanonicalEvent → Transaction/CashFlow), `templates.ts` + `contractNoteTemplates.ts` (learned
   email templates), `types.ts` (the shared adapter contract).
 - One folder per source:
-  - `gmail/`: inbox discovery, poller, body extraction.
+  - `gmail/`: OAuth connector, inbox discovery, poller, classifier, body extraction.
+  - `zerodha/`: Kite OAuth connector.
+  - `finfactor/`: Finvu account-aggregator client, consent and sync.
+  - `casparser/`: CASParser API client.
   - `llm/`: Claude parsing with a budget cap.
-  - `fileImport/`: uploaded statement and contract-note runner.
-  - `fno/`: F&O broker connectors.
+  - `fileImport/`: uploaded statement and contract-note runner, plus `parsers/` (one per file format).
+  - `fno/`: F&O broker connectors and `brokerOauth/` (Kite, Upstox, Angel login).
   - `mfcentral/`, `mfMailback/`: MF Central and CAS mailback.
   - `mfFactsheet/`: per-AMC factsheet parsers.
   - `pf/`: EPFO and per-bank PPF passbooks.

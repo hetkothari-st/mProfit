@@ -51,8 +51,7 @@ Background work runs as Bull jobs: `packages/api/src/jobs/*`, queued through `li
 | `routes/` | One `<feature>.routes.ts` per area: URL definitions only. |
 | `controllers/` | One `<feature>.controller.ts` per area: request → service → response. |
 | `services/` | Business logic, grouped by feature into sub-folders (`services/<feature>/`). |
-| `ingestion/` | Bringing data in from outside: Gmail, LLM parsing, the canonical-event pipeline, and (after the move) every per-source fetcher or parser. See the placement rule. |
-| `connectors/`, `integrations/` | **Being merged into `ingestion/`.** Gmail/Zerodha OAuth connectors and the Finfactor (account aggregator) client. |
+| `ingestion/` | Bringing data in from outside, with one sub-folder per source (Gmail, Zerodha, F&O brokers, Finfactor AA, CAS parser, MF Central, PF/PPF, vehicles, file imports) plus the LLM parser and the canonical-event pipeline. See the placement rule and `ingestion/README.md`. |
 | `priceFeeds/` | Market-data fetchers: NSE/BSE bhavcopy, AMFI NAV, indices, FX, commodity, crypto. |
 | `jobs/` | Bull workers and cron schedules. |
 | `ai/` | AI assistant: Claude client, context building, prompts, tools. |
@@ -134,7 +133,7 @@ folder (for example `mf*` routes map to `pages/mf/` and `pages/mutualFunds/`).
 | cas | `cas.routes.ts` | `cas.controller.ts` | — | — | `ca/`, `cas/` | `cas.api.ts` |
 | cashflows | `cashflows.routes.ts` | `cashflows.controller.ts` | `services/cashflowForecast.service.ts` | — | `cashflows/` | `cashflows.api.ts` |
 | connect | `connect.routes.ts` | — | `services/mcp/` | `mcpCleanupJob.ts` | `connect/` | `connect.api.ts` |
-| connectors | `connectors.routes.ts` | `connectors.controller.ts` | `connectors/zerodha.connector.ts` | — | `connectors/` | `connectors.api.ts` |
+| connectors | `connectors.routes.ts` | `connectors.controller.ts` | `ingestion/zerodha/` | — | `connectors/` | `connectors.api.ts` |
 | corporateActions | `corporateActions.routes.ts` | `corporateActions.controller.ts` | `priceFeeds/corporateActions.service.ts`, `services/corporateActionApply.service.ts`, `services/corporateActionsReport.service.ts` | `corporateActionApplyJob.ts`, `priceJobs.ts` | `corporateActions/` | `corporateActions.api.ts` |
 | creditCards | `creditCards.routes.ts` | `creditCards.controller.ts` | `services/creditCards.service.ts` | — | `creditCards/` | `creditCards.api.ts` |
 | dashboard | `dashboard.routes.ts` | — | `services/dashboard.service.ts` | `netWorthSnapshotJob.ts` | `dashboard/` | `dashboard.api.ts` |
@@ -142,10 +141,10 @@ folder (for example `mf*` routes map to `pages/mf/` and `pages/mutualFunds/`).
 | documents | `documents.routes.ts` | `document.controller.ts` | `services/document.service.ts`, `services/reports/` | — | — | `documents.api.ts` |
 | emi | `emi.routes.ts` | `emi.controller.ts` | `services/emi/` | — | `emi/` | `emi.api.ts` |
 | families | `families.routes.ts` | `familyDashboard.controller.ts` | `services/family.service.ts`, `services/family/`, `services/familyScope.service.ts` | — | — | `families.api.ts` |
-| finfactor | `finfactor.routes.ts` | `finfactor.controller.ts` | `integrations/finfactor/` | — | — | `finfactor.api.ts` |
-| fo | `fo.routes.ts` | `fo.controller.ts`, `brokerOauth.controller.ts` | `priceFeeds/nseOptionChain.service.ts`, `services/brokerOauth/`, `services/derivativePosition.service.ts`, `services/foBrokerSync.service.ts`, `services/foPnl.service.ts`, `services/reports/` | `priceJobs.ts` | — | `fo.api.ts` |
+| finfactor | `finfactor.routes.ts` | `finfactor.controller.ts` | `ingestion/finfactor/` | — | — | `finfactor.api.ts` |
+| fo | `fo.routes.ts` | `fo.controller.ts`, `brokerOauth.controller.ts` | `ingestion/fno/`, `priceFeeds/nseOptionChain.service.ts`, `services/derivativePosition.service.ts`, `services/foBrokerSync.service.ts`, `services/foPnl.service.ts`, `services/reports/` | `priceJobs.ts` | — | `fo.api.ts` |
 | forex | `forex.routes.ts` | `forex.controller.ts` | `priceFeeds/fx.service.ts`, `services/forex.service.ts` | `priceJobs.ts`, `startupSync.ts` | `forex/` | `forex.api.ts` |
-| gmail | `gmail.routes.ts` | `gmail.controller.ts` | `connectors/gmail.connector.ts`, `ingestion/gmail/` | `mailboxPoller.ts` | — | `gmail.api.ts` |
+| gmail | `gmail.routes.ts` | `gmail.controller.ts` | `ingestion/gmail/` | `mailboxPoller.ts` | — | `gmail.api.ts` |
 | gmailScan | `gmailScan.routes.ts` | `gmailScan.controller.ts` | `services/gmailAutoApproveRules.service.ts`, `services/gmailDiscoveredDocs.service.ts`, `services/gmailDocApproval.service.ts`, `services/gmailScanJobs.service.ts` | `gmailScanWorker.ts` | — | `gmailScan.api.ts` |
 | goals | `goals.routes.ts` | `goals.controller.ts` | `services/goals.service.ts` | — | `goals/` | `goals.api.ts` |
 | imports | `imports.routes.ts` | `imports.controller.ts` | `services/imports/`, `services/ingestionFailures.service.ts`, `services/piiAtRest.service.ts` | `benchmarkPriceJob.ts`, `importWorker.ts`, `loanRatesJob.ts`, `mailboxPoller.ts`, `mfFactsheetJob.ts`, `mfMetadataJob.ts`, `mfMetricsJob.ts`, `mfNavAdjustmentJob.ts`, `mfNavHistoryBackfillJob.ts`, `mfPeerRankJob.ts`, `mfReconciliationJob.ts`, `mfScoreJob.ts`, `pfFetchWorker.ts`, `piiAtRestJobs.ts`, `riskFreeRateJob.ts` | `imports/` | `imports.api.ts` |
@@ -158,13 +157,13 @@ folder (for example `mf*` routes map to `pages/mf/` and `pages/mutualFunds/`).
 | loanRates | `loanRates.routes.ts` | `loanRates.controller.ts` | `services/loanRates/` | — | — | `loanRates.api.ts` |
 | loans | `loans.routes.ts` | `loans.controller.ts` | `services/loanChecks/`, `services/loans.service.ts` | `loanChecksJob.ts` | `loans/` | `loans.api.ts` |
 | loansGiven | `loansGiven.routes.ts` | `loansGiven.controller.ts` | `services/loansGiven.service.ts` | — | — | `loansGiven.api.ts` |
-| mailboxes | `mailboxes.routes.ts` | `mailboxes.controller.ts` | `connectors/gmail.connector.ts` | `mailboxPoller.ts` | `mailboxes/` | `mailboxes.api.ts` |
+| mailboxes | `mailboxes.routes.ts` | `mailboxes.controller.ts` | `ingestion/gmail/` | `mailboxPoller.ts` | `mailboxes/` | `mailboxes.api.ts` |
 | managedProfiles | `managedProfiles.routes.ts` | — | `services/family/` | — | — | `managedProfiles.api.ts` |
 | mcp | `mcp.routes.ts` | — | `services/mcp/` | `mcpCleanupJob.ts` | — | — |
 | mcpOAuth | `mcpOAuth.routes.ts` | — | `services/mcp/` | `mcpCleanupJob.ts` | — | — |
 | mfAnalytics | `mfAnalytics.routes.ts` | `mfAnalytics.controller.ts`, `mfFindings.controller.ts` | `services/mfAnalytics/` | `mfMetricsJob.ts`, `mfPeerRankJob.ts`, `mfScoreJob.ts` | — | `mfAnalytics.api.ts` |
 | mfCasMailback | `mfCasMailback.routes.ts` | `mfCasMailback.controller.ts` | `services/mfCasMailback/` | — | — | `mfCasMailback.api.ts` |
-| mfCasparser | `mfCasparser.routes.ts` | `mfCasparser.controller.ts` | `services/mfCasparser/` | — | — | `mfCasparser.api.ts` |
+| mfCasparser | `mfCasparser.routes.ts` | `mfCasparser.controller.ts` | `ingestion/casparser/`, `services/mfCasparser/` | — | — | `mfCasparser.api.ts` |
 | mfCentral | `mfCentral.routes.ts` | `mfCentral.controller.ts` | `services/mfcentral/` | — | — | `mfCentral.api.ts` |
 | mfPortfolio | `mfPortfolio.routes.ts` | `mfPortfolio.controller.ts` | `services/familyScope.service.ts`, `services/mfAnalytics/` | — | — | — |
 | mfQualitativeFacts | `mfQualitativeFacts.routes.ts` | `mfQualitativeFacts.controller.ts` | — | — | — | `mfQualitativeFacts.api.ts` |

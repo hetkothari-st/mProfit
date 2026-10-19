@@ -1,13 +1,13 @@
 import crypto from 'node:crypto';
 import { request } from 'undici';
 import { Decimal } from 'decimal.js';
-import { prisma } from '../lib/prisma.js';
-import { env } from '../config/env.js';
-import { logger } from '../lib/logger.js';
-import { encryptSecret, decryptSecret } from '../lib/secrets.js';
-import { createTransaction } from '../services/transaction.service.js';
+import { prisma } from '../../lib/prisma.js';
+import { env } from '../../config/env.js';
+import { logger } from '../../lib/logger.js';
+import { encryptSecret, decryptSecret } from '../../lib/secrets.js';
+import { createTransaction } from '../../services/transaction.service.js';
 import type { AssetClass, TransactionType } from '@prisma/client';
-import { boundedAgent } from '../lib/httpDispatcher.js';
+import { boundedAgent } from '../../lib/httpDispatcher.js';
 
 const KITE_BASE = 'https://api.kite.trade';
 
