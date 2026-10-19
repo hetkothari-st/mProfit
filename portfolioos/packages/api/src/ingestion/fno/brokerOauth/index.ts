@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
-import { prisma } from '../../lib/prisma.js';
-import { logger } from '../../lib/logger.js';
-import { AppError } from '../../lib/errors.js';
-import { encryptSecret, decryptSecret } from '../../lib/secrets.js';
+import { prisma } from '../../../lib/prisma.js';
+import { logger } from '../../../lib/logger.js';
+import { AppError } from '../../../lib/errors.js';
+import { encryptSecret, decryptSecret } from '../../../lib/secrets.js';
 import {
   buildKiteLoginUrl,
   exchangeKiteRequestToken,

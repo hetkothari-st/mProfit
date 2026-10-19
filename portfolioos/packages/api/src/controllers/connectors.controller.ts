@@ -9,7 +9,7 @@ import {
   saveKiteSession,
   syncKiteAccount,
   disconnectKite,
-} from '../connectors/zerodha.connector.js';
+} from '../ingestion/zerodha/zerodha.connector.js';
 import { consumeOAuthState, issueOAuthState } from '../lib/oauthState.js';
 
 export async function listBrokerAccounts(req: Request, res: Response) {
@@ -39,7 +39,7 @@ export async function kiteLoginUrl(req: Request, res: Response) {
 
 const KiteCallbackSchema = z.object({
   requestToken: z.string().min(1),
-  // Required. This flow had no state at all, unlike services/brokerOauth,
+  // Required. This flow had no state at all, unlike ingestion/fno/brokerOauth,
   // which has bound its callbacks to a server-issued state since it was
   // written.
   state: z.string().min(1, 'Missing OAuth state'),

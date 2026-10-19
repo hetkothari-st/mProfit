@@ -11,7 +11,7 @@ import { sanitizePersonName } from './rules.js';
 
 /**
  * Fallback for the Documents sorter when local rules are unsure. Same gate,
- * budget and spend ledger as lib/gmailClassifier.ts. PAN/Aadhaar/account/phone
+ * budget and spend ledger as ingestion/gmail/gmailClassifier.ts. PAN/Aadhaar/account/phone
  * are masked by redactForLlm; the person's name is deliberately kept for this
  * one call (spec §2.2) because it is the answer being asked for.
  */

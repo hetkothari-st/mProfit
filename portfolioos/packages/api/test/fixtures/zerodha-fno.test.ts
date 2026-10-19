@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { parseZerodhaContractNoteText } from '../../src/services/imports/parsers/zerodhaContractNote.parser.js';
+import { parseZerodhaContractNoteText } from '../../src/ingestion/fileImport/parsers/zerodhaContractNote.parser.js';
 
 describe('Zerodha contract-note parser — F&O', () => {
   it('extracts F&O option rows with strike + expiry', () => {

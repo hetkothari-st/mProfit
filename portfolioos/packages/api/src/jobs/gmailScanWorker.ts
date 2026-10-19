@@ -8,8 +8,8 @@ import {
   listMessageIdsPage,
   fetchMessageWithAttachments,
   downloadAttachmentBytes,
-} from '../lib/gmailMessageLister.js';
-import { classifyAttachmentWithLlm } from '../lib/gmailClassifier.js';
+} from '../ingestion/gmail/gmailMessageLister.js';
+import { classifyAttachmentWithLlm } from '../ingestion/gmail/gmailClassifier.js';
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
 import { getGmailScanQueue } from '../lib/queue.js';
 import { sweepAutoApprovals } from '../services/gmailDocApproval.service.js';

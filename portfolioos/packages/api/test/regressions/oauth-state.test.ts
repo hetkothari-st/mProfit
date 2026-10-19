@@ -14,7 +14,7 @@ import { issueOAuthState, consumeOAuthState } from '../../src/lib/oauthState.js'
  * victim's, after which every scheduled sync feeds attacker-controlled data
  * into the victim's financial records.
  *
- * services/brokerOauth already did this correctly; these two paths did not.
+ * ingestion/fno/brokerOauth already did this correctly; these two paths did not.
  */
 
 const SRC = join(__dirname, '..', '..', 'src');
@@ -66,7 +66,7 @@ describe('SEC-06: the Gmail callback verifies state', () => {
   });
 
   it('no longer sends the bare userId as state', () => {
-    expect(read('connectors/gmail.connector.ts')).not.toContain('state: userId');
+    expect(read('ingestion/gmail/gmail.connector.ts')).not.toContain('state: userId');
   });
 });
 
@@ -83,6 +83,6 @@ describe('SEC-07: the Kite callback verifies state', () => {
   });
 
   it('puts the state on the login URL', () => {
-    expect(read('connectors/zerodha.connector.ts')).toContain('state=${encodeURIComponent(state)}');
+    expect(read('ingestion/zerodha/zerodha.connector.ts')).toContain('state=${encodeURIComponent(state)}');
   });
 });

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
-import { logger } from '../../lib/logger.js';
-import { AppError } from '../../lib/errors.js';
-import { OUTBOUND_FETCH_TIMEOUT_MS } from '../../lib/httpDispatcher.js';
+import { logger } from '../../../lib/logger.js';
+import { AppError } from '../../../lib/errors.js';
+import { OUTBOUND_FETCH_TIMEOUT_MS } from '../../../lib/httpDispatcher.js';
 
 /**
  * Kite Connect (Zerodha) login flow:

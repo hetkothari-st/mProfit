@@ -5,11 +5,11 @@ import { tmpdir } from 'node:os';
 import * as XLSX from 'xlsx';
 import { parse as parseCsv } from 'csv-parse/sync';
 
-import { genericCsvParser } from '../../src/services/imports/parsers/genericCsv.parser.js';
-import { genericExcelParser } from '../../src/services/imports/parsers/genericExcel.parser.js';
-import { parseZerodhaContractNoteText } from '../../src/services/imports/parsers/zerodhaContractNote.parser.js';
-import { parseMfCasText } from '../../src/services/imports/parsers/mfCas.parser.js';
-import { parseNsdlCdslText } from '../../src/services/imports/parsers/nsdlCdslCas.parser.js';
+import { genericCsvParser } from '../../src/ingestion/fileImport/parsers/genericCsv.parser.js';
+import { genericExcelParser } from '../../src/ingestion/fileImport/parsers/genericExcel.parser.js';
+import { parseZerodhaContractNoteText } from '../../src/ingestion/fileImport/parsers/zerodhaContractNote.parser.js';
+import { parseMfCasText } from '../../src/ingestion/fileImport/parsers/mfCas.parser.js';
+import { parseNsdlCdslText } from '../../src/ingestion/fileImport/parsers/nsdlCdslCas.parser.js';
 
 /**
  * Golden fixtures — §5.1 task 9.

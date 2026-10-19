@@ -11,7 +11,7 @@
 import { google } from 'googleapis';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
-import { getAuthorizedClientFor } from '../../connectors/gmail.connector.js';
+import { getAuthorizedClientFor } from '../../ingestion/gmail/gmail.connector.js';
 
 export interface GmailSendInput {
   userId: string;

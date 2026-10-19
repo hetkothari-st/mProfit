@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { logger } from '../../lib/logger.js';
 import { decryptIfNeeded, type FileKind } from '../../lib/decryptIfNeeded.js';
-import type { Parser, ParserContext } from '../../services/imports/parsers/types.js';
+import type { Parser, ParserContext } from './parsers/types.js';
 import { FILE_IMPORT_ADAPTERS, PARSER_OF } from './adapters.js';
 import type { FileImportAdapter, FileImportInput, FileImportParseResult } from './types.js';
 

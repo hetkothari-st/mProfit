@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { generateTotp } from '../../src/services/brokerOauth/angel.oauth.js';
-import { buildKiteLoginUrl } from '../../src/services/brokerOauth/kite.oauth.js';
-import { buildUpstoxLoginUrl } from '../../src/services/brokerOauth/upstox.oauth.js';
+import { generateTotp } from '../../../src/ingestion/fno/brokerOauth/angel.oauth.js';
+import { buildKiteLoginUrl } from '../../../src/ingestion/fno/brokerOauth/kite.oauth.js';
+import { buildUpstoxLoginUrl } from '../../../src/ingestion/fno/brokerOauth/upstox.oauth.js';
 
 describe('brokerOauth — pure helpers', () => {
   it('generateTotp matches RFC 6238 reference vector', () => {

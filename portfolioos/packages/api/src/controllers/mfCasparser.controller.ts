@@ -5,7 +5,7 @@ import {
   cdslSubmitOtp,
   kfintechMailbackRequest,
 } from '../services/mfCasparser/mfCasparser.service.js';
-import { getCredits } from '../lib/casparserClient.js';
+import { getCredits } from '../ingestion/casparser/casparserClient.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 

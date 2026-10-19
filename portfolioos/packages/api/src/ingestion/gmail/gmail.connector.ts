@@ -4,12 +4,12 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import type { ImportType } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
-import { env } from '../config/env.js';
-import { logger } from '../lib/logger.js';
-import { encryptSecret, decryptSecret } from '../lib/secrets.js';
-import { createImportJob } from '../services/imports/import.service.js';
-import { issueOAuthState } from '../lib/oauthState.js';
+import { prisma } from '../../lib/prisma.js';
+import { env } from '../../config/env.js';
+import { logger } from '../../lib/logger.js';
+import { encryptSecret, decryptSecret } from '../../lib/secrets.js';
+import { createImportJob } from '../../services/imports/import.service.js';
+import { issueOAuthState } from '../../lib/oauthState.js';
 
 // readonly for inbox ingestion + send for outbound rent reminders.
 // Existing users who connected before send scope landed will need to

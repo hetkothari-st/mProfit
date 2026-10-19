@@ -54,10 +54,8 @@ portfolioos/
 │   ├── prisma/migrations/       69 migrations
 │   ├── src/ai/                  Claude client, prompts, chat sessions
 │   ├── src/config/env.ts        Zod-validated environment
-│   ├── src/connectors/          Gmail OAuth, Zerodha OAuth
 │   ├── src/controllers/         HTTP handlers (49 files)
 │   ├── src/ingestion/           Data in from outside: per-source fetchers/scrapers/parsers + Email → CanonicalEvent pipeline
-│   ├── src/integrations/        Finfactor (Finvu AA)
 │   ├── src/jobs/                Bull workers + cron (15 files)
 │   ├── src/lib/                 Prisma, RLS, queue, SSE, storage, crypto
 │   ├── src/middleware/          auth, plan gating, validation, errors
@@ -529,7 +527,7 @@ contract notes, CAS PDFs, CSVs. Password-protected PDFs handled via
   Playwright session, `MFCentralSyncJob`.
 - **CAS mailback** (`ingestion/mfMailback/camsMailback.ts`, `kfintechMailback.ts`) —
   request the statement by email, then parse it.
-- **CASParser API** (`lib/casparserClient.ts`) — third-party parsing of
+- **CASParser API** (`ingestion/casparser/casparserClient.ts`) — third-party parsing of
   NSDL/CDSL/CAMS/KFintech CAS PDFs.
 
 Plus `services/mfOverlap.service.ts` for portfolio overlap analysis.
@@ -690,7 +688,7 @@ Catalog beyond the free basics is gated by `TAX_REPORT_CATALOG` (PLUS).
 
 ### 9.11 Account Aggregator (Finvu / Finfactor)
 
-`src/integrations/finfactor/` — `client.ts`, `consent.service.ts`, `mf.service.ts`,
+`src/ingestion/finfactor/` — `client.ts`, `consent.service.ts`, `mf.service.ts`,
 `insurance.service.ts`, `sync.service.ts`, `webhooks.service.ts`, `demo.ts`.
 Gated by `AA_FINVU_AUTOIMPORT` (PLUS); `AaConsent` stores the consent artefact.
 

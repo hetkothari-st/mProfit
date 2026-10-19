@@ -190,5 +190,5 @@ function sumCharges(c: FnoNormalizedTrade['charges'] | undefined): Decimal {
     .plus(c.sebiCharges ?? 0);
 }
 
-// Credential save lives in services/brokerOauth/index.ts (setupBrokerCredential)
+// Credential save lives in ingestion/fno/brokerOauth/index.ts (setupBrokerCredential)
 // — this used to host a direct accessToken-paste path that is no longer used.

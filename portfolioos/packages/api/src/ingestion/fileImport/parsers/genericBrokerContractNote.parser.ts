@@ -11,16 +11,16 @@ import {
   detectBrokerFromPdfText,
   type BrokerDescriptor,
 } from '../../../data/brokers.js';
-import { parseEmailWithLlm, checkLlmGate } from '../../../ingestion/llm/client.js';
-import type { ParsedEvent } from '../../../ingestion/llm/schema.js';
-import { bodyStructureHash } from '../../../ingestion/hash.js';
+import { parseEmailWithLlm, checkLlmGate } from '../../llm/client.js';
+import type { ParsedEvent } from '../../llm/schema.js';
+import { bodyStructureHash } from '../../hash.js';
 import {
   findActiveContractNoteRecipe,
   recordContractNoteSample,
   recordContractNoteRecipeMiss,
   applyContractNoteRecipe,
   type CnSampleTrade,
-} from '../../../ingestion/contractNoteTemplates.js';
+} from '../../contractNoteTemplates.js';
 
 /**
  * Generic Indian-broker contract-note parser.
