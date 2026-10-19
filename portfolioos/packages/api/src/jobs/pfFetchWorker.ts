@@ -14,11 +14,11 @@
  */
 
 import Bull from 'bull';
-import type { UanLookupInput } from '../adapters/pf/epf/uanLookup.parse.js';
-import type { PasswordResetInput } from '../adapters/pf/epf/passwordReset.parse.js';
-import { RESET_FAILURE_MESSAGE } from '../adapters/pf/epf/passwordReset.parse.js';
-import { runPasswordReset } from '../adapters/pf/epf/passwordReset.v1.js';
-import { runUanLookup } from '../adapters/pf/epf/uanLookup.v1.js';
+import type { UanLookupInput } from '../ingestion/pf/epf/uanLookup.parse.js';
+import type { PasswordResetInput } from '../ingestion/pf/epf/passwordReset.parse.js';
+import { RESET_FAILURE_MESSAGE } from '../ingestion/pf/epf/passwordReset.parse.js';
+import { runPasswordReset } from '../ingestion/pf/epf/passwordReset.v1.js';
+import { runUanLookup } from '../ingestion/pf/epf/uanLookup.v1.js';
 import { makeSessionPrompt } from '../services/pf/sessionPrompt.js';
 import {
   finishUanLookup,
@@ -36,11 +36,11 @@ import { getPfAccountById } from '../services/pfAccounts.service.js';
 import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
 import { startSession, transition, reportStatus, complete, fail } from '../services/pfFetchSessions.service.js';
 import { buildCanonicalEvents } from '../services/pfCanonicalize.service.js';
-import { runPfChain } from '../adapters/pf/chain.js';
+import { runPfChain } from '../ingestion/pf/chain.js';
 import { recomputeForAsset } from '../services/holdingsProjection.js';
 import { incCounter } from '../lib/metrics.js';
 import { randomUUID } from 'node:crypto';
-import type { ScrapeContext } from '../adapters/pf/types.js';
+import type { ScrapeContext } from '../ingestion/pf/types.js';
 import type { PfFetchStatus } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 

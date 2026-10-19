@@ -69,13 +69,13 @@ describe('SEC-21: scrape sessions are owned', () => {
   });
 
   it('the CarInfo OTP step passes the caller through', () => {
-    const carinfo = read('adapters/vehicle/carinfoPlaywright.ts');
+    const carinfo = read('ingestion/vehicle/carinfoPlaywright.ts');
     expect(carinfo).toContain('playwrightSessionManager.getSession(sessionId, userId)');
   });
 });
 
 describe('SEC-26: scraper debug dumps are opt-in and off the package root', () => {
-  const carinfo = read('adapters/vehicle/carinfoPlaywright.ts');
+  const carinfo = read('ingestion/vehicle/carinfoPlaywright.ts');
 
   it('gates every dump behind an explicit flag', () => {
     expect(carinfo).toContain("process.env.CARINFO_DEBUG_DUMPS === 'true'");

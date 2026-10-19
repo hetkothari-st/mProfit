@@ -3,13 +3,13 @@ import {
   CHALLAN_ADAPTER_ID,
   parseChallanPayload,
   parseChallanRow,
-} from '../../src/adapters/vehicle/challan.js';
+} from '../../src/ingestion/vehicle/challan.js';
 
 // The adapter's first two sources are live HTTP (carinfo.app scrape and the
 // echallan REST endpoint). Stub both so this file never touches the network —
 // otherwise the gating assertions below depend on whether two third-party
 // sites happen to be up, and the suite pays a 10s timeout per source.
-vi.mock('../../src/adapters/vehicle/carinfo.js', () => ({
+vi.mock('../../src/ingestion/vehicle/carinfo.js', () => ({
   fetchCarInfoChallans: vi.fn(async () => {
     throw new Error('carinfo stubbed out in tests');
   }),
@@ -156,7 +156,7 @@ describe('fetchChallansForRegNo', () => {
 
   it('does not open a browser session when the Gate G6 flag is off', async () => {
     const { fetchChallansForRegNo } = await import(
-      '../../src/adapters/vehicle/challan.js'
+      '../../src/ingestion/vehicle/challan.js'
     );
     const result = await fetchChallansForRegNo('MH47BT5950', '1234');
     expect(launchMock).not.toHaveBeenCalled();
@@ -181,7 +181,7 @@ describe('fetchChallansForRegNo', () => {
       ]),
     );
     const { fetchChallansForRegNo } = await import(
-      '../../src/adapters/vehicle/challan.js'
+      '../../src/ingestion/vehicle/challan.js'
     );
     const result = await fetchChallansForRegNo('MH47BT5950', '1234');
     expect(launchMock).toHaveBeenCalledTimes(1);
@@ -195,7 +195,7 @@ describe('fetchChallansForRegNo', () => {
   it('skips the browser session when chassis is missing', async () => {
     process.env.ENABLE_CHALLAN_ADAPTER = 'true';
     const { fetchChallansForRegNo } = await import(
-      '../../src/adapters/vehicle/challan.js'
+      '../../src/ingestion/vehicle/challan.js'
     );
     const result = await fetchChallansForRegNo('MH47BT5950', null);
     // The echallan form requires the chassis last-4; without it there is

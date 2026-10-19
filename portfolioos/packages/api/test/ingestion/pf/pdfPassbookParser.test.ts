@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { tokenizePassbookPdf } from '../../../src/adapters/pf/shared/pdfPassbookParser.js';
+import { tokenizePassbookPdf } from '../../../src/ingestion/pf/shared/pdfPassbookParser.js';
 
 describe('tokenizePassbookPdf', () => {
   it('extracts non-empty page count and lines from a real passbook', async () => {

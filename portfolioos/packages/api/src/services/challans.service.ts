@@ -33,7 +33,7 @@ import {
   type ChallanRow,
   CHALLAN_ADAPTER_ID,
   CHALLAN_ADAPTER_VERSION,
-} from '../adapters/vehicle/challan.js';
+} from '../ingestion/vehicle/challan.js';
 import { writeIngestionFailure } from './ingestionFailures.service.js';
 import { PLATE_SELECT, plateOf } from './piiAtRest.service.js';
 

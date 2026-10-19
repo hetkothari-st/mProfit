@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseVahanSms, smsVehicleAdapter } from '../../src/adapters/vehicle/sms.js';
+import { parseVahanSms, smsVehicleAdapter } from '../../src/ingestion/vehicle/sms.js';
 
 /**
  * §7.4 SMS adapter — pure regex parsing, no DB. Covers the two SMS

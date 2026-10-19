@@ -1,6 +1,6 @@
 import { pfEventHash } from './sourceHash.js';
 import { CanonicalEventType } from '@prisma/client';
-import type { PfCanonicalEventInput } from '../adapters/pf/types.js';
+import type { PfCanonicalEventInput } from '../ingestion/pf/types.js';
 
 export interface CanonicalizeInput {
   userId: string;

@@ -10,27 +10,27 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SBI_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/sbi.parse.js';
-import { ICICI_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/icici.parse.js';
-import { HDFC_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/hdfc.parse.js';
+import { SBI_ADAPTER_VERSION } from '../../../src/ingestion/mfFactsheet/sbi.parse.js';
+import { ICICI_ADAPTER_VERSION } from '../../../src/ingestion/mfFactsheet/icici.parse.js';
+import { HDFC_ADAPTER_VERSION } from '../../../src/ingestion/mfFactsheet/hdfc.parse.js';
 import { Decimal } from '@everypaisa/shared';
-import { csvToGrid, buildAmfiMarketCapLookup } from '../../../src/adapters/mfFactsheet/normalise.js';
-import { parseSbiPortfolio, parseSbiSchemeFacts } from '../../../src/adapters/mfFactsheet/sbi.parse.js';
+import { csvToGrid, buildAmfiMarketCapLookup } from '../../../src/ingestion/mfFactsheet/normalise.js';
+import { parseSbiPortfolio, parseSbiSchemeFacts } from '../../../src/ingestion/mfFactsheet/sbi.parse.js';
 import {
   parseIciciPortfolio,
   parseIciciSchemeFacts,
-} from '../../../src/adapters/mfFactsheet/icici.parse.js';
+} from '../../../src/ingestion/mfFactsheet/icici.parse.js';
 import {
   parseHdfcPortfolio,
   parseHdfcSchemeFacts,
-} from '../../../src/adapters/mfFactsheet/hdfc.parse.js';
+} from '../../../src/ingestion/mfFactsheet/hdfc.parse.js';
 import type {
   MfFactsheetResult,
   PortfolioParseInput,
   PortfolioRaw,
   SchemeFactsParseInput,
   SchemeFactsRaw,
-} from '../../../src/adapters/mfFactsheet/types.js';
+} from '../../../src/ingestion/mfFactsheet/types.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const fixtureDir = (amc: string) => resolve(here, '../../fixtures/mf/factsheet', amc);

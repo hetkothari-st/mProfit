@@ -43,12 +43,12 @@ async function rejectUnqueued(res: Response, sessionId: string): Promise<void> {
 }
 import { buildCanonicalEvents } from '../services/pfCanonicalize.service.js';
 import { recomputeForAsset } from '../services/holdingsProjection.js';
-import { tokenizePassbookPdf, tokenizePassbookText } from '../adapters/pf/shared/pdfPassbookParser.js';
+import { tokenizePassbookPdf, tokenizePassbookText } from '../ingestion/pf/shared/pdfPassbookParser.js';
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
 import { saveDocPassword } from '../lib/userDocPasswords.js';
-import { parseEpfoPassbook } from '../adapters/pf/epf/epfo.v1.parse.js';
+import { parseEpfoPassbook } from '../ingestion/pf/epf/epfo.v1.parse.js';
 import { pfFetchQueue } from '../jobs/pfFetchWorker.js';
-import { findPfAdapter } from '../adapters/pf/chain.js';
+import { findPfAdapter } from '../ingestion/pf/chain.js';
 import {
   initPairing,
   completePairing,

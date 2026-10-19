@@ -1,9 +1,9 @@
 /**
  * types.ts — Shared types for the EveryPaisa browser extension.
  *
- * RawScrapePayload mirrors packages/api/src/adapters/pf/types.ts.
+ * RawScrapePayload mirrors packages/api/src/ingestion/pf/types.ts.
  * If the server type changes, update this mirror too.
- * Server canonical: portfolioos/packages/api/src/adapters/pf/types.ts
+ * Server canonical: portfolioos/packages/api/src/ingestion/pf/types.ts
  */
 
 export interface PfMemberPayload {

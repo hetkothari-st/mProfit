@@ -6,12 +6,12 @@ import {
   initiateCamsMailback,
   submitCamsMailback,
   CamsMailbackError,
-} from '../../adapters/mfMailback/camsMailback.js';
+} from '../../ingestion/mfMailback/camsMailback.js';
 import {
   initiateKfintechMailback,
   submitKfintechMailback,
   KfintechMailbackError,
-} from '../../adapters/mfMailback/kfintechMailback.js';
+} from '../../ingestion/mfMailback/kfintechMailback.js';
 import { readPan } from '../piiAtRest.service.js';
 
 const SOURCE_ADAPTER = 'mfcas.mailback.v1';

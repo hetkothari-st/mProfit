@@ -52,7 +52,7 @@ Background work runs as Bull jobs: `packages/api/src/jobs/*`, queued through `li
 | `controllers/` | One `<feature>.controller.ts` per area: request → service → response. |
 | `services/` | Business logic, grouped by feature into sub-folders (`services/<feature>/`). |
 | `ingestion/` | Bringing data in from outside: Gmail, LLM parsing, the canonical-event pipeline, and (after the move) every per-source fetcher or parser. See the placement rule. |
-| `adapters/`, `connectors/`, `integrations/` | **Being merged into `ingestion/`.** Per-source fetchers, scrapers and API clients (PF, vehicle, MF factsheets, F&O brokers, Finfactor). |
+| `connectors/`, `integrations/` | **Being merged into `ingestion/`.** Gmail/Zerodha OAuth connectors and the Finfactor (account aggregator) client. |
 | `priceFeeds/` | Market-data fetchers: NSE/BSE bhavcopy, AMFI NAV, indices, FX, commodity, crypto. |
 | `jobs/` | Bull workers and cron schedules. |
 | `ai/` | AI assistant: Claude client, context building, prompts, tools. |
@@ -170,7 +170,7 @@ folder (for example `mf*` routes map to `pages/mf/` and `pages/mutualFunds/`).
 | mfQualitativeFacts | `mfQualitativeFacts.routes.ts` | `mfQualitativeFacts.controller.ts` | — | — | — | `mfQualitativeFacts.api.ts` |
 | monitoredSenders | `monitoredSenders.routes.ts` | `monitoredSenders.controller.ts` | `services/monitoredSenders.service.ts` | — | — | `monitoredSenders.api.ts` |
 | notifications | `notifications.routes.ts` | `notificationConfig.controller.ts`, `alertPrefs.controller.ts` | `services/notifications/` | — | — | `notifications.api.ts` |
-| pf | `pf.routes.ts` | `pf.controller.ts` | `adapters/pf/`, `services/extensionPairing.service.ts`, `services/holdingsProjection.ts`, `services/pf/`, `services/pfAccounts.service.ts`, `services/pfCanonicalize.service.ts`, `services/pfCredentials.service.ts`, `services/pfFetchSessions.service.ts`, `services/pfNudges.service.ts` | `pfFetchWorker.ts`, `pfNudgeJob.ts` | `pf/` | `pf.ts` |
+| pf | `pf.routes.ts` | `pf.controller.ts` | `ingestion/pf/`, `services/extensionPairing.service.ts`, `services/holdingsProjection.ts`, `services/pf/`, `services/pfAccounts.service.ts`, `services/pfCanonicalize.service.ts`, `services/pfCredentials.service.ts`, `services/pfFetchSessions.service.ts`, `services/pfNudges.service.ts` | `pfFetchWorker.ts`, `pfNudgeJob.ts` | `pf/` | `pf.ts` |
 | portfolioGroups | `portfolioGroups.routes.ts` | `portfolioGroup.controller.ts` | `services/portfolioGroup.service.ts` | — | — | `portfolioGroups.api.ts` |
 | portfolios | `portfolios.routes.ts` | `portfolio.controller.ts` | `services/portfolio.service.ts` | — | `portfolios/` | `portfolios.api.ts` |
 | propertyMedia | `propertyMedia.routes.ts` | `propertyMedia.controller.ts` | `services/propertyLocation.service.ts`, `services/propertyPhotos.service.ts` | — | — | `propertyMedia.api.ts` |
@@ -182,6 +182,6 @@ folder (for example `mf*` routes map to `pages/mf/` and `pages/mutualFunds/`).
 | transactions | `transactions.routes.ts` | `transaction.controller.ts`, `transactionPhotos.controller.ts` | `services/duplicates.service.ts`, `services/propertyPhotos.service.ts`, `services/transaction.service.ts` | — | `transactions/` | `transactions.api.ts` |
 | userPreferences | `userPreferences.routes.ts` | `userPreferences.controller.ts` | `services/userPreferences.service.ts` | — | — | `userPreferences.api.ts` |
 | valuation | `valuation.routes.ts` | `valuation.controller.ts` | `services/valuation/` | — | — | `valuation.api.ts` |
-| vehicles | `vehicles.routes.ts` | `vehicles.controller.ts` | `adapters/vehicle/`, `priceFeeds/fuel.service.ts`, `priceFeeds/fuelStates.ts`, `services/challans.service.ts`, `services/piiAtRest.service.ts`, `services/vehicles.service.ts` | `piiAtRestJobs.ts`, `priceJobs.ts`, `vehicleJobs.ts` | `vehicles/` | `vehicles.api.ts` |
+| vehicles | `vehicles.routes.ts` | `vehicles.controller.ts` | `ingestion/vehicle/`, `priceFeeds/fuel.service.ts`, `priceFeeds/fuelStates.ts`, `services/challans.service.ts`, `services/piiAtRest.service.ts`, `services/vehicles.service.ts` | `piiAtRestJobs.ts`, `priceJobs.ts`, `vehicleJobs.ts` | `vehicles/` | `vehicles.api.ts` |
 | will | `will.routes.ts` | `will.controller.ts` | `services/will/` | `willReviewJob.ts` | `will/` | `will.api.ts` |
 <!-- feature-index:end -->

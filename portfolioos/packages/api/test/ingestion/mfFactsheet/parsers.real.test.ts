@@ -31,22 +31,22 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Decimal } from '@everypaisa/shared';
-import { csvToGrid } from '../../../src/adapters/mfFactsheet/normalise.js';
-import { parseSbiPortfolio } from '../../../src/adapters/mfFactsheet/sbi.parse.js';
-import { parseIciciPortfolio } from '../../../src/adapters/mfFactsheet/icici.parse.js';
-import { parseHdfcPortfolio } from '../../../src/adapters/mfFactsheet/hdfc.parse.js';
-import { parseNipponPortfolio } from '../../../src/adapters/mfFactsheet/nippon.parse.js';
-import { parseKotakPortfolio } from '../../../src/adapters/mfFactsheet/kotak.parse.js';
-import { parseAxisPortfolio } from '../../../src/adapters/mfFactsheet/axis.parse.js';
-import { parseUtiPortfolio } from '../../../src/adapters/mfFactsheet/uti.parse.js';
-import { parseAbslPortfolio } from '../../../src/adapters/mfFactsheet/absl.parse.js';
-import { parseMiraePortfolio } from '../../../src/adapters/mfFactsheet/mirae.parse.js';
-import { parseDspPortfolio } from '../../../src/adapters/mfFactsheet/dsp.parse.js';
+import { csvToGrid } from '../../../src/ingestion/mfFactsheet/normalise.js';
+import { parseSbiPortfolio } from '../../../src/ingestion/mfFactsheet/sbi.parse.js';
+import { parseIciciPortfolio } from '../../../src/ingestion/mfFactsheet/icici.parse.js';
+import { parseHdfcPortfolio } from '../../../src/ingestion/mfFactsheet/hdfc.parse.js';
+import { parseNipponPortfolio } from '../../../src/ingestion/mfFactsheet/nippon.parse.js';
+import { parseKotakPortfolio } from '../../../src/ingestion/mfFactsheet/kotak.parse.js';
+import { parseAxisPortfolio } from '../../../src/ingestion/mfFactsheet/axis.parse.js';
+import { parseUtiPortfolio } from '../../../src/ingestion/mfFactsheet/uti.parse.js';
+import { parseAbslPortfolio } from '../../../src/ingestion/mfFactsheet/absl.parse.js';
+import { parseMiraePortfolio } from '../../../src/ingestion/mfFactsheet/mirae.parse.js';
+import { parseDspPortfolio } from '../../../src/ingestion/mfFactsheet/dsp.parse.js';
 import type {
   MfFactsheetResult,
   PortfolioParseInput,
   PortfolioRaw,
-} from '../../../src/adapters/mfFactsheet/types.js';
+} from '../../../src/ingestion/mfFactsheet/types.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const fixture = (amc: string) =>

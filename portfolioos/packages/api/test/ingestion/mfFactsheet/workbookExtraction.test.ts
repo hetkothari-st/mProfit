@@ -22,7 +22,7 @@
 
 import { describe, it, expect } from 'vitest';
 import * as XLSX from 'xlsx';
-import { sheetToGrid, findSheet, readWorkbook } from '../../../src/adapters/mfFactsheet/v1Support.js';
+import { sheetToGrid, findSheet, readWorkbook } from '../../../src/ingestion/mfFactsheet/v1Support.js';
 
 /** Build a one-sheet workbook from explicit cell objects. */
 function sheetOf(cells: Record<string, XLSX.CellObject>, ref: string): XLSX.WorkSheet {

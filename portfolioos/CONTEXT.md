@@ -52,12 +52,11 @@ portfolioos/
 ├── packages/api/                Express + Prisma backend
 │   ├── prisma/schema.prisma     101 models, ~3,500 lines
 │   ├── prisma/migrations/       69 migrations
-│   ├── src/adapters/            External-source parsers/scrapers (57 files)
 │   ├── src/ai/                  Claude client, prompts, chat sessions
 │   ├── src/config/env.ts        Zod-validated environment
 │   ├── src/connectors/          Gmail OAuth, Zerodha OAuth
 │   ├── src/controllers/         HTTP handlers (49 files)
-│   ├── src/ingestion/           Email → CanonicalEvent pipeline
+│   ├── src/ingestion/           Data in from outside: per-source fetchers/scrapers/parsers + Email → CanonicalEvent pipeline
 │   ├── src/integrations/        Finfactor (Finvu AA)
 │   ├── src/jobs/                Bull workers + cron (15 files)
 │   ├── src/lib/                 Prisma, RLS, queue, SSE, storage, crypto
@@ -519,16 +518,16 @@ throws, the projection is durable and retryable.
 
 ### 9.3 File imports
 
-`adapters/fileImport/` — `runner.ts`, `adapters.ts`, `projection.ts`. Broker
+`ingestion/fileImport/` — `runner.ts`, `adapters.ts`, `projection.ts`. Broker
 contract notes, CAS PDFs, CSVs. Password-protected PDFs handled via
 `lib/userDocPasswords.ts` + `useUploadWithPasswordRetry`. Runs on the Bull
 `importWorker`.
 
 ### 9.4 Mutual funds — three independent paths
 
-- **MF Central** (`adapters/mfcentral/mfCentralPlaywright.ts`) — OTP-driven
+- **MF Central** (`ingestion/mfcentral/mfCentralPlaywright.ts`) — OTP-driven
   Playwright session, `MFCentralSyncJob`.
-- **CAS mailback** (`adapters/mfMailback/camsMailback.ts`, `kfintechMailback.ts`) —
+- **CAS mailback** (`ingestion/mfMailback/camsMailback.ts`, `kfintechMailback.ts`) —
   request the statement by email, then parse it.
 - **CASParser API** (`lib/casparserClient.ts`) — third-party parsing of
   NSDL/CDSL/CAMS/KFintech CAS PDFs.
@@ -540,9 +539,9 @@ Plus `services/mfOverlap.service.ts` for portfolio overlap analysis.
 EPFO is **not** an Account Aggregator FIP and no consent API exists, so this is
 portal automation by necessity, not by preference.
 
-- `adapters/pf/epf/` — `epfo.v1.ts` (passbook), `uanLookup.v1.ts` (Know-your-UAN),
+- `ingestion/pf/epf/` — `epfo.v1.ts` (passbook), `uanLookup.v1.ts` (Know-your-UAN),
   `passwordReset.v1.ts`.
-- `adapters/pf/ppf/` — seven bank adapters: SBI, HDFC, ICICI, Axis, PNB, BoB,
+- `ingestion/pf/ppf/` — seven bank adapters: SBI, HDFC, ICICI, Axis, PNB, BoB,
   India Post.
 - Each adapter is split into a **pure `.parse.ts`** (fully unit-tested against
   fixtures) and a **`.v1.ts`** holding DOM selectors and Playwright driving.
@@ -581,7 +580,7 @@ member keep using a password that is now wrong. Logged at `error` level.
 ### 9.6 F&O
 
 `FoInstrument` + `DerivativePosition`, separate from the equity projection.
-`adapters/fno/broker-registry.ts`, `symbol-parser.ts`, broker connectors.
+`ingestion/fno/broker-registry.ts`, `symbol-parser.ts`, broker connectors.
 `services/foExpiry.service.ts` + `jobs/foExpiryClose.job.ts` auto-close expired
 contracts. `services/reports/schedule43.report.ts` produces the Schedule 43
 speculative/non-speculative split (`FNO_SCHEDULE_43`, PRO_ADVISOR).
@@ -592,9 +591,9 @@ speculative/non-speculative split (`FNO_SCHEDULE_43`, PRO_ADVISOR).
   12.5%-without choice model), `FmvOverride`/`SystemFmvSeed` for §55(2)(ac).
 - Rentals: `RentalProperty` → `Tenancy` → `RentReceipt`, `RentReminder`,
   `PropertyExpense`; SMS/email reminders via `rental.reminders.service.ts`.
-- Vehicles: `adapters/vehicle/` — mParivahan, CarInfo, Rahastas, challan lookup,
+- Vehicles: `ingestion/vehicle/` — mParivahan, CarInfo, Rahastas, challan lookup,
   photo fetch, all behind `chain.ts` (ordered fallback). Valuation via
-  `adapters/valuation/` — CarDekho, Cars24, CarWale, then a depreciation model as
+  `ingestion/valuation/` — CarDekho, Cars24, CarWale, then a depreciation model as
   final fallback. `VehicleValuationLog` records which adapter answered.
 
 ### 9.8 Advisor engine (`/advisor`, `ADVICE_ENGINE`, PLUS)
@@ -877,7 +876,7 @@ only for chart geometry, never for arithmetic that will be displayed.
 |---|---|---|
 | `services/` | 36 | Business logic |
 | `invariants/` | 12 | The §3 guarantees |
-| `adapters/` | 11 | Golden fixtures, ≥5 per parser |
+| `ingestion/` (per-source adapters) | 11 | Golden fixtures, ≥5 per parser |
 | `ingestion/` | 11 | Pipeline, hashing, templates, LLM schema |
 | `vehicles/` | 4 | Vehicle chain |
 | `security/` | 3 | `family-visibility`, `pf-rls`, `redaction` |

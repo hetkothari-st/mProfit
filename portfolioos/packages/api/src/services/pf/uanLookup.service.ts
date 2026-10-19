@@ -22,13 +22,13 @@ import {
   validateResetInput,
   type PasswordResetInput,
   type PasswordResetOutcome,
-} from '../../adapters/pf/epf/passwordReset.parse.js';
+} from '../../ingestion/pf/epf/passwordReset.parse.js';
 import {
   validateLookupInput,
   maskUan,
   type UanLookupInput,
   type UanLookupOutcome,
-} from '../../adapters/pf/epf/uanLookup.parse.js';
+} from '../../ingestion/pf/epf/uanLookup.parse.js';
 
 /**
  * A lookup answers "do these details belong to a real EPFO member?", which

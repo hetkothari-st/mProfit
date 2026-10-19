@@ -4,7 +4,7 @@ import {
   validateNewPassword,
   parseResetResponse,
   type PasswordResetInput,
-} from '../../../src/adapters/pf/epf/passwordReset.parse.js';
+} from '../../../src/ingestion/pf/epf/passwordReset.parse.js';
 
 function input(over: Partial<PasswordResetInput> = {}): PasswordResetInput {
   return { uan: '100234567890', mobile: '9876543210', newPassword: 'Str0ng!pass', ...over };

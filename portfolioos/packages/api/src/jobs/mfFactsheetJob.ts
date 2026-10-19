@@ -5,7 +5,7 @@
  * WHY THIS EXISTS
  * ---------------------------------------------------------------------------
  *
- * Ten AMC adapters exist under `adapters/mfFactsheet`, each tested against the
+ * Ten AMC adapters exist under `ingestion/mfFactsheet`, each tested against the
  * files the AMCs actually publish. Nothing called them. `resolveFactsheetAdapter`
  * was imported by no job, no script, nothing outside its own directory and its
  * tests, and the only code that had ever written `MfPortfolioSnapshot` was a
@@ -46,20 +46,20 @@ import { runAsSystem } from '../lib/requestContext.js';
 import {
   resolveFactsheetAdapter,
   REGISTERED_AMC_CODES,
-} from '../adapters/mfFactsheet/registry.js';
+} from '../ingestion/mfFactsheet/registry.js';
 import type {
   FactsheetFetchContext,
   MfFactsheetAdapter,
   PortfolioRaw,
   SchemeFactsRaw,
-} from '../adapters/mfFactsheet/types.js';
+} from '../ingestion/mfFactsheet/types.js';
 import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
 import {
   setIciciPortfolioUrlResolver,
   setIciciFactsheetTextResolver,
-} from '../adapters/mfFactsheet/icici.v1.js';
-import { setNipponFactsheetTextResolver } from '../adapters/mfFactsheet/nippon.v1.js';
-import { setKotakFactsheetTextResolver } from '../adapters/mfFactsheet/kotak.v1.js';
+} from '../ingestion/mfFactsheet/icici.v1.js';
+import { setNipponFactsheetTextResolver } from '../ingestion/mfFactsheet/nippon.v1.js';
+import { setKotakFactsheetTextResolver } from '../ingestion/mfFactsheet/kotak.v1.js';
 import { createIciciPortfolioResolver, resetFactsheetZipCache } from './mfFactsheetZip.js';
 import {
   createIciciFactsheetTextResolver,

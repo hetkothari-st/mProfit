@@ -21,50 +21,50 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NIPPON_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/nippon.parse.js';
-import { KOTAK_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/kotak.parse.js';
-import { AXIS_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/axis.parse.js';
-import { UTI_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/uti.parse.js';
-import { ABSL_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/absl.parse.js';
-import { MIRAE_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/mirae.parse.js';
-import { DSP_ADAPTER_VERSION } from '../../../src/adapters/mfFactsheet/dsp.parse.js';
+import { NIPPON_ADAPTER_VERSION } from '../../../src/ingestion/mfFactsheet/nippon.parse.js';
+import { KOTAK_ADAPTER_VERSION } from '../../../src/ingestion/mfFactsheet/kotak.parse.js';
+import { AXIS_ADAPTER_VERSION } from '../../../src/ingestion/mfFactsheet/axis.parse.js';
+import { UTI_ADAPTER_VERSION } from '../../../src/ingestion/mfFactsheet/uti.parse.js';
+import { ABSL_ADAPTER_VERSION } from '../../../src/ingestion/mfFactsheet/absl.parse.js';
+import { MIRAE_ADAPTER_VERSION } from '../../../src/ingestion/mfFactsheet/mirae.parse.js';
+import { DSP_ADAPTER_VERSION } from '../../../src/ingestion/mfFactsheet/dsp.parse.js';
 import { Decimal } from '@everypaisa/shared';
-import { csvToGrid, buildAmfiMarketCapLookup } from '../../../src/adapters/mfFactsheet/normalise.js';
+import { csvToGrid, buildAmfiMarketCapLookup } from '../../../src/ingestion/mfFactsheet/normalise.js';
 import {
   parseNipponPortfolio,
   parseNipponSchemeFacts,
-} from '../../../src/adapters/mfFactsheet/nippon.parse.js';
+} from '../../../src/ingestion/mfFactsheet/nippon.parse.js';
 import {
   parseKotakPortfolio,
   parseKotakSchemeFacts,
-} from '../../../src/adapters/mfFactsheet/kotak.parse.js';
+} from '../../../src/ingestion/mfFactsheet/kotak.parse.js';
 import {
   parseAxisPortfolio,
   parseAxisSchemeFacts,
-} from '../../../src/adapters/mfFactsheet/axis.parse.js';
+} from '../../../src/ingestion/mfFactsheet/axis.parse.js';
 import {
   parseUtiPortfolio,
   parseUtiSchemeFacts,
-} from '../../../src/adapters/mfFactsheet/uti.parse.js';
+} from '../../../src/ingestion/mfFactsheet/uti.parse.js';
 import {
   parseAbslPortfolio,
   parseAbslSchemeFacts,
-} from '../../../src/adapters/mfFactsheet/absl.parse.js';
+} from '../../../src/ingestion/mfFactsheet/absl.parse.js';
 import {
   parseMiraePortfolio,
   parseMiraeSchemeFacts,
-} from '../../../src/adapters/mfFactsheet/mirae.parse.js';
+} from '../../../src/ingestion/mfFactsheet/mirae.parse.js';
 import {
   parseDspPortfolio,
   parseDspSchemeFacts,
-} from '../../../src/adapters/mfFactsheet/dsp.parse.js';
+} from '../../../src/ingestion/mfFactsheet/dsp.parse.js';
 import type {
   MfFactsheetResult,
   PortfolioParseInput,
   PortfolioRaw,
   SchemeFactsParseInput,
   SchemeFactsRaw,
-} from '../../../src/adapters/mfFactsheet/types.js';
+} from '../../../src/ingestion/mfFactsheet/types.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const fixtureDir = (amc: string) => resolve(here, '../../fixtures/mf/factsheet', amc);

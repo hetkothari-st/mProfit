@@ -30,7 +30,7 @@
  *
  * Registering a new AMC is exactly two edits — import the adapter, add it to
  * `ADAPTERS` — and one obligation: ≥5 fixtures, asserted by the registry
- * coverage test in `test/adapters/mfFactsheet/registry.test.ts`.
+ * coverage test in `test/ingestion/mfFactsheet/registry.test.ts`.
  */
 
 import { abslFactsheetAdapter } from './absl.v1.js';

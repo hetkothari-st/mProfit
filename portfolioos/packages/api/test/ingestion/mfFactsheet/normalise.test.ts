@@ -27,7 +27,7 @@ import {
   resolveMarketCapBucket,
   validateSnapshot,
   validateTerPct,
-} from '../../../src/adapters/mfFactsheet/normalise.js';
+} from '../../../src/ingestion/mfFactsheet/normalise.js';
 import { normaliseCreditRating as mathNormaliseCreditRating } from '../../../src/services/mfAnalytics/mfMetricsMath.js';
 
 describe('credit rating normalisation', () => {

@@ -11,7 +11,7 @@ import {
   initiateMFCentralSync,
   submitMFCentralOtp,
   MFCentralError,
-} from '../../adapters/mfcentral/mfCentralPlaywright.js';
+} from '../../ingestion/mfcentral/mfCentralPlaywright.js';
 import type { ParsedTransaction } from '../imports/parsers/types.js';
 import { readPan } from '../piiAtRest.service.js';
 
