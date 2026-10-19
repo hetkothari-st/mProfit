@@ -185,11 +185,18 @@ export async function getCryptoPriceAt(
 }
 
 export async function getLatestCryptoPrice(cryptoId: string): Promise<Decimal | null> {
+  return (await getLatestCryptoQuote(cryptoId))?.price ?? null;
+}
+
+/** Latest INR price and the day it was recorded for. */
+export async function getLatestCryptoQuote(
+  cryptoId: string,
+): Promise<{ price: Decimal; asOf: Date } | null> {
   const row = await prisma.cryptoPrice.findFirst({
     where: { cryptoId },
     orderBy: { date: 'desc' },
   });
-  return row ? new Decimal(row.priceInr.toString()) : null;
+  return row ? { price: new Decimal(row.priceInr.toString()), asOf: row.date } : null;
 }
 
 /**
@@ -198,9 +205,15 @@ export async function getLatestCryptoPrice(cryptoId: string): Promise<Decimal | 
  * internal CryptoMaster.id from that slug, then read the latest INR price.
  */
 export async function getLatestCryptoPriceByCoinGeckoId(coinGeckoId: string): Promise<Decimal | null> {
+  return (await getLatestCryptoQuoteByCoinGeckoId(coinGeckoId))?.price ?? null;
+}
+
+export async function getLatestCryptoQuoteByCoinGeckoId(
+  coinGeckoId: string,
+): Promise<{ price: Decimal; asOf: Date } | null> {
   const coin = await prisma.cryptoMaster.findUnique({ where: { coinGeckoId } });
   if (!coin) return null;
-  return getLatestCryptoPrice(coin.id);
+  return getLatestCryptoQuote(coin.id);
 }
 
 export interface LiveCryptoPriceRow {
