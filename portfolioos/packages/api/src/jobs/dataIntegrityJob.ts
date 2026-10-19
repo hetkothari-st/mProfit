@@ -13,6 +13,8 @@
  * some write path skipped its recompute, and that path will keep doing it
  * until someone finds it. `details` names the portfolio and asset so they can.
  *
+ * Failed imports and emails are retried first (ingestionRecovery.service).
+ *
  * Runs at 02:15 IST — after the evening price jobs and the 23:45 net-worth
  * snapshot, before anyone opens a report in the morning.
  */
@@ -25,6 +27,7 @@ import {
   checkPortfolioIntegrity,
   type PortfolioIntegrityResult,
 } from '../services/integrity/storedDataIntegrity.service.js';
+import { runIngestionRecovery } from '../services/imports/ingestionRecovery.service.js';
 
 const TZ = 'Asia/Kolkata';
 export const DATA_INTEGRITY_ALERT_SOURCE = 'data.integrity';
@@ -51,6 +54,14 @@ export async function runDataIntegrityJob(opts: { repair?: boolean } = {}): Prom
   running = true;
   const repair = opts.repair ?? true;
   try {
+    // Heal ingestion first: a recovered import changes the transactions the
+    // integrity check below compares against.
+    try {
+      const recovery = await runIngestionRecovery();
+      logger.info(recovery, '[cron] ingestion recovery done');
+    } catch (err) {
+      logger.error({ err }, '[cron] ingestion recovery failed');
+    }
     const run = await runAsSystem(() => prisma.dataIntegrityRun.create({ data: {} }));
     const portfolios = await runAsSystem(() =>
       prisma.portfolio.findMany({

@@ -5,6 +5,11 @@ import { join, extname } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import type { ImportType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
+import {
+  recordSourceFailure,
+  resolveSourceFailure,
+  unresolvedSourceRefs,
+} from '../../services/imports/ingestionRecovery.service.js';
 import { env } from '../../config/env.js';
 import { uploadRoot } from '../../lib/uploadRoot.js';
 import { logger } from '../../lib/logger.js';
@@ -403,6 +408,10 @@ async function _syncGmailAccount(
 
     logger.info({ accountId, q, matched: messageIds.length }, '[gmail] search complete');
 
+    // Messages that failed on an earlier poll: resolved below once one goes
+    // through, so the data-quality banner only lists what is still missing.
+    const failedRefs = await unresolvedSourceRefs(acc.userId, `gmail:${accountId}:`);
+
     let authAborted = false;
     for (const id of messageIds) {
       if (authAborted) break;
@@ -480,6 +489,8 @@ async function _syncGmailAccount(
           imported++;
         }
 
+        const ref = `gmail:${accountId}:${id}`;
+        if (failedRefs.has(ref)) await resolveSourceFailure(acc.userId, ref);
       } catch (err) {
         errors++;
         if (isGmailAuthError(err)) {
@@ -495,6 +506,15 @@ async function _syncGmailAccount(
           break;
         }
         logger.warn({ err, messageId: id, accountId }, '[gmail] message failed');
+        // Recorded, not just logged: the next poll retries it (Gmail re-lists
+        // every matching message) and resolves this row when it succeeds.
+        await recordSourceFailure({
+          userId: acc.userId,
+          sourceAdapter: 'gmail.attachment',
+          sourceRef: `gmail:${accountId}:${id}`,
+          error: err,
+          rawPayload: { accountId, messageId: id },
+        });
       }
     }
 

@@ -2,9 +2,14 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { ImportType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import {
+  recordSourceFailure,
+  resolveSourceFailure,
+  unresolvedSourceRefs,
+} from '../services/imports/ingestionRecovery.service.js';
 import { env } from '../config/env.js';
 import { uploadRoot } from '../lib/uploadRoot.js';
 import { logger } from '../lib/logger.js';
@@ -84,6 +89,8 @@ async function pollOne(
   let processed = 0;
   let imported = 0;
   let errors = 0;
+  // Taken before the search, so mail arriving mid-poll is not skipped next time.
+  const pollStartedAt = new Date();
 
   try {
     await client.connect();
@@ -98,6 +105,7 @@ async function pollOne(
       if (!uids) {
         return { processed: 0, imported: 0, errors: 0 };
       }
+      const failedRefs = await unresolvedSourceRefs(acc.userId, `imap:${accountId}:`);
       for (const uid of uids) {
         processed++;
         try {
@@ -112,6 +120,15 @@ async function pollOne(
             const ext = extname(fileName).toLowerCase();
             if (!ALLOWED_EXT.has(ext)) continue;
 
+            // A message that failed half-way is fetched again in full, so an
+            // attachment imported on the earlier attempt must not be doubled.
+            const contentHash = createHash('sha256').update(att.content as Buffer).digest('hex');
+            const already = await prisma.importJob.findFirst({
+              where: { userId: acc.userId, contentHash },
+              select: { id: true },
+            });
+            if (already) continue;
+
             const filePath = await saveAttachment(att.content as Buffer, fileName);
             const type = inferType(fileName, subject);
             const broker = inferBroker(subject, from);
@@ -123,15 +140,25 @@ async function pollOne(
               fileName,
               filePath,
               broker,
+              contentHash,
             });
             imported++;
           }
 
           // Mark message seen via UID
           await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
+          const ref = `imap:${accountId}:${uid}`;
+          if (failedRefs.has(ref)) await resolveSourceFailure(acc.userId, ref);
         } catch (err) {
           errors++;
           logger.warn({ err, uid, accountId }, '[mailbox] message failed');
+          await recordSourceFailure({
+            userId: acc.userId,
+            sourceAdapter: 'mailbox.imap',
+            sourceRef: `imap:${accountId}:${uid}`,
+            error: err,
+            rawPayload: { accountId, uid },
+          });
         }
       }
     } finally {
@@ -140,9 +167,11 @@ async function pollOne(
     await client.logout();
   } catch (err) {
     logger.error({ err, accountId }, '[mailbox] poll failed');
+    // The cursor stays where it was: a poll that never got to its messages
+    // must not mark them as looked at.
     await prisma.mailboxAccount.update({
       where: { id: accountId },
-      data: { lastError: (err as Error).message, lastPolledAt: new Date() },
+      data: { lastError: (err as Error).message },
     });
     // Best-effort socket teardown after the primary poll failure — the real
     // error is already logged above; a close() failure here would just be
@@ -152,9 +181,12 @@ async function pollOne(
     return { processed, imported, errors: errors + 1 };
   }
 
+  // Advance the date cursor only when every message went through. A failed
+  // message stays unread, and keeping the cursor lets the next poll find it;
+  // the ones that succeeded are \Seen and are not fetched again.
   await prisma.mailboxAccount.update({
     where: { id: accountId },
-    data: { lastPolledAt: new Date(), lastError: null },
+    data: errors === 0 ? { lastPolledAt: pollStartedAt, lastError: null } : { lastError: null },
   });
   return { processed, imported, errors };
 }

@@ -28,6 +28,7 @@ import { startWillReviewJob } from './jobs/willReviewJob.js';
 import { startMcpCleanupJob } from './jobs/mcpCleanupJob.js';
 import { startNetWorthSnapshotJob } from './jobs/netWorthSnapshotJob.js';
 import { startDataIntegrityJob } from './jobs/dataIntegrityJob.js';
+import { runIngestionRecovery } from './services/imports/ingestionRecovery.service.js';
 import { startFundScoringJob } from './jobs/fundScoring.job.js';
 import { assertNamedFundReleaseGate } from './services/advisor/fundRanking/releaseGate.js';
 import { evaluateDbRole, readDbRoleFacts } from './lib/dbRoleGuard.js';
@@ -237,6 +238,12 @@ const server = app.listen(env.PORT, '::', () => {
   startMcpCleanupJob();
   startNetWorthSnapshotJob();
   startDataIntegrityJob();
+  // After a deploy, retry what failed while the previous build was running
+  // (and run the one-time outage recovery). Delayed so it does not compete
+  // with boot; bounded per job, so a permanent failure stops after a few tries.
+  setTimeout(() => {
+    runIngestionRecovery().catch((err) => logger.error({ err }, '[recovery] boot-time ingestion recovery failed'));
+  }, 2 * 60_000).unref();
   startFoExpiryJob();
   /**
    * MF analytics pipeline. Each job only registers a cron schedule here; the
