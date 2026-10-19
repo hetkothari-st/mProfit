@@ -17,11 +17,12 @@
  * user's request context (RLS).
  */
 
-import type { AssetClass } from '@prisma/client';
+import type { AssetClass, Transaction } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import {
   computePortfolioCapitalGains,
   computeUserCapitalGains,
+  type CapitalGainRow,
 } from '../tax/capitalGains.service.js';
 import { expectedProjections } from '../holdings/holdingsProjection.js';
 import { hasMarketPrice, isPriceStale } from '../holdings/priceStaleness.js';
@@ -39,6 +40,32 @@ export type DataQualityCode =
   | 'EVENTS_AWAITING_REVIEW'
   | 'UNRESOLVED_FAILURES';
 
+/**
+ * What the user can do about one item. The app never invents the missing
+ * data: it points at the real source when one exists (an email purchase
+ * awaiting review), and otherwise opens the entry form with everything it
+ * already knows filled in.
+ */
+export type DataQualityAction =
+  | {
+      kind: 'ADD_PURCHASE';
+      portfolioId: string;
+      assetClass: string;
+      assetName: string;
+      symbol: string | null;
+      isin: string | null;
+      quantity: string;
+      /** The purchase must be on or before this date (the sale's). */
+      onOrBefore: string;
+    }
+  | { kind: 'REVIEW_EVENTS'; count: number };
+
+export interface DataQualityItem {
+  label: string;
+  detail?: string;
+  action?: DataQualityAction;
+}
+
 export interface DataQualityIssue {
   code: DataQualityCode;
   severity: 'error' | 'warning';
@@ -47,7 +74,7 @@ export interface DataQualityIssue {
   count: number;
   message: string;
   /** Up to MAX_ITEMS examples, so the user can find and fix them. */
-  items: Array<{ label: string; detail?: string }>;
+  items: DataQualityItem[];
   /** Examples left out of `items` by the MAX_ITEMS cap. */
   moreItems: number;
 }
@@ -159,6 +186,7 @@ export async function checkReportDataQuality(
   // 1. Sales with no purchase behind them. The engine books these at nil cost
   //    (so tax is not understated) and marks the row with buy === sell.
   const oversold = gains.rows.filter((r) => r.buyTransactionId === r.sellTransactionId);
+  const oversoldActions = await oversoldActionsFor(userId, oversold, txs);
   push({
     code: 'OVERSOLD',
     severity: 'error',
@@ -166,9 +194,10 @@ export async function checkReportDataQuality(
     count: oversold.length,
     message:
       'Some sales are for more units than were ever bought. They are shown at zero cost, so gains are overstated until the missing purchases are added.',
-    items: oversold.map((r) => ({
+    items: oversold.map((r, i) => ({
       label: r.assetName,
       detail: `${r.quantity.toString()} units sold on ${day(r.sellDate)} with no matching purchase`,
+      action: oversoldActions[i],
     })),
   });
 
@@ -326,6 +355,59 @@ export function dataQualityMetaLines(q: DataQualityReport): Array<{ label: strin
     { label: 'Data as of', value: asOf.length ? asOf.join(', ') : 'no data' },
     { label: 'Data checks', value: checks },
   ];
+}
+
+/**
+ * For each sale with no purchase behind it: is the purchase already in the
+ * app, waiting? An email-parsed BUY of the same instrument on or before the
+ * sale, not yet turned into a transaction, is the real data — point at it.
+ * Otherwise offer the entry form, pre-filled.
+ */
+async function oversoldActionsFor(
+  userId: string,
+  rows: CapitalGainRow[],
+  txs: Transaction[],
+): Promise<DataQualityAction[]> {
+  if (rows.length === 0) return [];
+  const byId = new Map(txs.map((t) => [t.id, t]));
+  const sells = rows.map((r) => byId.get(r.sellTransactionId));
+  const stockIds = [...new Set(sells.map((t) => t?.stockId).filter((s): s is string => Boolean(s)))];
+  const isins = [...new Set(rows.map((r) => r.isin).filter((s): s is string => Boolean(s)))];
+  const [stocks, waiting] = await Promise.all([
+    stockIds.length
+      ? prisma.stockMaster.findMany({ where: { id: { in: stockIds } }, select: { id: true, symbol: true } })
+      : Promise.resolve([]),
+    isins.length
+      ? prisma.canonicalEvent.findMany({
+          where: {
+            userId,
+            eventType: 'BUY',
+            instrumentIsin: { in: isins },
+            status: { in: ['PARSED', 'PENDING_REVIEW', 'CONFIRMED'] },
+          },
+          select: { instrumentIsin: true, eventDate: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const symbolOf = new Map(stocks.map((s) => [s.id, s.symbol]));
+
+  return rows.map((r, i) => {
+    const matching = waiting.filter(
+      (e) => e.instrumentIsin === r.isin && e.eventDate.getTime() <= r.sellDate.getTime(),
+    ).length;
+    if (matching > 0) return { kind: 'REVIEW_EVENTS', count: matching };
+    const sell = sells[i];
+    return {
+      kind: 'ADD_PURCHASE',
+      portfolioId: r.portfolioId,
+      assetClass: r.assetClass,
+      assetName: r.assetName,
+      symbol: sell?.stockId ? symbolOf.get(sell.stockId) ?? null : null,
+      isin: r.isin,
+      quantity: r.quantity.toString(),
+      onOrBefore: day(r.sellDate)!,
+    };
+  });
 }
 
 /** Combine per-member checks for a household download into one verdict. */

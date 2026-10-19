@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { AlertTriangle, CheckCircle2, ChevronDown, Loader2, Wrench, XCircle } from 'lucide-react';
@@ -6,7 +7,7 @@ import { formatDateOnly } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import { apiErrorMessage } from '@/api/client';
-import { reportsApi, type DataQualityIssue } from '@/api/reports.api';
+import { reportsApi, type DataQualityAction, type DataQualityIssue } from '@/api/reports.api';
 
 /**
  * Whether the figures on the Reports page can be trusted, and if not, why.
@@ -129,6 +130,37 @@ export function DataQualityBanner({ portfolioId }: { portfolioId: string }) {
   );
 }
 
+/**
+ * Where to fix one item. The app never fills a missing purchase in by itself
+ * — a guessed price would put a wrong figure in the tax reports — so this
+ * points at the real data when it is already waiting, and otherwise opens the
+ * entry form with everything known filled in.
+ */
+function ItemAction({ action }: { action: DataQualityAction }) {
+  if (action.kind === 'REVIEW_EVENTS') {
+    return (
+      <Link to="/ingestion" className="ml-2 text-accent hover:underline">
+        Review {action.count} matching purchase{action.count === 1 ? '' : 's'} from email
+      </Link>
+    );
+  }
+  const params = new URLSearchParams({
+    add: 'purchase',
+    portfolioId: action.portfolioId,
+    assetClass: action.assetClass,
+    assetName: action.assetName,
+    quantity: action.quantity,
+    onOrBefore: action.onOrBefore,
+  });
+  if (action.symbol) params.set('symbol', action.symbol);
+  if (action.isin) params.set('isin', action.isin);
+  return (
+    <Link to={`/transactions?${params.toString()}`} className="ml-2 text-accent hover:underline">
+      Add purchase
+    </Link>
+  );
+}
+
 function IssueRow({ issue }: { issue: DataQualityIssue }) {
   return (
     <li>
@@ -152,6 +184,7 @@ function IssueRow({ issue }: { issue: DataQualityIssue }) {
                 <li key={i} className="break-words">
                   {item.label}
                   {item.detail && <span> — {item.detail}</span>}
+                  {item.action && <ItemAction action={item.action} />}
                 </li>
               ))}
               {issue.moreItems > 0 && <li>…and {issue.moreItems} more</li>}

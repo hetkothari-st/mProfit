@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CopyCheck, Plus, Receipt } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -8,7 +9,7 @@ import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/common/EmptyState';
 import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
-import { TransactionFormDialog } from './TransactionFormDialog';
+import { TransactionFormDialog, type TransactionPrefill } from './TransactionFormDialog';
 import { DuplicatesDialog } from './DuplicatesDialog';
 import type { TransactionDTO } from '@everypaisa/shared';
 import { ASSET_CLASS_LABELS, formatINR, formatQuantity, formatDateOnly } from '@everypaisa/shared';
@@ -17,6 +18,29 @@ export function TransactionsPage() {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<TransactionDTO | null>(null);
+  const [prefill, setPrefill] = useState<TransactionPrefill | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // ?add=purchase&… — opened from the Reports data-quality banner for a sale
+  // with no purchase behind it. Read once, then cleared from the URL so a
+  // refresh does not reopen the form.
+  useEffect(() => {
+    if (searchParams.get('add') !== 'purchase') return;
+    const qty = Number(searchParams.get('quantity'));
+    setPrefill({
+      portfolioId: searchParams.get('portfolioId') ?? undefined,
+      transactionType: 'BUY',
+      assetClass: (searchParams.get('assetClass') ?? 'EQUITY') as TransactionPrefill['assetClass'],
+      stockSymbol: searchParams.get('symbol') ?? undefined,
+      assetName: searchParams.get('assetName') ?? undefined,
+      isin: searchParams.get('isin') ?? undefined,
+      quantity: Number.isFinite(qty) && qty > 0 ? qty : undefined,
+      onOrBefore: searchParams.get('onOrBefore') ?? undefined,
+    });
+    setEditing(null);
+    setOpen(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [page, setPage] = useState(1);
 
@@ -185,7 +209,15 @@ export function TransactionsPage() {
         </CardContent>
       </Card>
 
-      <TransactionFormDialog open={open} onOpenChange={setOpen} initial={editing} />
+      <TransactionFormDialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setPrefill(null);
+        }}
+        initial={editing}
+        prefill={prefill}
+      />
       <DuplicatesDialog open={duplicatesOpen} onOpenChange={setDuplicatesOpen} />
     </div>
   );
