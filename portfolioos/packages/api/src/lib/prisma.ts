@@ -153,6 +153,7 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'MailboxAccount',
   'GmailScanJob',
   'GmailDiscoveredDoc',
+  'InsuranceDocument',
   'GmailAutoApproveRule',
   'VehicleValuationLog',
   'SipPlan',

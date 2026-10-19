@@ -16,6 +16,7 @@ import { classifyAttachmentWithLlm } from '../ingestion/gmail/gmailClassifier.js
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
 import { getGmailScanQueue } from '../lib/queue.js';
 import { sweepAutoApprovals } from '../services/gmail/gmailDocApproval.service.js';
+import { processInsuranceDocuments } from '../services/insurance/insuranceDocPipeline.js';
 import { dropLocalFile, ensureLocalFile, persistBytes } from '../lib/fileStore.js';
 
 const CONCURRENCY = 5;
@@ -70,6 +71,15 @@ async function runScanJobAsOwner(scanJobId: string): Promise<void> {
 
     await classifyPending(scanJobId);
     await sweepAutoApprovals(job.userId, scanJobId);
+    if (job.kind === 'INSURANCE') {
+      // Read what this scan found. A reading failure must not fail the scan:
+      // the documents stay PENDING and the nightly run tries again.
+      try {
+        await processInsuranceDocuments(job.userId);
+      } catch (err) {
+        logger.error({ err, scanJobId }, '[gmailScan] reading insurance documents failed');
+      }
+    }
 
     await prisma.gmailScanJob.update({
       where: { id: scanJobId },

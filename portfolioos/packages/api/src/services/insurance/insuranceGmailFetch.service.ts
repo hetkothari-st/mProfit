@@ -18,6 +18,7 @@ import { writeAuditLog } from '../../lib/audit.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { runAsSystem, runAsUser } from '../../lib/requestContext.js';
 import { createScanJob } from '../gmail/gmailScanJobs.service.js';
+import { processInsuranceDocuments } from './insuranceDocPipeline.js';
 
 const FIRST_SCAN_YEARS = 3;
 const ACTIVE_SCAN_STATUSES = ['PENDING', 'LISTING', 'DOWNLOADING', 'CLASSIFYING'] as const;
@@ -157,7 +158,12 @@ export async function runInsuranceFetchForAll(): Promise<{ started: number; fail
   let failed = 0;
   for (const mb of enabled) {
     try {
-      await runAsUser(mb.userId, () => startInsuranceScan(mb.userId, mb.id));
+      await runAsUser(mb.userId, async () => {
+        // Retry documents still waiting (budget, a password saved since)
+        // before looking for new ones.
+        await processInsuranceDocuments(mb.userId);
+        await startInsuranceScan(mb.userId, mb.id);
+      });
       started++;
     } catch (err) {
       failed++;
