@@ -21,6 +21,11 @@ import {
   taxSummaryHandler,
 } from '../controllers/insurance.controller.js';
 import { getCoverageHandler } from '../controllers/insuranceCoverage.controller.js';
+import {
+  getInsuranceFetchHandler,
+  scanInsuranceNowHandler,
+  setInsuranceFetchHandler,
+} from '../controllers/insuranceGmailFetch.controller.js';
 
 export const insuranceRouter = Router();
 insuranceRouter.use(authenticate);
@@ -54,6 +59,11 @@ insuranceRouter.post('/policies/:id/import-suggestions/dismiss', asyncHandler(di
 
 // What the year's recorded premiums are worth at tax time (?fy=2026-27).
 insuranceRouter.get('/tax-summary', asyncHandler(taxSummaryHandler));
+
+// Insurance documents from Gmail, with the user's permission per account.
+insuranceRouter.get('/gmail-fetch', asyncHandler(getInsuranceFetchHandler));
+insuranceRouter.put('/gmail-fetch/:mailboxId', asyncHandler(setInsuranceFetchHandler));
+insuranceRouter.post('/gmail-fetch/:mailboxId/scan', asyncHandler(scanInsuranceNowHandler));
 
 // Manual trigger for renewal alerts (useful for testing §9.4)
 insuranceRouter.post('/alerts/trigger', asyncHandler(triggerRenewalAlertsHandler));

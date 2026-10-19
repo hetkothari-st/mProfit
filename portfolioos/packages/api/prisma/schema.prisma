@@ -342,6 +342,12 @@ model MailboxAccount {
   lastPolledAt    DateTime?
   lastError       String?
   isActive        Boolean         @default(true)
+  /// The user's permission to search this mailbox for insurance documents
+  /// (policy PDFs, premium receipts, renewal notices, claim letters). Off
+  /// until they turn it on; the consent time is kept, and AuditLog records
+  /// every change.
+  insuranceFetchEnabled   Boolean   @default(false)
+  insuranceFetchConsentAt DateTime?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -1420,6 +1426,10 @@ model GmailScanJob {
   lookbackFrom DateTime @db.Date
   lookbackTo   DateTime @db.Date
 
+  /// FULL: every financial attachment. INSURANCE: only insurer senders and
+  /// insurance subject lines (services/insurance/insuranceGmailFetch).
+  kind GmailScanKind @default(FULL)
+
   status GmailScanStatus @default(PENDING)
 
   totalMessages         Int?
@@ -1500,6 +1510,11 @@ model GmailDiscoveredDoc {
   @@index([userId, status, receivedAt])
   @@index([scanJobId, status])
   @@index([userId, fromAddress, isFinancial])
+}
+
+enum GmailScanKind {
+  FULL
+  INSURANCE
 }
 
 enum GmailDocStatus {

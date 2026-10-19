@@ -1,3 +1,4 @@
+import { INSURANCE_SUBJECT_PHRASES, INSURERS } from '../../data/insurers.js';
 import { google, type gmail_v1 } from 'googleapis';
 import { getAuthorizedClientFor } from './gmail.connector.js';
 import { logger } from '../../lib/logger.js';
@@ -38,6 +39,23 @@ function formatDate(d: Date): string {
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
   const dd = String(d.getUTCDate()).padStart(2, '0');
   return `${yyyy}/${mm}/${dd}`;
+}
+
+/**
+ * Insurance scan: PDFs from a known insurer (data/insurers), or with an
+ * insurance subject line from anyone. Narrower than the full scan on
+ * purpose — the user granted permission for insurance documents, not their
+ * whole inbox.
+ */
+export function buildInsuranceScanQuery(lookbackFrom: Date, lookbackTo: Date): string {
+  const exclusiveTo = new Date(lookbackTo);
+  exclusiveTo.setUTCDate(exclusiveTo.getUTCDate() + 1);
+  const senders = INSURERS.flatMap((i) => i.domains).join(' OR ');
+  const subjects = INSURANCE_SUBJECT_PHRASES.map((p) => `"${p}"`).join(' OR ');
+  return (
+    `filename:pdf has:attachment (from:(${senders}) OR subject:(${subjects}))` +
+    ` after:${formatDate(lookbackFrom)} before:${formatDate(exclusiveTo)}`
+  );
 }
 
 export function buildScanQuery(lookbackFrom: Date, lookbackTo: Date): string {

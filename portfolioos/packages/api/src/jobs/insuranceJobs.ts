@@ -1,4 +1,6 @@
+import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
+import { runInsuranceFetchForAll } from '../services/insurance/insuranceGmailFetch.service.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { backfillPolicyNumberEncryption } from '../services/insurance/insurance.service.js';
 
@@ -10,6 +12,15 @@ import { backfillPolicyNumberEncryption } from '../services/insurance/insurance.
  */
 export function startInsuranceJobs(): void {
   if (process.env.ENABLE_INSURANCE_CRONS === 'false') return;
+  // 05:30 IST: search the Gmail accounts whose owners turned on insurance
+  // documents. Runs before the morning, after the night's other jobs.
+  cron.schedule(
+    '30 5 * * *',
+    () => {
+      runInsuranceFetchForAll().catch((err) => logger.error({ err }, '[insurance] nightly Gmail scan failed'));
+    },
+    { timezone: 'Asia/Kolkata' },
+  );
   if (!process.env.APP_ENCRYPTION_KEY) {
     logger.warn('[insurance] APP_ENCRYPTION_KEY is not set — policy numbers stay unencrypted until it is');
     return;

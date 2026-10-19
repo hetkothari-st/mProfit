@@ -5,6 +5,7 @@ import { logger } from '../lib/logger.js';
 import { env } from '../config/env.js';
 import { uploadRoot } from '../lib/uploadRoot.js';
 import {
+  buildInsuranceScanQuery,
   buildScanQuery,
   listMessageIdsPage,
   fetchMessageWithAttachments,
@@ -74,7 +75,10 @@ async function collectMessageIds(scanJobId: string): Promise<string[]> {
   const job = await prisma.gmailScanJob.findUniqueOrThrow({ where: { id: scanJobId } });
   const ids: string[] = [];
   let cursor = job.nextPageToken ?? null;
-  const query = buildScanQuery(job.lookbackFrom, job.lookbackTo);
+  const query =
+    job.kind === 'INSURANCE'
+      ? buildInsuranceScanQuery(job.lookbackFrom, job.lookbackTo)
+      : buildScanQuery(job.lookbackFrom, job.lookbackTo);
   logger.info({ scanJobId, query, lookbackFrom: job.lookbackFrom, lookbackTo: job.lookbackTo }, '[gmailScan] LISTING start');
 
   // The cursor is the loop's own condition: Gmail returns a nextPageToken

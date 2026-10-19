@@ -14,6 +14,7 @@ import { insuranceApi, type AddPremiumInput, type InsurancePolicyDTO } from '@/a
 import { ComingUpPanel } from '@/components/insurance/ComingUpPanel';
 import { OpenClaimsPanel } from '@/components/insurance/OpenClaimsPanel';
 import { TaxSummaryCard } from '@/components/insurance/TaxSummaryCard';
+import { InsuranceGmailFetchCard } from '@/components/insurance/InsuranceGmailFetchCard';
 import { PolicyCard } from '@/components/insurance/PolicyCard';
 import { PolicyFormDialog } from '@/components/insurance/PolicyFormDialog';
 import { RecordPremiumDialog } from '@/components/insurance/RecordPremiumDialog';
@@ -141,6 +142,8 @@ export function InsuranceListPage() {
           </div>
         }
       />
+
+      <InsuranceGmailFetchCard />
 
       {isLoading && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
