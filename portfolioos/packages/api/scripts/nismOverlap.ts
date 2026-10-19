@@ -35,10 +35,15 @@ function runs(text: string, n: number): Set<string> {
   return out;
 }
 
+/** Index `a` once; the returned function lists the runs any other text shares with it. */
+export function overlapWith(a: string, n = 10): (b: string) => string[] {
+  const inA = runs(a, n);
+  return (b) => [...runs(b, n)].filter((r) => inA.has(r));
+}
+
 /** Normalised lowercase n-word runs that appear in both texts, in the order they occur in `b`. */
 export function sharedRuns(a: string, b: string, n = 10): string[] {
-  const inA = runs(a, n);
-  return [...runs(b, n)].filter((r) => inA.has(r));
+  return overlapWith(a, n)(b);
 }
 
 interface OurText {
