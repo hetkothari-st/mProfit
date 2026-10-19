@@ -113,6 +113,14 @@ describe('invariant: report data-quality check', () => {
           },
         },
       });
+      // One failure from the user's own import, one from a reference-data job
+      // that happens to be attributed to them (as admin): only the first counts.
+      await prisma.ingestionFailure.create({
+        data: { userId: dirty.userId, sourceAdapter: 'gmail.generic.v1', adapterVersion: '1', sourceRef: 'msg-1', errorMessage: 'unreadable' },
+      });
+      await prisma.ingestionFailure.create({
+        data: { userId: dirty.userId, sourceAdapter: 'mf.metrics', adapterVersion: '1', sourceRef: 'scheme-1', errorMessage: 'no nav' },
+      });
       await prisma.importJob.create({
         data: {
           userId: dirty.userId,
@@ -139,8 +147,10 @@ describe('invariant: report data-quality check', () => {
       const byCode = new Map(q.issues.map((i) => [i.code, i]));
       expect(q.ok).toBe(false);
       expect([...byCode.keys()].sort()).toEqual(
-        ['IMPORTS_NOT_FINISHED', 'MISSING_PRICE', 'OVERSOLD', 'STALE_PRICE', 'STATEMENT_MISMATCH'].sort(),
+        ['IMPORTS_NOT_FINISHED', 'MISSING_PRICE', 'OVERSOLD', 'STALE_PRICE', 'STATEMENT_MISMATCH', 'UNRESOLVED_FAILURES'].sort(),
       );
+      expect(byCode.get('UNRESOLVED_FAILURES')!.count).toBe(1);
+      expect(byCode.get('UNRESOLVED_FAILURES')!.items).toEqual([{ label: 'gmail.generic.v1', detail: '1 unresolved' }]);
       expect(byCode.get('OVERSOLD')!.items[0]!.label).toBe('DQ Ghost');
       expect(byCode.get('STALE_PRICE')!.count).toBe(1);
       // The unpriced stock and the fund (no NAV loaded).
@@ -156,7 +166,9 @@ describe('invariant: report data-quality check', () => {
       const h = await prisma.holdingProjection.findFirstOrThrow({ where: { portfolioId: dirty.portfolioId } });
       await prisma.holdingProjection.update({ where: { id: h.id }, data: { quantity: '1234' } });
       const q = await checkReportDataQuality(dirty.userId, dirty.portfolioId);
-      expect(q.issues.find((i) => i.code === 'HOLDINGS_OUT_OF_SYNC')?.count).toBe(1);
+      const drift = q.issues.find((i) => i.code === 'HOLDINGS_OUT_OF_SYNC');
+      expect(drift?.count).toBe(1);
+      expect(drift?.items[0]?.detail).toMatch(/saved holding says 1234$/);
       await recomputeForPortfolio(dirty.portfolioId);
     }), 120_000);
 

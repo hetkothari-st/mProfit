@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
 import type { Transaction } from '@prisma/client';
-import { expectedProjections } from '../../src/services/holdings/holdingsProjection.js';
+import { expectedProjections, replayTransactions } from '../../src/services/holdings/holdingsProjection.js';
 import { computeFIFOGains } from '../../src/services/tax/capitalGains.service.js';
 import {
   compareGains,
@@ -99,6 +99,19 @@ describe('expectedProjections', () => {
     // 5 units left from the second lot at 110.
     expect(exp.get('stock:a')!.quantity.toString()).toBe('5');
     expect(exp.get('stock:a')!.totalCost.toString()).toBe('550');
+  });
+});
+
+describe('replay order', () => {
+  it('same-day purchases replay in entry order, whatever order they are read in', () => {
+    const early = { ...tx({ date: '2024-01-01', qty: '10', net: '1000' }), createdAt: new Date('2024-01-01T09:00:00Z') };
+    const late = { ...tx({ date: '2024-01-01', qty: '10', net: '2000' }), createdAt: new Date('2024-01-01T10:00:00Z') };
+    const sell = tx({ type: 'SELL', date: '2024-02-01', qty: '10', net: '1500' });
+    const a = replayTransactions([early, late, sell]);
+    const b = replayTransactions([late, early, sell]);
+    // The ₹100 lot entered first is sold; the ₹200 lot is what is left.
+    expect(a.totalCost.toString()).toBe('2000');
+    expect(b.totalCost.toString()).toBe(a.totalCost.toString());
   });
 });
 

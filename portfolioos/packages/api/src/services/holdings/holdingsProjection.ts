@@ -236,14 +236,28 @@ export function quantityHeldBefore(txs: Transaction[], exDate: Date): Decimal {
   return replayTransactions(txs.filter((t) => t.tradeDate.getTime() < exDate.getTime())).quantity;
 }
 
+/**
+ * Replay order: trade date, then entry order. The tie-break matters — two
+ * purchases on the same day at different prices leave a different FIFO cost
+ * depending on which is consumed first, and without it that order was
+ * whatever the database happened to return, so two reads of the same
+ * transactions could disagree (and the nightly integrity check flagged the
+ * difference as drift).
+ */
+export function compareReplayOrder(a: Transaction, b: Transaction): number {
+  return (
+    a.tradeDate.getTime() - b.tradeDate.getTime() ||
+    a.createdAt.getTime() - b.createdAt.getTime() ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
+}
+
 export function replayTransactions(txs: Transaction[]): ProjectionAggregate {
   const lots: Array<{ qty: Decimal; costPerUnit: Decimal }> = [];
   let realisedPnL = new Decimal(0);
   const openQuantity = () => lots.reduce((s, l) => s.plus(l.qty), new Decimal(0));
 
-  const sorted = [...txs].sort(
-    (a, b) => a.tradeDate.getTime() - b.tradeDate.getTime(),
-  );
+  const sorted = [...txs].sort(compareReplayOrder);
 
   for (const tx of sorted) {
     const qty = new Decimal(tx.quantity.toString());
@@ -335,7 +349,7 @@ export function expectedProjections(txs: Transaction[]): Map<string, ExpectedPro
   }
   const out = new Map<string, ExpectedProjection>();
   for (const [key, group] of groups) {
-    const first = [...group].sort((a, b) => a.tradeDate.getTime() - b.tradeDate.getTime())[0]!;
+    const first = [...group].sort(compareReplayOrder)[0]!;
     if (SKIP_PROJECTION.has(first.assetClass)) continue;
     const agg = replayTransactions(group);
     if (agg.quantity.isZero() || agg.quantity.isNegative()) continue;
