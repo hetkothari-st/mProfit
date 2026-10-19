@@ -3,15 +3,15 @@ import { mkdir } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { env } from '../config/env.js';
+import { uploadRoot } from '../lib/uploadRoot.js';
 
-const UPLOAD_ROOT = env.UPLOAD_DIR;
 
 async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
 }
 
 /**
- * Per-user import storage path — `${UPLOAD_ROOT}/imports/${userId}/${year}-${month}`.
+ * Per-user import storage path — `${uploadRoot()}/imports/${userId}/${year}-${month}`.
  * userId comes from a Prisma cuid (alphanumeric) but validated defensively
  * anyway since it ends up in a filesystem path.
  */
@@ -21,7 +21,7 @@ export function buildImportUploadDir(userId: string): string {
   }
   const year = new Date().getUTCFullYear();
   const month = String(new Date().getUTCMonth() + 1).padStart(2, '0');
-  return join(UPLOAD_ROOT, 'imports', userId, `${year}-${month}`);
+  return join(uploadRoot(), 'imports', userId, `${year}-${month}`);
 }
 
 const storage = multer.diskStorage({

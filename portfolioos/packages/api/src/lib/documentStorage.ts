@@ -25,6 +25,7 @@ import { extname } from 'node:path';
 import { Readable } from 'node:stream';
 import type { Response } from 'express';
 import { env } from '../config/env.js';
+import { uploadRoot } from './uploadRoot.js';
 import { NotFoundError } from './errors.js';
 import { logger } from './logger.js';
 import { prisma } from './prisma.js';
@@ -39,7 +40,7 @@ function userDir(userId: string): string {
   if (!/^[a-zA-Z0-9]+$/.test(userId)) {
     throw new Error('Invalid userId for storage path');
   }
-  return join(env.UPLOAD_DIR, 'documents', `user_${userId}`);
+  return join(uploadRoot(), 'documents', `user_${userId}`);
 }
 
 export function buildStorageKey(originalName: string): string {

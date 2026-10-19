@@ -167,15 +167,19 @@ export async function processImportJob(
   if (!file) throw new NotFoundError('Import job not found');
   // Put the file back where the parsers expect it if a deploy removed it,
   // and remove the plain-text copy again when done (the encrypted one stays).
-  await ensureLocalFile(file.userId, file.blobKey, file.filePath);
+  const localPath = await ensureLocalFile(file.userId, file.blobKey, file.filePath);
   try {
-    return await processImportJobFromDisk(importJobId, pdfPassword);
+    return await processImportJobFromDisk(importJobId, pdfPassword, localPath);
   } finally {
-    await dropLocalFile(file.blobKey, file.filePath);
+    await dropLocalFile(file.blobKey, localPath);
   }
 }
 
-async function processImportJobFromDisk(importJobId: string, pdfPassword?: string | null): Promise<{
+async function processImportJobFromDisk(
+  importJobId: string,
+  pdfPassword: string | null | undefined,
+  localPath: string,
+): Promise<{
   parser: string;
   total: number;
   success: number;
@@ -193,7 +197,7 @@ async function processImportJobFromDisk(importJobId: string, pdfPassword?: strin
   const extraPasswords = pdfPassword ? [pdfPassword] : undefined;
 
   const { adapter, result } = await runFileImportAdapter({
-    filePath: job.filePath,
+    filePath: localPath,
     fileName: job.fileName,
     portfolioId: job.portfolioId,
     userId: job.userId,
@@ -289,7 +293,7 @@ async function processImportJobFromDisk(importJobId: string, pdfPassword?: strin
   // rows (§3.3). Hash ONCE per job rather than per event.
   let fileHash: string | null = null;
   try {
-    const bytes = await readFile(job.filePath);
+    const bytes = await readFile(localPath);
     fileHash = hashBytes(bytes);
   } catch (err) {
     logger.warn(
