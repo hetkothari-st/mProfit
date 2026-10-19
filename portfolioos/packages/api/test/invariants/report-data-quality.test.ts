@@ -81,6 +81,36 @@ describe('invariant: report data-quality check', () => {
           netAmount: '350',
         },
       });
+      // A second unbought sale whose purchase IS in the app — an email BUY
+      // awaiting review. The banner should point at it, not at a blank form.
+      await prisma.transaction.create({
+        data: {
+          ...raw,
+          assetClass: 'EQUITY',
+          transactionType: 'SELL',
+          assetName: 'DQ Pending',
+          isin: 'INE000PEND01',
+          assetKey: 'isin:INE000PEND01',
+          tradeDate: new Date('2024-05-02'),
+          quantity: '3',
+          price: '10',
+          grossAmount: '30',
+          netAmount: '30',
+        },
+      });
+      await prisma.canonicalEvent.create({
+        data: {
+          userId: dirty.userId,
+          sourceAdapter: 'gmail.generic.v1',
+          sourceAdapterVer: '1',
+          sourceRef: 'msg-buy',
+          sourceHash: `dq-pending-${dirty.userId}`,
+          eventType: 'BUY',
+          eventDate: new Date('2024-04-01'),
+          instrumentIsin: 'INE000PEND01',
+          status: 'PENDING_REVIEW',
+        },
+      });
       // 100 units of a fund, where the statement below says 150.
       await prisma.transaction.create({
         data: {
@@ -147,18 +177,39 @@ describe('invariant: report data-quality check', () => {
       const byCode = new Map(q.issues.map((i) => [i.code, i]));
       expect(q.ok).toBe(false);
       expect([...byCode.keys()].sort()).toEqual(
-        ['IMPORTS_NOT_FINISHED', 'MISSING_PRICE', 'OVERSOLD', 'STALE_PRICE', 'STATEMENT_MISMATCH', 'UNRESOLVED_FAILURES'].sort(),
+        [
+          'EVENTS_AWAITING_REVIEW',
+          'IMPORTS_NOT_FINISHED',
+          'MISSING_PRICE',
+          'OVERSOLD',
+          'STALE_PRICE',
+          'STATEMENT_MISMATCH',
+          'UNRESOLVED_FAILURES',
+        ].sort(),
       );
       expect(byCode.get('UNRESOLVED_FAILURES')!.count).toBe(1);
       expect(byCode.get('UNRESOLVED_FAILURES')!.items).toEqual([{ label: 'gmail.generic.v1', detail: '1 unresolved' }]);
-      expect(byCode.get('OVERSOLD')!.items[0]!.label).toBe('DQ Ghost');
+      const oversold = byCode.get('OVERSOLD')!;
+      const ghost = oversold.items.find((i) => i.label === 'DQ Ghost')!;
+      expect(ghost.action).toEqual({
+        kind: 'ADD_PURCHASE',
+        portfolioId: dirty.portfolioId,
+        assetClass: 'EQUITY',
+        assetName: 'DQ Ghost',
+        symbol: null,
+        isin: null,
+        quantity: '7',
+        onOrBefore: '2024-05-01',
+      });
+      const pending = oversold.items.find((i) => i.label === 'DQ Pending')!;
+      expect(pending.action).toEqual({ kind: 'REVIEW_EVENTS', count: 1 });
       expect(byCode.get('STALE_PRICE')!.count).toBe(1);
       // The unpriced stock and the fund (no NAV loaded).
       expect(byCode.get('MISSING_PRICE')!.count).toBe(2);
       expect(byCode.get('STATEMENT_MISMATCH')!.items[0]!.detail).toBe(
         'statement (2024-03-31): 150 units, transactions: 100 units',
       );
-      expect(q.dataAsOf.lastTransactionDate).toBe('2024-05-01');
+      expect(q.dataAsOf.lastTransactionDate).toBe('2024-05-02');
     }), 120_000);
 
   it('notices stored holdings that no longer match the transactions', () =>

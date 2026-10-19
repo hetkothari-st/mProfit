@@ -95,11 +95,30 @@ const schema = z.object({
 type FormValues = z.input<typeof schema>;
 type FormOutput = z.output<typeof schema>;
 
+/**
+ * Values to start a NEW transaction with (ignored when editing). Used by the
+ * Reports data-quality banner to open "Add purchase" for a sale that has no
+ * purchase behind it: the asset and quantity are known, the date and price
+ * are not and are left for the user.
+ */
+export interface TransactionPrefill {
+  portfolioId?: string;
+  transactionType?: TransactionType;
+  assetClass?: AssetClass;
+  stockSymbol?: string;
+  assetName?: string;
+  isin?: string;
+  quantity?: number;
+  /** Shown as a hint: the purchase must be on or before this date. */
+  onOrBefore?: string;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: TransactionDTO | null;
   defaultPortfolioId?: string;
+  prefill?: TransactionPrefill | null;
 }
 
 const ASSET_CLASS_OPTIONS: AssetClass[] = [
@@ -129,7 +148,7 @@ const TXN_TYPE_OPTIONS: TransactionType[] = [
   'REDEMPTION',
 ];
 
-export function TransactionFormDialog({ open, onOpenChange, initial, defaultPortfolioId }: Props) {
+export function TransactionFormDialog({ open, onOpenChange, initial, defaultPortfolioId, prefill }: Props) {
   const queryClient = useQueryClient();
   const isEdit = Boolean(initial);
   const [selectedAsset, setSelectedAsset] = useState<AssetSearchHit | null>(null);
@@ -187,17 +206,23 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
       setSelectedAsset(null);
     } else {
       reset({
-        portfolioId: defaultPortfolioId ?? portfolios?.[0]?.id ?? '',
-        transactionType: 'BUY',
-        assetClass: 'EQUITY',
-        tradeDate: new Date().toISOString().slice(0, 10),
-        quantity: 0,
+        portfolioId: prefill?.portfolioId ?? defaultPortfolioId ?? portfolios?.[0]?.id ?? '',
+        transactionType: prefill?.transactionType ?? 'BUY',
+        assetClass: prefill?.assetClass ?? 'EQUITY',
+        // A prefilled purchase has no known date. Left blank (validation
+        // refuses it) rather than defaulted: a default the user forgets to
+        // change would book a wrong holding period, or an intraday trade.
+        tradeDate: prefill ? '' : new Date().toISOString().slice(0, 10),
+        quantity: prefill?.quantity ?? 0,
         price: 0,
         exchange: 'NSE',
+        ...(prefill?.stockSymbol ? { stockSymbol: prefill.stockSymbol, stockName: prefill.assetName ?? '' } : {}),
+        ...(prefill?.assetName ? { assetName: prefill.assetName, schemeName: prefill.assetName } : {}),
+        ...(prefill?.isin ? { isin: prefill.isin } : {}),
       });
       setSelectedAsset(null);
     }
-  }, [open, initial, defaultPortfolioId, portfolios, reset]);
+  }, [open, initial, defaultPortfolioId, portfolios, reset, prefill]);
 
   // Set when the server answers 409: the values we tried, plus what it found.
   // The user either confirms a second genuine trade or drops it.
@@ -486,7 +511,18 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <Label htmlFor="tradeDate">Trade date</Label>
-              <Input id="tradeDate" type="date" className="mt-1" {...register('tradeDate')} />
+              <Input
+                id="tradeDate"
+                type="date"
+                className="mt-1"
+                max={!isEdit && prefill?.onOrBefore ? prefill.onOrBefore : undefined}
+                {...register('tradeDate')}
+              />
+              {!isEdit && prefill?.onOrBefore && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  When you bought these units — on or before the sale on {prefill.onOrBefore}.
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="quantity">Quantity</Label>

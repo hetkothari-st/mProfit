@@ -133,8 +133,27 @@ export interface DataQualityIssue {
   scope: 'portfolio' | 'account';
   count: number;
   message: string;
-  items: Array<{ label: string; detail?: string }>;
+  items: DataQualityItem[];
   moreItems: number;
+}
+
+export type DataQualityAction =
+  | {
+      kind: 'ADD_PURCHASE';
+      portfolioId: string;
+      assetClass: string;
+      assetName: string;
+      symbol: string | null;
+      isin: string | null;
+      quantity: string;
+      onOrBefore: string;
+    }
+  | { kind: 'REVIEW_EVENTS'; count: number };
+
+export interface DataQualityItem {
+  label: string;
+  detail?: string;
+  action?: DataQualityAction;
 }
 
 export interface DataQualityReport {
