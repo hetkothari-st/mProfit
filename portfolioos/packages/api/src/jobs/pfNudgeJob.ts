@@ -10,7 +10,7 @@
 
 import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
-import { emitStaleAccountAlerts } from '../services/pfNudges.service.js';
+import { emitStaleAccountAlerts } from '../services/pf/pfNudges.service.js';
 import { runAsSystem } from '../lib/requestContext.js';
 
 let running = false;

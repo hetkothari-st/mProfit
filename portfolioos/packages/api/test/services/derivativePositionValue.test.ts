@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { derivativePositionValue } from '../../src/services/derivativePosition.service.js';
+import { derivativePositionValue } from '../../src/services/fo/derivativePosition.service.js';
 
 describe('derivativePositionValue', () => {
   it('values a long in units with no lot-size factor', () => {

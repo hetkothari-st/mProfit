@@ -174,3 +174,42 @@ describe('findUnresolved in comments', () => {
     expect(findUnresolved(code, '/r/src/a.ts', () => false)).toEqual([]);
   });
 });
+
+describe('less common module-path forms', () => {
+  const map = new Map([['/r/src/services/c.ts', '/r/src/services/mf/c.ts']]);
+  const exists = (p: string) => map.has(p);
+  const opts = { importerOld: '/r/test/x.test.ts', importerNew: '/r/test/x.test.ts', fileMap: map, exists };
+
+  it('rewrites vi.doUnmock, a generic importActual call and new URL(..., import.meta.url)', () => {
+    const src = [
+      `vi.doUnmock('../src/services/c.js');`,
+      `const a = await vi.importActual<\n  typeof import('../src/services/c.js')\n>('../src/services/c.js');`,
+      `const u = new URL(\n  '../src/services/c.ts',\n  import.meta.url,\n);`,
+    ].join('\n');
+    expect(rewriteSpecifiers(src, opts)).toBe(src.replaceAll('../src/services/c.', '../src/services/mf/c.'));
+  });
+
+  it('reports the same forms when they resolve to nothing', () => {
+    const src = [`vi.doUnmock('../gone.js');`, `vi.importActual<T>('../gone2.js');`, `new URL('../gone3.ts', import.meta.url);`].join('\n');
+    expect(findUnresolved(src, '/r/test/x.test.ts', () => false)).toEqual(['../gone.js', '../gone2.js', '../gone3.ts']);
+  });
+});
+
+describe('directory specifiers (trailing slash)', () => {
+  it('resolves an existing directory and follows a directory move', () => {
+    const map = new Map([['/r/assets/fonts/a.ttf', '/r/static/fonts/a.ttf']]);
+    const exists = (p: string) => p === '/r/assets/fonts/' || map.has(p);
+    const src = `const dir = new URL('../../assets/fonts/', import.meta.url);`;
+    expect(findUnresolved(src, '/r/src/will/f.ts', exists)).toEqual([]);
+    expect(
+      rewriteSpecifiers(src, { importerOld: '/r/src/will/f.ts', importerNew: '/r/src/will/f.ts', fileMap: map, exists }),
+    ).toBe(`const dir = new URL('../../static/fonts/', import.meta.url);`);
+  });
+});
+
+describe('paths that leave the --root', () => {
+  it('treats a relative path climbing above the root as external (never reported, never rewritten)', () => {
+    const src = `const shared = new URL('../../shared/src/', import.meta.url);`;
+    expect(findUnresolved(src, '/scripts/lock.ts', () => false)).toEqual([]);
+  });
+});

@@ -17,7 +17,7 @@ import { prisma } from '../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { serializeMoney } from '@everypaisa/shared';
-import { encryptIdentifier, decryptIdentifier, last4 as last4Of } from './pfCredentials.service.js';
+import { encryptIdentifier, decryptIdentifier, last4 as last4Of } from './pf/pfCredentials.service.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 

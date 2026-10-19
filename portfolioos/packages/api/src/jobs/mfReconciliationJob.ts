@@ -73,7 +73,7 @@ import type { MfHorizonMetrics } from '@everypaisa/shared';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
+import { writeIngestionFailure } from '../services/imports/ingestionFailures.service.js';
 import {
   fetchMfPublishedReturns,
   MF_PUBLISHED_RETURNS_ADAPTER_VERSION,

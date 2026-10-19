@@ -14,7 +14,7 @@
 import { writeFileSync } from 'node:fs';
 import { prisma } from '../src/lib/prisma.js';
 import { runAsSystem, runAsUser } from '../src/lib/requestContext.js';
-import { scanDuplicates, removeDuplicates } from '../src/services/duplicates.service.js';
+import { scanDuplicates, removeDuplicates } from '../src/services/imports/duplicates.service.js';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);

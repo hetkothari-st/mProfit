@@ -45,9 +45,10 @@ export function expandMoves(
 }
 
 // Every place a module path appears as a string literal: static/side-effect imports, re-exports, dynamic
-// import(), require(), and vitest's module-path APIs.
+// import(), require(), vitest's module-path APIs, the call half of a generic `vi.importActual<T>('…')`, and
+// `new URL('…', import.meta.url)` file reads (resolved relative to the file, exactly like an import).
 const SPECIFIER =
-  /(\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|unmock|importActual|importMock)\s*\(\s*)(['"])([^'"\n]+)\2/g;
+  /(\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|unmock|doUnmock|importActual|importMock)\s*\(\s*|>\s*\(\s*|\bnew URL\(\s*)(['"])([^'"\n]+)\2/g;
 
 const JS_TO_TS: Record<string, string[]> = {
   '.js': ['.ts', '.tsx', '.js'],
@@ -58,7 +59,7 @@ const JS_TO_TS: Record<string, string[]> = {
 
 const EXACT_EXT = new Set(['.ts', '.tsx', '.mts', '.cts', '.json', '.css', '.scss', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.txt', '.md', '.html']);
 
-type Form = 'swapExt' | 'noExt' | 'index' | 'exact';
+type Form = 'swapExt' | 'noExt' | 'index' | 'exact' | 'dir';
 
 function stripExt(p: string): string {
   return p.slice(0, p.length - posix.extname(p).length);
@@ -77,8 +78,19 @@ function resolveSpecifier(
   const aliasRoot = alias === undefined ? undefined : aliases[alias];
   let base: string;
   if (alias !== undefined && aliasRoot !== undefined) base = aliasRoot + spec.slice(alias.length);
-  else if (spec.startsWith('./') || spec.startsWith('../')) base = posix.resolve(posix.dirname(importer), spec);
+  else if (spec.startsWith('./') || spec.startsWith('../')) {
+    // Climbing above the virtual root ("/" = --root) means another package, which this run neither scans nor moves.
+    const ups = spec.split('/').filter((seg) => seg === '..').length;
+    if (ups > posix.dirname(importer).split('/').filter(Boolean).length) return 'external';
+    base = posix.resolve(posix.dirname(importer), spec);
+  }
   else return 'external';
+
+  // `new URL('../assets/fonts/', import.meta.url)`: a directory, kept with its trailing slash.
+  if (spec.endsWith('/')) {
+    const dir = base.endsWith('/') ? base : base + '/';
+    return known(dir) ? { target: dir, form: 'dir', ext: '', alias, aliasRoot } : null;
+  }
 
   const ext = posix.extname(base);
   const swaps = JS_TO_TS[ext];
@@ -110,14 +122,23 @@ export function rewriteSpecifiers(
   },
 ): string {
   const { importerOld, importerNew, fileMap, exists, aliases = {} } = opts;
-  const known = (p: string) => fileMap.has(p) || exists(p);
+  const movedFrom = [...fileMap.keys()];
+  const known = (p: string) =>
+    fileMap.has(p) || exists(p) || (p.endsWith('/') && movedFrom.some((k) => k.startsWith(p)));
   const importerMoved = importerOld !== importerNew;
+  // A directory follows its files: if any file under it moved, the directory moved by the same prefix change.
+  const movedDir = (dir: string): string => {
+    const k = movedFrom.find((f) => f.startsWith(dir));
+    if (k === undefined) return dir;
+    const v = fileMap.get(k) ?? k;
+    return v.slice(0, v.length - (k.length - dir.length));
+  };
 
   return code.replace(SPECIFIER, (whole, lead: string, quote: string, spec: string) => {
     const r = resolveSpecifier(spec, importerOld, known, aliases);
     if (r === null || r === 'external') return whole;
     const { target, form, ext, alias, aliasRoot } = r;
-    const newTarget = fileMap.get(target) ?? target;
+    const newTarget = form === 'dir' ? movedDir(target) : (fileMap.get(target) ?? target);
     if (!importerMoved && newTarget === target) return whole;
 
     let next: string;
@@ -132,6 +153,7 @@ export function rewriteSpecifiers(
     } else {
       newSpec = posix.relative(posix.dirname(importerNew), next);
       if (!newSpec.startsWith('.')) newSpec = './' + newSpec;
+      if (form === 'dir') newSpec += '/';
     }
     return `${lead}${quote}${newSpec}${quote}`;
   });
@@ -184,6 +206,10 @@ function main(argv: string[]): void {
     .filter(Boolean)
     .map((f) => '/' + f);
   const trackedSet = new Set(tracked);
+  // Directories too (with a trailing slash), so `new URL('../dir/', import.meta.url)` resolves.
+  for (const f of tracked) {
+    for (let i = f.indexOf('/', 1); i > 0; i = f.indexOf('/', i + 1)) trackedSet.add(f.slice(0, i + 1));
+  }
   const real = (p: string) => path.join(root, p.slice(1));
   const isScanned = (p: string) => SOURCE_EXT.test(p) && scan.some((d) => p.startsWith(d + '/'));
 

@@ -2,8 +2,8 @@
 
 Three real schemes, ~13 years of daily NAV each, with **published** 1y/3y/5y
 returns, 3-year standard deviation, Sharpe ratio and beta taken from the AMC's
-own monthly factsheet PDF. `test/services/mfAnalytics/mfRealFunds.golden.test.ts`
-runs `src/services/mfAnalytics/mfMetricsMath.ts` on these series at the
+own monthly factsheet PDF. `test/services/mf/mfAnalytics/mfRealFunds.golden.test.ts`
+runs `src/services/mf/mfAnalytics/mfMetricsMath.ts` on these series at the
 factsheet's as-of date and compares against the AMC's numbers at the doc's
 tolerances (returns ±0.05 pp, σ ±0.1 pp, Sharpe ±0.03; beta ±0.03 by analogy,
 the doc is silent).

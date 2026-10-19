@@ -18,7 +18,7 @@ import type { ApiResponse } from '@everypaisa/shared';
  *
  * The methodology payload is the one thing here with no shared type, and the
  * reason is structural rather than an oversight. The scoring model tables live
- * in `packages/api/src/services/mfAnalytics/mfScoring/models/*` — they have to,
+ * in `packages/api/src/services/mf/mfAnalytics/mfScoring/models/*` — they have to,
  * the scorer runs on the server — and `06 §5` requires this page to render them
  * "from the same constants the scorer uses, do not hand-copy". The acceptance
  * criterion is literally that *a weight change in `activeEquity.ts` shows on

@@ -54,7 +54,7 @@ import { runAsSystem } from '../lib/requestContext.js';
 import {
   computeMetricsForScheme,
   persistSchemeMetrics,
-} from '../services/mfAnalytics/mfMetrics.service.js';
+} from '../services/mf/mfAnalytics/mfMetrics.service.js';
 import { CHUNK_SIZE, runMfMetricsJob } from '../jobs/mfMetricsJob.js';
 import { UNIVERSE_CHUNK_SIZE, runMfPeerRankForUniverses } from '../jobs/mfPeerRankJob.js';
 import { universeKey } from '@everypaisa/shared';

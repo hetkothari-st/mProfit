@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createTestScope, prisma } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { recomputeDerivativePosition } from '../../src/services/derivativePosition.service.js';
-import { approveExpiryClose } from '../../src/services/foExpiry.service.js';
+import { recomputeDerivativePosition } from '../../src/services/fo/derivativePosition.service.js';
+import { approveExpiryClose } from '../../src/services/fo/foExpiry.service.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {

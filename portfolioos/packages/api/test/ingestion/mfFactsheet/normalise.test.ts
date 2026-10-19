@@ -28,7 +28,7 @@ import {
   validateSnapshot,
   validateTerPct,
 } from '../../../src/ingestion/mfFactsheet/normalise.js';
-import { normaliseCreditRating as mathNormaliseCreditRating } from '../../../src/services/mfAnalytics/mfMetricsMath.js';
+import { normaliseCreditRating as mathNormaliseCreditRating } from '../../../src/services/mf/mfAnalytics/mfMetricsMath.js';
 
 describe('credit rating normalisation', () => {
   it('is the SAME function the metrics layer uses', () => {

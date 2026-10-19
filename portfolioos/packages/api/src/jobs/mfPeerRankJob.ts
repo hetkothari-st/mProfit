@@ -37,13 +37,13 @@ import { logger } from '../lib/logger.js';
 import { warnIfNotMonthEnd } from './mfAsOfGuard.js';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
+import { writeIngestionFailure } from '../services/imports/ingestionFailures.service.js';
 import {
   listUniverses,
   runPeerRankForUniverse,
   MF_PEER_RANK_VERSION,
   type UniverseRef,
-} from '../services/mfAnalytics/mfPeerRank.service.js';
+} from '../services/mf/mfAnalytics/mfPeerRank.service.js';
 
 const TZ = 'Asia/Kolkata';
 

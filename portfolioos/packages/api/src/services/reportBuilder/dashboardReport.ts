@@ -33,8 +33,8 @@ import { logger } from '../../lib/logger.js';
 import { fmtNum, fmtDatePdf } from '../export.service.js';
 import { computePortfolioXirr, computeUserXirr } from '../analytics/xirr.service.js';
 import { computePortfolioCapitalGains } from '../tax/capitalGains.service.js';
-import { computePortfolioFoPnl } from '../foPnl.service.js';
-import { derivativePositionValue } from '../derivativePosition.service.js';
+import { computePortfolioFoPnl } from '../fo/foPnl.service.js';
+import { derivativePositionValue } from '../fo/derivativePosition.service.js';
 import { replayTransactions } from '../holdings/holdingsProjection.js';
 import { getDashboardNetWorth } from '../analytics/dashboard.service.js';
 import {

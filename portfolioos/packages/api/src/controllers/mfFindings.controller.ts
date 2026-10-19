@@ -98,7 +98,7 @@ import { prisma } from '../lib/prisma.js';
 import { ok } from '../lib/response.js';
 import { AppError, UnauthorizedError } from '../lib/errors.js';
 import { env } from '../config/env.js';
-import { MF_RULES } from '../services/mfAnalytics/rules/registry.js';
+import { MF_RULES } from '../services/mf/mfAnalytics/rules/registry.js';
 import { requestMfAnalysisRefresh } from '../jobs/mfAnalysisJob.js';
 
 // ---------------------------------------------------------------------------

@@ -21,7 +21,7 @@ import type { LoanRateSource, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
+import { writeIngestionFailure } from '../services/imports/ingestionFailures.service.js';
 import { FetchPageError, fetchPage } from '../services/loanRates/fetchPage.js';
 import { isSourceStale, istDate, STALE_AFTER_DAYS } from '../services/loanRates/sanity.js';
 import { ensureLoanRateSources } from '../services/loanRates/sourceList.js';

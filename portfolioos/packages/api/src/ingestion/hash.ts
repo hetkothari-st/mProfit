@@ -20,7 +20,7 @@ import { createHash } from 'node:crypto';
  *    (§6.4 promotion). The hash is *not* security-sensitive — it's used as
  *    a bucket key, so we trim it to 16 hex chars to keep rows small.
  *
- * These are deliberately separate from `services/sourceHash.ts`, which
+ * These are deliberately separate from `services/imports/sourceHash.ts`, which
  * handles Transaction-layer hashes (broker natural keys, file positional
  * hashes). The CanonicalEvent layer sits upstream of Transaction and has
  * its own scopes.

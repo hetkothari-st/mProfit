@@ -14,7 +14,7 @@
  *     everything in order.
  */
 
-import { writeIngestionFailure } from '../../services/ingestionFailures.service.js';
+import { writeIngestionFailure } from '../../services/imports/ingestionFailures.service.js';
 import { logger } from '../../lib/logger.js';
 import { smsVehicleAdapter } from './sms.js';
 import { mparivahanAdapter } from './mparivahan.js';

@@ -27,7 +27,7 @@ import {
 import {
   encryptIdentifier,
   decryptIdentifier,
-} from '../../src/services/pfCredentials.service.js';
+} from '../../src/services/pf/pfCredentials.service.js';
 import { BadRequestError, NotFoundError } from '../../src/lib/errors.js';
 
 const FULL = '50100123456789';

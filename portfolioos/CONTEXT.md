@@ -123,7 +123,7 @@ replaying transactions (FIFO) through `services/holdings/holdingsProjection.ts`.
 
 ### 3.3 Every ingestion path is idempotent
 
-`sourceHash` (`services/sourceHash.ts`, `ingestion/hash.ts`) is computed per
+`sourceHash` (`services/imports/sourceHash.ts`, `ingestion/hash.ts`) is computed per
 source artefact. Re-polling a mailbox, restarting a worker or re-uploading a file
 must never double-count. Enforced by unique constraints and asserted in
 `test/invariants/idempotency.test.ts`, `pf-idempotency`, `fo-idempotency`.
@@ -530,7 +530,7 @@ contract notes, CAS PDFs, CSVs. Password-protected PDFs handled via
 - **CASParser API** (`ingestion/casparser/casparserClient.ts`) — third-party parsing of
   NSDL/CDSL/CAMS/KFintech CAS PDFs.
 
-Plus `services/mfOverlap.service.ts` for portfolio overlap analysis.
+Plus `services/mf/mfOverlap.service.ts` for portfolio overlap analysis.
 
 ### 9.5 Provident fund (EPF / PPF)
 
@@ -579,7 +579,7 @@ member keep using a password that is now wrong. Logged at `error` level.
 
 `FoInstrument` + `DerivativePosition`, separate from the equity projection.
 `ingestion/fno/broker-registry.ts`, `symbol-parser.ts`, broker connectors.
-`services/foExpiry.service.ts` + `jobs/foExpiryClose.job.ts` auto-close expired
+`services/fo/foExpiry.service.ts` + `jobs/foExpiryClose.job.ts` auto-close expired
 contracts. `services/reports/schedule43.report.ts` produces the Schedule 43
 speculative/non-speculative split (`FNO_SCHEDULE_43`, PRO_ADVISOR).
 
@@ -718,7 +718,7 @@ Eight design docs live in `docs/mf-analytics/`; `00-README.md` is the entry
 point and `07-IMPLEMENTATION-PLAN.md` is the work queue. What follows is the
 map, not a summary of them.
 
-- `services/mfAnalytics/` — `mfMetricsMath.ts` (pure Decimal metric functions),
+- `services/mf/mfAnalytics/` — `mfMetricsMath.ts` (pure Decimal metric functions),
   `mfMetrics.service.ts`, `mfPeerRank.service.ts`, `mfPortfolioAnalysis.service.ts`
   (extends `mfOverlap.service.ts`, reuses `capitalGains.service.ts` and
   `goalMath.ts` rather than re-deriving them), `mfScoring/` (per-category weight
@@ -756,7 +756,7 @@ map, not a summary of them.
   prose prompt. **It must stay `false` in production until an RIA registration
   is confirmed. Flipping it is a legal decision, not a deploy-config tidy-up.**
 - **No `SWITCH_CANDIDATE` can be issued today, gate or no gate.**
-  `REPLACEMENT_EXPECTED_EDGE` in `services/mfAnalytics/constants.ts` is `null`
+  `REPLACEMENT_EXPECTED_EDGE` in `services/mf/mfAnalytics/constants.ts` is `null`
   and stays `null` until Task 2.7's backtest produces a regression coefficient
   of forward excess return on composite gap. Without it `breakEvenMonths`
   (`05 §5`) cannot be computed, the switch row cannot match, and those funds

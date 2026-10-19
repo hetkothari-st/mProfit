@@ -11,7 +11,7 @@ import type { IncomeType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { serializeMoney } from '@everypaisa/shared';
-import { computeUserFoPnl } from './foPnl.service.js';
+import { computeUserFoPnl } from './fo/foPnl.service.js';
 
 export const INCOME_TYPES = [
   'SALARY', 'BUSINESS', 'TRADING', 'FREELANCE', 'RENTAL', 'INTEREST_DIVIDEND', 'CAPITAL_GAINS', 'OTHER',

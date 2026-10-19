@@ -5,7 +5,7 @@ import {
   submitMailbackJob,
   getMailbackJob,
   listMailbackJobs,
-} from '../services/mfCasMailback/mfCasMailback.service.js';
+} from '../services/mf/mfCasMailback/mfCasMailback.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 

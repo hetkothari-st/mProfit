@@ -16,7 +16,7 @@
 
 import { Decimal } from 'decimal.js';
 import { logger } from '../../lib/logger.js';
-import { writeIngestionFailure } from '../../services/ingestionFailures.service.js';
+import { writeIngestionFailure } from '../../services/imports/ingestionFailures.service.js';
 import type {
   ValuationAdapter,
   ValuationFetchResult,

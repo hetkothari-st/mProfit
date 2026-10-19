@@ -34,12 +34,12 @@ import { logger } from '../lib/logger.js';
 import { warnIfNotMonthEnd } from './mfAsOfGuard.js';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
+import { writeIngestionFailure } from '../services/imports/ingestionFailures.service.js';
 import {
   computeMetricsForScheme,
   persistSchemeMetrics,
-} from '../services/mfAnalytics/mfMetrics.service.js';
-import { MF_METRICS_MATH_VERSION } from '../services/mfAnalytics/mfMetricsMath.js';
+} from '../services/mf/mfAnalytics/mfMetrics.service.js';
+import { MF_METRICS_MATH_VERSION } from '../services/mf/mfAnalytics/mfMetricsMath.js';
 
 const TZ = 'Asia/Kolkata';
 

@@ -53,7 +53,7 @@ import {
   runMfAnalysis,
   type MfAnalysisRunResult,
   type MfAnalysisTrigger,
-} from '../services/mfAnalytics/mfAnalysisEngine.service.js';
+} from '../services/mf/mfAnalytics/mfAnalysisEngine.service.js';
 
 /**
  * `01 §5`: "the user requests a refresh (rate-limited 1/hour)".

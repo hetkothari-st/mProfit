@@ -50,8 +50,8 @@ import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { parseFamilyId } from '../lib/familyHeader.js';
 import { getEffectiveScope } from '../services/familyScope.service.js';
-import { computeMfPortfolioAnalysis } from '../services/mfAnalytics/mfPortfolioAnalysis.service.js';
-import { MF_SCORING_MODELS } from '../services/mfAnalytics/mfScoring/models/registry.js';
+import { computeMfPortfolioAnalysis } from '../services/mf/mfAnalytics/mfPortfolioAnalysis.service.js';
+import { MF_SCORING_MODELS } from '../services/mf/mfAnalytics/mfScoring/models/registry.js';
 import {
   HORIZON_BASE_WEIGHTS,
   METRIC_DIRECTION,
@@ -60,7 +60,7 @@ import {
   RATING_REQUIRED_PILLARS,
   type MetricDirection,
   type ScoringHorizon,
-} from '../services/mfAnalytics/mfScoring/mfScoreMath.js';
+} from '../services/mf/mfAnalytics/mfScoring/mfScoreMath.js';
 
 // ---------------------------------------------------------------------------
 // Portfolio analysis (`04-PORTFOLIO-ANALYSIS.md`, Task 4.3)
@@ -97,7 +97,7 @@ export async function getPortfolioAnalysis(req: Request, res: Response) {
  *
  * **This is the one response shape in the MF layer with no type in
  * `@everypaisa/shared`, and that is a compromise, not a design.** The model
- * tables live in `packages/api/src/services/mfAnalytics/mfScoring/models/*` —
+ * tables live in `packages/api/src/services/mf/mfAnalytics/mfScoring/models/*` —
  * server-side by necessity, since the scorer runs there — and `06 §5` requires
  * the public methodology page to render them "from the same constants the
  * scorer uses", never a hand-copy. The client therefore has to receive them

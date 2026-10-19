@@ -6,7 +6,7 @@ import {
   getIngestionFailure,
   resolveIngestionFailure,
   retryIngestionFailure,
-} from '../services/ingestionFailures.service.js';
+} from '../services/imports/ingestionFailures.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError, BadRequestError } from '../lib/errors.js';
 

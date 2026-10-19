@@ -2,7 +2,7 @@
  * How much a candidate duplicates what the client already owns.
  *
  * The honest version of this compares portfolio holdings between two schemes —
- * `services/mfOverlap.service.ts` does exactly that for funds whose holdings we
+ * `services/mf/mfOverlap.service.ts` does exactly that for funds whose holdings we
  * have. We do not have constituent holdings for the market at large, only for
  * schemes the client already owns through their statements, so a true overlap
  * matrix across every candidate is not available today.

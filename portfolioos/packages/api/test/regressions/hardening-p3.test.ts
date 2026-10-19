@@ -88,7 +88,7 @@ describe('SEC-28: untrusted spreadsheets are not parsed with npm xlsx', () => {
 });
 
 describe('SEC-39: extension PF payloads resolve to the caller only', () => {
-  const svc = read('services/pfAccounts.service.ts');
+  const svc = read('services/pf/pfAccounts.service.ts');
 
   it('scopes resolution to the authenticated user', () => {
     const fn = svc.slice(svc.indexOf('export async function resolveEpfoAccountForExtension'));

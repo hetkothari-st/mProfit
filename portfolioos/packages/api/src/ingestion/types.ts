@@ -57,7 +57,7 @@ export interface CanonicalEvent {
   /**
    * Optional adapter-computed idempotency hash. When absent, the projection
    * layer derives one from the natural key or positional fallback
-   * (see services/sourceHash.ts).
+   * (see services/imports/sourceHash.ts).
    */
   sourceHash?: string;
 

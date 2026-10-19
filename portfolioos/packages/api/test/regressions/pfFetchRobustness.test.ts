@@ -20,7 +20,7 @@ vi.mock('../../src/services/pf/uanLookup.service.js', () => ({
   startPasswordReset: vi.fn(async () => ({ sessionId: 'sess-2' })),
 }));
 
-const { reportStatus } = await import('../../src/services/pfFetchSessions.service.js');
+const { reportStatus } = await import('../../src/services/pf/pfFetchSessions.service.js');
 const { startUanLookupHandler } = await import('../../src/controllers/pf.controller.js');
 
 function fakeRes() {

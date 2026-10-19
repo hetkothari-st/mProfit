@@ -429,7 +429,7 @@ export async function recomputeForAsset(
   // artefact is harmless here.
   if (SKIP_PROJECTION.has(meta.assetClass)) {
     await prisma.holdingProjection.deleteMany({ where: { portfolioId, assetKey } });
-    const { recomputeDerivativePosition } = await import('../derivativePosition.service.js');
+    const { recomputeDerivativePosition } = await import('../fo/derivativePosition.service.js');
     await recomputeDerivativePosition(portfolioId, assetKey);
     return;
   }

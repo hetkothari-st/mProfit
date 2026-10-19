@@ -20,12 +20,12 @@ import {
   getPfAccountById,
   resolveEpfoAccountForExtension,
   forgetPfCredentials,
-} from '../services/pfAccounts.service.js';
+} from '../services/pf/pfAccounts.service.js';
 import {
   encryptCredentialBlob,
   decryptIdentifier,
-} from '../services/pfCredentials.service.js';
-import { startSession, fail as failSession } from '../services/pfFetchSessions.service.js';
+} from '../services/pf/pfCredentials.service.js';
+import { startSession, fail as failSession } from '../services/pf/pfFetchSessions.service.js';
 
 const QUEUE_UNAVAILABLE = 'Could not start this right now. Please try again in a minute.';
 
@@ -41,7 +41,7 @@ async function rejectUnqueued(res: Response, sessionId: string): Promise<void> {
   }
   error(res, 503, QUEUE_UNAVAILABLE, 'QUEUE_UNAVAILABLE');
 }
-import { buildCanonicalEvents } from '../services/pfCanonicalize.service.js';
+import { buildCanonicalEvents } from '../services/pf/pfCanonicalize.service.js';
 import { recomputeForAsset } from '../services/holdings/holdingsProjection.js';
 import { tokenizePassbookPdf, tokenizePassbookText } from '../ingestion/pf/shared/pdfPassbookParser.js';
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
@@ -58,7 +58,7 @@ import {
   revokePairingByBearer,
   PairingError,
 } from '../services/account/extensionPairing.service.js';
-import { snoozeNudge } from '../services/pfNudges.service.js';
+import { snoozeNudge } from '../services/pf/pfNudges.service.js';
 import { enterUserContext } from '../lib/requestContext.js';
 import type { CanonicalEventType } from '@prisma/client';
 import { Prisma } from '@prisma/client';

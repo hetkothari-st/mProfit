@@ -28,7 +28,7 @@ import {
   encryptIdentifier,
   hashIdentifier,
   last4,
-} from '../pfCredentials.service.js';
+} from '../pf/pfCredentials.service.js';
 
 const PAN_PURPOSE = 'pan';
 

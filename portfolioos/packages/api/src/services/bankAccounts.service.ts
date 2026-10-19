@@ -17,7 +17,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
-import { encryptIdentifier, decryptIdentifier, last4 as last4Of } from './pfCredentials.service.js';
+import { encryptIdentifier, decryptIdentifier, last4 as last4Of } from './pf/pfCredentials.service.js';
 import { lookupIfsc, type IfscDetails } from './ifscLookup.service.js';
 import { openText, sealText } from './security/piiAtRest.service.js';
 

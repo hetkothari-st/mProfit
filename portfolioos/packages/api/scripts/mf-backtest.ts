@@ -101,9 +101,9 @@ import type { MfSchemeStatus } from '@prisma/client';
 
 import { prisma } from '../src/lib/prisma.js';
 import { runAsSystem } from '../src/lib/requestContext.js';
-import { toDailySeries, type SeriesPoint } from '../src/services/mfAnalytics/mfMetricsMath.js';
-import { modelForKey } from '../src/services/mfAnalytics/mfScoring/models/registry.js';
-import { ACTIVE_EQUITY_MODEL } from '../src/services/mfAnalytics/mfScoring/models/activeEquity.js';
+import { toDailySeries, type SeriesPoint } from '../src/services/mf/mfAnalytics/mfMetricsMath.js';
+import { modelForKey } from '../src/services/mf/mfAnalytics/mfScoring/models/registry.js';
+import { ACTIVE_EQUITY_MODEL } from '../src/services/mf/mfAnalytics/mfScoring/models/activeEquity.js';
 import {
   ACCEPTANCE,
   PRECONDITIONS,
@@ -646,7 +646,7 @@ async function main(): Promise<number> {
       console.warn('  This script does NOT edit constants.ts. Making the edit below switches on');
       console.warn('  live SWITCH_CANDIDATE recommendations; that is a human decision.');
       console.warn('');
-      console.warn('  packages/api/src/services/mfAnalytics/constants.ts');
+      console.warn('  packages/api/src/services/mf/mfAnalytics/constants.ts');
       console.warn(
         `  export const REPLACEMENT_EXPECTED_EDGE: Decimal | null = new Decimal('${regression.slope.toFixed(8)}');`,
       );

@@ -33,12 +33,12 @@ import { logger } from '../lib/logger.js';
 import { warnIfNotMonthEnd } from './mfAsOfGuard.js';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
-import { listUniverses, type UniverseRef } from '../services/mfAnalytics/mfPeerRank.service.js';
+import { writeIngestionFailure } from '../services/imports/ingestionFailures.service.js';
+import { listUniverses, type UniverseRef } from '../services/mf/mfAnalytics/mfPeerRank.service.js';
 import {
   scoreUniverse,
   MF_SCORE_SERVICE_VERSION,
-} from '../services/mfAnalytics/mfScoring/mfScore.service.js';
+} from '../services/mf/mfAnalytics/mfScoring/mfScore.service.js';
 
 const TZ = 'Asia/Kolkata';
 

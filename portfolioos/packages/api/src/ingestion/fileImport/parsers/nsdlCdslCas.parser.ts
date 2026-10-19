@@ -2,7 +2,7 @@ import { Decimal } from '@everypaisa/shared';
 import type { Parser, ParserResult, ParsedTransaction } from './types.js';
 import { logger } from '../../../lib/logger.js';
 import { readPdfText, getUserPdfPasswords, isPdfPasswordError } from '../../../lib/pdf.js';
-import { openingHoldingHash } from '../../../services/sourceHash.js';
+import { openingHoldingHash } from '../../../services/imports/sourceHash.js';
 
 /**
  * NSDL / CDSL depository CAS & monthly transaction statement parser.

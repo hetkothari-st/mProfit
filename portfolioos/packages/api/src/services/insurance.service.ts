@@ -26,7 +26,7 @@ import { Decimal, addDaysIso, addMonthsIso, buildPremiumSchedule, daysBetweenIso
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
-import { decryptIdentifier, encryptIdentifier, hashIdentifier } from './pfCredentials.service.js';
+import { decryptIdentifier, encryptIdentifier, hashIdentifier } from './pf/pfCredentials.service.js';
 import { PLATE_SELECT, revealVehicle } from './security/piiAtRest.service.js';
 
 // ── Constants ────────────────────────────────────────────────────────

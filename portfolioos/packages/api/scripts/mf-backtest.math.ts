@@ -41,7 +41,7 @@ import {
   cagr,
   maxDrawdown,
   type SeriesPoint,
-} from '../src/services/mfAnalytics/mfMetricsMath.js';
+} from '../src/services/mf/mfAnalytics/mfMetricsMath.js';
 import {
   blendHorizons,
   composite,
@@ -52,7 +52,7 @@ import {
   type PillarInputValue,
   type ScoringHorizon,
   type ScoringModel,
-} from '../src/services/mfAnalytics/mfScoring/mfScoreMath.js';
+} from '../src/services/mf/mfAnalytics/mfScoring/mfScoreMath.js';
 
 // ---------------------------------------------------------------------------
 // 0. Where each scored metric's value comes from
@@ -1106,7 +1106,7 @@ export function renderRefusalReport(
   lines.push('');
   lines.push(
     'This run produced **no regression coefficient**. `REPLACEMENT_EXPECTED_EDGE` in',
-    '`services/mfAnalytics/constants.ts` must stay `null`, and with it `05 §5` row 3 cannot',
+    '`services/mf/mfAnalytics/constants.ts` must stay `null`, and with it `05 §5` row 3 cannot',
     'match, so no `SWITCH_CANDIDATE` verdict naming a replacement can be justified. Funds that',
     'would otherwise be switch candidates fall through to `REVIEW`, which is the correct and',
     'honest outcome while the evidence does not exist.',
@@ -1221,7 +1221,7 @@ export function renderModelReport(ctx: ReportContext, input: ModelReportInput): 
     lines.push('### The edit this authorises (NOT applied by the script)');
     lines.push('');
     lines.push('```ts');
-    lines.push('// packages/api/src/services/mfAnalytics/constants.ts');
+    lines.push('// packages/api/src/services/mf/mfAnalytics/constants.ts');
     lines.push(`// Backtest ${input.methodologyVersion}, run ${isoDate(ctx.runDate)}.`);
     lines.push(
       `export const REPLACEMENT_EXPECTED_EDGE: Decimal | null = new Decimal('${input.regression.slope.toFixed(8)}');`,

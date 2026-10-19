@@ -22,7 +22,7 @@ import {
 } from '../services/analytics/analytics.insights.js';
 import { generateDeterministicInsights } from '../services/insights/deterministicInsights.js';
 import { checkBudget } from '../ingestion/llm/budget.js';
-import { getMfOverlap } from '../services/mfOverlap.service.js';
+import { getMfOverlap } from '../services/mf/mfOverlap.service.js';
 import { simulateWhatIf } from '../services/analytics/whatIf.service.js';
 
 export async function postWhatIf(req: Request, res: Response): Promise<void> {
