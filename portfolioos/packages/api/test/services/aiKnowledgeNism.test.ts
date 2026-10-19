@@ -225,6 +225,39 @@ describe('NISM retrieval, chapter by chapter', () => {
   it('X-B 3: motor NCB', () => {
     expect(ids('car insurance no claim bonus transfer to new car')).toContain('xb-03-motor-insurance');
   });
+  it('X-B 4: replacement ratio', () => {
+    expect(ids('replacement ratio method to estimate retirement income')).toContain('xb-04-replacement-ratio');
+  });
+  it('X-B 4: longevity risk', () => {
+    expect(ids('what is longevity risk in retirement corpus planning')).toContain('xb-04-retirement-process-variables');
+  });
+  it('X-B 5: EPF withdrawal tax', () => {
+    expect(ids('is PF withdrawal taxable before five years of service')).toContain('xb-05-epf-vpf-tax');
+  });
+  it('X-B 5: gratuity formula', () => {
+    expect(ids('how is gratuity calculated 15/26 formula')).toContain('xb-05-gratuity');
+  });
+  it('X-B 5: NPS exit', () => {
+    expect(ids('NPS exit rules at 60, how much annuity is compulsory')).toContain('xb-05-nps-exit');
+  });
+  it('X-B 5: NPS tax', () => {
+    expect(ids('NPS 80CCD(1B) extra 50000 deduction')).toContain('xb-05-nps-tax');
+  });
+  it('X-B 5: SCSS', () => {
+    expect(ids('SCSS maximum deposit 30 lakh and premature closure')).toContain('xb-05-scss-pomis-pmvvy');
+  });
+  it('X-B 5: reverse mortgage', () => {
+    expect(ids('how does a reverse mortgage work for senior citizens')).toContain('xb-05-reverse-mortgage');
+  });
+  it('X-B 5: PPF extension', () => {
+    expect(ids('PPF account after 15 years extension with contribution')).toContain('xb-05-ppf-withdrawal-extension');
+  });
+  it('X-B 6: cost of delay', () => {
+    expect(ids('how much more do I need to save if I start retirement saving at 40 instead of 30')).toContain('xb-06-cost-of-delay');
+  });
+  it('X-B 6: EPF transfer', () => {
+    expect(ids('should I withdraw or transfer my PF when changing job')).toContain('xb-06-early-withdrawals-transfers');
+  });
   it('X-B 16: prospect theory', () => {
     expect(ids('why do people hold losing stocks and sell winners early, prospect theory')).toContain('xb-16-prospect-theory');
   });
