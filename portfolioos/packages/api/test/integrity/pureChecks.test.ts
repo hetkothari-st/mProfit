@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
 import type { Transaction } from '@prisma/client';
-import { expectedProjections } from '../../src/services/holdingsProjection.js';
-import { computeFIFOGains } from '../../src/services/capitalGains.service.js';
+import { expectedProjections } from '../../src/services/holdings/holdingsProjection.js';
+import { computeFIFOGains } from '../../src/services/tax/capitalGains.service.js';
 import {
   compareGains,
   compareHoldings,
@@ -17,7 +17,7 @@ import {
   mergeDataQuality,
   type DataQualityReport,
 } from '../../src/services/integrity/reportDataQuality.service.js';
-import { parseMfCasText } from '../../src/services/imports/parsers/mfCas.parser.js';
+import { parseMfCasText } from '../../src/ingestion/fileImport/parsers/mfCas.parser.js';
 
 /**
  * The pure halves of the report data-integrity checks: what the stored rows

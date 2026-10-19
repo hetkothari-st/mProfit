@@ -16,12 +16,12 @@
 import { Decimal } from 'decimal.js';
 import { Prisma, type Transaction } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
-import { replayTransactions } from '../holdingsProjection.js';
-import { assetKeyFromTransaction } from '../assetKey.js';
+import { replayTransactions } from '../holdings/holdingsProjection.js';
+import { assetKeyFromTransaction } from '../holdings/assetKey.js';
 import type {
   StatementHolding,
   StatementSnapshot,
-} from '../imports/parsers/types.js';
+} from '../../ingestion/fileImport/parsers/types.js';
 
 /** CAS prints units to 3 places; anything inside that is print rounding. */
 const UNITS_TOLERANCE = new Decimal('0.001');

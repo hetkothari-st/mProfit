@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createTransaction } from '../../src/services/transaction.service.js';
-import { persistCapitalGainsForPortfolio } from '../../src/services/capitalGains.service.js';
+import { createTransaction } from '../../src/services/holdings/transaction.service.js';
+import { persistCapitalGainsForPortfolio } from '../../src/services/tax/capitalGains.service.js';
 import { checkPortfolioIntegrity } from '../../src/services/integrity/storedDataIntegrity.service.js';
 import { runDataIntegrityJob } from '../../src/jobs/dataIntegrityJob.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';

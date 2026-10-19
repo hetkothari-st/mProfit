@@ -26,12 +26,12 @@ import {
   expectedProjections,
   recomputeForAsset,
   type ExpectedProjection,
-} from '../holdingsProjection.js';
+} from '../holdings/holdingsProjection.js';
 import {
   computePortfolioCapitalGains,
   persistCapitalGainsForPortfolio,
   type CapitalGainRow,
-} from '../capitalGains.service.js';
+} from '../tax/capitalGains.service.js';
 
 // Stored scale is Decimal(18,6) for quantity and (18,4) for money. Anything
 // inside one unit of the last stored digit is rounding, not drift.

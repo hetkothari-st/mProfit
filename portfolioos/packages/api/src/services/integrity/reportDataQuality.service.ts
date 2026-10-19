@@ -22,9 +22,9 @@ import { prisma } from '../../lib/prisma.js';
 import {
   computePortfolioCapitalGains,
   computeUserCapitalGains,
-} from '../capitalGains.service.js';
-import { expectedProjections } from '../holdingsProjection.js';
-import { hasMarketPrice, isPriceStale } from '../priceStaleness.js';
+} from '../tax/capitalGains.service.js';
+import { expectedProjections } from '../holdings/holdingsProjection.js';
+import { hasMarketPrice, isPriceStale } from '../holdings/priceStaleness.js';
 import { compareHoldings } from './storedDataIntegrity.service.js';
 import { findStatementMismatches } from './statementReconciliation.service.js';
 

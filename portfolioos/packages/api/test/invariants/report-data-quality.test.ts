@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createTransaction } from '../../src/services/transaction.service.js';
-import { recomputeForPortfolio } from '../../src/services/holdingsProjection.js';
+import { createTransaction } from '../../src/services/holdings/transaction.service.js';
+import { recomputeForPortfolio } from '../../src/services/holdings/holdingsProjection.js';
 import { checkReportDataQuality } from '../../src/services/integrity/reportDataQuality.service.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { createTestScope, seedStockMaster, prisma, type TestScope } from '../helpers/db.js';
