@@ -27,6 +27,9 @@ import { XA_17 } from './xa-17-operations.js';
 import { XA_18 } from './xa-18-key-regulations.js';
 import { XA_19 } from './xa-19-ethics.js';
 import { XA_20 } from './xa-20-grievance-redress.js';
+import { XB_01 } from './xb-01-insurance-basics.js';
+import { XB_02 } from './xb-02-life-insurance.js';
+import { XB_03 } from './xb-03-non-life-insurance.js';
 import { XB_16 } from './xb-16-behavioural-finance-basics.js';
 import { XB_17 } from './xb-17-behavioural-finance-practice.js';
 
@@ -51,6 +54,9 @@ export const NISM_LIBRARY: readonly KnowledgeEntry[] = [
   ...XA_18,
   ...XA_19,
   ...XA_20,
+  ...XB_01,
+  ...XB_02,
+  ...XB_03,
   ...XB_16,
   ...XB_17,
 ];

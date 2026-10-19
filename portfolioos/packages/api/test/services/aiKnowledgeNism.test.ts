@@ -192,6 +192,39 @@ describe('NISM retrieval, chapter by chapter', () => {
   it('X-A 20: banking ombudsman', () => {
     expect(ids('bank not resolving my complaint, RBI ombudsman')).toContain('xa-20-banking-ombudsman');
   });
+  it('X-B 1: non-disclosure', () => {
+    expect(ids('will my insurance claim be rejected if I did not disclose smoking')).toContain('xb-01-utmost-good-faith-insurable-interest');
+  });
+  it('X-B 1: co-pay vs deductible', () => {
+    expect(ids('difference between co-pay and deductible in health insurance')).toContain('xb-01-copay-deductible');
+  });
+  it('X-B 1: section 45', () => {
+    expect(ids('can life insurance claim be denied after 3 years, section 45')).toContain('xb-01-nominee-section-45-moratorium');
+  });
+  it('X-B 2: how much life cover', () => {
+    expect(ids('how much term insurance do I need, human life value')).toContain('xb-02-human-life-value');
+  });
+  it('X-B 2: endowment return', () => {
+    expect(ids('is an endowment policy a good investment, what return')).toContain('xb-02-endowment-whole-life');
+  });
+  it('X-B 2: ULIP vs mutual fund', () => {
+    expect(ids('ULIP vs term plan plus mutual fund')).toContain('xb-02-ulip-vs-term-plus-mf');
+  });
+  it('X-B 2: MWPA', () => {
+    expect(ids('protect life insurance from creditors MWPA policy for wife')).toContain('xb-02-mwpa');
+  });
+  it('X-B 2: surrender', () => {
+    expect(ids('should I surrender my LIC policy, surrender value or paid up')).toContain('xb-02-surrender-paid-up');
+  });
+  it('X-B 3: super top up', () => {
+    expect(ids('top up vs super top up health insurance')).toContain('xb-03-top-up-super-top-up');
+  });
+  it('X-B 3: critical illness', () => {
+    expect(ids('do I need critical illness insurance if I have health insurance')).toContain('xb-03-accident-critical-illness');
+  });
+  it('X-B 3: motor NCB', () => {
+    expect(ids('car insurance no claim bonus transfer to new car')).toContain('xb-03-motor-insurance');
+  });
   it('X-B 16: prospect theory', () => {
     expect(ids('why do people hold losing stocks and sell winners early, prospect theory')).toContain('xb-16-prospect-theory');
   });
