@@ -1,3 +1,5 @@
+> Historical document — superseded by `portfolioos/ARCHITECTURE.md` and the root `CLAUDE.md` as of 2026-10-19. Kept for reference.
+
 # Intelligence Layer Audit
 
 Source spec: `C:\Users\ST269\Downloads\PORTFOLIOOS_INTELLIGENCE_LAYER_PROMPT.md`
