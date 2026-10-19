@@ -657,7 +657,7 @@ describe('determinism', () => {
 
 describe('score persistence (`03 §11.8-9`) — static guarantees on mfScore.service', () => {
   const serviceUrl = new URL(
-    '../../../../src/services/mf/mfAnalytics/mfScoring/mfScore.service.ts',
+    '../../../../../src/services/mf/mfAnalytics/mfScoring/mfScore.service.ts',
     import.meta.url,
   );
 

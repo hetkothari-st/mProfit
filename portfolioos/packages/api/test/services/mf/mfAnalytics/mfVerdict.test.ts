@@ -310,7 +310,7 @@ async function verdictWithEdge(edge: string) {
   vi.doMock('../../../../src/services/mf/mfAnalytics/constants.js', async () => {
     const actual = await vi.importActual<
       typeof import('../../../../src/services/mf/mfAnalytics/constants.js')
-    >('../../../src/services/mf/mfAnalytics/constants.js');
+    >('../../../../src/services/mf/mfAnalytics/constants.js');
     return { ...actual, REPLACEMENT_EXPECTED_EDGE: edge };
   });
   return import('../../../../src/services/mf/mfAnalytics/mfVerdict.js');
@@ -318,7 +318,7 @@ async function verdictWithEdge(edge: string) {
 
 describe('row 3 — once the backtest coefficient exists', () => {
   afterEach(() => {
-    vi.doUnmock('../../../src/services/mf/mfAnalytics/constants.js');
+    vi.doUnmock('../../../../src/services/mf/mfAnalytics/constants.js');
     vi.resetModules();
   });
 
