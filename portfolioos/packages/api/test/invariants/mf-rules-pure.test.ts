@@ -32,7 +32,7 @@ import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const RULES_DIR = join(HERE, '..', '..', 'src', 'services', 'mfAnalytics', 'rules');
+const RULES_DIR = join(HERE, '..', '..', 'src', 'services', 'mf', 'mfAnalytics', 'rules');
 
 /**
  * Files under `rules/` that are not rules. `registry.ts` is the extension

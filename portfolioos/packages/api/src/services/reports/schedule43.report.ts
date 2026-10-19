@@ -1,5 +1,5 @@
 import { Decimal } from 'decimal.js';
-import { computeUserFoPnl, computePortfolioFoPnl } from '../foPnl.service.js';
+import { computeUserFoPnl, computePortfolioFoPnl } from '../fo/foPnl.service.js';
 
 /**
  * Schedule 43 / ITR-3 Schedule BP — F&O business income report.

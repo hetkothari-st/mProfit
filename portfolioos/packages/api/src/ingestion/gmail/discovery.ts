@@ -25,7 +25,7 @@ import { google } from 'googleapis';
 import type { gmail_v1 } from 'googleapis';
 import type { InstitutionKind } from '@prisma/client';
 import { getAuthorizedClientFor } from './gmail.connector.js';
-import { findSeedsForAddresses } from '../../services/templateSeeds.service.js';
+import { findSeedsForAddresses } from '../../services/imports/templateSeeds.service.js';
 import { parseFromHeader } from './headers.js';
 import { DISCOVERY_THRESHOLD, scoreSender } from './keywords.js';
 

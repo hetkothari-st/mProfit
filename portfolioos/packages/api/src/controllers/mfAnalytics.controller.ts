@@ -1,4 +1,4 @@
-import { loadAlternatives } from '../services/mfAnalytics/mfAlternatives.service.js';
+import { loadAlternatives } from '../services/mf/mfAnalytics/mfAlternatives.service.js';
 /**
  * HTTP surface for the mutual-fund analytics REFERENCE layer
  * (`/api/mf-analytics`, `docs/mf-analytics/07-IMPLEMENTATION-PLAN.md` Task 3.1).
@@ -75,8 +75,8 @@ import type { MfSchemeMeta } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ok } from '../lib/response.js';
 import { AppError, NotFoundError } from '../lib/errors.js';
-import { parsePeerRankPayload } from '../services/mfAnalytics/mfPeerRank.service.js';
-import { fundAgeYears as fundAgeYearsMetric } from '../services/mfAnalytics/mfMetricsMath.js';
+import { parsePeerRankPayload } from '../services/mf/mfAnalytics/mfPeerRank.service.js';
+import { fundAgeYears as fundAgeYearsMetric } from '../services/mf/mfAnalytics/mfMetricsMath.js';
 
 // ---------------------------------------------------------------------------
 // Query schemas

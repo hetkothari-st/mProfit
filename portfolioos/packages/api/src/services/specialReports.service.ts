@@ -10,7 +10,7 @@
 
 import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
-import { derivativePositionValue, replayFoTransactions } from './derivativePosition.service.js';
+import { derivativePositionValue, replayFoTransactions } from './fo/derivativePosition.service.js';
 import type { AssetClass, MFCategory, Transaction } from '@prisma/client';
 import {
   GRANDFATHERING_CUTOFF,

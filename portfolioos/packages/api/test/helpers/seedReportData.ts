@@ -5,7 +5,7 @@ import { runAsSystem } from '../../src/lib/requestContext.js';
 import { createTestScope, type TestScope } from './db.js';
 import { recomputeForPortfolio } from '../../src/services/holdings/holdingsProjection.js';
 import { persistCapitalGainsForPortfolio } from '../../src/services/tax/capitalGains.service.js';
-import { recomputeDerivativePosition } from '../../src/services/derivativePosition.service.js';
+import { recomputeDerivativePosition } from '../../src/services/fo/derivativePosition.service.js';
 
 /**
  * One user with something in every stream the reports read: equity (including

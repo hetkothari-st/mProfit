@@ -12,7 +12,7 @@ import {
 import { classifyAttachmentWithLlm } from '../ingestion/gmail/gmailClassifier.js';
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
 import { getGmailScanQueue } from '../lib/queue.js';
-import { sweepAutoApprovals } from '../services/gmailDocApproval.service.js';
+import { sweepAutoApprovals } from '../services/gmail/gmailDocApproval.service.js';
 import { dropLocalFile, ensureLocalFile, persistBytes } from '../lib/fileStore.js';
 
 const STORAGE_ROOT = env.UPLOAD_DIR;

@@ -25,7 +25,7 @@ vi.mock('../../src/lib/sentry.js', () => ({
 
 const { FeedCanaryError, runFeedWithCanary } = await import('../../src/priceFeeds/feedCanary.js');
 const { captureFeedFailure } = await import('../../src/lib/runAlerting.js');
-const { listFeedRunFailures } = await import('../../src/services/ingestionFailures.service.js');
+const { listFeedRunFailures } = await import('../../src/services/imports/ingestionFailures.service.js');
 const { prisma } = await import('../../src/lib/prisma.js');
 const { runAsSystem } = await import('../../src/lib/requestContext.js');
 

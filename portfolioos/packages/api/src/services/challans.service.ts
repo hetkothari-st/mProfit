@@ -34,7 +34,7 @@ import {
   CHALLAN_ADAPTER_ID,
   CHALLAN_ADAPTER_VERSION,
 } from '../ingestion/vehicle/challan.js';
-import { writeIngestionFailure } from './ingestionFailures.service.js';
+import { writeIngestionFailure } from './imports/ingestionFailures.service.js';
 import { PLATE_SELECT, plateOf } from './security/piiAtRest.service.js';
 
 // The $extends-wrapped Prisma client passes a different tx client type

@@ -53,7 +53,7 @@ import type {
   PortfolioRaw,
   SchemeFactsRaw,
 } from '../ingestion/mfFactsheet/types.js';
-import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
+import { writeIngestionFailure } from '../services/imports/ingestionFailures.service.js';
 import {
   setIciciPortfolioUrlResolver,
   setIciciFactsheetTextResolver,

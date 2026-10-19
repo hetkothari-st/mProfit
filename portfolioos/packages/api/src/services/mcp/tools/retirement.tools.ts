@@ -1,5 +1,5 @@
 import { serializeMoney } from '@everypaisa/shared';
-import { listPfAccounts } from '../../pfAccounts.service.js';
+import { listPfAccounts } from '../../pf/pfAccounts.service.js';
 import type { ConnectorTool } from './types.js';
 import { dmy } from './common.js';
 

@@ -27,7 +27,7 @@ import {
 import {
   encryptIdentifier,
   decryptIdentifier,
-} from '../../src/services/pfCredentials.service.js';
+} from '../../src/services/pf/pfCredentials.service.js';
 import { BadRequestError, NotFoundError } from '../../src/lib/errors.js';
 
 // Standard test PANs (they pass the Luhn check; no real account behind them).

@@ -11,18 +11,18 @@ import {
   getScanJob,
   cancelScanJob,
   resumeScanJob,
-} from '../services/gmailScanJobs.service.js';
+} from '../services/gmail/gmailScanJobs.service.js';
 import {
   listDiscoveredDocs,
   getDiscoveredDoc,
   listDistinctSenders,
-} from '../services/gmailDiscoveredDocs.service.js';
-import { approveDoc, rejectDoc } from '../services/gmailDocApproval.service.js';
+} from '../services/gmail/gmailDiscoveredDocs.service.js';
+import { approveDoc, rejectDoc } from '../services/gmail/gmailDocApproval.service.js';
 import {
   listRules,
   upsertRule,
   deleteRule,
-} from '../services/gmailAutoApproveRules.service.js';
+} from '../services/gmail/gmailAutoApproveRules.service.js';
 import { readBuffer } from '../lib/documentStorage.js';
 
 const CreateScanSchema = z.object({

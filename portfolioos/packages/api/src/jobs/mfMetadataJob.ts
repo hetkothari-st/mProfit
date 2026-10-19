@@ -52,7 +52,7 @@ import { Prisma, type MfSchemeStatus } from '@prisma/client';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
+import { writeIngestionFailure } from '../services/imports/ingestionFailures.service.js';
 import {
   fetchAmfiSchemeMaster,
   parseAmfiSchemeMasterText,

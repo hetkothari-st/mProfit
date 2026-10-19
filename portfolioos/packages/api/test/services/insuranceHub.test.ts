@@ -36,7 +36,7 @@ import {
   backfillPolicyNumberEncryption,
   hashPolicyNumber,
 } from '../../src/services/insurance.service.js';
-import { decryptIdentifier, encryptIdentifier } from '../../src/services/pfCredentials.service.js';
+import { decryptIdentifier, encryptIdentifier } from '../../src/services/pf/pfCredentials.service.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../src/lib/errors.js';
 
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pfEventHash } from '../../src/services/sourceHash.js';
+import { pfEventHash } from '../../src/services/imports/sourceHash.js';
 
 describe('pfEventHash', () => {
   it('is deterministic for same inputs', () => {

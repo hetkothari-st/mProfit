@@ -7,8 +7,8 @@ import { AppError, BadRequestError, ForbiddenError, NotFoundError } from '../../
 import { ensureStockMaster, ensureMutualFundMaster, resolveMutualFundId } from './masterData.service.js';
 import { recomputeForAsset } from './holdingsProjection.js';
 import { computeAssetKey, extractUnderlyingFromAssetName } from './assetKey.js';
-import { naturalKeyHash } from '../sourceHash.js';
-import { findDuplicateTransaction } from '../duplicateMatch.js';
+import { naturalKeyHash } from '../imports/sourceHash.js';
+import { findDuplicateTransaction } from '../imports/duplicateMatch.js';
 import { persistCapitalGainsForAsset } from '../tax/capitalGains.service.js';
 import { updateStockPricesFromYahoo } from '../../priceFeeds/yahoo.service.js';
 import { refreshAllHoldingPrices } from './holdings.service.js';

@@ -5,7 +5,7 @@ import {
   submitOtpAndSync,
   getMFCentralSyncJob,
   listMFCentralSyncJobs,
-} from '../services/mfcentral/mfCentral.service.js';
+} from '../services/mf/mfcentral/mfCentral.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 

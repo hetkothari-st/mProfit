@@ -10,7 +10,7 @@ import { runAsSystem } from '../../lib/requestContext.js';
 import { ConflictError, NotFoundError, BadRequestError, TooManyRequestsError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { env } from '../../config/env.js';
-import { hashIdentifier } from '../pfCredentials.service.js';
+import { hashIdentifier } from '../pf/pfCredentials.service.js';
 import { openText } from '../security/piiAtRest.service.js';
 import { sendEmail } from '../notifications/email.service.js';
 import { renderInviteShell } from '../notifications/caInviteEmail.template.js';

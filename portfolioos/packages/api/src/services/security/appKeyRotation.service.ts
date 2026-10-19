@@ -30,7 +30,7 @@ import {
   encryptIdentifier,
   loadPreviousKey,
   type CredentialBlob,
-} from '../pfCredentials.service.js';
+} from '../pf/pfCredentials.service.js';
 import { panHash, registrationNoHash } from './piiAtRest.service.js';
 import { hashPolicyNumber } from '../insurance.service.js';
 

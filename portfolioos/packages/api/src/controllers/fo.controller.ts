@@ -4,13 +4,13 @@ import { Decimal } from 'decimal.js';
 import { prisma } from '../lib/prisma.js';
 import { ok, noContent } from '../lib/response.js';
 import { UnauthorizedError, NotFoundError, ForbiddenError, BadRequestError } from '../lib/errors.js';
-import { computePortfolioFoPnl, computeUserFoPnl } from '../services/foPnl.service.js';
+import { computePortfolioFoPnl, computeUserFoPnl } from '../services/fo/foPnl.service.js';
 import { buildSchedule43Report } from '../services/reports/schedule43.report.js';
 import {
   recomputeAllDerivativePositions,
   refreshLiveDerivativePositionPrices,
-} from '../services/derivativePosition.service.js';
-import { syncFnoBroker } from '../services/foBrokerSync.service.js';
+} from '../services/fo/derivativePosition.service.js';
+import { syncFnoBroker } from '../services/fo/foBrokerSync.service.js';
 import { getOptionChainSnapshot } from '../priceFeeds/nseOptionChain.service.js';
 import { blackScholes, impliedVolatility, timeToExpiryYears, DEFAULT_INDIAN_RISK_FREE_RATE } from '@everypaisa/shared';
 
@@ -251,7 +251,7 @@ export async function approveExpiryJob(req: Request, res: Response) {
   const job = await prisma.expiryCloseJob.findUnique({ where: { id } });
   if (!job) throw new NotFoundError('Expiry job not found');
   await assertPortfolio(userId, job.portfolioId);
-  const { approveExpiryClose } = await import('../services/foExpiry.service.js');
+  const { approveExpiryClose } = await import('../services/fo/foExpiry.service.js');
   await approveExpiryClose(job.id);
   return ok(res, { success: true });
 }

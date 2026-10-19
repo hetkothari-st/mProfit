@@ -8,7 +8,7 @@ import {
   approveCanonicalEvent,
   rejectCanonicalEvent,
   bulkApproveFromSender,
-} from '../services/canonicalEvents.service.js';
+} from '../services/imports/canonicalEvents.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 

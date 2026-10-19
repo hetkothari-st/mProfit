@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { scanExpiringPositions } from '../services/foExpiry.service.js';
+import { scanExpiringPositions } from '../services/fo/foExpiry.service.js';
 
 const TZ = 'Asia/Kolkata';
 let running = false;

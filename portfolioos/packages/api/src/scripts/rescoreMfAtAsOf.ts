@@ -14,7 +14,7 @@
  */
 import { runAsSystem } from '../lib/requestContext.js';
 import { prisma } from '../lib/prisma.js';
-import { listUniverses } from '../services/mfAnalytics/mfPeerRank.service.js';
+import { listUniverses } from '../services/mf/mfAnalytics/mfPeerRank.service.js';
 import { runMfScoreForUniverses } from '../jobs/mfScoreJob.js';
 
 async function main(): Promise<void> {

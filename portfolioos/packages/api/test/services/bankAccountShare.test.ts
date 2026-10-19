@@ -15,7 +15,7 @@ vi.mock('../../src/lib/prisma.js', () => ({ prisma: db }));
 vi.mock('../../src/services/ifscLookup.service.js', () => ({ lookupIfsc }));
 
 import { shareAccountDetails } from '../../src/services/bankAccounts.service.js';
-import { encryptIdentifier } from '../../src/services/pfCredentials.service.js';
+import { encryptIdentifier } from '../../src/services/pf/pfCredentials.service.js';
 import { BadRequestError, NotFoundError } from '../../src/lib/errors.js';
 
 const FULL = '50100123456789';

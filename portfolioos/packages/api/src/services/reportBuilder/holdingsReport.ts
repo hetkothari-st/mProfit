@@ -1,7 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
-import { derivativePositionValue } from '../derivativePosition.service.js';
+import { derivativePositionValue } from '../fo/derivativePosition.service.js';
 import { logger } from '../../lib/logger.js';
 import { fmtNum, fmtDate, type ExportPayload, type ExportColumn } from '../export.service.js';
 import type { BarDatum } from '../charts/pdfCharts.js';
@@ -283,7 +283,7 @@ export async function buildHoldingsExport(params: HoldingsExportParams): Promise
     }
 
     // Realised P&L per asset key by FY + Tax bucket summary
-    const { computePortfolioFoPnl } = await import('../foPnl.service.js');
+    const { computePortfolioFoPnl } = await import('../fo/foPnl.service.js');
     const foRows: Array<Record<string, unknown>> = [];
     let totalRealised = new Decimal(0);
     let specPnl = new Decimal(0);

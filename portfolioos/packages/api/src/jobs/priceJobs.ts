@@ -26,7 +26,7 @@ import { loadNseFoBhavcopy } from '../priceFeeds/nseFoBhavcopy.service.js';
 import {
   refreshAllDerivativePositionPrices,
   refreshLiveDerivativePositionPrices,
-} from '../services/derivativePosition.service.js';
+} from '../services/fo/derivativePosition.service.js';
 
 const TZ = 'Asia/Kolkata';
 

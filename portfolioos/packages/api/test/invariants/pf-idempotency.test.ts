@@ -6,7 +6,7 @@ import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { tokenizePassbookPdf } from '../../src/ingestion/pf/shared/pdfPassbookParser.js';
 import { parseEpfoPassbook } from '../../src/ingestion/pf/epf/epfo.v1.parse.js';
-import { buildCanonicalEvents } from '../../src/services/pfCanonicalize.service.js';
+import { buildCanonicalEvents } from '../../src/services/pf/pfCanonicalize.service.js';
 
 /**
  * INVARIANT: Re-importing the same EPFO passbook PDF twice must insert zero

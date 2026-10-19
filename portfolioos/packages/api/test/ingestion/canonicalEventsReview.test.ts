@@ -10,7 +10,7 @@ import {
   updateCanonicalEvent,
   listCanonicalEvents,
   bulkApproveFromSender,
-} from '../../src/services/canonicalEvents.service.js';
+} from '../../src/services/imports/canonicalEvents.service.js';
 import {
   GMAIL_LLM_ADAPTER_ID,
   GMAIL_LLM_ADAPTER_VER,

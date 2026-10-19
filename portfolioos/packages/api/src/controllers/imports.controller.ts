@@ -13,7 +13,7 @@ import {
 import { ok, created } from '../lib/response.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
 import { verifyUploadedFile } from '../lib/uploadSecurity.js';
-import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
+import { writeIngestionFailure } from '../services/imports/ingestionFailures.service.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { panColumns } from '../services/security/piiAtRest.service.js';

@@ -6,8 +6,8 @@ import {
   findSeedForAddress,
   findSeedsForAddresses,
   listActiveSeeds,
-} from '../../src/services/templateSeeds.service.js';
-import { createMonitoredSender } from '../../src/services/monitoredSenders.service.js';
+} from '../../src/services/imports/templateSeeds.service.js';
+import { createMonitoredSender } from '../../src/services/gmail/monitoredSenders.service.js';
 
 /**
  * §6.10 template seed directory. The 28 seed rows are installed by

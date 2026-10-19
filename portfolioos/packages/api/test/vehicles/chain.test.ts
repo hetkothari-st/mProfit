@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const writeFailure = vi.fn();
-vi.mock('../../src/services/ingestionFailures.service.js', () => ({
+vi.mock('../../src/services/imports/ingestionFailures.service.js', () => ({
   writeIngestionFailure: writeFailure,
 }));
 

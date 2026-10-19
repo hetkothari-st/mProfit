@@ -68,7 +68,7 @@ import {
   type MfProsePillar,
   type MfProsePromptInput,
 } from '../ai/prompts/mfAnalysis.prose.js';
-import type { MfAnalysisFacts, MfFundFacts } from '../services/mfAnalytics/types.js';
+import type { MfAnalysisFacts, MfFundFacts } from '../services/mf/mfAnalytics/types.js';
 
 // ---------------------------------------------------------------------------
 // Ledger identity

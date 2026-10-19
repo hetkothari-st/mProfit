@@ -7,7 +7,7 @@ import {
   updateMonitoredSender,
   deleteMonitoredSender,
   listMonitoredSenders,
-} from '../../src/services/monitoredSenders.service.js';
+} from '../../src/services/gmail/monitoredSenders.service.js';
 
 describe('monitoredSenders CRUD', () => {
   let scope: TestScope;

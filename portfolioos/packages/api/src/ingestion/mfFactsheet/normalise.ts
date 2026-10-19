@@ -25,7 +25,7 @@ import type { MarketCapBucket, AmfiMarketCapLookup, ParsedExitLoadRule } from '.
 
 /**
  * The credit ladder and its normaliser live in
- * `services/mfAnalytics/mfMetricsMath.ts` and are re-exported here verbatim.
+ * `services/mf/mfAnalytics/mfMetricsMath.ts` and are re-exported here verbatim.
  *
  * They are NOT reimplemented. A second ordinal scale would be the worst
  * possible outcome of this task: ingest would bucket a holding one way, the
@@ -42,11 +42,11 @@ export {
   creditRatingOrdinal,
   compareCreditRating,
   normaliseCreditRating,
-} from '../../services/mfAnalytics/mfMetricsMath.js';
-export type { CreditRatingGrade } from '../../services/mfAnalytics/mfMetricsMath.js';
+} from '../../services/mf/mfAnalytics/mfMetricsMath.js';
+export type { CreditRatingGrade } from '../../services/mf/mfAnalytics/mfMetricsMath.js';
 
-import { normaliseCreditRating as normaliseCreditRatingImpl } from '../../services/mfAnalytics/mfMetricsMath.js';
-import type { CreditRatingGrade } from '../../services/mfAnalytics/mfMetricsMath.js';
+import { normaliseCreditRating as normaliseCreditRatingImpl } from '../../services/mf/mfAnalytics/mfMetricsMath.js';
+import type { CreditRatingGrade } from '../../services/mf/mfAnalytics/mfMetricsMath.js';
 
 /**
  * Rating normalisation for a HOLDING row, as opposed to for math.

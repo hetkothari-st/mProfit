@@ -7,7 +7,7 @@ import { assetKeyFromTransaction } from '../holdings/assetKey.js';
 import { cashDirection } from '../cashDirection.js';
 import { transactionInrNet } from '../investmentIncome.service.js';
 import { holdingsAsOf, isCurrent } from '../holdings/holdingsAsOf.service.js';
-import { replayForFoPnl } from '../foPnl.service.js';
+import { replayForFoPnl } from '../fo/foPnl.service.js';
 
 /**
  * Internal cashflow representation. Amounts are Decimal to avoid IEEE-754

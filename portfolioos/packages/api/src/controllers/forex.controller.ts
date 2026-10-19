@@ -17,7 +17,7 @@ import {
   computeForexPairPnL,
   getDefaultTicker,
   SUPPORTED_FX_CURRENCIES,
-} from '../services/forex.service.js';
+} from '../services/forex/forex.service.js';
 import { getForexTicker, syncFxRates } from '../priceFeeds/fx.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError, BadRequestError, NotFoundError, ForbiddenError } from '../lib/errors.js';

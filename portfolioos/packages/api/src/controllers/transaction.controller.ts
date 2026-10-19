@@ -8,7 +8,7 @@ import {
   listTransactions,
   updateTransaction,
 } from '../services/holdings/transaction.service.js';
-import { removeDuplicates, scanDuplicates } from '../services/duplicates.service.js';
+import { removeDuplicates, scanDuplicates } from '../services/imports/duplicates.service.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { parseFamilyId } from '../lib/familyHeader.js';

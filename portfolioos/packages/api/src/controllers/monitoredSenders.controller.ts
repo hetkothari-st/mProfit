@@ -6,7 +6,7 @@ import {
   createMonitoredSender,
   updateMonitoredSender,
   deleteMonitoredSender,
-} from '../services/monitoredSenders.service.js';
+} from '../services/gmail/monitoredSenders.service.js';
 import { ok } from '../lib/response.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 
