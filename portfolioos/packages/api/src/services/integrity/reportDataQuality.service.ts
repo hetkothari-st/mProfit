@@ -74,12 +74,18 @@ export interface DataQualityReport {
 const MAX_ITEMS = 20;
 
 /**
- * Failures logged by reference-data jobs (MF analytics, benchmark and
- * risk-free rates, loan rates). They share the IngestionFailure table and are
- * attributed to an admin, but they are not the user's data: counting them
- * told an admin that tens of thousands of their own rows were missing.
+ * Failures logged by reference-data jobs (AMFI scheme master, MF analytics,
+ * benchmark and risk-free rates, loan rates). They share the IngestionFailure
+ * table and are attributed to an admin, but they are not the user's data:
+ * counting them told an admin that tens of thousands of their own rows were
+ * missing. A new reference-data job must use one of these prefixes —
+ * test/integrity/pureChecks.test.ts holds every existing job id to it.
  */
-const REFERENCE_DATA_ADAPTER_PREFIXES = ['mf.', 'mfapi.', 'fbil.', 'loanrates.'];
+export const REFERENCE_DATA_ADAPTER_PREFIXES = ['amfi.', 'mf.', 'mfapi.', 'fbil.', 'loanrates.'];
+
+export function isReferenceDataAdapter(sourceAdapter: string): boolean {
+  return REFERENCE_DATA_ADAPTER_PREFIXES.some((p) => sourceAdapter.startsWith(p));
+}
 
 function driftDetail(d: HoldingDrift): string {
   if (d.kind === 'COST') {

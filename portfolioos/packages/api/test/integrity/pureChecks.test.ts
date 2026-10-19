@@ -14,9 +14,20 @@ import {
 } from '../../src/services/integrity/statementReconciliation.service.js';
 import {
   dataQualityMetaLines,
+  isReferenceDataAdapter,
   mergeDataQuality,
   type DataQualityReport,
 } from '../../src/services/integrity/reportDataQuality.service.js';
+import { AMFI_SCHEME_MASTER_ADAPTER_ID } from '../../src/priceFeeds/amfiSchemeMaster.v1.js';
+import { MFAPI_NAV_HISTORY_ADAPTER_ID } from '../../src/priceFeeds/mfapiNavHistory.parse.js';
+import { FBIL_RISK_FREE_ADAPTER_ID } from '../../src/priceFeeds/fbilTbillCurve.v1.js';
+import { BENCHMARK_PRICE_ADAPTER_ID } from '../../src/jobs/benchmarkPriceJob.js';
+import { MF_FACTSHEET_ADAPTER_ID } from '../../src/jobs/mfFactsheetJob.js';
+import { MF_METRICS_ADAPTER_ID } from '../../src/jobs/mfMetricsJob.js';
+import { MF_NAV_ADJUSTMENT_ADAPTER_ID } from '../../src/jobs/mfNavAdjustmentJob.js';
+import { MF_PEER_RANK_ADAPTER_ID } from '../../src/jobs/mfPeerRankJob.js';
+import { MF_RECONCILIATION_ADAPTER_ID } from '../../src/jobs/mfReconciliationJob.js';
+import { MF_SCORE_ADAPTER_ID } from '../../src/jobs/mfScoreJob.js';
 import { parseMfCasText } from '../../src/ingestion/fileImport/parsers/mfCas.parser.js';
 
 /**
@@ -262,5 +273,41 @@ describe('download stamp', () => {
     expect(merged.ok).toBe(false);
     expect(merged.dataAsOf.lastTransactionDate).toBe('2026-10-05');
     expect(dataQualityMetaLines(merged)[1]!.value).toBe('1 problem(s) affect these figures — see Reports page');
+  });
+});
+
+describe("reference-data failures are not the user's missing data", () => {
+  it('every reference-data job id is excluded', () => {
+    for (const id of [
+      AMFI_SCHEME_MASTER_ADAPTER_ID,
+      MFAPI_NAV_HISTORY_ADAPTER_ID,
+      FBIL_RISK_FREE_ADAPTER_ID,
+      BENCHMARK_PRICE_ADAPTER_ID,
+      `${MF_FACTSHEET_ADAPTER_ID}.kotak.parse`,
+      MF_METRICS_ADAPTER_ID,
+      MF_NAV_ADJUSTMENT_ADAPTER_ID,
+      MF_PEER_RANK_ADAPTER_ID,
+      MF_RECONCILIATION_ADAPTER_ID,
+      MF_SCORE_ADAPTER_ID,
+      'loanrates.sbi',
+    ]) {
+      expect(isReferenceDataAdapter(id), id).toBe(true);
+    }
+  });
+
+  it("the user's own sources are counted", () => {
+    for (const id of [
+      'gmail.generic.v1',
+      'cas.mf.cams_kfintech',
+      'mfcas.mailback.v1.cams',
+      'mfcentral.cas.v1',
+      'casparser.cdsl.v4',
+      'pf.chain',
+      'vehicle.chain',
+      'docsorter',
+      'file-import.unmatched',
+    ]) {
+      expect(isReferenceDataAdapter(id), id).toBe(false);
+    }
   });
 });
