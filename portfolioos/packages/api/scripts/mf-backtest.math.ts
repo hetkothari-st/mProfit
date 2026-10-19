@@ -53,6 +53,13 @@ import {
   type ScoringHorizon,
   type ScoringModel,
 } from '../src/services/mf/mfAnalytics/mfScoring/mfScoreMath.js';
+import { fileURLToPath } from 'node:url';
+
+/**
+ * Where the backtest writes its report unless BACKTEST_REPORT_DIR says otherwise: the repo-root
+ * `docs/mf-analytics/backtests/`. Resolved from this file, not the cwd, so it is right however the script is run.
+ */
+export const DEFAULT_REPORT_DIR = fileURLToPath(new URL('../../../../docs/mf-analytics/backtests/', import.meta.url));
 
 // ---------------------------------------------------------------------------
 // 0. Where each scored metric's value comes from

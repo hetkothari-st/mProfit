@@ -736,3 +736,15 @@ describe('report rendering', () => {
     expect(md).toContain('| Slope (annual return per composite point) | — |');
   });
 });
+
+describe('DEFAULT_REPORT_DIR', () => {
+  it('points at the repo-root docs/mf-analytics/backtests, whatever the cwd', async () => {
+    const { existsSync } = await import('node:fs');
+    const { sep } = await import('node:path');
+    const { DEFAULT_REPORT_DIR } = await import('../../scripts/mf-backtest.math.js');
+    const posixDir = DEFAULT_REPORT_DIR.split(sep).join('/').replace(/\/$/, '');
+    expect(posixDir.endsWith('/docs/mf-analytics/backtests')).toBe(true);
+    expect(posixDir).not.toContain('/portfolioos/docs/');
+    expect(existsSync(DEFAULT_REPORT_DIR)).toBe(true);
+  });
+});
