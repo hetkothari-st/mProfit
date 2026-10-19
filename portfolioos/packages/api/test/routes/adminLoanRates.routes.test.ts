@@ -10,7 +10,7 @@ import { encryptSecret } from '../../src/lib/secrets.js';
 import { generateTotpSecret } from '../../src/lib/totp.js';
 import { adminLoanRatesRouter } from '../../src/routes/adminLoanRates.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
-import { signAccessToken } from '../../src/services/jwt.service.js';
+import { signAccessToken } from '../../src/services/auth/jwt.service.js';
 import { listLoanRates } from '../../src/services/loanRates/loanRates.service.js';
 import { ensureLoanRateSources } from '../../src/services/loanRates/sourceList.js';
 import { isLoanRatesRunning, runLoanRates, runLoanRatesJob } from '../../src/jobs/loanRatesJob.js';

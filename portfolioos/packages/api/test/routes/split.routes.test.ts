@@ -10,7 +10,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { splitRouter } from '../../src/routes/split.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
-import { signAccessToken } from '../../src/services/jwt.service.js';
+import { signAccessToken } from '../../src/services/auth/jwt.service.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { seedContact, cleanupSplit } from '../helpers/splitFixtures.js';
 import { offendingNumbers } from '../helpers/wireNumerics.js';

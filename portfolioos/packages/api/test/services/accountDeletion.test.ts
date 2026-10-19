@@ -18,9 +18,9 @@ process.env.UPLOAD_DIR = uploadDir;
 
 const { prisma } = await import('../../src/lib/prisma.js');
 const { runAsSystem } = await import('../../src/lib/requestContext.js');
-const { hashPassword } = await import('../../src/services/password.service.js');
+const { hashPassword } = await import('../../src/services/auth/password.service.js');
 const deletion = await import('../../src/services/accountDeletion.service.js');
-const { loginUser } = await import('../../src/services/auth.service.js');
+const { loginUser } = await import('../../src/services/auth/auth.service.js');
 
 const PASSWORD = 'Delete-me-Test-1!';
 const tag = crypto.randomUUID().slice(0, 8);

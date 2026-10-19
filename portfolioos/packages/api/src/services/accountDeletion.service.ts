@@ -27,7 +27,7 @@ import {
 } from '../lib/errors.js';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
-import { verifyPassword } from './password.service.js';
+import { verifyPassword } from './auth/password.service.js';
 import { sendEmail } from './notifications/email.service.js';
 import { renderCodeEmail } from './notifications/codeEmail.template.js';
 import { writeAuditLog } from '../lib/audit.js';

@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { emiRouter } from '../../src/routes/emi.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
-import { signAccessToken } from '../../src/services/jwt.service.js';
+import { signAccessToken } from '../../src/services/auth/jwt.service.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';

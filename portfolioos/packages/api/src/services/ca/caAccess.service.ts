@@ -30,7 +30,7 @@ import type { AssetClass, Client } from '@prisma/client';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
-import { hashPassword } from '../password.service.js';
+import { hashPassword } from '../auth/password.service.js';
 import { recordCaAudit } from './caAudit.service.js';
 import type { Request } from 'express';
 import { panColumns } from '../piiAtRest.service.js';

@@ -32,7 +32,7 @@ function secretLogCalls(src: string): Array<{ call: string; context: string }> {
 }
 
 describe('SEC-02: reset secrets never reach production logs', () => {
-  for (const file of ['controllers/auth.controller.ts', 'services/auth.service.ts']) {
+  for (const file of ['controllers/auth.controller.ts', 'services/auth/auth.service.ts']) {
     it(`${file}: any logged token/code is inside a non-production guard`, () => {
       for (const { call, context } of secretLogCalls(read(file))) {
         expect(context, `unguarded secret log: ${call}`).toMatch(

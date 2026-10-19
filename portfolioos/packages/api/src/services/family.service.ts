@@ -22,7 +22,7 @@ import {
 } from './familyScope.service.js';
 import { logger } from '../lib/logger.js';
 import { env } from '../config/env.js';
-import { hashPassword } from './password.service.js';
+import { hashPassword } from './auth/password.service.js';
 import { managedPlaceholderEmail } from './family/managedProfile.service.js';
 import { purgeUser } from './accountDeletion.service.js';
 import {

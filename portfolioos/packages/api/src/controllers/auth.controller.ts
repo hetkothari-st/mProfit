@@ -15,7 +15,7 @@ import {
   getCurrentUserRecord,
   updateProfile,
   verifyRegistration,
-} from '../services/auth.service.js';
+} from '../services/auth/auth.service.js';
 import { created, noContent, ok } from '../lib/response.js';
 import {
   DELETION_GRACE_DAYS,
@@ -27,8 +27,8 @@ import { UnauthorizedError } from '../lib/errors.js';
 import { writeAuditLog } from '../lib/audit.js';
 import { readPan } from '../services/piiAtRest.service.js';
 import { notifyIfLoginBurst, notifyIfNewDevice } from '../services/securityAlerts.service.js';
-import * as twoFactor from '../services/twoFactor.service.js';
-import { completeTwoFactorSignIn, issueSession } from '../services/auth.service.js';
+import * as twoFactor from '../services/auth/twoFactor.service.js';
+import { completeTwoFactorSignIn, issueSession } from '../services/auth/auth.service.js';
 
 export const registerSchema = z.object({
   email: z.string().email().toLowerCase(),

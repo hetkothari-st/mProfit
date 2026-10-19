@@ -173,7 +173,7 @@ wrong cause. All 17 PF routes once lacked it; that was the bug.
   `run` unwinds when its synchronous callback returns, and some callback-based
   middleware (multer disk storage) does not propagate the store. `enterWith`
   binds the store to the request's async resource and all descendants.
-- `services/auth.service.ts` exports `issueSession(user)`; register, login,
+- `services/auth/auth.service.ts` exports `issueSession(user)`; register, login,
   refresh and Google OAuth all reuse it.
 - Frontend `api/client.ts` refreshes on 401 with a shared in-flight promise so
   concurrent 401s trigger one refresh, not N.

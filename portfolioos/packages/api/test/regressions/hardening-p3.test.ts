@@ -33,7 +33,7 @@ describe('SEC-35: self-assignable roles cannot gate anything', () => {
 });
 
 describe('SEC-34: login does not reveal whether an account exists by timing', () => {
-  const svc = read('services/auth.service.ts');
+  const svc = read('services/auth/auth.service.ts');
 
   it('runs a password comparison on the unknown-user path', () => {
     const body = svc.slice(svc.indexOf('export async function loginUser'));

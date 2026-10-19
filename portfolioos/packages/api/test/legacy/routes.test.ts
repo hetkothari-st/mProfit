@@ -11,7 +11,7 @@ import type { Server } from 'node:http';
 import { legacyRouter, legacyPublicRouter, legacyViewRouter } from '../../src/routes/legacy.routes.js';
 import { authenticate } from '../../src/middleware/authenticate.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
-import { signAccessToken } from '../../src/services/jwt.service.js';
+import { signAccessToken } from '../../src/services/auth/jwt.service.js';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { runInTransaction } from '../../src/lib/prisma.js';

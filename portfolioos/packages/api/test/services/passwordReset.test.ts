@@ -96,9 +96,9 @@ vi.mock('../../src/lib/prisma.js', () => {
 });
 
 const { requestPasswordReset, resetPassword } = await import(
-  '../../src/services/auth.service.js'
+  '../../src/services/auth/auth.service.js'
 );
-const { verifyPassword } = await import('../../src/services/password.service.js');
+const { verifyPassword } = await import('../../src/services/auth/password.service.js');
 
 const EMAIL = 'forgetful@example.com';
 const NEW_PASSWORD = 'brand-new-password';

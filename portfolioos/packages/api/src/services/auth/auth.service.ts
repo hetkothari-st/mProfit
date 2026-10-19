@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { Prisma, type User } from '@prisma/client';
 import { OAuth2Client } from 'google-auth-library';
-import { prisma, runInTransaction } from '../lib/prisma.js';
+import { prisma, runInTransaction } from '../../lib/prisma.js';
 import {
   AppError,
   BadRequestError,
@@ -9,23 +9,23 @@ import {
   NotFoundError,
   TooManyRequestsError,
   UnauthorizedError,
-} from '../lib/errors.js';
-import { env } from '../config/env.js';
-import { logger } from '../lib/logger.js';
+} from '../../lib/errors.js';
+import { env } from '../../config/env.js';
+import { logger } from '../../lib/logger.js';
 import { hashPassword, verifyPassword } from './password.service.js';
-import { sendEmail } from './notifications/email.service.js';
-import { renderCodeEmail } from './notifications/codeEmail.template.js';
+import { sendEmail } from '../notifications/email.service.js';
+import { renderCodeEmail } from '../notifications/codeEmail.template.js';
 import {
   generateRefreshToken,
   refreshTokenExpiry,
   signAccessToken,
 } from './jwt.service.js';
-import { panColumns } from './piiAtRest.service.js';
-import { assertNotPendingDeletion } from './accountDeletion.service.js';
-import { linkContactsForUser } from './split/linking.service.js';
-import { effectivePlan } from '../lib/effectivePlan.js';
+import { panColumns } from '../piiAtRest.service.js';
+import { assertNotPendingDeletion } from '../accountDeletion.service.js';
+import { linkContactsForUser } from '../split/linking.service.js';
+import { effectivePlan } from '../../lib/effectivePlan.js';
 import { completeChallenge, createChallenge, isTwoFactorEnabled } from './twoFactor.service.js';
-import { touchActivitySoon } from './legacy/activity.service.js';
+import { touchActivitySoon } from '../legacy/activity.service.js';
 
 interface IssueTokensResult {
   accessToken: string;

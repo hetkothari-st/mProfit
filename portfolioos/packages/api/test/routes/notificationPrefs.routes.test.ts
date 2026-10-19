@@ -7,7 +7,7 @@ import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { notificationsRouter } from '../../src/routes/notifications.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
-import { signAccessToken } from '../../src/services/jwt.service.js';
+import { signAccessToken } from '../../src/services/auth/jwt.service.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';

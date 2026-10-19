@@ -73,7 +73,7 @@ import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { mfAnalyticsRouter } from '../../src/routes/mfAnalytics.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
-import { signAccessToken } from '../../src/services/jwt.service.js';
+import { signAccessToken } from '../../src/services/auth/jwt.service.js';
 import { env } from '../../src/config/env.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { offendingNumbers } from '../helpers/wireNumerics.js';

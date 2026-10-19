@@ -9,7 +9,7 @@ vi.mock('../../src/lib/prisma.js', () => ({
   prisma: { refreshToken: { create: vi.fn().mockResolvedValue({}) } },
 }));
 
-import { issueSession } from '../../src/services/auth.service.js';
+import { issueSession } from '../../src/services/auth/auth.service.js';
 import { authenticate } from '../../src/middleware/authenticate.js';
 import { requireFeature } from '../../src/middleware/requirePlan.js';
 

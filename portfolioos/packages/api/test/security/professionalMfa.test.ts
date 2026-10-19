@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { createTestScope, prisma, runAsVerified, type TestScope } from '../helpers/db.js';
 import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
 import { getCaScope } from '../../src/services/ca/caAccess.service.js';
-import { issueSession, refreshSession } from '../../src/services/auth.service.js';
+import { issueSession, refreshSession } from '../../src/services/auth/auth.service.js';
 import { encryptSecret } from '../../src/lib/secrets.js';
 import { generateTotpSecret } from '../../src/lib/totp.js';
 
