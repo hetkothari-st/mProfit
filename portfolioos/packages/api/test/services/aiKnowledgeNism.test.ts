@@ -327,6 +327,39 @@ describe('NISM retrieval, chapter by chapter', () => {
   it('X-B 13: stock lending', () => {
     expect(ids('lending my shares through SLB, how is the fee taxed')).toContain('xb-13-slb');
   });
+  it('X-B 14: Class I heirs', () => {
+    expect(ids('who inherits if a Hindu man dies without a will, class I heirs')).toContain('xb-14-hindu-male-intestate');
+  });
+  it('X-B 14: Muslim will limit', () => {
+    expect(ids('how much can a Muslim leave by will, one third')).toContain('xb-14-muslim-succession');
+  });
+  it('X-B 15: probate', () => {
+    expect(ids('is probate mandatory for a will in Mumbai')).toContain('xb-15-probate-succession-certificate');
+  });
+  it('X-B 15: discretionary trust tax', () => {
+    expect(ids('how is a private discretionary family trust taxed')).toContain('xb-15-trust-types-tax');
+  });
+  it('X-B 15: register a will', () => {
+    expect(ids('do I need to register my will, codicil to change it')).toContain('xb-15-will-registration-revocation');
+  });
+  it('X-B 15: joint tenancy', () => {
+    expect(ids('joint tenancy vs tenancy in common survivorship')).toContain('xb-15-tenancy-asset-protection');
+  });
+  it('X-B 18: SAA vs TAA', () => {
+    expect(ids('strategic tactical and dynamic asset allocation difference')).toContain('xb-18-saa-taa-daa');
+  });
+  it('X-B 18: model portfolio', () => {
+    expect(ids('model portfolio asset allocation for a retired couple in their seventies')).toContain('xb-18-model-portfolios');
+  });
+  it('X-B 19: gold options', () => {
+    expect(ids('gold ETF vs sovereign gold bond vs physical gold')).toContain('xb-19-gold-options');
+  });
+  it('X-B 19: ETF vs index fund', () => {
+    expect(ids('should I buy an ETF or an index fund')).toContain('xb-19-etf-vs-index-fund');
+  });
+  it('X-B 20: returning NRI', () => {
+    expect(ids('returning from US, is my 401k and US rental income taxed in India')).toContain('xb-20-returning-nri-case');
+  });
   it('X-B 16: prospect theory', () => {
     expect(ids('why do people hold losing stocks and sell winners early, prospect theory')).toContain('xb-16-prospect-theory');
   });

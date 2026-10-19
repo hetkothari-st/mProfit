@@ -40,8 +40,13 @@ import { XB_10 } from './xb-10-debt-taxation.js';
 import { XB_11 } from './xb-11-equity-taxation.js';
 import { XB_12 } from './xb-12-other-products-tax.js';
 import { XB_13 } from './xb-13-special-cases-tax.js';
+import { XB_14 } from './xb-14-estate-basics.js';
+import { XB_15 } from './xb-15-estate-tools.js';
 import { XB_16 } from './xb-16-behavioural-finance-basics.js';
 import { XB_17 } from './xb-17-behavioural-finance-practice.js';
+import { XB_18 } from './xb-18-risk-profiling.js';
+import { XB_19 } from './xb-19-product-comparisons.js';
+import { XB_20 } from './xb-20-case-studies.js';
 
 export const NISM_LIBRARY: readonly KnowledgeEntry[] = [
   ...XA_01,
@@ -77,6 +82,11 @@ export const NISM_LIBRARY: readonly KnowledgeEntry[] = [
   ...XB_11,
   ...XB_12,
   ...XB_13,
+  ...XB_14,
+  ...XB_15,
   ...XB_16,
   ...XB_17,
+  ...XB_18,
+  ...XB_19,
+  ...XB_20,
 ];
