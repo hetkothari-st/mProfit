@@ -25,7 +25,7 @@ import {
 } from '../tax/capitalGains.service.js';
 import { expectedProjections } from '../holdings/holdingsProjection.js';
 import { hasMarketPrice, isPriceStale } from '../holdings/priceStaleness.js';
-import { compareHoldings } from './storedDataIntegrity.service.js';
+import { compareHoldings, type HoldingDrift } from './storedDataIntegrity.service.js';
 import { findStatementMismatches } from './statementReconciliation.service.js';
 
 export type DataQualityCode =
@@ -48,6 +48,8 @@ export interface DataQualityIssue {
   message: string;
   /** Up to MAX_ITEMS examples, so the user can find and fix them. */
   items: Array<{ label: string; detail?: string }>;
+  /** Examples left out of `items` by the MAX_ITEMS cap. */
+  moreItems: number;
 }
 
 export interface DataAsOf {
@@ -70,6 +72,23 @@ export interface DataQualityReport {
 }
 
 const MAX_ITEMS = 20;
+
+/**
+ * Failures logged by reference-data jobs (MF analytics, benchmark and
+ * risk-free rates, loan rates). They share the IngestionFailure table and are
+ * attributed to an admin, but they are not the user's data: counting them
+ * told an admin that tens of thousands of their own rows were missing.
+ */
+const REFERENCE_DATA_ADAPTER_PREFIXES = ['mf.', 'mfapi.', 'fbil.', 'loanrates.'];
+
+function driftDetail(d: HoldingDrift): string {
+  if (d.kind === 'COST') {
+    return `transactions say cost ${d.expected?.totalCost}, saved holding says ${d.stored?.totalCost}`;
+  }
+  if (d.kind === 'MISSING') return `transactions say ${d.expected?.quantity} units, but no holding is saved`;
+  if (d.kind === 'UNEXPECTED') return `a holding of ${d.stored?.quantity} units is saved, but the transactions add up to none`;
+  return `transactions say ${d.expected?.quantity} units, saved holding says ${d.stored?.quantity}`;
+}
 const day = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
 
 export async function checkReportDataQuality(
@@ -109,12 +128,26 @@ export async function checkReportDataQuality(
       prisma.canonicalEvent.count({
         where: { userId, status: { in: ['PARSED', 'PENDING_REVIEW', 'CONFIRMED', 'ARCHIVED'] } },
       }),
-      prisma.ingestionFailure.count({ where: { userId, resolvedAt: null } }),
+      prisma.ingestionFailure.groupBy({
+        by: ['sourceAdapter'],
+        where: {
+          userId,
+          resolvedAt: null,
+          NOT: REFERENCE_DATA_ADAPTER_PREFIXES.map((p) => ({ sourceAdapter: { startsWith: p } })),
+        },
+        _count: { _all: true },
+      }),
     ]);
 
   const issues: DataQualityIssue[] = [];
-  const push = (issue: Omit<DataQualityIssue, 'items'> & { items: DataQualityIssue['items'] }) => {
-    if (issue.count > 0) issues.push({ ...issue, items: issue.items.slice(0, MAX_ITEMS) });
+  const push = (issue: Omit<DataQualityIssue, 'moreItems'>) => {
+    if (issue.count > 0) {
+      issues.push({
+        ...issue,
+        items: issue.items.slice(0, MAX_ITEMS),
+        moreItems: Math.max(0, issue.items.length - MAX_ITEMS),
+      });
+    }
   };
 
   // 1. Sales with no purchase behind them. The engine books these at nil cost
@@ -199,7 +232,7 @@ export async function checkReportDataQuality(
       'Some saved holdings do not match the transactions they come from. They are rebuilt automatically every night, or use Fix now to rebuild them immediately.',
     items: drifts.map((d) => ({
       label: nameOf.get(d.assetKey) ?? d.assetKey,
-      detail: `transactions say ${d.expected?.quantity ?? '0'} units, saved holding says ${d.stored?.quantity ?? '0'}`,
+      detail: driftDetail(d),
     })),
   });
 
@@ -234,13 +267,14 @@ export async function checkReportDataQuality(
     message: 'Some transactions found in your email are waiting for your review and are not in reports yet.',
     items: [],
   });
+  const failureGroups = [...failures].sort((a, b) => b._count._all - a._count._all);
   push({
     code: 'UNRESOLVED_FAILURES',
     severity: 'warning',
     scope: 'account',
-    count: failures,
-    message: 'Some rows could not be read during import and were left out.',
-    items: [],
+    count: failureGroups.reduce((s, g) => s + g._count._all, 0),
+    message: 'Some imported files, emails or rows could not be processed and were left out.',
+    items: failureGroups.map((g) => ({ label: g.sourceAdapter, detail: `${g._count._all} unresolved` })),
   });
 
   const priceDates = market

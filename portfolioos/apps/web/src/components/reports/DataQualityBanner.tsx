@@ -154,7 +154,7 @@ function IssueRow({ issue }: { issue: DataQualityIssue }) {
                   {item.detail && <span> — {item.detail}</span>}
                 </li>
               ))}
-              {issue.count > issue.items.length && <li>…and {issue.count - issue.items.length} more</li>}
+              {issue.moreItems > 0 && <li>…and {issue.moreItems} more</li>}
             </ul>
           )}
         </div>

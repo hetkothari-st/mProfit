@@ -134,6 +134,7 @@ export interface DataQualityIssue {
   count: number;
   message: string;
   items: Array<{ label: string; detail?: string }>;
+  moreItems: number;
 }
 
 export interface DataQualityReport {
