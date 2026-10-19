@@ -12,10 +12,11 @@
  */
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, unlink, writeFile, access } from 'node:fs/promises';
-import { dirname, extname } from 'node:path';
+import { basename, dirname, extname, join } from 'node:path';
 import { logger } from './logger.js';
 import { prisma } from './prisma.js';
 import { readBuffer, saveBuffer } from './documentStorage.js';
+import { uploadRoot } from './uploadRoot.js';
 
 /** Seal a local file into the encrypted store; returns its blob key. */
 export async function persistLocalFile(userId: string, path: string, prefix: string): Promise<string> {
@@ -42,15 +43,37 @@ async function exists(path: string): Promise<boolean> {
 }
 
 /**
- * Make sure `path` holds the file. If the disk copy is gone (a deploy wiped
- * it, or it was dropped after processing), write it back from the encrypted
- * store. Without a blob key there is nothing to restore from.
+ * Make sure there is a readable local copy of a stored file, and return its
+ * path. Normally that is `path` itself: if the disk copy is gone (a deploy
+ * wiped it, or it was dropped after processing), it is written back from the
+ * encrypted store. When `path` sits in a directory this process cannot write
+ * (rows saved under an upload dir that is no longer writable), the copy goes
+ * under the writable upload root instead — callers must read the RETURNED
+ * path. Without a blob key there is nothing to restore from, and `path` is
+ * returned for the caller to fail on.
  */
-export async function ensureLocalFile(userId: string, blobKey: string | null | undefined, path: string): Promise<void> {
-  if (await exists(path)) return;
-  if (!blobKey) return; // legacy row from before the store; caller sees the missing file
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, await readBuffer(userId, blobKey));
+export async function ensureLocalFile(
+  userId: string,
+  blobKey: string | null | undefined,
+  path: string,
+): Promise<string> {
+  if (await exists(path)) return path;
+  if (!blobKey) return path; // legacy row from before the store; caller sees the missing file
+  const bytes = await readBuffer(userId, blobKey);
+  try {
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await writeFile(path, bytes, { mode: 0o600 });
+    return path;
+  } catch (err) {
+    // The bytes come from the database, so any location will do: an
+    // unwritable or vanished original directory must not lose the import.
+    logger.warn({ err, path }, '[fileStore] original location not writable; restoring under the upload root');
+    const relocated = join(uploadRoot(), 'restored', `${blobKey}-${basename(path)}`);
+    if (await exists(relocated)) return relocated;
+    await mkdir(dirname(relocated), { recursive: true, mode: 0o700 });
+    await writeFile(relocated, bytes, { mode: 0o600 });
+    return relocated;
+  }
 }
 
 /** Remove the plain-text disk copy of a file the encrypted store holds. */

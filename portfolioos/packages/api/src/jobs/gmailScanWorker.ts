@@ -3,6 +3,7 @@ import { join, extname } from 'node:path';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { env } from '../config/env.js';
+import { uploadRoot } from '../lib/uploadRoot.js';
 import {
   buildScanQuery,
   listMessageIdsPage,
@@ -15,7 +16,6 @@ import { getGmailScanQueue } from '../lib/queue.js';
 import { sweepAutoApprovals } from '../services/gmail/gmailDocApproval.service.js';
 import { dropLocalFile, ensureLocalFile, persistBytes } from '../lib/fileStore.js';
 
-const STORAGE_ROOT = env.UPLOAD_DIR;
 const CONCURRENCY = 5;
 
 /**
@@ -183,14 +183,14 @@ async function classifyPending(scanJobId: string): Promise<void> {
       const doc = queue.shift();
       if (!doc) return;
 
-      await ensureLocalFile(doc.userId, doc.blobKey, doc.storagePath);
-      const decrypted = await decryptIfNeeded(doc.storagePath, {
+      const localPath = await ensureLocalFile(doc.userId, doc.blobKey, doc.storagePath);
+      const decrypted = await decryptIfNeeded(localPath, {
         fileName: doc.fileName,
         userId: doc.userId,
         allowedKinds: ['pdf', 'xlsx_ooxml', 'xlsx_encrypted', 'xls', 'csv'],
       });
       // Classification only needs the text; the plain-text disk copy goes.
-      await dropLocalFile(doc.blobKey, doc.storagePath);
+      await dropLocalFile(doc.blobKey, localPath);
 
       const first4kb = decrypted.ok && decrypted.text ? decrypted.text.slice(0, 4096) : '';
 
@@ -275,7 +275,7 @@ function localPathFor(
   att: { attachmentId: string; fileName: string },
 ): string {
   const ym = new Date().toISOString().slice(0, 7);
-  const dir = join(STORAGE_ROOT, 'gmail-imports', userId, ym);
+  const dir = join(uploadRoot(), 'gmail-imports', userId, ym);
   const ext = extname(att.fileName) || '.bin';
   const safeMsg = messageId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32);
   return join(dir, `${safeMsg}-${att.attachmentId.slice(0, 12)}${ext}`);

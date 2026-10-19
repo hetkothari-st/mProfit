@@ -26,6 +26,7 @@ import {
   TooManyRequestsError,
 } from '../../lib/errors.js';
 import { env } from '../../config/env.js';
+import { uploadRoots } from '../../lib/uploadRoot.js';
 import { logger } from '../../lib/logger.js';
 import { verifyPassword } from '../auth/password.service.js';
 import { sendEmail } from '../notifications/email.service.js';
@@ -239,12 +240,14 @@ export async function assertNotPendingDeletion(
 
 // ── Purge ────────────────────────────────────────────────────────────
 
-/** Resolve a stored path and refuse anything outside UPLOAD_DIR. */
+/** Resolve a stored path and refuse anything outside the upload roots. */
 function insideUploads(p: string): string | null {
-  const root = resolve(env.UPLOAD_DIR);
-  const full = isAbsolute(p) ? resolve(p) : resolve(root, p);
-  const rel = relative(root, full);
-  return rel && !rel.startsWith('..') && !isAbsolute(rel) ? full : null;
+  for (const root of uploadRoots()) {
+    const full = isAbsolute(p) ? resolve(p) : resolve(root, p);
+    const rel = relative(root, full);
+    if (rel && !rel.startsWith('..') && !isAbsolute(rel)) return full;
+  }
+  return null;
 }
 
 async function collectStoredFiles(userId: string): Promise<string[]> {
@@ -273,11 +276,11 @@ async function removeStoredFiles(userId: string, files: string[]): Promise<void>
         logger.warn({ err, userId }, '[account.delete] could not remove a stored file');
     });
   }
-  for (const dir of [
-    join(env.UPLOAD_DIR, 'documents', `user_${userId}`),
-    join(env.UPLOAD_DIR, 'imports', userId),
-    join(env.UPLOAD_DIR, 'gmail-imports', userId),
-  ]) {
+  for (const dir of uploadRoots().flatMap((root) => [
+    join(root, 'documents', `user_${userId}`),
+    join(root, 'imports', userId),
+    join(root, 'gmail-imports', userId),
+  ])) {
     await rm(dir, { recursive: true, force: true }).catch((err: unknown) =>
       logger.warn({ err, userId }, '[account.delete] could not remove a user upload directory'),
     );

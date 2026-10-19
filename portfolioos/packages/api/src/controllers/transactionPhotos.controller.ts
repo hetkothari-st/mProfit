@@ -4,6 +4,7 @@ import type { Request, Response } from 'express';
 import multer from 'multer';
 import { prisma } from '../lib/prisma.js';
 import { env } from '../config/env.js';
+import { uploadRoot } from '../lib/uploadRoot.js';
 import { ok, noContent } from '../lib/response.js';
 import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
 import { sniffImage } from '../services/realEstate/propertyPhotos.service.js';
@@ -41,7 +42,7 @@ async function userOwnsTransaction(userId: string, txnId: string): Promise<boole
 export const upload = multer({
   storage: multer.diskStorage({
     destination: async (_req, _file, cb) => {
-      const dir = path.join(env.UPLOAD_DIR, 'transaction_photos');
+      const dir = path.join(uploadRoot(), 'transaction_photos');
       await fs.mkdir(dir, { recursive: true });
       cb(null, dir);
     },
