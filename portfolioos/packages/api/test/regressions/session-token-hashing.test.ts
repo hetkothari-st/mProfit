@@ -17,7 +17,7 @@ import crypto from 'node:crypto';
  */
 
 const ROOT = join(__dirname, '..', '..');
-const svc = readFileSync(join(ROOT, 'src', 'services', 'auth.service.ts'), 'utf8');
+const svc = readFileSync(join(ROOT, 'src', 'services', 'auth', 'auth.service.ts'), 'utf8');
 const schema = readFileSync(join(ROOT, 'prisma', 'schema.prisma'), 'utf8');
 const migration = readFileSync(
   join(ROOT, 'prisma', 'migrations', '20260918110000_hash_session_tokens', 'migration.sql'),

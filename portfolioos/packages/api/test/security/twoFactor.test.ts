@@ -5,11 +5,11 @@ vi.mock('../../src/services/notifications/email.service.js', () => mail);
 
 const { createTestScope, prisma } = await import('../helpers/db.js');
 const { runAsSystem } = await import('../../src/lib/requestContext.js');
-const { hashPassword } = await import('../../src/services/password.service.js');
-const { loginUser, completeTwoFactorSignIn } = await import('../../src/services/auth.service.js');
-const tf = await import('../../src/services/twoFactor.service.js');
+const { hashPassword } = await import('../../src/services/auth/password.service.js');
+const { loginUser, completeTwoFactorSignIn } = await import('../../src/services/auth/auth.service.js');
+const tf = await import('../../src/services/auth/twoFactor.service.js');
 const { totpAt, currentStep } = await import('../../src/lib/totp.js');
-const { verifyAccessToken } = await import('../../src/services/jwt.service.js');
+const { verifyAccessToken } = await import('../../src/services/auth/jwt.service.js');
 
 /**
  * Two-factor sign-in end to end against a real database (NOBYPASSRLS role).

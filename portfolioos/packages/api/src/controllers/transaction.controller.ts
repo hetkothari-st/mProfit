@@ -7,7 +7,7 @@ import {
   getTransaction,
   listTransactions,
   updateTransaction,
-} from '../services/transaction.service.js';
+} from '../services/holdings/transaction.service.js';
 import { removeDuplicates, scanDuplicates } from '../services/duplicates.service.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';

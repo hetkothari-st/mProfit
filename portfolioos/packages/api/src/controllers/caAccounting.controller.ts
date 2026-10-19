@@ -64,14 +64,14 @@ import {
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { toDecimal, serializeMoney, type Decimal } from '@everypaisa/shared';
-import { recomputeForAsset } from '../services/holdingsProjection.js';
+import { recomputeForAsset } from '../services/holdings/holdingsProjection.js';
 import {
   listUserFmvOverrides,
   getFmvForIsin,
   upsertUserFmv,
   deleteUserFmv,
 } from '../services/fmvOverride.service.js';
-import { createTransaction } from '../services/transaction.service.js';
+import { createTransaction } from '../services/holdings/transaction.service.js';
 import { baseTransactionSchema } from './transaction.controller.js';
 import { createImportJob, listImportJobs } from '../services/imports/import.service.js';
 import {

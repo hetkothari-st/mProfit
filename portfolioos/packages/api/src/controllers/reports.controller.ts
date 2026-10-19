@@ -1020,7 +1020,7 @@ import {
   requireSingleSubject,
   runForSubject,
 } from '../services/reports/reportSubjects.js';
-import { plateOf, revealVehicle } from '../services/piiAtRest.service.js';
+import { plateOf, revealVehicle } from '../services/security/piiAtRest.service.js';
 
 async function emitMprofit(req: Request, res: Response, layout: MprofitLayout) {
   const format = getFormat(req);

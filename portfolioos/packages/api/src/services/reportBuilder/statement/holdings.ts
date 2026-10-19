@@ -11,7 +11,7 @@
  *   Market Value · Unrealised P&L · % of Portfolio
  */
 
-import { holdingsAsOf, sortHoldings } from '../../holdingsAsOf.service.js';
+import { holdingsAsOf, sortHoldings } from '../../holdings/holdingsAsOf.service.js';
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';

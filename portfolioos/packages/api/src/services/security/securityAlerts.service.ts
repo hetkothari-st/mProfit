@@ -16,11 +16,11 @@
  */
 import { formatDateTimeIST } from '@everypaisa/shared';
 import type { Request } from 'express';
-import { prisma } from '../lib/prisma.js';
-import { logger } from '../lib/logger.js';
-import { runAsSystem } from '../lib/requestContext.js';
-import { writeAuditLog } from '../lib/audit.js';
-import { sendEmail } from './notifications/email.service.js';
+import { prisma } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
+import { runAsSystem } from '../../lib/requestContext.js';
+import { writeAuditLog } from '../../lib/audit.js';
+import { sendEmail } from '../notifications/email.service.js';
 
 export const NEW_DEVICE_LOOKBACK_DAYS = 90;
 export const FAILED_LOGIN_THRESHOLD = 5;

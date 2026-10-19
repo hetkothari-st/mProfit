@@ -42,7 +42,7 @@ async function rejectUnqueued(res: Response, sessionId: string): Promise<void> {
   error(res, 503, QUEUE_UNAVAILABLE, 'QUEUE_UNAVAILABLE');
 }
 import { buildCanonicalEvents } from '../services/pfCanonicalize.service.js';
-import { recomputeForAsset } from '../services/holdingsProjection.js';
+import { recomputeForAsset } from '../services/holdings/holdingsProjection.js';
 import { tokenizePassbookPdf, tokenizePassbookText } from '../ingestion/pf/shared/pdfPassbookParser.js';
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
 import { saveDocPassword } from '../lib/userDocPasswords.js';
@@ -57,7 +57,7 @@ import {
   revokePairingById,
   revokePairingByBearer,
   PairingError,
-} from '../services/extensionPairing.service.js';
+} from '../services/account/extensionPairing.service.js';
 import { snoozeNudge } from '../services/pfNudges.service.js';
 import { enterUserContext } from '../lib/requestContext.js';
 import type { CanonicalEventType } from '@prisma/client';

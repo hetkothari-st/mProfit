@@ -1,4 +1,4 @@
-import type { CreateTransactionInput } from '../../services/transaction.service.js';
+import type { CreateTransactionInput } from '../../services/holdings/transaction.service.js';
 import type { TransactionEvent } from './types.js';
 
 /**

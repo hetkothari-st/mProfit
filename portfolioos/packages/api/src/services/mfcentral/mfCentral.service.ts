@@ -5,7 +5,7 @@ import { logger } from '../../lib/logger.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
 import { readPdfText, getUserPdfPasswords } from '../../lib/pdf.js';
 import { writeIngestionFailure } from '../ingestionFailures.service.js';
-import { createTransaction } from '../transaction.service.js';
+import { createTransaction } from '../holdings/transaction.service.js';
 import { parseMfCasText } from '../../ingestion/fileImport/parsers/mfCas.parser.js';
 import {
   initiateMFCentralSync,
@@ -13,7 +13,7 @@ import {
   MFCentralError,
 } from '../../ingestion/mfcentral/mfCentralPlaywright.js';
 import type { ParsedTransaction } from '../../ingestion/fileImport/parsers/types.js';
-import { readPan } from '../piiAtRest.service.js';
+import { readPan } from '../security/piiAtRest.service.js';
 
 const SOURCE_ADAPTER = 'mfcentral.cas.v1';
 const SOURCE_ADAPTER_VER = '1.0.0';

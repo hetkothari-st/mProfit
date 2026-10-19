@@ -3,10 +3,10 @@ import type { AssetClass, Prisma, Transaction, TransactionType } from '@prisma/c
 import { prisma } from '../lib/prisma.js';
 import { routePriceLookup } from '../priceFeeds/router.service.js';
 import { spanDays, isXirrReliable } from './xirr.reliability.js';
-import { assetKeyFromTransaction } from './assetKey.js';
+import { assetKeyFromTransaction } from './holdings/assetKey.js';
 import { cashDirection } from './cashDirection.js';
 import { transactionInrNet } from './investmentIncome.service.js';
-import { holdingsAsOf, isCurrent } from './holdingsAsOf.service.js';
+import { holdingsAsOf, isCurrent } from './holdings/holdingsAsOf.service.js';
 import { replayForFoPnl } from './foPnl.service.js';
 
 /**

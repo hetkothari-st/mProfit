@@ -8,7 +8,7 @@ import { outstandingLoansGiven } from './loansGiven.service.js';
 import { computeCardSummary } from './creditCards.service.js';
 import { getEffectiveScope, type EffectiveScope } from './familyScope.service.js';
 import { runAsUser } from '../lib/requestContext.js';
-import { plateOf } from './piiAtRest.service.js';
+import { plateOf } from './security/piiAtRest.service.js';
 
 // Human-readable labels for the AssetClass enum — used in dashboard breakdown.
 // Mirrors the per-class labels in apps/web/src/pages/assetClasses/SimpleAssetPage.tsx

@@ -16,9 +16,9 @@ import {
   listProfilesIManage,
   resolveActAs,
 } from '../../src/services/family/managedProfile.service.js';
-import { loginUser } from '../../src/services/auth.service.js';
+import { loginUser } from '../../src/services/auth/auth.service.js';
 import { authenticate } from '../../src/middleware/authenticate.js';
-import { signAccessToken } from '../../src/services/jwt.service.js';
+import { signAccessToken } from '../../src/services/auth/jwt.service.js';
 import { ForbiddenError } from '../../src/lib/errors.js';
 
 /**

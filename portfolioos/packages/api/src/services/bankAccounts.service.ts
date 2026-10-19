@@ -19,7 +19,7 @@ import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { encryptIdentifier, decryptIdentifier, last4 as last4Of } from './pfCredentials.service.js';
 import { lookupIfsc, type IfscDetails } from './ifscLookup.service.js';
-import { openText, sealText } from './piiAtRest.service.js';
+import { openText, sealText } from './security/piiAtRest.service.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 import jwt, { type SignOptions, type JwtPayload } from 'jsonwebtoken';
 import crypto from 'node:crypto';
-import { env } from '../config/env.js';
-import { UnauthorizedError } from '../lib/errors.js';
+import { env } from '../../config/env.js';
+import { UnauthorizedError } from '../../lib/errors.js';
 
 export interface AccessPayload {
   sub: string;

@@ -33,7 +33,7 @@ import {
   plateOf,
   registrationNoColumns,
   revealVehicle,
-} from './piiAtRest.service.js';
+} from './security/piiAtRest.service.js';
 
 // Indian RC pattern: 2-char state + 1-2 digit RTO + 1-3 alpha series +
 // 4-digit number. Covers MH47BT5950, DL01AB1234, KA05MP9999, etc. We

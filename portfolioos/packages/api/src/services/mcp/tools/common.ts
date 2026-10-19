@@ -1,6 +1,6 @@
 import { formatDateOnly, serializeMoney, toDecimal } from '@everypaisa/shared';
 import { prisma } from '../../../lib/prisma.js';
-import { listPortfolios } from '../../portfolio.service.js';
+import { listPortfolios } from '../../holdings/portfolio.service.js';
 import { ToolUserError } from './types.js';
 
 export function dmy(d: Date | string | null | undefined): string | null {

@@ -31,7 +31,7 @@ import {
 } from './notifications/config.service.js';
 import { sendViaGmailApi, getGmailSendAccount } from './notifications/gmailSender.service.js';
 import { markOverdueReceipts } from './rental.service.js';
-import { openText, revealTenancy, tenantContactColumns } from './piiAtRest.service.js';
+import { openText, revealTenancy, tenantContactColumns } from './security/piiAtRest.service.js';
 
 import { formatDateIST } from '@everypaisa/shared';
 export const REMINDER_LEAD_DAYS = [5, 3, 1, 0] as const;

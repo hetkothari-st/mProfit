@@ -1,8 +1,8 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass, Prisma, Transaction, TransactionType } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
-import { routePriceLookup } from '../priceFeeds/router.service.js';
-import { getLatestFxRate } from '../priceFeeds/fx.service.js';
+import { prisma } from '../../lib/prisma.js';
+import { routePriceLookup } from '../../priceFeeds/router.service.js';
+import { getLatestFxRate } from '../../priceFeeds/fx.service.js';
 import { istCalendarDate } from '@everypaisa/shared';
 import { assetKeyFromTransaction } from './assetKey.js';
 import { resolveMutualFundId, resolveStockMasterId } from './masterData.service.js';
@@ -382,7 +382,7 @@ export async function recomputeForAsset(
   // artefact is harmless here.
   if (SKIP_PROJECTION.has(meta.assetClass)) {
     await prisma.holdingProjection.deleteMany({ where: { portfolioId, assetKey } });
-    const { recomputeDerivativePosition } = await import('./derivativePosition.service.js');
+    const { recomputeDerivativePosition } = await import('../derivativePosition.service.js');
     await recomputeDerivativePosition(portfolioId, assetKey);
     return;
   }

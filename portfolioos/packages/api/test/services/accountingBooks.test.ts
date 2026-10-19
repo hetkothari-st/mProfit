@@ -12,7 +12,7 @@ import {
 } from '../../src/services/accounting.service.js';
 import { Decimal } from 'decimal.js';
 import { computeOpenLots, computePortfolioCapitalGains } from '../../src/services/capitalGains.service.js';
-import { replayTransactions } from '../../src/services/holdingsProjection.js';
+import { replayTransactions } from '../../src/services/holdings/holdingsProjection.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {

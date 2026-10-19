@@ -5,7 +5,7 @@ import { logger } from '../../lib/logger.js';
 import { NotFoundError, ForbiddenError } from '../../lib/errors.js';
 import { runFileImportAdapter } from '../../ingestion/fileImport/runner.js';
 import { projectTransactionEvent } from '../../ingestion/fileImport/projection.js';
-import { createTransaction } from '../transaction.service.js';
+import { createTransaction } from '../holdings/transaction.service.js';
 import { hashBytes, positionalHash } from '../sourceHash.js';
 import { enqueueBounded, getImportQueue } from '../../lib/queue.js';
 import { writeIngestionFailure } from '../ingestionFailures.service.js';

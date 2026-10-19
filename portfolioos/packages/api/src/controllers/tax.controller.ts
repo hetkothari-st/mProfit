@@ -24,7 +24,7 @@ import {
 } from '../services/reports/reportSubjects.js';
 import { runAsUser } from '../lib/requestContext.js';
 import { advanceTaxReport } from '../services/advanceTax.service.js';
-import { readPan } from '../services/piiAtRest.service.js';
+import { readPan } from '../services/security/piiAtRest.service.js';
 
 /**
  * Whose tax position this request is about.

@@ -23,7 +23,7 @@ import { getAllocationByClass, getConcentrationRisk } from '../analytics.service
 import { taxHarvestReport, ratesForDate } from '../tax.service.js';
 import { listGoals } from '../goals.service.js';
 import { getEmergencyFundInputs } from '../healthScore.service.js';
-import { isPriceStale } from '../priceStaleness.js';
+import { isPriceStale } from '../holdings/priceStaleness.js';
 import type { RiskCategoryValue } from '../riskProfileMath.js';
 import { bucketForHolding } from './assetBuckets.js';
 import { ADVISOR_ASSET_BUCKETS } from './types.js';

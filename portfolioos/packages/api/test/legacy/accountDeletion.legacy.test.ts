@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createTestScope, prisma } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { encryptSecret } from '../../src/lib/secrets.js';
-import { purgeUser } from '../../src/services/accountDeletion.service.js';
+import { purgeUser } from '../../src/services/account/accountDeletion.service.js';
 import { startOwnerStepUp } from '../../src/services/legacy/tokens.service.js';
 
 describe('account purge removes Legacy data', () => {

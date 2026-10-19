@@ -4,9 +4,9 @@
 // its own what to delete.
 
 import { prisma } from '../lib/prisma.js';
-import { deleteTransaction } from './transaction.service.js';
+import { deleteTransaction } from './holdings/transaction.service.js';
 import { deleteLedgerEntry } from './rentalLedger.service.js';
-import { computeAssetKey } from './assetKey.js';
+import { computeAssetKey } from './holdings/assetKey.js';
 import {
   groupRentDuplicates,
   groupTransactionDuplicates,

@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken } from '../services/jwt.service.js';
+import { verifyAccessToken } from '../services/auth/jwt.service.js';
 import { ForbiddenError, UnauthorizedError } from '../lib/errors.js';
 import { enterUserContext } from '../lib/requestContext.js';
 import type { UserRole, PlanTier } from '@prisma/client';

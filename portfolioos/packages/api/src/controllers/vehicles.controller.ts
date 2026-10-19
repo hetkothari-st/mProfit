@@ -24,7 +24,7 @@ import {
   findVehicleByPlate,
   registrationNoColumns,
   revealVehicle,
-} from '../services/piiAtRest.service.js';
+} from '../services/security/piiAtRest.service.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const moneyString = z.string().regex(/^-?\d+(\.\d+)?$/, 'Expected decimal string');

@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { runSecurityScan } from '../services/securityAlerts.service.js';
+import { runSecurityScan } from '../services/security/securityAlerts.service.js';
 
 /** Every 15 minutes: look for credential stuffing and export/PII spikes. */
 export function startSecurityAlertJobs(): void {

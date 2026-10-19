@@ -6,7 +6,7 @@ import { createTestScope, type TestScope } from '../helpers/db.js';
 import { CONNECTOR_TOOLS } from '../../src/services/mcp/tools/index.js';
 import { maskForChatbot } from '../../src/services/mcp/mask.js';
 import { getDashboardNetWorth } from '../../src/services/dashboard.service.js';
-import { createTransaction } from '../../src/services/transaction.service.js';
+import { createTransaction } from '../../src/services/holdings/transaction.service.js';
 import type { ToolContext } from '../../src/services/mcp/tools/types.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';

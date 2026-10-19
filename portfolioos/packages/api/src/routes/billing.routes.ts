@@ -11,7 +11,7 @@ import { ok } from '../lib/response.js';
 import { env } from '../config/env.js';
 import { BadRequestError, ForbiddenError, UnauthorizedError } from '../lib/errors.js';
 import { prisma } from '../lib/prisma.js';
-import { issueSession } from '../services/auth.service.js';
+import { issueSession } from '../services/auth/auth.service.js';
 import {
   assertValidSignature,
   createOrder,

@@ -13,9 +13,9 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto';
-import { prisma } from '../lib/prisma.js';
-import { runAsSystem } from '../lib/requestContext.js';
-import { logger } from '../lib/logger.js';
+import { prisma } from '../../lib/prisma.js';
+import { runAsSystem } from '../../lib/requestContext.js';
+import { logger } from '../../lib/logger.js';
 import type { ExtensionPairing } from '@prisma/client';
 
 // ---------------------------------------------------------------------------

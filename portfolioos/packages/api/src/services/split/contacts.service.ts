@@ -6,7 +6,7 @@
 import type { SplitContactDto } from '@everypaisa/shared';
 import { prisma } from '../../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../../lib/errors.js';
-import { sealText, openText } from '../piiAtRest.service.js';
+import { sealText, openText } from '../security/piiAtRest.service.js';
 import { hashIdentifier } from '../pfCredentials.service.js';
 import { env } from '../../config/env.js';
 import { normalizeEmail, normalizePhone } from './validate.js';

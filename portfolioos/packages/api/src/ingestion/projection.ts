@@ -42,9 +42,9 @@
 import { Prisma, type AssetClass, type CanonicalEvent, type TransactionType } from '@prisma/client';
 import { prisma, runInTransaction } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import { recomputeForAsset } from '../services/holdingsProjection.js';
+import { recomputeForAsset } from '../services/holdings/holdingsProjection.js';
 import { findDuplicateTransaction } from '../services/duplicateMatch.js';
-import { computeAssetKey } from '../services/assetKey.js';
+import { computeAssetKey } from '../services/holdings/assetKey.js';
 import { hookAutoMatchRentalCredit } from '../services/rental.service.js';
 import { hookAutoMatchPremiumPayment } from '../services/insurance.service.js';
 import {

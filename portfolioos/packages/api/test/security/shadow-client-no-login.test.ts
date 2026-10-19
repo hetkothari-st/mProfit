@@ -23,8 +23,8 @@ import {
   requestPasswordReset,
   refreshSession,
   issueSession,
-} from '../../src/services/auth.service.js';
-import { hashPassword } from '../../src/services/password.service.js';
+} from '../../src/services/auth/auth.service.js';
+import { hashPassword } from '../../src/services/auth/password.service.js';
 
 const PASSWORD = 'Sh4dow-Test-Password!';
 const realEmail = `shadow-subject-${crypto.randomUUID()}@example.com`;

@@ -41,7 +41,7 @@ import {
 import { prisma } from '../../src/lib/prisma.js';
 import { mfAnalyticsRouter } from '../../src/routes/mfAnalytics.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
-import { signAccessToken } from '../../src/services/jwt.service.js';
+import { signAccessToken } from '../../src/services/auth/jwt.service.js';
 import { offendingNumbers } from '../helpers/wireNumerics.js';
 
 // ---------------------------------------------------------------------------

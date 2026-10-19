@@ -10,8 +10,8 @@ import type { AssetClass, TransactionType } from '@prisma/client';
 import { opsPrisma } from '../src/lib/opsDatabase.js';
 import { Decimal } from 'decimal.js';
 import { randomUUID } from 'node:crypto';
-import { recomputeForPortfolio } from '../src/services/holdingsProjection.js';
-import { computeAssetKey } from '../src/services/assetKey.js';
+import { recomputeForPortfolio } from '../src/services/holdings/holdingsProjection.js';
+import { computeAssetKey } from '../src/services/holdings/assetKey.js';
 import { runAsSystem, runAsUser } from '../src/lib/requestContext.js';
 
 // The APP role by default, through the app's OWN client — see lib/opsDatabase.

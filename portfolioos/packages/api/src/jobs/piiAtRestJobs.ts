@@ -1,6 +1,6 @@
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
-import { backfillPiiAtRest } from '../services/piiAtRest.service.js';
+import { backfillPiiAtRest } from '../services/security/piiAtRest.service.js';
 import { sealLegacyBlobs } from '../lib/documentStorage.js';
 import { sealLegacyInviteTokens } from '../lib/inviteToken.js';
 import { sealLegacyGmailDocs } from '../lib/fileStore.js';

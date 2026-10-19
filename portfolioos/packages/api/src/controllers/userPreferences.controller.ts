@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { UnauthorizedError } from '../lib/errors.js';
 import { ok } from '../lib/response.js';
-import { getUserPreferences, updateUserPreferences } from '../services/userPreferences.service.js';
+import { getUserPreferences, updateUserPreferences } from '../services/account/userPreferences.service.js';
 
 const assetSectionPrefSchema = z.object({
   key: z.string().min(1),

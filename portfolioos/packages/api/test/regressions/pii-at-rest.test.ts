@@ -11,7 +11,7 @@ import {
   readRegistrationNo,
   loanAccountNumberColumns,
   readLoanAccountNumber,
-} from '../../src/services/piiAtRest.service.js';
+} from '../../src/services/security/piiAtRest.service.js';
 import { isMaskedAccountNumber, withMaskedAccount } from '../../src/services/loans.service.js';
 
 /**
@@ -125,7 +125,7 @@ describe('SEC-14: vehicle registration is encrypted, not dual-written', () => {
 });
 
 describe('SEC-14: plaintext clearing is an explicit operator decision', () => {
-  const svc = readFileSync(join(SRC, 'services', 'piiAtRest.service.ts'), 'utf8');
+  const svc = readFileSync(join(SRC, 'services', 'security', 'piiAtRest.service.ts'), 'utf8');
 
   it('only clears User.pan behind PII_BACKFILL_CLEAR_PLAINTEXT', () => {
     expect(svc).toContain("process.env.PII_BACKFILL_CLEAR_PLAINTEXT === 'true'");

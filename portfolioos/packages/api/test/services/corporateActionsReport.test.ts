@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createTestScope, seedStockMaster, prisma } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { computeAssetKey } from '../../src/services/assetKey.js';
-import { recomputeForPortfolio } from '../../src/services/holdingsProjection.js';
+import { computeAssetKey } from '../../src/services/holdings/assetKey.js';
+import { recomputeForPortfolio } from '../../src/services/holdings/holdingsProjection.js';
 import { applyCorporateActionsForPortfolio } from '../../src/services/corporateActionApply.service.js';
 import { getCorporateActionsReport } from '../../src/services/corporateActionsReport.service.js';
 

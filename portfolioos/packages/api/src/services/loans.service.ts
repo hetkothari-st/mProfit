@@ -14,7 +14,7 @@ import { prisma } from '../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { serializeMoney, type LoanRateBenchmark, type LoanRateType } from '@everypaisa/shared';
-import { loanAccountNumberColumns, PLATE_SELECT, readLoanAccountNumber, revealVehicle } from './piiAtRest.service.js';
+import { loanAccountNumberColumns, PLATE_SELECT, readLoanAccountNumber, revealVehicle } from './security/piiAtRest.service.js';
 import { last4 } from './pfCredentials.service.js';
 import { isRealDate } from './loanRates/sanity.js';
 

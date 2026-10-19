@@ -6,12 +6,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // user never added must still show there.
 
 const db = vi.hoisted(() => ({ findUniqueOrThrow: vi.fn(), update: vi.fn() }));
-vi.mock('../../src/lib/prisma.js', () => ({
+vi.mock('../../../src/lib/prisma.js', () => ({
   prisma: { user: { findUniqueOrThrow: db.findUniqueOrThrow, update: db.update } },
 }));
 
 import { OPTIONAL_ASSET_SECTION_KEYS } from '@everypaisa/shared';
-import { getUserPreferences, updateUserPreferences } from '../../src/services/userPreferences.service.js';
+import { getUserPreferences, updateUserPreferences } from '../../../src/services/account/userPreferences.service.js';
 
 const OPTIONAL = ['/bonds', '/crypto', '/forex', '/post-office', '/nps'];
 

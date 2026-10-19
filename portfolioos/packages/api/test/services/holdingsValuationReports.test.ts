@@ -3,7 +3,7 @@ import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { createTestScope, prisma } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
-import { holdingsAsOf } from '../../src/services/holdingsAsOf.service.js';
+import { holdingsAsOf } from '../../src/services/holdings/holdingsAsOf.service.js';
 import { historicalValuation } from '../../src/services/reports.service.js';
 import { dematHoldingReport } from '../../src/services/specialReports.service.js';
 import {

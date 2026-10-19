@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { prisma } from './prisma.js';
 import { logger } from './logger.js';
-import { readPan } from '../services/piiAtRest.service.js';
+import { readPan } from '../services/security/piiAtRest.service.js';
 
 /**
  * Thin wrapper around pdfjs-dist that tries to read a PDF and, if it's

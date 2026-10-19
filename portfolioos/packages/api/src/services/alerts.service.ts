@@ -8,7 +8,7 @@ import { generateCreditCardAlerts } from './creditCards.service.js';
 import { generateRealEstateAlerts } from './realEstateAlerts.js';
 import { generateDepositReminderAlerts } from './depositReminders.service.js';
 import { generateClaimAlerts, generateRenewalAlerts } from './insurance.service.js';
-import { PLATE_SELECT, plateOf } from './piiAtRest.service.js';
+import { PLATE_SELECT, plateOf } from './security/piiAtRest.service.js';
 
 const EXPIRY_THRESHOLDS = [30, 15, 7, 1] as const;
 

@@ -19,10 +19,10 @@ import {
   type Money,
   type Quantity,
 } from '@everypaisa/shared';
-import { prisma, runInTransaction } from '../lib/prisma.js';
-import { logger } from '../lib/logger.js';
-import { ForbiddenError, NotFoundError, BadRequestError } from '../lib/errors.js';
-import { fetchHistorical } from '../priceFeeds/yahoo.service.js';
+import { prisma, runInTransaction } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
+import { ForbiddenError, NotFoundError, BadRequestError } from '../../lib/errors.js';
+import { fetchHistorical } from '../../priceFeeds/yahoo.service.js';
 
 function toGroupDTO(g: PrismaGroup) {
   return {

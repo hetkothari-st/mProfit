@@ -6,7 +6,7 @@ import { updateStockPricesFromYahoo } from '../priceFeeds/yahoo.service.js';
 import { syncAllCommodities } from '../priceFeeds/commodity.service.js';
 import { syncCryptoPrices } from '../priceFeeds/crypto.service.js';
 import { syncFxRates } from '../priceFeeds/fx.service.js';
-import { refreshAllHoldingPrices } from '../services/holdings.service.js';
+import { refreshAllHoldingPrices } from '../services/holdings/holdings.service.js';
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
 // Self-registering PF adapters — import side-effects call registerPfAdapter()
 import '../ingestion/pf/epf/epfo.v1.js';

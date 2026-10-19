@@ -17,7 +17,7 @@ import {
   type ChargeInput,
   type CreditInput,
 } from './rentalLedgerMath.js';
-import { openText } from './piiAtRest.service.js';
+import { openText } from './security/piiAtRest.service.js';
 
 export const LEDGER_ENTRY_TYPES = [
   'PAYMENT',

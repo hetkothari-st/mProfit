@@ -9,7 +9,7 @@ import {
 } from '../../src/services/family/familyClaim.service.js';
 import { buildFamilyInviteEmail } from '../../src/services/family/familyInviteEmail.service.js';
 import { resolveActAs } from '../../src/services/family/managedProfile.service.js';
-import { loginUser } from '../../src/services/auth.service.js';
+import { loginUser } from '../../src/services/auth/auth.service.js';
 
 /**
  * Handing a managed profile to the person it belongs to.

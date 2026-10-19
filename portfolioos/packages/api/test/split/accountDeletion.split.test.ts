@@ -3,7 +3,7 @@ import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { seedContact, cleanupSplit } from '../helpers/splitFixtures.js';
 import { createGroup, getGroup } from '../../src/services/split/groups.service.js';
-import { purgeUser } from '../../src/services/accountDeletion.service.js';
+import { purgeUser } from '../../src/services/account/accountDeletion.service.js';
 
 describe('account purge and split groups', () => {
   let alice: TestScope;

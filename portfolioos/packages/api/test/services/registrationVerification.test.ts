@@ -92,7 +92,7 @@ const {
   startRegistration,
   verifyRegistration,
   resendRegistrationCode,
-} = await import('../../src/services/auth.service.js');
+} = await import('../../src/services/auth/auth.service.js');
 
 const EMAIL = 'new.person@example.com';
 const input = { email: EMAIL, password: 'correct-horse-battery', name: 'New Person' };

@@ -5,7 +5,7 @@ import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
 import { writeIngestionFailure } from '../ingestionFailures.service.js';
-import { createTransaction } from '../transaction.service.js';
+import { createTransaction } from '../holdings/transaction.service.js';
 import {
   cdslFetchInit,
   cdslFetchVerify,

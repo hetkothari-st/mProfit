@@ -29,8 +29,8 @@ import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
-import { hashPassword } from '../password.service.js';
-import { issueSession } from '../auth.service.js';
+import { hashPassword } from '../auth/password.service.js';
+import { issueSession } from '../auth/auth.service.js';
 import { assertOwnerOf } from '../familyScope.service.js';
 import { inviteTokenHash, newInviteToken } from '../../lib/inviteToken.js';
 

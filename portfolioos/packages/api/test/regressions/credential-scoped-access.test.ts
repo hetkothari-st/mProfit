@@ -13,7 +13,7 @@ import {
   authenticateExtension,
   completePairing,
   initPairing,
-} from '../../src/services/extensionPairing.service.js';
+} from '../../src/services/account/extensionPairing.service.js';
 
 /**
  * Paths where the credential is NOT a session.

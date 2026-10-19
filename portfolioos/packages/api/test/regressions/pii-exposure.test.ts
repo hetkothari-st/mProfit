@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { maskPan } from '../../src/services/auth.service.js';
+import { maskPan } from '../../src/services/auth/auth.service.js';
 
 /**
  * SEC-10 / SEC-14 / SEC-15 / SEC-30 — PII that left the server in full.
@@ -30,7 +30,7 @@ describe('SEC-14: PAN is masked at the API boundary', () => {
   });
 
   it('is not in the profile payload any more', () => {
-    const svc = read('services/auth.service.ts');
+    const svc = read('services/auth/auth.service.ts');
     const body = svc.slice(svc.indexOf('export function toAuthUser'));
     const fn = body.slice(0, body.indexOf('\n}'));
     expect(fn).toContain('panMasked');

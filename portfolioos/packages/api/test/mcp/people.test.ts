@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
-import { createTransaction } from '../../src/services/transaction.service.js';
+import { createTransaction } from '../../src/services/holdings/transaction.service.js';
 import { listShareablePeople } from '../../src/services/mcp/people.js';
 import { runConnectorTool } from '../../src/services/mcp/server.js';
 import { decide, registerClient, startAuthorization, updateConnection } from '../../src/services/mcp/oauth.service.js';

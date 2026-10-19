@@ -3,7 +3,7 @@ import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { touchActivity } from '../../src/services/legacy/activity.service.js';
 import { authenticate } from '../../src/middleware/authenticate.js';
-import { signAccessToken } from '../../src/services/jwt.service.js';
+import { signAccessToken } from '../../src/services/auth/jwt.service.js';
 
 const lastActive = (id: string) =>
   runAsSystem(() => prisma.user.findUniqueOrThrow({ where: { id }, select: { lastActiveAt: true } })).then((u) => u.lastActiveAt);

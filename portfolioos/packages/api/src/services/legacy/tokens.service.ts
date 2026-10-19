@@ -4,7 +4,7 @@ import { prisma } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { inviteTokenHash } from '../../lib/inviteToken.js';
 import { BadRequestError, TooManyRequestsError } from '../../lib/errors.js';
-import { acceptCode, isTwoFactorEnabled } from '../twoFactor.service.js';
+import { acceptCode, isTwoFactorEnabled } from '../auth/twoFactor.service.js';
 
 /**
  * Legacy Transfer secrets. Link tokens and every code are bearer credentials,

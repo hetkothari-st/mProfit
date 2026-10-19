@@ -35,7 +35,7 @@ import { computePortfolioXirr, computeUserXirr } from '../xirr.service.js';
 import { computePortfolioCapitalGains } from '../capitalGains.service.js';
 import { computePortfolioFoPnl } from '../foPnl.service.js';
 import { derivativePositionValue } from '../derivativePosition.service.js';
-import { replayTransactions } from '../holdingsProjection.js';
+import { replayTransactions } from '../holdings/holdingsProjection.js';
 import { getDashboardNetWorth } from '../dashboard.service.js';
 import {
   drawPieChart,
@@ -48,7 +48,7 @@ import {
 } from '../charts/pdfCharts.js';
 import { themeFor, type ThemeName, type PdfTheme } from '../charts/pdfTheme.js';
 import { drawBrandLockup } from '../charts/pdfBrand.js';
-import { plateOf } from '../piiAtRest.service.js';
+import { plateOf } from '../security/piiAtRest.service.js';
 
 import { formatDateIST } from '@everypaisa/shared';
 export type DashboardScope = 'single' | 'all';

@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { willRouter } from '../../src/routes/will.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
-import { signAccessToken } from '../../src/services/jwt.service.js';
+import { signAccessToken } from '../../src/services/auth/jwt.service.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { recordWillExecution } from '../../src/services/will/willExecute.service.js';

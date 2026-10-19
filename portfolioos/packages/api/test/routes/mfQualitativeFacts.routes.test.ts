@@ -32,7 +32,7 @@ import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { mfQualitativeFactsRouter } from '../../src/routes/mfQualitativeFacts.routes.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
-import { signAccessToken } from '../../src/services/jwt.service.js';
+import { signAccessToken } from '../../src/services/auth/jwt.service.js';
 
 // ---------------------------------------------------------------------------
 // Guard rail

@@ -5,7 +5,7 @@ import {
   getPortfolio,
   getPortfolioHoldings,
   getPortfolioSummary,
-} from '../../src/services/portfolio.service.js';
+} from '../../src/services/holdings/portfolio.service.js';
 
 /**
  * Opening a family member's portfolio.
