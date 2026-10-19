@@ -14,6 +14,8 @@ import {
   getUserXirr,
   getHistoricalValuation,
   rebuildCapitalGains,
+  getDataQuality,
+  repairStoredData,
   getHoldingsExport,
   getDashboardExport,
   getSectionExport,
@@ -93,6 +95,10 @@ reportsRouter.get('/xirr', asyncHandler(getXirr));
 reportsRouter.get('/xirr/user', asyncHandler(getUserXirr));
 reportsRouter.get('/historical-valuation', asyncHandler(getHistoricalValuation));
 reportsRouter.post('/rebuild-capital-gains', asyncHandler(rebuildCapitalGains));
+// Data-quality banner + on-demand rebuild of stored holdings/gains. Ungated:
+// knowing whether your own figures are complete is not a paid feature.
+reportsRouter.get('/data-quality', asyncHandler(getDataQuality));
+reportsRouter.post('/data-quality/repair', asyncHandler(repairStoredData));
 reportsRouter.get('/holdings-export', asyncHandler(getHoldingsExport));
 reportsRouter.get('/dashboard-export', asyncHandler(getDashboardExport));
 reportsRouter.get('/section-export', asyncHandler(getSectionExport));

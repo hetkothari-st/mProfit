@@ -118,6 +118,38 @@ export interface PortfolioSummary {
   };
 }
 
+export interface DataQualityIssue {
+  code:
+    | 'OVERSOLD'
+    | 'GAINS_NEED_REVIEW'
+    | 'MISSING_PRICE'
+    | 'STALE_PRICE'
+    | 'HOLDINGS_OUT_OF_SYNC'
+    | 'STATEMENT_MISMATCH'
+    | 'IMPORTS_NOT_FINISHED'
+    | 'EVENTS_AWAITING_REVIEW'
+    | 'UNRESOLVED_FAILURES';
+  severity: 'error' | 'warning';
+  scope: 'portfolio' | 'account';
+  count: number;
+  message: string;
+  items: Array<{ label: string; detail?: string }>;
+}
+
+export interface DataQualityReport {
+  ok: boolean;
+  checkedAt: string;
+  dataAsOf: {
+    lastTransactionDate: string | null;
+    lastImportAt: string | null;
+    oldestPriceDate: string | null;
+    newestPriceDate: string | null;
+  };
+  errorCount: number;
+  warningCount: number;
+  issues: DataQualityIssue[];
+}
+
 function qs(params: Record<string, string | undefined>): string {
   const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== '') as [string, string][];
   if (entries.length === 0) return '';
@@ -184,6 +216,20 @@ export const reportsApi = {
     const { data } = await api.get<ApiResponse<{ points: HistoricalPoint[] }>>(
       '/api/reports/historical-valuation' + qs({ portfolioId, granularity }),
     );
+    return unwrap(data);
+  },
+  dataQuality: async (portfolioId: string): Promise<DataQualityReport> => {
+    const { data } = await api.get<ApiResponse<DataQualityReport>>(
+      '/api/reports/data-quality' + qs({ portfolioId }),
+    );
+    return unwrap(data);
+  },
+  repairStoredData: async (
+    portfolioId: string,
+  ): Promise<{ portfoliosChecked: number; portfoliosRepaired: number; holdingsRebuilt: number }> => {
+    const { data } = await api.post<
+      ApiResponse<{ portfoliosChecked: number; portfoliosRepaired: number; holdingsRebuilt: number }>
+    >('/api/reports/data-quality/repair' + qs({ portfolioId }));
     return unwrap(data);
   },
   rebuild: async (portfolioId: string): Promise<{ persisted: number }> => {

@@ -19,6 +19,7 @@ import { cn } from '@/lib/cn';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { reportsApi } from '@/api/reports.api';
 import { useReportSubject } from '@/components/reports/useReportSubject';
+import { DataQualityBanner } from '@/components/reports/DataQualityBanner';
 import { useAuthStore } from '@/stores/auth.store';
 import { InboxImportsTab } from './InboxImportsTab';
 import { TaxMisDownloads, REPORTS as TAX_MIS_REPORTS, type ReportHighlight } from './TaxMisDownloads';
@@ -356,6 +357,8 @@ export function ReportsPage() {
           )}
         </CardContent>
       </Card>
+
+      {portfolioId && tab !== 'inbox-imports' && <DataQualityBanner portfolioId={portfolioId} />}
 
       <HScroll className="flex gap-1 mb-4 border-b overflow-x-auto scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
         {TABS.map((t) => (
