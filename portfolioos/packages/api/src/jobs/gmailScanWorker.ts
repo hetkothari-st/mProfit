@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { join, extname } from 'node:path';
 import { prisma } from '../lib/prisma.js';
+import { runAsSystem, runAsUser } from '../lib/requestContext.js';
 import { logger } from '../lib/logger.js';
 import { env } from '../config/env.js';
 import { uploadRoot } from '../lib/uploadRoot.js';
@@ -23,8 +24,25 @@ const CONCURRENCY = 5;
  * Bull job entry point. Idempotent across phases — every step guards on
  * the row's current status and writes status transitions atomically so
  * a worker crash mid-flight resumes from the same place on retry.
+ *
+ * The queue calls this with no request context, and every table it touches
+ * is row-level-secured: without a context the job was invisible and dropped
+ * as "missing", so no Gmail scan ever ran. The owner is looked up as the
+ * system, and the scan runs as that user — never as the system, so it can
+ * only ever see and write that user's rows.
  */
 export async function runScanJob(scanJobId: string): Promise<void> {
+  const owner = await runAsSystem(() =>
+    prisma.gmailScanJob.findUnique({ where: { id: scanJobId }, select: { userId: true } }),
+  );
+  if (!owner) {
+    logger.warn({ scanJobId }, '[gmailScan] missing job — dropping');
+    return;
+  }
+  await runAsUser(owner.userId, () => runScanJobAsOwner(scanJobId));
+}
+
+async function runScanJobAsOwner(scanJobId: string): Promise<void> {
   const job = await prisma.gmailScanJob.findUnique({ where: { id: scanJobId } });
   if (!job) {
     logger.warn({ scanJobId }, '[gmailScan] missing job — dropping');
