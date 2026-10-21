@@ -181,6 +181,11 @@ export function InsuranceDocumentsCard() {
                         d.errorMessage ??
                         (d.status === 'PENDING' ? 'Not read yet.' : null)}
                     </div>
+                    {d.status === 'FILED' && (
+                      <Link to="/documents" className="text-accent hover:underline">
+                        Filed in Documents under the policy holder
+                      </Link>
+                    )}
                   </div>
                 </li>
               ))}

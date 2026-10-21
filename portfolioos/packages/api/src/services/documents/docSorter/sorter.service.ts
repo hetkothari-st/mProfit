@@ -230,6 +230,41 @@ export async function processDocument(documentId: string, opts?: { password?: st
   }
 }
 
+/**
+ * One filing at a time per user: person lookup-or-create and file-name choice
+ * both read what another worker may be writing, and nothing in the schema
+ * stops two equal results. Every path that files into a person's folder takes it.
+ */
+export async function lockFiling(tx: Prisma.TransactionClient, userId: string): Promise<void> {
+  await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`docsort:${userId}`}))`);
+}
+
+/** The person folder for `personName`, created when no one matches. Call under lockFiling. */
+export async function findOrCreatePerson(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  personName: string,
+  panLast4: string | null,
+): Promise<string> {
+  const key = nameKey(personName);
+  const cands = await tx.documentPerson.findMany({
+    where: { userId },
+    select: { id: true, nameKey: true, panLast4: true, aliasKeys: true },
+  });
+  const personId = matchPerson(cands, key, panLast4);
+  if (!personId) {
+    const created = await tx.documentPerson.create({
+      data: { userId, displayName: personName, nameKey: key, panLast4, autoCreated: true },
+      select: { id: true },
+    });
+    return created.id;
+  }
+  if (panLast4) {
+    await tx.documentPerson.updateMany({ where: { id: personId, panLast4: null }, data: { panLast4 } });
+  }
+  return personId;
+}
+
 async function fileDocument(a: {
   userId: string;
   documentId: string;
@@ -240,12 +275,9 @@ async function fileDocument(a: {
   docType: SortDocType;
   docDate: string | null;
 }): Promise<void> {
-  const key = nameKey(a.personName);
   await runAsUser(a.userId, () =>
     runInTransaction(async (tx) => {
-      // One filing at a time per user: person lookup-or-create and file-name choice both read what
-      // another worker may be writing, and nothing in the schema stops two equal results.
-      await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`docsort:${a.userId}`}))`);
+      await lockFiling(tx, a.userId);
 
       // Filed by hand (or failed) while this job was reading: the person's choice stands.
       const stillOurs = await tx.document.findFirst({
@@ -254,20 +286,7 @@ async function fileDocument(a: {
       });
       if (!stillOurs) return;
 
-      const cands = await tx.documentPerson.findMany({
-        where: { userId: a.userId },
-        select: { id: true, nameKey: true, panLast4: true, aliasKeys: true },
-      });
-      let personId = matchPerson(cands, key, a.panLast4);
-      if (!personId) {
-        const created = await tx.documentPerson.create({
-          data: { userId: a.userId, displayName: a.personName, nameKey: key, panLast4: a.panLast4, autoCreated: true },
-          select: { id: true },
-        });
-        personId = created.id;
-      } else if (a.panLast4) {
-        await tx.documentPerson.updateMany({ where: { id: personId, panLast4: null }, data: { panLast4: a.panLast4 } });
-      }
+      const personId = await findOrCreatePerson(tx, a.userId, a.personName, a.panLast4);
 
       const siblings = await tx.document.findMany({
         where: { userId: a.userId, personId, docType: a.docType, id: { not: a.documentId } },

@@ -21,6 +21,8 @@ export async function listDiscoveredDocs(p: ListDiscoveredDocsParams) {
       fromAddress: p.fromAddress,
       classifiedDocType: p.docType,
       scanJobId: p.scanJobId,
+      // Insurance searches have their own screen (Insurance → documents).
+      scanJob: { kind: { not: 'INSURANCE' } },
     },
     orderBy: [{ status: 'asc' }, { receivedAt: 'desc' }],
     take: limit,
@@ -37,7 +39,7 @@ export async function getDiscoveredDoc(userId: string, id: string) {
 
 export async function listDistinctSenders(userId: string): Promise<string[]> {
   const rows = await prisma.gmailDiscoveredDoc.findMany({
-    where: { userId, isFinancial: true },
+    where: { userId, isFinancial: true, scanJob: { kind: { not: 'INSURANCE' } } },
     distinct: ['fromAddress'],
     select: { fromAddress: true },
     orderBy: { fromAddress: 'asc' },

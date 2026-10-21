@@ -14,6 +14,8 @@
  *                                           status moved forward
  *                        policy document,
  *                        renewal notice   → linked only
+ * Linked documents are then filed into Documents (insuranceDocFiling).
+ *
  *   no policy yet    → a policy document or renewal notice becomes a
  *                      SUGGESTED policy the user approves (one per number,
  *                      the latest document); anything else waits as READ
@@ -28,39 +30,17 @@ import { addMonthsIso, daysBetweenIso, formatINR, PREMIUM_FREQUENCY_MONTHS } fro
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.js';
-import { decryptIdentifier, encryptIdentifier } from '../pf/pfCredentials.service.js';
-import {
-  InsuranceDocExtractSchema,
-  type InsuranceDocExtract,
-} from '../../ingestion/insurance/insuranceDocReader.js';
+import type { InsuranceDocExtract } from '../../ingestion/insurance/insuranceDocReader.js';
+import { extractOf, sealedExtractColumns } from './insuranceDocExtract.js';
+import { fileMatchedInsuranceDocuments } from './insuranceDocFiling.js';
 import {
   addClaim,
   addPremiumPayment,
   createPolicy,
-  hashPolicyNumber,
   normalizePolicyNumber,
   updateClaim,
   type CreatePolicyInput,
 } from './insurance.service.js';
-
-// ── Stored reading ───────────────────────────────────────────────────
-
-/** The columns a reading is stored as: encrypted, plus the number's fingerprint. */
-export async function sealedExtractColumns(extract: InsuranceDocExtract) {
-  const number = extract.policy_number ? normalizePolicyNumber(extract.policy_number) : '';
-  return {
-    extractEnc: await encryptIdentifier(JSON.stringify(extract)),
-    policyNumberHash: number.length >= 3 ? hashPolicyNumber(extract.policy_number!) : null,
-    extract: Prisma.DbNull,
-  };
-}
-
-async function extractOf(doc: Pick<InsuranceDocument, 'extract' | 'extractEnc'>): Promise<InsuranceDocExtract | null> {
-  const raw = doc.extractEnc ? JSON.parse(await decryptIdentifier(doc.extractEnc)) : doc.extract;
-  if (raw == null) return null;
-  const parsed = InsuranceDocExtractSchema.safeParse(raw);
-  return parsed.success ? parsed.data : null;
-}
 
 /** Encrypt readings stored in plain text before readings were sealed. */
 async function sealLegacyExtracts(userId: string): Promise<void> {
@@ -292,6 +272,8 @@ export async function matchInsuranceDocuments(userId: string): Promise<Insurance
   }
 
   if (summary.matched > 0 || summary.suggested > 0) logger.info({ userId, ...summary }, '[insurance] documents matched');
+  // Linked documents go into the policy holder's folder in Documents.
+  await fileMatchedInsuranceDocuments(userId);
   return summary;
 }
 
