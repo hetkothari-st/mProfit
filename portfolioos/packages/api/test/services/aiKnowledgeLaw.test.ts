@@ -131,6 +131,13 @@ describe('Income-tax Act 2025 retrieval', () => {
     ['54EC bonds limit to save capital gains', 'ita25-cg-bonds'],
     ['sold shares and want to buy a house to save tax', 'ita25-cg-asset-to-house'],
     ['can I carry forward a long term capital loss', 'ita25-cg-losses'],
+    ['is a cash gift from my uncle taxable', 'ita25-gifts'],
+    ['how is fixed deposit interest taxed', 'ita25-interest-income'],
+    ['home loan interest deduction on self occupied house', 'ita25-house-property'],
+    ['tax on income from investments in my wife name', 'ita25-clubbing'],
+    ['80C limit and what investments qualify', 'ita25-deductions-investments'],
+    ['health insurance premium deduction for parents', 'ita25-deductions-health'],
+    ['savings account interest deduction for senior citizens', 'ita25-deduction-interest'],
   ];
   for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
 });
