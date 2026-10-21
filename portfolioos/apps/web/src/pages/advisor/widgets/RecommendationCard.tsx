@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -413,8 +414,11 @@ export function RecommendationCard({ rec, llmEnabled }: RecommendationCardProps)
             </p>
             <p className="mt-1 text-[13px] leading-relaxed text-foreground">{prose}</p>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Generated summary of the reasoning above. If the two ever disagree, the reasoning above
-              is what the system actually used.
+              AI-generated summary of the reasoning above. If the two ever disagree, the reasoning above
+              is what the system actually used.{' '}
+              <Link to="/legal/ai-use" className="underline underline-offset-2 hover:text-foreground">
+                How we use AI
+              </Link>
             </p>
           </div>
         )}

@@ -104,6 +104,7 @@ import { PricingPage } from './pages/pricing/PricingPage';
 import { AlertsPage } from './pages/alerts/AlertsPage';
 import { OnboardingWizard } from './pages/onboarding/OnboardingWizard';
 import { PrivacyPage } from './pages/legal/PrivacyPage';
+import { AiUsePage } from './pages/legal/AiUsePage';
 
 export function App() {
   return (
@@ -112,6 +113,7 @@ export function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/legal/ai-use" element={<AiUsePage />} />
       <Route
         path="/families/invitations/:token/accept"
         element={<AcceptInvitationPage />}
