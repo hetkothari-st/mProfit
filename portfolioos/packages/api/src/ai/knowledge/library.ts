@@ -15,6 +15,7 @@
  * lives in ./nism/, one file per chapter, in the same own-words form.
  */
 import { NISM_LIBRARY } from './nism/index.js';
+import { LAW_LIBRARY } from './law/index.js';
 
 export type KnowledgeTopic =
   | 'planning'
@@ -65,7 +66,9 @@ export interface KnowledgeBook {
 export type KnowledgeSource =
   | { kind: 'BOOK'; book: string; author: string }
   | { kind: 'FRAMEWORK'; label: string }
-  | { kind: 'NISM'; series: 'X-A' | 'X-B'; edition: '2025-06' | '2025-12'; chapter: number; chapterTitle: string };
+  | { kind: 'NISM'; series: 'X-A' | 'X-B'; edition: '2025-06' | '2025-12'; chapter: number; chapterTitle: string }
+  /** An Act, regulation or circular; `ref` is its section / para / circular number, `date` its effective date. */
+  | { kind: 'LAW'; instrument: string; ref: string; date: string };
 
 export interface KnowledgeEntry {
   id: string;
@@ -79,6 +82,8 @@ export interface KnowledgeEntry {
   asOf?: string;
   topics: KnowledgeTopic[];
   keywords: string[];
+  /** The id of a newer entry that replaces this rule; retrieval prefers it. */
+  supersededBy?: string;
 }
 
 export const KNOWLEDGE_BOOKS: readonly KnowledgeBook[] = [
@@ -649,5 +654,5 @@ const CORE_LIBRARY: readonly KnowledgeEntry[] = [
   },
 ];
 
-/** Everything the adviser can search: the core reading plus the NISM X-A/X-B syllabus. */
-export const KNOWLEDGE_LIBRARY: readonly KnowledgeEntry[] = [...CORE_LIBRARY, ...NISM_LIBRARY];
+/** Everything the adviser can search: the core reading, the NISM X-A/X-B syllabus and current law. */
+export const KNOWLEDGE_LIBRARY: readonly KnowledgeEntry[] = [...CORE_LIBRARY, ...NISM_LIBRARY, ...LAW_LIBRARY];

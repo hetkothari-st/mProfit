@@ -11,6 +11,7 @@ const SRC: KnowledgeSource = {
 export const XB_09: readonly KnowledgeEntry[] = [
   {
     id: 'xb-09-dividends-buyback',
+    supersededBy: 'fa26-buyback',
     title: 'Tax on dividends and share buybacks',
     principle:
       'Since dividend distribution tax was abolished (from AY 2021-22), dividends from companies, mutual funds and business trusts are taxed in the shareholder’s hands under other sources at slab rates; non-residents pay 20% plus surcharge and cess, or the DTAA rate if lower. Deemed dividends include distributions of accumulated profits on liquidation or capital reduction and loans from closely held companies to shareholders. From 1 October 2024 money received in a company buyback is taxed as dividend with no deduction for costs, and the cost of the shares bought back becomes a capital loss that can be set off under the normal rules. Companies and funds deduct TDS on dividends.',

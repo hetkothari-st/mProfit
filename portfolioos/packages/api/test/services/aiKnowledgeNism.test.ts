@@ -286,7 +286,7 @@ describe('NISM retrieval, chapter by chapter', () => {
     expect(ids('cost of acquisition grandfathering 31 January 2018 shares')).toContain('xb-08-computation');
   });
   it('X-B 9: buyback tax', () => {
-    expect(ids('how is a share buyback taxed now')).toContain('xb-09-dividends-buyback');
+    expect(ids('how is a share buyback taxed now')).toContain('fa26-buyback'); // superseded by Finance Act 2026
   });
   it('X-B 9: gift from relative', () => {
     expect(ids('is a gift of shares from my uncle taxable, who is a relative')).toContain('xb-09-gifts');
@@ -310,7 +310,7 @@ describe('NISM retrieval, chapter by chapter', () => {
     expect(ids('how are ESOPs taxed on exercise and sale')).toContain('xb-12-esop-tax');
   });
   it('X-B 12: SGB redemption', () => {
-    expect(ids('is sovereign gold bond redemption tax free')).toContain('xb-12-sgb');
+    expect(ids('is sovereign gold bond redemption tax free')).toContain('fa26-sgb'); // superseded by Finance Act 2026
   });
   it('X-B 12: REIT distribution', () => {
     expect(ids('how are REIT distributions taxed, interest dividend rent')).toContain('xb-12-reit-invit');

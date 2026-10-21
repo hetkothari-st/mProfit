@@ -117,7 +117,12 @@ export function searchKnowledge(
     }
     if (score >= minScore) hits.push({ entry: d.entry, score });
   }
-  return hits.sort((a, b) => b.score - a.score).slice(0, limit);
+  // A rule that changed is shown only when its replacement did not match.
+  const found = new Set(hits.map((h) => h.entry.id));
+  return hits
+    .filter((h) => !h.entry.supersededBy || !found.has(h.entry.supersededBy))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 }
 
 /** How many passages ride along with a chat message, and the score they must clear. */
@@ -134,14 +139,23 @@ export function knowledgeForTurn(message: string): KnowledgeHit[] {
 }
 
 const EDITION_LABEL: Record<string, string> = { '2025-06': 'Jun 2025', '2025-12': 'Dec 2025' };
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const monthLabel = (ym: string) => `${MONTHS[Number(ym.slice(5, 7)) - 1] ?? ''} ${ym.slice(0, 4)}`.trim();
 
 /** Where an entry comes from, in the words the model should use to credit it. */
 export function credit(e: KnowledgeEntry): string {
+  const base = sourceCredit(e);
+  return e.supersededBy ? `${base}; older rule, superseded by ${e.supersededBy}` : base;
+}
+
+function sourceCredit(e: KnowledgeEntry): string {
   switch (e.source.kind) {
     case 'BOOK':
       return `from "${e.source.book}" by ${e.source.author}`;
     case 'NISM':
       return `from NISM Series ${e.source.series} (${EDITION_LABEL[e.source.edition] ?? e.source.edition}), ch. ${e.source.chapter}`;
+    case 'LAW':
+      return `from ${e.source.instrument}, ${e.source.ref} (as of ${monthLabel(e.asOf ?? e.source.date)})`;
     default:
       return 'from the planning framework';
   }
