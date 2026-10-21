@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { ok } from '../lib/response.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
-import { Decimal, isValidFinancialYear } from '@everypaisa/shared';
+import { Decimal, formatDateTimeIST, isValidFinancialYear } from '@everypaisa/shared';
 import {
   intradayReport,
   stcgReport,
@@ -546,16 +546,23 @@ export async function getDashboardExport(req: Request, res: Response) {
 
   const format = getFormat(req);
   const theme = parseThemeQuery(req.query.theme);
+  // The dashboard file carries the same "Data as of / Data checks" lines as
+  // every other report download.
+  const qualityLines = await downloadQualityLines(req);
 
   // A family member's books are readable only as that member (RLS), so the
   // whole build runs in their context — not the caller's, which would see nothing.
   if (format === 'xlsx') {
-    await runForSubject(resolved.via, userId, () => streamDashboardExcel(res, { userId, portfolioId, scope, theme }));
+    await runForSubject(resolved.via, userId, () =>
+      streamDashboardExcel(res, { userId, portfolioId, scope, theme, qualityLines }),
+    );
     return;
   }
 
   // PDF (default)
-  await runForSubject(resolved.via, userId, () => streamDashboardPdf(res, { userId, portfolioId, scope, theme }));
+  await runForSubject(resolved.via, userId, () =>
+    streamDashboardPdf(res, { userId, portfolioId, scope, theme, qualityLines }),
+  );
 }
 
 // ─── Specialized section exports (Vehicles / Insurance / Loans / Credit Cards / Rental / Real Estate) ─────
@@ -592,7 +599,7 @@ async function sectionPayload(
       const rows = await prisma.vehicle.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
       payload = {
         title: 'Vehicles',
-        meta: { 'Generated On': new Date().toISOString().slice(0, 10), 'Total': String(rows.length) },
+        meta: { 'Data as of': formatDateTimeIST(new Date()), 'Total': String(rows.length) },
         columns: [
           { key: 'registrationNo', header: 'Reg No',       width: 14 },
           { key: 'make',           header: 'Make',          width: 14 },
@@ -620,7 +627,7 @@ async function sectionPayload(
       const rows = await prisma.insurancePolicy.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
       payload = {
         title: 'Insurance Policies',
-        meta: { 'Generated On': new Date().toISOString().slice(0, 10), 'Total': String(rows.length) },
+        meta: { 'Data as of': formatDateTimeIST(new Date()), 'Total': String(rows.length) },
         columns: [
           { key: 'insurer',          header: 'Insurer',       width: 18 },
           { key: 'type',             header: 'Type',          width: 14 },
@@ -642,7 +649,7 @@ async function sectionPayload(
       const rows = await prisma.loan.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
       payload = {
         title: 'Loans',
-        meta: { 'Generated On': new Date().toISOString().slice(0, 10), 'Total': String(rows.length) },
+        meta: { 'Data as of': formatDateTimeIST(new Date()), 'Total': String(rows.length) },
         columns: [
           { key: 'lenderName',       header: 'Lender',          width: 20 },
           { key: 'loanType',         header: 'Type',            width: 12 },
@@ -662,7 +669,7 @@ async function sectionPayload(
       const rows = await prisma.creditCard.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
       payload = {
         title: 'Credit Cards',
-        meta: { 'Generated On': new Date().toISOString().slice(0, 10), 'Total': String(rows.length) },
+        meta: { 'Data as of': formatDateTimeIST(new Date()), 'Total': String(rows.length) },
         columns: [
           { key: 'cardName',     header: 'Card',          width: 20 },
           { key: 'issuerBank',   header: 'Issuer Bank',   width: 18 },
@@ -688,7 +695,7 @@ async function sectionPayload(
       const rows = await prisma.ownedProperty.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
       payload = {
         title: 'Real Estate',
-        meta: { 'Generated On': new Date().toISOString().slice(0, 10), 'Total': String(rows.length) },
+        meta: { 'Data as of': formatDateTimeIST(new Date()), 'Total': String(rows.length) },
         columns: [
           { key: 'name',             header: 'Property',       width: 24 },
           { key: 'propertyType',     header: 'Type',           width: 16 },
@@ -731,7 +738,7 @@ async function sectionPayload(
       });
       payload = {
         title: 'Rental Properties',
-        meta: { 'Generated On': new Date().toISOString().slice(0, 10), 'Total': String(rows.length) },
+        meta: { 'Data as of': formatDateTimeIST(new Date()), 'Total': String(rows.length) },
         columns: [
           { key: 'name',            header: 'Property',       width: 24 },
           { key: 'propertyType',    header: 'Type',           width: 14 },

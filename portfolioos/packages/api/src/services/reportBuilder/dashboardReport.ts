@@ -59,6 +59,8 @@ export interface DashboardReportParams {
   scope: DashboardScope;
   /** Defaults to 'dark' — the app's own brand skin — same as every other report. */
   theme?: ThemeName;
+  /** "Data as of" / "Data checks" (reportDataQuality dataQualityMetaLines), shown under the headline figures. */
+  qualityLines?: Array<{ label: string; value: string }>;
 }
 
 const ASSET_CLASS_LABELS: Record<string, string> = {
@@ -356,6 +358,14 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
   ];
   cy = drawMetricCards(doc, ML, W, cy, secondaryCards, C);
   cy += 8;
+
+  // A file leaves the app, so it says how current and how checked its figures are.
+  for (const line of params.qualityLines ?? []) {
+    doc.font('Helvetica').fontSize(8).fillColor(C.muted)
+       .text(pdfSafe(`${line.label}: ${line.value}`), ML, cy, { width: W });
+    cy = doc.y + 2;
+  }
+  if (params.qualityLines?.length) cy += 6;
 
   // Asset allocation pie chart
   cy = ensureSpace(cy, 220);
@@ -995,6 +1005,7 @@ export async function streamDashboardExcel(res: Response, params: DashboardRepor
   ws.getCell('A1').font = { bold: true, size: 14 };
   ws.getCell('A2').value = `Portfolio: ${portfolioIdFilter ? (portfolios.find(p => p.id === portfolioIdFilter)?.name ?? '') : 'All Portfolios'}`;
   ws.getCell('A3').value = `Generated: ${formatDateIST(new Date())}`;
+  for (const line of params.qualityLines ?? []) ws.addRow([`${line.label}: ${line.value}`]);
   ws.addRow([]);
   ws.addRow(['Metric', 'Value']).font = { bold: true };
   ws.addRow(['Net Worth',          `₹${fmtNum(nw.totalNetWorth)}`]);
