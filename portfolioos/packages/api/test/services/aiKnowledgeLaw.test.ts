@@ -166,3 +166,17 @@ describe('SEBI investment adviser rules retrieval', () => {
   ];
   for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
 });
+
+// SEBI (Mutual Funds) Regulations 2026 and the MF Master Circular (20 Mar 2026).
+describe('SEBI mutual fund rules retrieval', () => {
+  const turn = (q: string) => knowledgeForTurn(q).map((h) => h.entry.id);
+  const cases: [string, string][] = [
+    ['what is the maximum expense ratio a mutual fund can charge', 'sebi-mf-expense-ratio'],
+    ['maximum exit load a mutual fund can charge', 'sebi-mf-exit-load'],
+    ['what are the mutual fund scheme categories like flexi cap and value fund', 'sebi-mf-categories'],
+    ['what is a life cycle fund with a target year', 'sebi-mf-life-cycle'],
+    ['what is a specialized investment fund SIF minimum investment', 'sebi-mf-sif'],
+    ['mutual fund NAV cut off time and redemption payout days', 'sebi-mf-nav-redemption'],
+  ];
+  for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
+});
