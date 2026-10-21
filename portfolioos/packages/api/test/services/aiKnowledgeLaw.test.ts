@@ -112,3 +112,17 @@ describe('Finance Act 2026 changes', () => {
     }
   });
 });
+
+// Income-tax Act 2025: one natural question per entry finds it among the turn's passages.
+describe('Income-tax Act 2025 retrieval', () => {
+  const turn = (q: string) => knowledgeForTurn(q).map((h) => h.entry.id);
+  const cases: [string, string][] = [
+    ['what is a tax year under the new income tax act', 'ita25-tax-year'],
+    ['how many days in India make me a resident for tax', 'ita25-residence'],
+    ['what are the new tax regime slabs for 2026-27', 'ita25-new-regime'],
+    ['old regime tax slabs for a senior citizen', 'ita25-old-regime'],
+    ['is income up to 12 lakh tax free under the rebate', 'ita25-rebate'],
+    ['what surcharge applies above 2 crore income', 'ita25-surcharge'],
+  ];
+  for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
+});
