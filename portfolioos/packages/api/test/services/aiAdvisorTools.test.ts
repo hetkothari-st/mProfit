@@ -245,6 +245,8 @@ describe('advisor tools', () => {
   it('describes the library it actually searches', () => {
     const tool = ADVISOR_TOOLS.find((t) => t.name === 'search_knowledge');
     expect(tool?.description).toContain('NISM');
+    expect(tool?.description).toContain('Income-tax Act 2025');
+    expect(tool?.description).toContain('SEBI');
     expect(tool?.description).not.toContain('Intelligent Investor');
   });
 });
