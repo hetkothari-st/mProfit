@@ -7,7 +7,7 @@
  *
  *   pnpm --filter @everypaisa/api exec tsx scripts/nismExam.ts                 # estimate only
  *   pnpm --filter @everypaisa/api exec tsx scripts/nismExam.ts --confirm-spend
- *     [--series xa|xb] [--chapter N] [--only-failed <report.json>] [--model M] [--concurrency 4]
+ *     [--bank nism|law] [--series xa|xb] [--chapter N] [--only-failed <report.json>] [--model M] [--concurrency 4]
  *
  * Writes docs/ai/nism-exam/<date>-<model>.md and .json at the repo root.
  * Law-sensitive questions (rates and rules that change) are scored separately
@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export interface ExamQuestion {
   id: string;
-  series: 'X-A' | 'X-B';
+  series: 'X-A' | 'X-B' | 'LAW';
   chapter: number;
   kind: 'mcq' | 'case';
   stem: string;
@@ -113,10 +113,11 @@ function arg(argv: string[], name: string): string | undefined {
 
 function loadQuestions(argv: string[]): ExamQuestion[] {
   const read = (file: string) =>
-    JSON.parse(
-      readFileSync(fileURLToPath(new URL(`../test/fixtures/nism-exam/${file}`, import.meta.url)), 'utf8'),
-    ) as ExamQuestion[];
-  let questions = [...read('xa.json'), ...read('xb.json')];
+    JSON.parse(readFileSync(fileURLToPath(new URL(`../test/fixtures/${file}`, import.meta.url)), 'utf8')) as ExamQuestion[];
+  let questions =
+    arg(argv, 'bank') === 'law'
+      ? read('law-exam/law.json')
+      : [...read('nism-exam/xa.json'), ...read('nism-exam/xb.json')];
 
   const series = arg(argv, 'series');
   if (series) questions = questions.filter((q) => q.id.startsWith(`${series.toLowerCase()}-`));

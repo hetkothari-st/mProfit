@@ -83,4 +83,12 @@ describe('nismExam CLI', () => {
     expect(out).toMatch(/--confirm-spend/);
     log.mockRestore();
   });
+
+  it('loads the current-law bank with --bank law', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const code = await main(['--bank', 'law']);
+    expect(code).toBe(2);
+    expect(log.mock.calls.flat().join(' ')).toMatch(/60 questions/);
+    log.mockRestore();
+  });
 });
