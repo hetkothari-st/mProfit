@@ -167,9 +167,20 @@ export async function listDocuments(
   userId: string,
   filter?: { ownerType?: DocumentOwnerType; ownerId?: string },
 ) {
-  const where: Prisma.DocumentWhereInput = { userId };
+  let where: Prisma.DocumentWhereInput = { userId };
   if (filter?.ownerType) where.ownerType = filter.ownerType;
   if (filter?.ownerId) where.ownerId = filter.ownerId;
+  if (filter?.ownerType === 'INSURANCE_POLICY' && filter.ownerId) {
+    // Documents found in Gmail live in the policy holder's folder
+    // (insuranceDocFiling); the policy shows them too, from the one copy.
+    const linked = await prisma.insuranceDocument.findMany({
+      where: { userId, policyId: filter.ownerId, documentId: { not: null } },
+      select: { documentId: true },
+    });
+    if (linked.length > 0) {
+      where = { userId, OR: [where, { id: { in: linked.map((l) => l.documentId!) } }] };
+    }
+  }
   const rows = await prisma.document.findMany({
     where,
     orderBy: { createdAt: 'desc' },

@@ -39,8 +39,14 @@ export async function approveDoc(
   docId: string,
   options: { createAutoApproveRule?: boolean } = {},
 ) {
-  const doc = await prisma.gmailDiscoveredDoc.findUnique({ where: { id: docId } });
+  const doc = await prisma.gmailDiscoveredDoc.findUnique({
+    where: { id: docId },
+    include: { scanJob: { select: { kind: true } } },
+  });
   if (!doc || doc.userId !== userId) throw new NotFoundError('Document not found');
+  // Found by an insurance search: read and filed by the insurance pipeline,
+  // never imported as a statement.
+  if (doc.scanJob.kind === 'INSURANCE') throw new BadRequestError('Insurance documents are handled on the Insurance page');
   if (doc.status === 'APPROVED' || doc.status === 'IMPORTING' || doc.status === 'IMPORTED') {
     return doc;
   }

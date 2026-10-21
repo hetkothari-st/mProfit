@@ -70,7 +70,9 @@ async function runScanJobAsOwner(scanJobId: string): Promise<void> {
     });
 
     await classifyPending(scanJobId);
-    await sweepAutoApprovals(job.userId, scanJobId);
+    // Auto-approve rules import statements; insurance documents are read
+    // and filed by their own pipeline instead.
+    if (job.kind !== 'INSURANCE') await sweepAutoApprovals(job.userId, scanJobId);
     if (job.kind === 'INSURANCE') {
       // Read what this scan found. A reading failure must not fail the scan:
       // the documents stay PENDING and the nightly run tries again.

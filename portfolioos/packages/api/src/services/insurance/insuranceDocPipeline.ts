@@ -25,7 +25,8 @@ import {
   readInsuranceDocument,
   type CallModel,
 } from '../../ingestion/insurance/insuranceDocReader.js';
-import { matchInsuranceDocuments, sealedExtractColumns } from './insuranceDocMatching.js';
+import { matchInsuranceDocuments } from './insuranceDocMatching.js';
+import { sealedExtractColumns } from './insuranceDocExtract.js';
 
 export interface InsuranceDocRunSummary {
   created: number;

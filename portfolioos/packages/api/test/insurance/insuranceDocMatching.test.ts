@@ -8,8 +8,8 @@ import {
   dismissInsuranceDocument,
   listInsuranceDocuments,
   matchInsuranceDocuments,
-  sealedExtractColumns,
 } from '../../src/services/insurance/insuranceDocMatching.js';
+import { sealedExtractColumns } from '../../src/services/insurance/insuranceDocExtract.js';
 import type { InsuranceDocExtract } from '../../src/ingestion/insurance/insuranceDocReader.js';
 
 /**
