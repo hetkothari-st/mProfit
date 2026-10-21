@@ -28,13 +28,13 @@ export const ITA25_CAPITAL_GAINS: KnowledgeEntry[] = [
     id: 'ita25-cg-equity',
     title: 'Tax on gains from listed shares and equity funds',
     principle:
-      'For equity shares, equity-oriented fund units and business-trust (REIT, InvIT) units where STT applies, short-term gains are taxed at 20% (s.196, formerly s.111A) and long-term gains at 12.5% on the amount above 1.25 lakh a year (s.198, formerly s.112A). For shares, STT must have been paid on both purchase and sale (with notified exceptions such as IPO and bonus shares); for fund units, on sale. For holdings bought before 1 February 2018, cost is the higher of actual cost and the 31 January 2018 price (highest quoted price, or NAV for units), capped at the sale price. A resident whose other income is below the basic exemption limit can use the shortfall against these gains. No Chapter VIII deductions (the old 80C and the like) can be set against them.',
+      'For equity shares, equity-oriented fund units and business-trust (REIT, InvIT) units where STT applies, short-term gains are taxed at 20% (s.196, formerly s.111A) and long-term gains at 12.5% on the amount above 1.25 lakh a year (s.198, formerly s.112A). The short-term rate needs STT only on the sale; the long-term rate needs it on both purchase and sale for shares (with notified exceptions such as IPO and bonus shares) and on sale for fund units. For holdings bought before 1 February 2018, cost is the higher of actual cost and the 31 January 2018 price (highest quoted price, or NAV for units), capped at the sale price. A resident whose other income is below the basic exemption limit can use the shortfall against these gains. No Chapter VIII deductions (the old 80C and the like) can be set against them.',
     inPractice:
       'Booking up to 1.25 lakh of long-term equity gains each year and reinvesting ("harvesting") resets cost tax-free; it does not trigger any minimum holding rule.',
     source: law('s.196, s.198, s.72'),
     asOf: '2026-04',
     topics: ['tax', 'equity', 'mutual-funds'],
-    keywords: ['LTCG equity', 'STCG equity', '112A', '111A', 'equity mutual fund tax', '1.25 lakh exemption', 'grandfathering 31 January 2018', 'tax harvesting', 'share sale tax'],
+    keywords: ['LTCG equity', 'long term capital gains equity mutual funds', 'tax on equity fund gains', 'STCG equity', '112A', '111A', 'equity mutual fund tax', '1.25 lakh exemption', 'grandfathering 31 January 2018', 'tax harvesting', 'share sale tax'],
   },
   {
     id: 'ita25-cg-other-assets',
@@ -100,7 +100,7 @@ export const ITA25_CAPITAL_GAINS: KnowledgeEntry[] = [
     id: 'ita25-cg-losses',
     title: 'Setting off and carrying forward capital losses',
     principle:
-      'Short-term losses may absorb gains of either kind, short or long; long-term losses absorb only long-term gains (s.108). Capital losses cannot be set against salary, interest or any other head. What remains is carried forward for up to eight tax years and used under the same rules (s.111), provided the loss return was filed by the due date.',
+      'Short-term losses may absorb gains of either kind, short or long; long-term losses absorb only long-term gains (s.108, formerly ss.70–71). Capital losses cannot be set against salary, interest or any other head. What remains is carried forward for up to eight tax years and used under the same rules (s.111, formerly s.74), provided the loss return was filed by the due date.',
     inPractice:
       'Booking losses before year end to offset gains is legitimate; file on time, or carried-forward losses are lost.',
     source: law('s.108, s.111'),

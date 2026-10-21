@@ -42,7 +42,7 @@ export const SEBI_IA: KnowledgeEntry[] = [
     source: mc('para 1(i); Reg. 22, 22A'),
     asOf: '2026-02',
     topics: ['regulation', 'ethics', 'mutual-funds'],
-    keywords: ['advice vs distribution', 'adviser distributor segregation', 'direct plan only adviser', 'implementation services', 'adviser commission', 'family of client', 'regulation 22A'],
+    keywords: ['advice vs distribution', 'adviser sell mutual funds commission', 'adviser also distributor', 'adviser distributor segregation', 'direct plan only adviser', 'implementation services', 'adviser commission', 'family of client', 'regulation 22A'],
   },
   {
     id: 'sebi-ia-fees',
@@ -132,7 +132,7 @@ export const SEBI_IA: KnowledgeEntry[] = [
     id: 'sebi-ia-records-audit',
     title: 'Records and annual compliance audit',
     principle:
-      'Advisers must keep a record of every advice-related interaction with clients and prospective clients, from the first contact to the end of the service — signed notes, call recordings, emails from the registered address, SMS or other verifiable records — plus time-stamped recordings of every consent to execute a trade taken by phone (Master Circular para 1(xiii)). Records are kept five years, or longer if a dispute is pending. An annual compliance audit must be completed within six months of the financial year end and reported to IAASB/SEBI within a month, with adverse findings and actions taken; the audit status is published on the adviser’s website, together with an annual certificate on advice-distribution segregation.',
+      'Advisers must keep a record of every advice-related interaction with clients and prospective clients, from the first contact to the end of the service — signed notes, call recordings, emails from the registered address, SMS or other verifiable records — plus time-stamped recordings of every consent to execute a trade taken by phone (Master Circular para 1(xiii)). Records are kept five years, or longer if a dispute is pending. An annual compliance audit must be completed within six months of the financial year end and reported to IAASB/SEBI within a month, with adverse findings and actions taken; the audit status and any adverse findings with actions taken are published on the adviser’s website, and an annual certificate on advice-distribution segregation is kept on record as part of the audit.',
     inPractice:
       'An advisory chat or app conversation that contains advice is itself a record that must be retained for five years.',
     source: mc('paras 1(xiii), 1(xiv); Reg. 19'),
@@ -144,7 +144,7 @@ export const SEBI_IA: KnowledgeEntry[] = [
     id: 'sebi-ia-registration',
     title: 'Who can register as an investment adviser',
     principle:
-      'An individual adviser, or the principal officer and advice staff of a firm, needs a graduate degree with NISM-recognised certification, or a NISM postgraduate programme in investment advisory or financial planning; certification must be renewed within three years of registration (Reg. 7, as relaxed from 25 November 2025). Professionals in unrelated or separately regulated work (CAs, lawyers, doctors, teachers, insurance agents) may register as part-time advisers with a prominent disclaimer on their other work. An individual adviser whose clients exceed 300, or annual fees exceed 3 crore, must move to a firm registration. Advisers keep a lien-marked deposit of 1 to 10 lakh depending on client numbers.',
+      'An individual adviser, or the principal officer and advice staff of a firm, needs a graduate degree with NISM-recognised certification, or a NISM postgraduate programme in investment advisory or financial planning; certification must be kept current — for those qualifying through the NISM programme, renewed within three years of registration (Reg. 7, as relaxed from 25 November 2025). Professionals in unrelated or separately regulated work (CAs, lawyers, doctors, teachers, insurance agents) may register as part-time advisers, with at most 75 clients and a prominent disclaimer on their other work. An individual adviser whose clients exceed 300, or annual fees exceed 3 crore, must move to a firm registration. Advisers keep a lien-marked deposit of 1 to 10 lakh depending on client numbers.',
     inPractice:
       'A CA giving general asset-class advice during tax work needs no registration; recommending specific securities to a client does.',
     source: mc('para 1(iv)–(viii); Reg. 7, Reg. 13'),

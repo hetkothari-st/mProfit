@@ -32,6 +32,10 @@ describe('law exam bank', () => {
     }
   });
 
+  it('scores every question: the bank is current law, so none is set aside as law-sensitive', () => {
+    expect(bank.filter((q) => q.lawSensitive).map((q) => q.id)).toEqual([]);
+  });
+
   it('no answer letter carries more than 40% of the bank', () => {
     for (const letter of ['A', 'B', 'C', 'D']) {
       expect(bank.filter((q) => q.answer === letter).length / bank.length, letter).toBeLessThanOrEqual(0.4);

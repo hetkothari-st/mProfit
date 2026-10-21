@@ -35,7 +35,7 @@ export const SEBI_MF: KnowledgeEntry[] = [
     id: 'sebi-mf-exit-load',
     title: 'Exit loads are capped at 3%',
     principle:
-      'An open-ended scheme may charge an exit load of at most 3% of NAV when units are redeemed (Reg. 44(4), SEBI (Mutual Funds) Regulations 2026), down from the earlier 5% ceiling, and every rupee of exit load goes back into the scheme rather than to the fund house. There is no entry load. Within that cap each scheme sets its own load and holding period in its offer document; changes apply only to units bought after the change.',
+      'An open-ended scheme may charge an exit load of at most 3% of NAV when units are redeemed (Reg. 44(4), SEBI (Mutual Funds) Regulations 2026), and every rupee of exit load goes back into the scheme rather than to the fund house. There is no entry load. Within that cap each scheme sets its own load and holding period in its offer document; changes apply only to units bought after the change.',
     inPractice:
       'Check the load schedule before switching or redeeming early; a 1% load on a fund held a few months can wipe out a small gain.',
     source: regs('Reg. 44'),
@@ -83,7 +83,7 @@ export const SEBI_MF: KnowledgeEntry[] = [
     id: 'sebi-mf-nav-redemption',
     title: 'Which NAV you get, and when redemption money arrives',
     principle:
-      'For purchases, the NAV applied is that of the day the money reaches the scheme’s bank account, if it arrives by 3 p.m. (by 1.30 p.m. for liquid and overnight funds, which get the previous day’s NAV) (Master Circular para 9). For redemptions, requests by 3 p.m. on a business day get that day’s NAV; for liquid and overnight funds, the next day’s NAV, and overnight-fund online redemptions are accepted until 7 p.m. Only forward-looking NAVs are used. Redemption money must reach the investor within three working days (longer for schemes investing mainly abroad), or the fund house pays 15% a year interest for the delay.',
+      'For purchases, the NAV applied is that of the day the money reaches the scheme’s bank account, if it arrives by 3 p.m. (by 1.30 p.m. for liquid and overnight funds, which get the previous day’s NAV) (Master Circular para 9). For redemptions, requests by 3 p.m. on a business day get that day’s NAV, including for liquid and overnight funds; requests after 3 p.m. get the next business day’s NAV (overnight-fund online redemptions count as on time until 7 p.m.). Apart from liquid and overnight purchases, only forward NAVs are used. Redemption money must reach the investor within three working days (longer for schemes investing mainly abroad), or the fund house pays 15% a year interest for the delay.',
     inPractice:
       'A SIP or lump sum paid late in the day can get the next day’s NAV; for urgent cash, liquid and overnight funds pay out fastest.',
     source: mc('paras 9, 15.3'),

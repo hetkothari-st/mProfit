@@ -183,3 +183,69 @@ describe('SEBI mutual fund rules retrieval', () => {
   ];
   for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
 });
+
+// Final-review fixes (adviser law P1).
+describe('law review fixes', () => {
+  const turn = (q: string) => knowledgeForTurn(q).map((h) => h.entry.id);
+  const entry = (id: string) => KNOWLEDGE_LIBRARY.find((e) => e.id === id);
+  const p = (id: string) => entry(id)?.principle ?? '';
+
+  it('a superseded entry is hidden only when its successor is among the hits shown', () => {
+    const lib = [
+      nism({ id: 'old', keywords: ['alpha beta gamma', 'alpha beta gamma'], supersededBy: 'new' }),
+      law({ id: 'new', keywords: ['gamma'] }),
+      law({ id: 'other', keywords: ['delta'] }),
+    ];
+    expect(searchKnowledge('alpha beta gamma', { library: lib, limit: 1, minScore: 0 }).map((h) => h.entry.id)).toEqual([
+      'old',
+    ]);
+  });
+  it('mixed NISM capital-gains entries are no longer superseded', () => {
+    expect(entry('xb-08-rates')?.supersededBy).toBeUndefined();
+    expect(entry('xb-08-holding-periods')?.supersededBy).toBeUndefined();
+  });
+  it('capital-gains questions outside equity still find an answer', () => {
+    expect(turn('is a depreciable asset always short term')).toContain('xb-08-holding-periods');
+    expect(turn('what are the capital gains tax rates on gold and debt funds').length).toBeGreaterThan(0);
+  });
+  it('liquid fund redemptions before 3 pm get the same day NAV', () => {
+    expect(p('sebi-mf-nav-redemption')).not.toMatch(/for liquid and overnight funds, the next day/);
+    expect(p('sebi-mf-nav-redemption')).toMatch(/after 3 p\.m\./);
+  });
+  it('short-term equity gains need STT only on sale', () => {
+    expect(p('ita25-cg-equity')).toMatch(/short-term rate needs STT only on the sale/);
+  });
+  it('NRIs lose the pre-2024 property indexation option', () => {
+    expect(p('ita25-nri')).toMatch(/indexation/);
+  });
+  it('property bought below stamp-duty value has the 10% tolerance', () => {
+    expect(p('ita25-gifts')).toMatch(/10% of the price/);
+  });
+  it('interest income allows expenses incurred to earn it', () => {
+    expect(p('ita25-interest-income')).not.toMatch(/The only deductions against interest/);
+    expect(p('ita25-interest-income')).toMatch(/spent wholly to earn it/);
+  });
+  it('Income-tax Act 2025 entries name the 1961 section once', () => {
+    const exempt = new Set(['ita25-tax-year', 'ita25-residence']);
+    for (const e of LAW_LIBRARY) {
+      if (e.source.kind !== 'LAW' || e.source.instrument !== 'Income-tax Act 2025' || exempt.has(e.id)) continue;
+      expect(e.principle, e.id).toMatch(/formerly s/);
+    }
+  });
+  it('old section numbers find their entry', () => {
+    expect(turn('what does section 115BBH say')).toContain('ita25-crypto');
+  });
+  it('rate entries cite the Finance Act schedule that charges the tax', () => {
+    for (const id of ['ita25-old-regime', 'ita25-surcharge']) {
+      const s = entry(id)?.source;
+      expect(s?.kind === 'LAW' && s.ref, id).toMatch(/Part I-B/);
+    }
+  });
+  it('adviser entries state what is published and the part-time cap', () => {
+    expect(p('sebi-ia-records-audit')).not.toMatch(/together with an annual certificate/);
+    expect(p('sebi-ia-registration')).toMatch(/75 clients/);
+  });
+  it('exit-load entry makes no unsourced history claim', () => {
+    expect(p('sebi-mf-exit-load')).not.toMatch(/5% ceiling/);
+  });
+});
