@@ -97,6 +97,7 @@ export const XA_01: readonly KnowledgeEntry[] = [
   },
   {
     id: 'xa-01-advice-vs-distribution',
+    supersededBy: 'sebi-ia-segregation',
     title: 'Advisers are paid by clients; distributors by product makers',
     principle:
       'A seller paid commission by the product maker has a conflict of interest that can lead to mis-selling. Indian regulation separates advice from distribution: anyone giving financial advice for consideration must register with SEBI as an Investment Adviser and may not earn from product makers. Individual advisers must choose either advice or distribution, not both; non-individual advisers must segregate the two at client level across the group and keep advice at arm’s length in a separate division. Individual advisers may offer execution only through direct plans, with no consideration earned at group or family level.',

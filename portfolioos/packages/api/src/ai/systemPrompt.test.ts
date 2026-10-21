@@ -122,4 +122,10 @@ describe('assistant prompt — help vs advice, and the NISM library', () => {
   it('says to name the edition when a passage states a dated rule', () => {
     expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/edition/i);
   });
+
+  it('names current law in the library and says it outranks an older passage', () => {
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toContain('Income-tax Act 2025');
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/SEBI's rules/);
+    expect(AI_ASSISTANT_SYSTEM_PROMPT).toMatch(/superseded/);
+  });
 });

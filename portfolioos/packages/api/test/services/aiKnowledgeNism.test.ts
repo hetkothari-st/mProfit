@@ -22,7 +22,7 @@ describe('NISM retrieval, chapter by chapter', () => {
     expect(ids('what are the steps of the financial planning process')).toContain('xa-01-six-step-process');
   });
   it('X-A 1: advice vs distribution', () => {
-    expect(ids('can an investment adviser also earn distribution commission')).toContain('xa-01-advice-vs-distribution');
+    expect(ids('can an investment adviser also earn distribution commission')).toContain('sebi-ia-segregation'); // superseded by the SEBI IA rules entry
   });
   it('X-A 2: CAGR', () => {
     expect(ids('how do I calculate CAGR of my fund')).toContain('xa-02-cagr');

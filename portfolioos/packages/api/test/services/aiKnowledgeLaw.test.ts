@@ -112,3 +112,140 @@ describe('Finance Act 2026 changes', () => {
     }
   });
 });
+
+// Income-tax Act 2025: one natural question per entry finds it among the turn's passages.
+describe('Income-tax Act 2025 retrieval', () => {
+  const turn = (q: string) => knowledgeForTurn(q).map((h) => h.entry.id);
+  const cases: [string, string][] = [
+    ['what is a tax year under the new income tax act', 'ita25-tax-year'],
+    ['how many days in India make me a resident for tax', 'ita25-residence'],
+    ['what are the new tax regime slabs for 2026-27', 'ita25-new-regime'],
+    ['old regime tax slabs for a senior citizen', 'ita25-old-regime'],
+    ['is income up to 12 lakh tax free under the rebate', 'ita25-rebate'],
+    ['what surcharge applies above 2 crore income', 'ita25-surcharge'],
+    ['when does a listed share become long term', 'ita25-cg-holding-periods'],
+    ['how much tax on long term capital gains from equity mutual funds', 'ita25-cg-equity'],
+    ['tax on selling a flat bought in 2015 indexation option', 'ita25-cg-other-assets'],
+    ['debt fund bought after april 2023 capital gains tax', 'ita25-cg-specified-mf'],
+    ['save capital gains tax by buying another house', 'ita25-cg-house-to-house'],
+    ['54EC bonds limit to save capital gains', 'ita25-cg-bonds'],
+    ['sold shares and want to buy a house to save tax', 'ita25-cg-asset-to-house'],
+    ['can I carry forward a long term capital loss', 'ita25-cg-losses'],
+    ['is a cash gift from my uncle taxable', 'ita25-gifts'],
+    ['how is fixed deposit interest taxed', 'ita25-interest-income'],
+    ['home loan interest deduction on self occupied house', 'ita25-house-property'],
+    ['tax on income from investments in my wife name', 'ita25-clubbing'],
+    ['80C limit and what investments qualify', 'ita25-deductions-investments'],
+    ['health insurance premium deduction for parents', 'ita25-deductions-health'],
+    ['savings account interest deduction for senior citizens', 'ita25-deduction-interest'],
+    ['how are F&O losses treated and can I set them off against salary', 'ita25-fo-intraday'],
+    ['do I need a tax audit for my trading turnover', 'ita25-audit-presumptive'],
+    ['how is crypto taxed in India', 'ita25-crypto'],
+    ['advance tax due dates and instalments', 'ita25-advance-tax'],
+    ['how is an NRI taxed on capital gains in India', 'ita25-nri'],
+    ['special tax regime for NRI investment income in foreign exchange', 'ita25-nri-special'],
+  ];
+  for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
+});
+
+// SEBI Investment Advisers Regulations 2013 (to 25 Nov 2025) and the IA Master Circular (6 Feb 2026).
+describe('SEBI investment adviser rules retrieval', () => {
+  const turn = (q: string) => knowledgeForTurn(q).map((h) => h.entry.id);
+  const cases: [string, string][] = [
+    ['what is the maximum fee a SEBI registered investment adviser can charge', 'sebi-ia-fees'],
+    ['can my investment adviser also sell me mutual funds for commission', 'sebi-ia-segregation'],
+    ['what must the investment advisory agreement and MITC contain', 'sebi-ia-agreement'],
+    ['what information must an adviser collect for risk profiling', 'sebi-ia-risk-profiling'],
+    ['adviser suitability obligations for complex products', 'sebi-ia-suitability'],
+    ['must an investment adviser disclose use of AI tools', 'sebi-ia-disclosures-ai'],
+    ['fiduciary duty and conflicts of interest of an investment adviser', 'sebi-ia-fiduciary'],
+    ['can an investment adviser advertise past performance or testimonials', 'sebi-ia-advertising'],
+    ['how do I complain against a SEBI registered investment adviser', 'sebi-ia-grievance'],
+    ['how long must an investment adviser keep records and audits', 'sebi-ia-records-audit'],
+    ['qualification needed to register as a SEBI investment adviser', 'sebi-ia-registration'],
+  ];
+  for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
+});
+
+// SEBI (Mutual Funds) Regulations 2026 and the MF Master Circular (20 Mar 2026).
+describe('SEBI mutual fund rules retrieval', () => {
+  const turn = (q: string) => knowledgeForTurn(q).map((h) => h.entry.id);
+  const cases: [string, string][] = [
+    ['what is the maximum expense ratio a mutual fund can charge', 'sebi-mf-expense-ratio'],
+    ['maximum exit load a mutual fund can charge', 'sebi-mf-exit-load'],
+    ['what are the mutual fund scheme categories like flexi cap and value fund', 'sebi-mf-categories'],
+    ['what is a life cycle fund with a target year', 'sebi-mf-life-cycle'],
+    ['what is a specialized investment fund SIF minimum investment', 'sebi-mf-sif'],
+    ['mutual fund NAV cut off time and redemption payout days', 'sebi-mf-nav-redemption'],
+    ['PMS exit load and operating expense limits', 'sebi-pms-charges'],
+    ['do AIFs have a direct plan without distribution commission', 'sebi-aif-direct-plan'],
+    ['how much can a SEBI research analyst charge for stock tips subscription', 'sebi-ra-fees'],
+  ];
+  for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
+});
+
+// Final-review fixes (adviser law P1).
+describe('law review fixes', () => {
+  const turn = (q: string) => knowledgeForTurn(q).map((h) => h.entry.id);
+  const entry = (id: string) => KNOWLEDGE_LIBRARY.find((e) => e.id === id);
+  const p = (id: string) => entry(id)?.principle ?? '';
+
+  it('a superseded entry is hidden only when its successor is among the hits shown', () => {
+    const lib = [
+      nism({ id: 'old', keywords: ['alpha beta gamma', 'alpha beta gamma'], supersededBy: 'new' }),
+      law({ id: 'new', keywords: ['gamma'] }),
+      law({ id: 'other', keywords: ['delta'] }),
+    ];
+    expect(searchKnowledge('alpha beta gamma', { library: lib, limit: 1, minScore: 0 }).map((h) => h.entry.id)).toEqual([
+      'old',
+    ]);
+  });
+  it('mixed NISM capital-gains entries are no longer superseded', () => {
+    expect(entry('xb-08-rates')?.supersededBy).toBeUndefined();
+    expect(entry('xb-08-holding-periods')?.supersededBy).toBeUndefined();
+  });
+  it('capital-gains questions outside equity still find an answer', () => {
+    expect(turn('is a depreciable asset always short term')).toContain('xb-08-holding-periods');
+    expect(turn('what are the capital gains tax rates on gold and debt funds').length).toBeGreaterThan(0);
+  });
+  it('liquid fund redemptions before 3 pm get the same day NAV', () => {
+    expect(p('sebi-mf-nav-redemption')).not.toMatch(/for liquid and overnight funds, the next day/);
+    expect(p('sebi-mf-nav-redemption')).toMatch(/after 3 p\.m\./);
+  });
+  it('short-term equity gains need STT only on sale', () => {
+    expect(p('ita25-cg-equity')).toMatch(/short-term rate needs STT only on the sale/);
+  });
+  it('NRIs lose the pre-2024 property indexation option', () => {
+    expect(p('ita25-nri')).toMatch(/indexation/);
+  });
+  it('property bought below stamp-duty value has the 10% tolerance', () => {
+    expect(p('ita25-gifts')).toMatch(/10% of the price/);
+  });
+  it('interest income allows expenses incurred to earn it', () => {
+    expect(p('ita25-interest-income')).not.toMatch(/The only deductions against interest/);
+    expect(p('ita25-interest-income')).toMatch(/spent wholly to earn it/);
+  });
+  it('Income-tax Act 2025 entries name the 1961 section once', () => {
+    const exempt = new Set(['ita25-tax-year', 'ita25-residence']);
+    for (const e of LAW_LIBRARY) {
+      if (e.source.kind !== 'LAW' || e.source.instrument !== 'Income-tax Act 2025' || exempt.has(e.id)) continue;
+      expect(e.principle, e.id).toMatch(/formerly s/);
+    }
+  });
+  it('old section numbers find their entry', () => {
+    expect(turn('what does section 115BBH say')).toContain('ita25-crypto');
+  });
+  it('rate entries cite the Finance Act schedule that charges the tax', () => {
+    for (const id of ['ita25-old-regime', 'ita25-surcharge']) {
+      const s = entry(id)?.source;
+      expect(s?.kind === 'LAW' && s.ref, id).toMatch(/Part I-B/);
+    }
+  });
+  it('adviser entries state what is published and the part-time cap', () => {
+    expect(p('sebi-ia-records-audit')).not.toMatch(/together with an annual certificate/);
+    expect(p('sebi-ia-registration')).toMatch(/75 clients/);
+  });
+  it('exit-load entry makes no unsourced history claim', () => {
+    expect(p('sebi-mf-exit-load')).not.toMatch(/5% ceiling/);
+  });
+});

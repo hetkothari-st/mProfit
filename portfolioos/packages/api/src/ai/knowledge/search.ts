@@ -117,12 +117,11 @@ export function searchKnowledge(
     }
     if (score >= minScore) hits.push({ entry: d.entry, score });
   }
-  // A rule that changed is shown only when its replacement did not match.
-  const found = new Set(hits.map((h) => h.entry.id));
-  return hits
-    .filter((h) => !h.entry.supersededBy || !found.has(h.entry.supersededBy))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+  // A rule that changed gives way to its replacement only when the replacement is
+  // itself among the passages shown; otherwise the older passage is all there is.
+  hits.sort((a, b) => b.score - a.score);
+  const shown = new Set(hits.slice(0, limit).map((h) => h.entry.id));
+  return hits.filter((h) => !h.entry.supersededBy || !shown.has(h.entry.supersededBy)).slice(0, limit);
 }
 
 /** How many passages ride along with a chat message, and the score they must clear. */

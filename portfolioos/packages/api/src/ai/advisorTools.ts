@@ -202,7 +202,7 @@ export const ADVISOR_TOOLS: Anthropic.Tool[] = [
   {
     name: 'search_knowledge',
     description:
-      'Search the adviser library: the NISM investment adviser syllabus (Series X-A and X-B: planning, markets, products, tax, retirement, insurance, estate, regulation, behavioural finance), Let’s Talk Money, and the planning framework.',
+      'Search the adviser library: current law (Income-tax Act 2025 as amended by the Finance Act 2026; SEBI rules for advisers, mutual funds, PMS, AIFs and research analysts), the NISM investment adviser syllabus (Series X-A and X-B: planning, markets, products, tax, retirement, insurance, estate, regulation, behavioural finance), Let’s Talk Money, and the planning framework.',
     input_schema: obj({ query: { type: 'string' } }, ['query']),
   },
 ];
