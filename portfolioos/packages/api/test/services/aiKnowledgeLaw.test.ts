@@ -249,3 +249,27 @@ describe('law review fixes', () => {
     expect(p('sebi-mf-exit-load')).not.toMatch(/5% ceiling/);
   });
 });
+
+// Deferred minors from the P1 final review.
+describe('law review minors', () => {
+  const p = (id: string) => KNOWLEDGE_LIBRARY.find((e) => e.id === id)?.principle ?? '';
+  const both = (id: string) => {
+    const e = KNOWLEDGE_LIBRARY.find((x) => x.id === id);
+    return `${e?.principle ?? ''} ${e?.inPractice ?? ''}`;
+  };
+
+  it('NRI special regime: reinvestment exemption is proportionate; continuation excludes shares', () => {
+    expect(p('ita25-nri-special')).toMatch(/in proportion/);
+    expect(p('ita25-nri-special')).toMatch(/other than shares/);
+  });
+  it('audit entry: presumptive taxpayers declaring lower profit need an audit; ICAI note is guidance', () => {
+    expect(p('ita25-audit-presumptive')).toMatch(/below the presumptive rate/);
+    expect(both('ita25-audit-presumptive')).toMatch(/ICAI guidance note/);
+  });
+  it('PMS performance fee wording follows the circular', () => {
+    expect(p('sebi-pms-charges')).toMatch(/at least a quarter apart/);
+  });
+  it('RA advance fee notes the circular’s conflicting one-quarter term', () => {
+    expect(both('sebi-ra-fees')).toMatch(/one quarter/);
+  });
+});
