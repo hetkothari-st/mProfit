@@ -5,5 +5,6 @@
  * points here through `supersededBy`.
  */
 import type { KnowledgeEntry } from '../library.js';
+import { FA2026_CHANGES } from './fa2026-changes.js';
 
-export const LAW_LIBRARY: readonly KnowledgeEntry[] = [];
+export const LAW_LIBRARY: readonly KnowledgeEntry[] = [...FA2026_CHANGES];

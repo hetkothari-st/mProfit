@@ -23,6 +23,7 @@ export const XB_12: readonly KnowledgeEntry[] = [
   },
   {
     id: 'xb-12-sgb',
+    supersededBy: 'fa26-sgb',
     title: 'Sovereign Gold Bonds: features and tax',
     principle:
       'SGBs are RBI-issued government securities in grams of gold, paying 2.5% a year on the issue value half-yearly, with an 8-year term (early redemption from year five on interest dates) and redemption at the average 999 gold price of the previous three working days. Limits per financial year: 4 kg for individuals and HUFs, 20 kg for trusts. Residents can hold them (and keep them if they later become NRIs); they can be traded in demat or pledged for loans. Interest is taxable at slab rates with no TDS. Redemption by an individual with RBI, at maturity or early, is not a transfer, so no capital gains tax, even if bought on the exchange. Selling on the exchange is taxable: long-term after 12 months at 12.5%, otherwise slab; accrued interest since the last coupon is split out as interest. Non-individuals pay capital gains even on redemption.',

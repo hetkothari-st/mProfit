@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { credit, searchKnowledge } from '../../src/ai/knowledge/search.js';
+import { credit, knowledgeForTurn, searchKnowledge } from '../../src/ai/knowledge/search.js';
 import { KNOWLEDGE_LIBRARY, type KnowledgeEntry } from '../../src/ai/knowledge/library.js';
 import { LAW_LIBRARY } from '../../src/ai/knowledge/law/index.js';
 
@@ -69,6 +69,46 @@ describe('law library integrity', () => {
     for (const e of LAW_LIBRARY) {
       expect(e.principle.length, e.id).toBeLessThanOrEqual(900);
       expect((e.inPractice ?? '').length, e.id).toBeLessThanOrEqual(500);
+    }
+  });
+});
+
+// Finance Act 2026 (Act 4 of 2026): the four investor rules that changed from 1 April 2026.
+describe('Finance Act 2026 changes', () => {
+  const turn = (q: string) => knowledgeForTurn(q).map((h) => h.entry.id);
+  const entry = (id: string) => KNOWLEDGE_LIBRARY.find((e) => e.id === id);
+
+  it('buyback questions get the capital-gains rule, not the 2024 dividend rule', () => {
+    const got = turn('How are share buybacks taxed now?');
+    expect(got).toContain('fa26-buyback');
+    expect(got).not.toContain('xb-09-dividends-buyback');
+  });
+  it('dividend questions learn that no deduction is allowed', () => {
+    expect(turn('Can I deduct interest on a loan taken to buy shares from my dividend income?')).toContain(
+      'fa26-dividend-no-deduction',
+    );
+  });
+  it('SGB questions get the original-subscriber condition', () => {
+    const got = turn('Is SGB redemption tax free if I bought the bond on the stock exchange?');
+    expect(got).toContain('fa26-sgb');
+    expect(got).not.toContain('xb-12-sgb');
+  });
+  it('STT questions get the 2026 rates', () => {
+    expect(turn('What is the STT on options and futures now?')).toContain('fa26-stt');
+  });
+  it('whole entries that changed point at their replacement', () => {
+    expect(entry('xb-09-dividends-buyback')?.supersededBy).toBe('fa26-buyback');
+    expect(entry('xb-12-sgb')?.supersededBy).toBe('fa26-sgb');
+  });
+  it('entries with one changed clause say so in place', () => {
+    for (const id of [
+      'xb-13-buyback-rights',
+      'xb-10-mf-dividend-nri',
+      'xb-11-listed-equity-tax',
+      'xb-08-transfer-not-transfer',
+      'xb-19-gold-options',
+    ]) {
+      expect(entry(id)?.principle, id).toMatch(/Finance Act 2026/);
     }
   });
 });
