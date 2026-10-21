@@ -234,4 +234,17 @@ describe('advisor tools', () => {
     expect(out.ok).toBe(true);
     expect((out.result as { passages: unknown[] }).passages.length).toBeGreaterThan(0);
   });
+
+  it('credits NISM passages to their workbook and chapter', async () => {
+    const out = await runAdvisorTool('search_knowledge', { query: 'difference between pledge and hypothecation' }, ctx);
+    const passages = (out.result as { passages: Array<{ id: string; credit: string }> }).passages;
+    const nism = passages.find((p) => p.id.startsWith('xa-04-'));
+    expect(nism?.credit).toBe('from NISM Series X-A (Jun 2025), ch. 4');
+  });
+
+  it('describes the library it actually searches', () => {
+    const tool = ADVISOR_TOOLS.find((t) => t.name === 'search_knowledge');
+    expect(tool?.description).toContain('NISM');
+    expect(tool?.description).not.toContain('Intelligent Investor');
+  });
 });

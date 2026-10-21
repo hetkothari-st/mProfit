@@ -1,7 +1,7 @@
 /**
  * Finds the library passages that fit a question — BM25 over each entry's
  * title, principle, keywords and topics, in-process. The library is a few
- * dozen curated entries, so this is instant and needs no embeddings service
+ * hundred curated entries, so this is instant and needs no embeddings service
  * or database.
  */
 import { KNOWLEDGE_LIBRARY, type KnowledgeEntry } from './library.js';
@@ -120,8 +120,31 @@ export function searchKnowledge(
   return hits.sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
-function credit(e: KnowledgeEntry): string {
-  return e.source.kind === 'BOOK' ? `from "${e.source.book}" by ${e.source.author}` : 'from the planning framework';
+/** How many passages ride along with a chat message, and the score they must clear. */
+const TURN_LIMIT = 3;
+const TURN_MIN_SCORE = 6;
+
+/**
+ * The passages attached to a chat message. Stricter than a tool search: with a
+ * few hundred entries, weak matches are mostly off-topic and would pull an
+ * answer sideways, so a message with no strong match gets none.
+ */
+export function knowledgeForTurn(message: string): KnowledgeHit[] {
+  return searchKnowledge(message, { limit: TURN_LIMIT, minScore: TURN_MIN_SCORE });
+}
+
+const EDITION_LABEL: Record<string, string> = { '2025-06': 'Jun 2025', '2025-12': 'Dec 2025' };
+
+/** Where an entry comes from, in the words the model should use to credit it. */
+export function credit(e: KnowledgeEntry): string {
+  switch (e.source.kind) {
+    case 'BOOK':
+      return `from "${e.source.book}" by ${e.source.author}`;
+    case 'NISM':
+      return `from NISM Series ${e.source.series} (${EDITION_LABEL[e.source.edition] ?? e.source.edition}), ch. ${e.source.chapter}`;
+    default:
+      return 'from the planning framework';
+  }
 }
 
 /** The passages as the model sees them: id, credit, and the idea in our words. */

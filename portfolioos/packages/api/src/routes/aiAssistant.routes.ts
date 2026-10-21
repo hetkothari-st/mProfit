@@ -23,7 +23,7 @@ import { taxYearOf } from '@everypaisa/shared';
 import { classifyQuery } from '../ai/queryClassifier.js';
 import { buildContext } from '../ai/contextBuilder.js';
 import { loadAdvisorContext } from '../ai/userFacts.js';
-import { searchKnowledge } from '../ai/knowledge/search.js';
+import { knowledgeForTurn } from '../ai/knowledge/search.js';
 import { CardStreamFilter } from '../ai/cardStream.js';
 import {
   streamAssistantResponse,
@@ -278,7 +278,7 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
       readableUserIds: context.scope.readableUserIds,
       profile: context.userProfile as unknown as Record<string, unknown>,
     });
-    const knowledge = searchKnowledge(message, { limit: 3 });
+    const knowledge = knowledgeForTurn(message);
 
     await saveMessage({
       userId,

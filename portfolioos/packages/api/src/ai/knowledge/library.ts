@@ -10,7 +10,11 @@
  * NOT live here; they come from the services that own them.
  *
  * Searched in-process (search.ts): no embeddings service, no database.
+ *
+ * The NISM Investment Adviser syllabus (Series X-A and X-B, 2025 editions)
+ * lives in ./nism/, one file per chapter, in the same own-words form.
  */
+import { NISM_LIBRARY } from './nism/index.js';
 
 export type KnowledgeTopic =
   | 'planning'
@@ -32,17 +36,36 @@ export type KnowledgeTopic =
   | 'savings'
   | 'retirement'
   | 'real-estate'
-  | 'sip';
+  | 'sip'
+  // NISM Series X-A / X-B syllabus
+  | 'markets'
+  | 'equity'
+  | 'bonds'
+  | 'derivatives'
+  | 'mutual-funds'
+  | 'pms-aif'
+  | 'portfolio-theory'
+  | 'performance'
+  | 'operations'
+  | 'regulation'
+  | 'ethics'
+  | 'grievance'
+  | 'estate'
+  | 'risk-profiling'
+  | 'products';
 
 export interface KnowledgeBook {
   title: string;
   author: string;
   year: number;
+  /** False = its entries are switched off (commented out below). */
+  enabled: boolean;
 }
 
 export type KnowledgeSource =
   | { kind: 'BOOK'; book: string; author: string }
-  | { kind: 'FRAMEWORK'; label: string };
+  | { kind: 'FRAMEWORK'; label: string }
+  | { kind: 'NISM'; series: 'X-A' | 'X-B'; edition: '2025-06' | '2025-12'; chapter: number; chapterTitle: string };
 
 export interface KnowledgeEntry {
   id: string;
@@ -52,25 +75,27 @@ export interface KnowledgeEntry {
   /** How it plays out for an Indian investor, in our own words. */
   inPractice?: string;
   source: KnowledgeSource;
+  /** Set when the entry states a rate, limit, date or regulation: the edition it was true as of. */
+  asOf?: string;
   topics: KnowledgeTopic[];
   keywords: string[];
 }
 
 export const KNOWLEDGE_BOOKS: readonly KnowledgeBook[] = [
-  { title: 'The Intelligent Investor', author: 'Benjamin Graham', year: 1949 },
-  { title: 'The Little Book of Common Sense Investing', author: 'John C. Bogle', year: 2007 },
-  { title: 'A Random Walk Down Wall Street', author: 'Burton G. Malkiel', year: 1973 },
-  { title: 'The Psychology of Money', author: 'Morgan Housel', year: 2020 },
-  { title: "Let's Talk Money", author: 'Monika Halan', year: 2018 },
+  { title: 'The Intelligent Investor', author: 'Benjamin Graham', year: 1949, enabled: false },
+  { title: 'The Little Book of Common Sense Investing', author: 'John C. Bogle', year: 2007, enabled: false },
+  { title: 'A Random Walk Down Wall Street', author: 'Burton G. Malkiel', year: 1973, enabled: false },
+  { title: 'The Psychology of Money', author: 'Morgan Housel', year: 2020, enabled: false },
+  { title: "Let's Talk Money", author: 'Monika Halan', year: 2018, enabled: true },
 ];
 
-const [GRAHAM, BOGLE, MALKIEL, HOUSEL, HALAN] = KNOWLEDGE_BOOKS.map(
+const [, , , , HALAN] = KNOWLEDGE_BOOKS.map(
   (b): KnowledgeSource => ({ kind: 'BOOK', book: b.title, author: b.author }),
 ) as [KnowledgeSource, KnowledgeSource, KnowledgeSource, KnowledgeSource, KnowledgeSource];
 
 const FRAMEWORK: KnowledgeSource = { kind: 'FRAMEWORK', label: 'Planning framework' };
 
-export const KNOWLEDGE_LIBRARY: readonly KnowledgeEntry[] = [
+const CORE_LIBRARY: readonly KnowledgeEntry[] = [
   // ── The planning framework the adviser follows ─────────────────────
   {
     id: 'plan-order',
@@ -171,9 +196,13 @@ export const KNOWLEDGE_LIBRARY: readonly KnowledgeEntry[] = [
       'Most long-run damage comes from panic selling, chasing whatever is hot and trading too often, not from picking a slightly worse fund. The adviser’s job is often to slow a decision down.',
     source: FRAMEWORK,
     topics: ['behaviour'],
-    keywords: ['panic', 'fomo', 'overtrading', 'emotion', 'fear', 'greed', 'sell everything', 'everyone is buying'],
+    keywords: ['panic', 'fomo', 'overtrading', 'emotion', 'fear', 'greed', 'sell everything', 'everyone is buying', 'should I sell', 'sell my shares', 'stop my SIP', 'market fall', 'crash'],
   },
 
+  // Switched off 2026-10-19 at the user's request: Graham, Bogle, Malkiel, Housel.
+  // To bring a book back, move its entries out of this comment and set its
+  // `enabled: true` in KNOWLEDGE_BOOKS.
+  /*
   // ── Benjamin Graham, The Intelligent Investor ──────────────────────
   {
     id: 'graham-mr-market',
@@ -523,6 +552,8 @@ export const KNOWLEDGE_LIBRARY: readonly KnowledgeEntry[] = [
     keywords: ['best days', 'miss rally', 'few stocks', 'stay invested', 'timing'],
   },
 
+  */
+
   // ── Monika Halan, Let's Talk Money ─────────────────────────────────
   {
     id: 'halan-money-box',
@@ -617,3 +648,6 @@ export const KNOWLEDGE_LIBRARY: readonly KnowledgeEntry[] = [
     keywords: ['house', 'property', 'real estate', 'buy home', 'second home', 'plot', 'rent vs buy'],
   },
 ];
+
+/** Everything the adviser can search: the core reading plus the NISM X-A/X-B syllabus. */
+export const KNOWLEDGE_LIBRARY: readonly KnowledgeEntry[] = [...CORE_LIBRARY, ...NISM_LIBRARY];

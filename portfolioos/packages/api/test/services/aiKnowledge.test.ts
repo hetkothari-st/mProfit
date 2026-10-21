@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { KNOWLEDGE_BOOKS, KNOWLEDGE_LIBRARY } from '../../src/ai/knowledge/library.js';
+import { KNOWLEDGE_BOOKS, KNOWLEDGE_LIBRARY, type KnowledgeEntry } from '../../src/ai/knowledge/library.js';
 import { knowledgeForPrompt, searchKnowledge } from '../../src/ai/knowledge/search.js';
 
 // The adviser's reading: principles from five classic books, in our own words
@@ -12,7 +12,9 @@ describe('knowledge library', () => {
     expect(new Set(ids).size).toBe(ids.length);
     for (const e of KNOWLEDGE_LIBRARY) {
       expect(e.principle.length, e.id).toBeGreaterThan(40);
-      expect(e.principle.length, e.id).toBeLessThanOrEqual(700);
+      // 900: NISM entries pack a rule with its numbers; inPractice shares the cap so it is no loophole.
+      expect(e.principle.length, e.id).toBeLessThanOrEqual(900);
+      expect((e.inPractice ?? "").length, e.id).toBeLessThanOrEqual(500);
       expect(e.keywords.length, e.id).toBeGreaterThan(0);
       if (e.source.kind === 'BOOK') {
         const book = e.source.book;
@@ -21,11 +23,20 @@ describe('knowledge library', () => {
     }
   });
 
-  it('draws on all five books, substantially', () => {
-    expect(KNOWLEDGE_BOOKS).toHaveLength(5);
-    for (const b of KNOWLEDGE_BOOKS) {
-      const n = KNOWLEDGE_LIBRARY.filter((e) => e.source.kind === 'BOOK' && e.source.book === b.title).length;
-      expect(n, b.title).toBeGreaterThanOrEqual(8);
+  it("keeps only the enabled books: Let's Talk Money and the framework (four classics switched off 2026-10-19)", () => {
+    const enabled = KNOWLEDGE_BOOKS.filter((b) => b.enabled).map((b) => b.title);
+    expect(enabled).toEqual(["Let's Talk Money"]);
+    for (const e of KNOWLEDGE_LIBRARY) {
+      if (e.source.kind === 'BOOK') expect(enabled, e.id).toContain(e.source.book);
+    }
+    expect(KNOWLEDGE_LIBRARY.filter((e) => e.source.kind === 'BOOK').length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('dates every NISM entry that states a rate or an amount', () => {
+    for (const e of KNOWLEDGE_LIBRARY) {
+      if (e.source.kind !== 'NISM') continue;
+      const text = `${e.principle} ${e.inPractice ?? ''}`;
+      if (/%|₹|Rs\.?\s?\d/.test(text)) expect(e.asOf, e.id).toBeTruthy();
     }
   });
 
@@ -64,7 +75,22 @@ describe('searchKnowledge', () => {
 
   it('formats hits for the prompt with their credit, and nothing when empty', () => {
     const text = knowledgeForPrompt(searchKnowledge('index fund costs', { limit: 1 }));
-    expect(text).toMatch(/Bogle|Malkiel|Graham|Housel|Halan|framework/i);
+    expect(text).toMatch(/Halan|framework|NISM/i);
     expect(knowledgeForPrompt([])).toBe('');
+  });
+});
+
+describe('NISM credit', () => {
+  it('credits a NISM entry with its series, edition and chapter', () => {
+    const entry: KnowledgeEntry = {
+      id: 'xb-08-test',
+      title: 'Test entry',
+      principle: 'A test principle that is long enough to pass the library length rule easily.',
+      source: { kind: 'NISM', series: 'X-B', edition: '2025-12', chapter: 8, chapterTitle: 'Capital Gains' },
+      asOf: '2025-12',
+      topics: ['tax'],
+      keywords: ['test'],
+    };
+    expect(knowledgeForPrompt([{ entry, score: 1 }])).toContain('NISM Series X-B (Dec 2025), ch. 8');
   });
 });
