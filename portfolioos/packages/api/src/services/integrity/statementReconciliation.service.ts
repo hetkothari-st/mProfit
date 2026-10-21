@@ -11,6 +11,9 @@
  * under the PAN, however the user has split those folios across portfolios.
  * Transactions dated after the statement are excluded — they are not missing
  * from it, they happened later.
+ *
+ * Covers registrar CAS (CAMS/KFintech) and depository statements (NSDL/CDSL),
+ * whose "holdings as on" table is the same kind of closing figure.
  */
 
 import { Decimal } from 'decimal.js';
@@ -60,12 +63,58 @@ export interface UnitsGap {
 }
 
 /**
+ * A transaction with the ISIN of the stock or fund it points at: a trade from
+ * a contract note often carries only the stock, not the ISIN, and must still
+ * count against a statement that lists the ISIN.
+ */
+export type IsinTransaction = Transaction & {
+  stock?: { isin: string | null } | null;
+  fund?: { isin: string | null } | null;
+};
+
+const isinOf = (tx: IsinTransaction): string | null => tx.isin ?? tx.stock?.isin ?? tx.fund?.isin ?? null;
+
+/** Every transaction of the user touching these ISINs, directly or through its stock or fund. */
+export async function fetchIsinTransactions(userId: string, isins: string[]): Promise<IsinTransaction[]> {
+  return prisma.transaction.findMany({
+    where: {
+      portfolio: { userId },
+      OR: [{ isin: { in: isins } }, { stock: { isin: { in: isins } } }, { fund: { isin: { in: isins } } }],
+    },
+    include: { stock: { select: { isin: true } }, fund: { select: { isin: true } } },
+    orderBy: { tradeDate: 'asc' },
+  });
+}
+
+/** Pure: the units `txs` add up to per ISIN at the end of `asOf` (YYYY-MM-DD). */
+export function unitsHeldAt(txs: IsinTransaction[], isins: ReadonlySet<string>, asOf: string): Map<string, Decimal> {
+  const cutoff = new Date(`${asOf}T23:59:59.999Z`).getTime();
+  // Replay per (portfolio, asset) — the same unit a holding is — then sum.
+  const groups = new Map<string, Transaction[]>();
+  for (const tx of txs) {
+    const isin = isinOf(tx);
+    if (!isin || !isins.has(isin)) continue;
+    if (tx.tradeDate.getTime() > cutoff) continue;
+    const key = `${isin}|${tx.portfolioId}|${tx.assetKey ?? assetKeyFromTransaction(tx)}`;
+    const list = groups.get(key);
+    if (list) list.push(tx);
+    else groups.set(key, [tx]);
+  }
+  const out = new Map<string, Decimal>();
+  for (const [key, group] of groups) {
+    const isin = key.slice(0, key.indexOf('|'));
+    const qty = Decimal.max(replayTransactions(group).quantity, 0);
+    out.set(isin, (out.get(isin) ?? new Decimal(0)).plus(qty));
+  }
+  return out;
+}
+
+/**
  * Pure: per ISIN, statement units vs the units `txs` add up to at the end of
  * `snapshot.asOf`. Folios of the same scheme are summed. Returns only the
  * schemes that disagree.
  */
-export function reconcileSnapshot(snapshot: StatementSnapshot, txs: Transaction[]): UnitsGap[] {
-  const cutoff = new Date(`${snapshot.asOf}T23:59:59.999Z`).getTime();
+export function reconcileSnapshot(snapshot: StatementSnapshot, txs: IsinTransaction[]): UnitsGap[] {
 
   const statementByIsin = new Map<string, { units: Decimal; schemeName: string | null }>();
   for (const h of snapshot.holdings) {
@@ -76,22 +125,7 @@ export function reconcileSnapshot(snapshot: StatementSnapshot, txs: Transaction[
     });
   }
 
-  // Replay per (portfolio, asset) — the same unit a holding is — then sum.
-  const groups = new Map<string, Transaction[]>();
-  for (const tx of txs) {
-    if (!tx.isin || !statementByIsin.has(tx.isin)) continue;
-    if (tx.tradeDate.getTime() > cutoff) continue;
-    const key = `${tx.isin}|${tx.portfolioId}|${tx.assetKey ?? assetKeyFromTransaction(tx)}`;
-    const list = groups.get(key);
-    if (list) list.push(tx);
-    else groups.set(key, [tx]);
-  }
-  const appByIsin = new Map<string, Decimal>();
-  for (const [key, group] of groups) {
-    const isin = key.slice(0, key.indexOf('|'));
-    const qty = Decimal.max(replayTransactions(group).quantity, 0);
-    appByIsin.set(isin, (appByIsin.get(isin) ?? new Decimal(0)).plus(qty));
-  }
+  const appByIsin = unitsHeldAt(txs, new Set(statementByIsin.keys()), snapshot.asOf);
 
   const gaps: UnitsGap[] = [];
   for (const [isin, s] of statementByIsin) {
@@ -137,10 +171,7 @@ export async function findStatementMismatches(userId: string): Promise<Statement
   }
   if (latest.size === 0) return [];
 
-  const txs = await prisma.transaction.findMany({
-    where: { portfolio: { userId }, isin: { in: [...latest.keys()] } },
-    orderBy: { tradeDate: 'asc' },
-  });
+  const txs = await fetchIsinTransactions(userId, [...latest.keys()]);
 
   // Reconcile each statement once, restricted to the schemes it is newest for.
   const byJob = new Map<string, { job: (typeof jobs)[number]; snapshot: StatementSnapshot; isins: Set<string> }>();

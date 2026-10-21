@@ -139,13 +139,14 @@ describe('parser golden fixtures', () => {
     for (const file of listFixtures(dir, /\.txt$/i)) {
       it(`nsdl-cdsl :: ${file}`, () => {
         const text = readFileSync(join(dir, file), 'utf8');
-        const { transactions, warnings, depository, isTxnOnly } =
+        const { transactions, warnings, depository, isTxnOnly, statement } =
           parseNsdlCdslText(text);
         expect({
           depository,
           isTxnOnly,
           transactions,
           warnings: normaliseWarnings(warnings),
+          statement: statement ?? null,
         }).toMatchSnapshot();
       });
     }

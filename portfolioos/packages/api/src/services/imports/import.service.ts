@@ -5,11 +5,17 @@ import { logger } from '../../lib/logger.js';
 import { NotFoundError, ForbiddenError } from '../../lib/errors.js';
 import { runFileImportAdapter } from '../../ingestion/fileImport/runner.js';
 import { projectTransactionEvent } from '../../ingestion/fileImport/projection.js';
+import type { TransactionEvent } from '../../ingestion/fileImport/types.js';
 import { createTransaction } from '../holdings/transaction.service.js';
 import { hashBytes, positionalHash } from './sourceHash.js';
 import { enqueueBounded, getImportQueue } from '../../lib/queue.js';
 import { writeIngestionFailure } from './ingestionFailures.service.js';
-import { parseStatementSnapshot } from '../integrity/statementReconciliation.service.js';
+import { Decimal } from 'decimal.js';
+import {
+  fetchIsinTransactions,
+  parseStatementSnapshot,
+  unitsHeldAt,
+} from '../integrity/statementReconciliation.service.js';
 import { runAsUser } from '../../lib/requestContext.js';
 import { hookAutoLinkImportedPremium } from '../insurance/insuranceExtras.service.js';
 import { dropLocalFile, ensureLocalFile, persistLocalFile } from '../../lib/fileStore.js';
@@ -31,6 +37,32 @@ export interface CreateImportJobInput {
   gmailDocId?: string | null;
   /** A class-limited CA's grant: the asset classes this job may write. */
   caAllowedAssetClasses?: AssetClass[] | null;
+}
+
+
+/** A depository statement's closing-holding row (nsdlCdslCas.parser), not a trade. */
+function isStatementHolding(event: TransactionEvent): boolean {
+  const narration = event.metadata.narration;
+  return (
+    event.metadata.transactionType === 'OPENING_BALANCE' &&
+    typeof narration === 'string' &&
+    narration.startsWith('Opening holding from') &&
+    Boolean(event.instrumentIsin)
+  );
+}
+
+/**
+ * The units a statement holding adds: what the statement says was held on its
+ * date, less what the user's transactions (across all portfolios — a
+ * statement covers the whole PAN) already add up to on that date. Null when
+ * nothing is missing.
+ */
+async function statementHoldingShortfall(userId: string, event: TransactionEvent): Promise<string | null> {
+  const isin = event.instrumentIsin!;
+  const held = unitsHeldAt(await fetchIsinTransactions(userId, [isin]), new Set([isin]), event.eventDate).get(isin);
+  const gap = new Decimal(event.quantity ?? '0').minus(held ?? 0);
+  // Statements print units to 3 places.
+  return gap.greaterThan('0.001') ? gap.toString() : null;
 }
 
 export async function createImportJob(input: CreateImportJobInput) {
@@ -347,7 +379,15 @@ async function processImportJobFromDisk(
     ? new Set(job.caAllowedAssetClasses as string[])
     : null;
 
-  for (const [i, event] of events.entries()) {
+  // A depository statement's "holdings as on" rows go last: by then this
+  // file's own trades are in, and each holding adds only the units the
+  // user's transactions don't already account for.
+  const order = [
+    ...[...events.keys()].filter((i) => !isStatementHolding(events[i]!)),
+    ...[...events.keys()].filter((i) => isStatementHolding(events[i]!)),
+  ];
+  for (const i of order) {
+    let event = events[i]!;
     // A model-read row whose figures are not in the document is not imported:
     // it becomes a failed row with the reason, for a person to check.
     const unverified = event.metadata.verificationProblems;
@@ -376,6 +416,15 @@ async function processImportJobFromDisk(
           });
           continue;
         }
+      }
+      if (isStatementHolding(event)) {
+        const shortfall = await statementHoldingShortfall(job.userId, event);
+        if (!shortfall) {
+          // Already held, by the user's trades or an earlier statement.
+          skipped++;
+          continue;
+        }
+        event = { ...event, quantity: shortfall };
       }
       // Per §6.2 preference order: adapter-supplied hash → broker natural
       // key (derived inside createTransaction) → file+row positional
