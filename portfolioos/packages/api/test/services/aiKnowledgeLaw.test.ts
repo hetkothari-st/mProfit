@@ -138,6 +138,10 @@ describe('Income-tax Act 2025 retrieval', () => {
     ['80C limit and what investments qualify', 'ita25-deductions-investments'],
     ['health insurance premium deduction for parents', 'ita25-deductions-health'],
     ['savings account interest deduction for senior citizens', 'ita25-deduction-interest'],
+    ['how are F&O losses treated and can I set them off against salary', 'ita25-fo-intraday'],
+    ['do I need a tax audit for my trading turnover', 'ita25-audit-presumptive'],
+    ['how is crypto taxed in India', 'ita25-crypto'],
+    ['advance tax due dates and instalments', 'ita25-advance-tax'],
   ];
   for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
 });

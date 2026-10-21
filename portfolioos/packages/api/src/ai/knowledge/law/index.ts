@@ -9,5 +9,6 @@ import { FA2026_CHANGES } from './fa2026-changes.js';
 import { ITA25_BASICS } from './ita25-basics.js';
 import { ITA25_CAPITAL_GAINS } from './ita25-capital-gains.js';
 import { ITA25_INCOME } from './ita25-income.js';
+import { ITA25_TRADING } from './ita25-trading.js';
 
-export const LAW_LIBRARY: readonly KnowledgeEntry[] = [...FA2026_CHANGES, ...ITA25_BASICS, ...ITA25_CAPITAL_GAINS, ...ITA25_INCOME];
+export const LAW_LIBRARY: readonly KnowledgeEntry[] = [...FA2026_CHANGES, ...ITA25_BASICS, ...ITA25_CAPITAL_GAINS, ...ITA25_INCOME, ...ITA25_TRADING];
