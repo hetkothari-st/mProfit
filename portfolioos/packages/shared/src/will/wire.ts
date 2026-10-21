@@ -1,5 +1,5 @@
 import type { WillEstate, WillPayload, WillRelationship } from './schema.js';
-import type { WillBlock } from './ast.js';
+import type { WillBlockV2 } from './astV2.js';
 
 export type WillSeverity = 'BLOCKER' | 'WARNING' | 'INFO';
 
@@ -106,8 +106,8 @@ export interface WillPreviewWire {
   templateId: string;
   templateVersion: number;
   generatedOn: string;
-  summary: WillBlock[];
-  document: WillBlock[];
+  summary: WillBlockV2[];
+  document: WillBlockV2[];
 }
 
 export interface WillGenerateResultWire {

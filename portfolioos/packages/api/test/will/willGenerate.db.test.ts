@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { renderWillText, selectWillTemplate, WILL_SECTIONS, willSectionData } from '@everypaisa/shared';
+import { renderWillTextV2, selectWillTemplate, WILL_SECTIONS, willSectionData } from '@everypaisa/shared';
 import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
@@ -54,9 +54,9 @@ describe('preview', () => {
   it('renders the summary and the will from the stored draft', async () => {
     const d = await validDraft(b);
     const pv = await b.runAs(() => previewWill(b.userId, d.id, deps));
-    expect(pv).toMatchObject({ templateId: 'isa-hindu', templateVersion: 1, generatedOn: TODAY });
-    expect(renderWillText(pv.document)).toContain('LAST WILL AND TESTAMENT');
-    expect(renderWillText(pv.summary)).toContain('will carry out your will as executor');
+    expect(pv).toMatchObject({ templateId: 'isa-hindu', templateVersion: 2, generatedOn: TODAY });
+    expect(renderWillTextV2(pv.document)).toContain('LAST WILL AND TESTAMENT');
+    expect(renderWillTextV2(pv.summary)).toContain('will carry out your will as executor');
     await runAsSystem(() => prisma.will.deleteMany({ where: { userId: b.userId } }));
   });
 
@@ -122,13 +122,17 @@ describe('generate', () => {
 
   it('creates the version, the sealed snapshot and the PDF document', async () => {
     const draft = await a.runAs(() => prisma.will.findUniqueOrThrow({ where: { id: firstWillId } }));
-    const res = await a.runAs(() => generateWill(a.userId, firstWillId, { revision: draft.revision, acknowledge: true, generatedOn: TODAY }, deps));
+    let seen: Parameters<typeof renderWillPdf>[0] | null = null;
+    const capture = { ...deps, renderPdf: async (input: Parameters<typeof renderWillPdf>[0]) => { seen = input; return renderWillPdf(input); } };
+    const res = await a.runAs(() => generateWill(a.userId, firstWillId, { revision: draft.revision, acknowledge: true, generatedOn: TODAY }, capture));
+    // Every page after the first names the testator, so a loose page can be matched to its will.
+    expect(seen!.runningHead).toBe('Last Will and Testament of Ramesh Kumar Verma');
     firstVersionId = res.version.id;
     expect(res.version).toMatchObject({ willId: firstWillId, versionNo: 1, status: 'GENERATED', generatedOn: TODAY, templateId: 'isa-hindu' });
 
     const p = validWillPayload();
     const v = await a.runAs(() => prisma.willVersion.findUniqueOrThrow({ where: { id: firstVersionId } }));
-    expect(v.textHash).toBe(sha256Hex(renderWillText(selectWillTemplate(p).render(p, { generatedOn: TODAY }))));
+    expect(v.textHash).toBe(sha256Hex(renderWillTextV2(selectWillTemplate(p).render(p, { generatedOn: TODAY }))));
     expect(v.inputHash).toBe(sha256Hex(canonicalJson(p)));
     expect(v.findingsJson).toEqual([{ ruleId: 'LEGAL_REVIEW_RECOMMENDED', severity: 'INFO' }]);
     expect(Buffer.from(v.snapshotSealed).includes(Buffer.from('Ramesh'))).toBe(false);

@@ -24,10 +24,12 @@ describe('will template lock', () => {
     expect(files).toContain('common.v1.ts');
     expect(files).toContain('summary.v1.ts');
     expect(files).toContain('regime.v1.ts');
+    // v2 is current; the v1 files stay locked because generated wills were printed from them.
+    for (const f of ['common.v2.ts', 'summary.v2.ts', 'isaHindu.v1.ts', 'isaGeneral.v1.ts', 'isaHindu.v2.ts', 'isaGeneral.v2.ts']) expect(files).toContain(f);
   });
 
-  it('also locks the helpers the will prints through (amount in words, the block model)', () => {
-    expect(WILL_LOCKED_EXTRA_FILES).toEqual(['amountInWords.ts', 'will/ast.ts']);
+  it('also locks the helpers the will prints through (amount in words, both block models)', () => {
+    expect(WILL_LOCKED_EXTRA_FILES).toEqual(['amountInWords.ts', 'will/ast.ts', 'will/astV2.ts']);
     for (const f of WILL_LOCKED_EXTRA_FILES) expect(lock()[f]).toMatch(/^[0-9a-f]{64}$/);
   });
 });

@@ -42,6 +42,7 @@ export function validWillPayload(): WillPayload {
       maritalStatus: 'MARRIED',
       hasChildren: true,
       hasDependents: false,
+      parentage: { relation: null, name: '' },
     },
     people: [
       person({ id: 'p-spouse', name: 'Sunita Verma', relationship: 'SPOUSE', dob: '1972-08-01' }),
@@ -65,6 +66,7 @@ export function validWillPayload(): WillPayload {
       ],
       specificGifts: [{ itemId: 'holdings:pf1:EQUITY', personId: 'p-son', sharePct: '100' }],
       fixedGifts: [{ personId: 'p-trust', amount: '50000' }],
+      survivalDays: 30,
     },
     instructions: { text: 'I wish my books to go to the Pune public library.' },
   };

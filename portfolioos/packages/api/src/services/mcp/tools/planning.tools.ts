@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { renderWillSummary, renderWillText, type WillPayload } from '@everypaisa/shared';
+import { renderWillSummary, renderWillTextV2, willPayloadSchema } from '@everypaisa/shared';
 import { prisma } from '../../../lib/prisma.js';
 import { logger } from '../../../lib/logger.js';
 import { openForUser } from '../../../lib/userKeys.js';
@@ -92,8 +92,9 @@ const getWillSummary: ConnectorTool<Record<string, never>> = {
       try {
         const v = await prisma.willVersion.findUnique({ where: { id: live.versionId } });
         if (v) {
-          const payload = JSON.parse((await openForUser(ctx.userId, `willversion:${v.id}`, Buffer.from(v.snapshotSealed))).toString('utf8')) as WillPayload;
-          summary = renderWillText(renderWillSummary(payload, { generatedOn: v.generatedOn.toISOString().slice(0, 10) }));
+          // Parsed, not cast: a snapshot saved before a field existed gets that field's default (e.g. 30-day survival).
+          const payload = willPayloadSchema.parse(JSON.parse((await openForUser(ctx.userId, `willversion:${v.id}`, Buffer.from(v.snapshotSealed))).toString('utf8')));
+          summary = renderWillTextV2(renderWillSummary(payload, { generatedOn: v.generatedOn.toISOString().slice(0, 10) }));
         }
       } catch (err) {
         // The status answer still helps without the summary (e.g. keys unavailable).

@@ -90,6 +90,7 @@ export function removeWillPerson(p: WillPayload, personId: string): WillPayload 
       altGuardianId: keep(p.roles.altGuardianId),
     },
     allocation: {
+      ...p.allocation,
       residuary: p.allocation.residuary.filter((r) => r.personId !== personId),
       specificGifts: p.allocation.specificGifts.filter((g) => g.personId !== personId),
       fixedGifts: p.allocation.fixedGifts.filter((g) => g.personId !== personId),
