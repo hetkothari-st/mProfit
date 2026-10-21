@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   unlockDocument: vi.fn(),
   dismissDocument: vi.fn(),
   approveDocument: vi.fn(),
+  answerRenewal: vi.fn(),
 }));
 vi.mock('@/api/insurance/insurance.api', () => ({ insuranceApi: api }));
 
@@ -31,6 +32,7 @@ const doc = (over: Partial<InsuranceDocumentDTO>): InsuranceDocumentDTO => ({
   note: null,
   policyId: null,
   policyNumberLast4: null,
+  renewal: null,
   extract: null,
   ...over,
 });
@@ -101,5 +103,28 @@ describe('InsuranceDocumentsCard', () => {
     expect(screen.getByRole('link', { name: 'Filed in Documents under the policy holder' }).getAttribute('href')).toBe(
       '/documents',
     );
+  });
+
+  it('shows a renewal notice’s changes and applies them on confirmation', async () => {
+    api.listDocuments.mockResolvedValue([
+      doc({
+        id: 'r1',
+        status: 'FILED',
+        docKind: 'RENEWAL_NOTICE',
+        policyId: 'p1',
+        errorMessage: null,
+        renewal: [
+          { field: 'premiumAmount', label: 'Premium', from: '₹24,000.00', to: '₹26,000.00' },
+          { field: 'maturityDate', label: 'Cover until', from: '9 Apr 2025', to: '9 Apr 2026' },
+        ],
+      }),
+    ]);
+    api.answerRenewal.mockResolvedValue({ applied: ['premiumAmount', 'maturityDate'] });
+    renderCard();
+
+    expect(await screen.findByText('Renewals to confirm (1)')).toBeTruthy();
+    expect(screen.getByText('₹26,000.00')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Update the policy' }));
+    await waitFor(() => expect(api.answerRenewal).toHaveBeenCalledWith('r1', true));
   });
 });

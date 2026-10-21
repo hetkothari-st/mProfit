@@ -121,6 +121,16 @@ export function InsuranceDocumentsCard() {
   const [adding, setAdding] = useState<InsuranceDocumentDTO | null>(null);
   const q = useQuery({ queryKey: ['insurance-documents'], queryFn: () => insuranceApi.listDocuments() });
 
+  const answer = useMutation({
+    mutationFn: ({ id, apply }: { id: string; apply: boolean }) => insuranceApi.answerRenewal(id, apply),
+    onSuccess: (_r, v) => {
+      toast.success(v.apply ? 'Policy updated from the renewal notice' : 'Renewal notice ignored');
+      void qc.invalidateQueries({ queryKey: ['insurance-documents'] });
+      void qc.invalidateQueries({ queryKey: ['insurance-policies'] });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Could not answer the renewal notice')),
+  });
+
   const dismiss = useMutation({
     mutationFn: (id: string) => insuranceApi.dismissDocument(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['insurance-documents'] }),
@@ -131,6 +141,7 @@ export function InsuranceDocumentsCard() {
   if (docs.length === 0) return null;
 
   const suggested = docs.filter((d) => d.status === 'SUGGESTED');
+  const renewals = docs.filter((d) => d.renewal && d.renewal.length > 0);
   const review = docs.filter((d) => d.status === 'NEEDS_REVIEW');
   const locked = new Map<string, InsuranceDocumentDTO[]>();
   for (const d of docs.filter((x) => x.status === 'NEEDS_PASSWORD')) {
@@ -181,6 +192,49 @@ export function InsuranceDocumentsCard() {
                       onClick={() => dismiss.mutate(d.id)}
                     >
                       Not mine
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {renewals.length > 0 && (
+          <section>
+            <h3 className="mb-2 text-sm font-medium">Renewals to confirm ({renewals.length})</h3>
+            <ul className="space-y-2">
+              {renewals.map((d) => (
+                <li key={d.id} className="rounded-md border p-3 text-sm">
+                  <div className="truncate font-medium">
+                    {d.policyId ? (
+                      <Link to={`/insurance/${d.policyId}`} className="hover:underline">
+                        {title(d)}
+                      </Link>
+                    ) : (
+                      title(d)
+                    )}
+                  </div>
+                  <div className="text-muted-foreground">{subtitle(d)}</div>
+                  <ul className="mt-2 space-y-0.5">
+                    {d.renewal!.map((c) => (
+                      <li key={c.field}>
+                        {c.label}: {c.from ? <span className="text-muted-foreground line-through">{c.from}</span> : null}{' '}
+                        <span className="font-medium">{c.to}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-2 flex gap-2">
+                    <Button size="sm" disabled={answer.isPending} onClick={() => answer.mutate({ id: d.id, apply: true })}>
+                      Update the policy
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={answer.isPending}
+                      onClick={() => answer.mutate({ id: d.id, apply: false })}
+                    >
+                      Ignore
                     </Button>
                   </div>
                 </li>

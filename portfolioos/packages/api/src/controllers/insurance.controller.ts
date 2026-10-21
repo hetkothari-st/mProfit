@@ -35,6 +35,7 @@ import {
   matchInsuranceDocuments,
 } from '../services/insurance/insuranceDocMatching.js';
 import { unlockInsuranceDocument } from '../services/insurance/insuranceDocPipeline.js';
+import { answerRenewal } from '../services/insurance/insuranceRenewal.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const moneyString = z.string().regex(/^\d+(\.\d+)?$/, 'Expected positive decimal string');
@@ -289,4 +290,11 @@ export async function unlockInsuranceDocumentHandler(req: Request, res: Response
   if (!req.user) throw new UnauthorizedError();
   const { password, remember } = unlockSchema.parse(req.body ?? {});
   ok(res, await unlockInsuranceDocument(req.user.id, req.params['docId']!, password, remember));
+}
+
+/** Apply a renewal notice's proposed changes to its policy, or ignore them. */
+export async function answerRenewalHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const { apply } = z.object({ apply: z.boolean() }).parse(req.body ?? {});
+  ok(res, await answerRenewal(req.user.id, req.params['docId']!, apply));
 }

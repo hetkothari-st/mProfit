@@ -1539,6 +1539,9 @@ model InsuranceDocument {
   policyNumberHash String?
   /// What matching did with it, in words ("Premium of ₹12,345 recorded").
   note         String?
+  /// Renewal notices: the user's answer to the changes it proposed —
+  /// APPLIED or IGNORED (services/insurance/insuranceRenewal).
+  renewalAction String?
   /// Fields the document does not actually contain; non-empty = review.
   problems     Json?
   errorMessage String?

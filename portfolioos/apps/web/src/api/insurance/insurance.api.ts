@@ -230,6 +230,8 @@ export interface InsuranceDocumentDTO {
   note: string | null;
   policyId: string | null;
   policyNumberLast4: string | null;
+  /** A renewal notice's proposed policy changes, while waiting for an answer. */
+  renewal: { field: string; label: string; from: string | null; to: string }[] | null;
   extract: {
     insurer: string | null;
     policy_type: string | null;
@@ -368,6 +370,14 @@ export const insuranceApi = {
     const { data } = await api.post<ApiResponse<{ unlocked: number }>>(
       `/api/insurance/documents/${docId}/password`,
       { password, remember },
+    );
+    return unwrap(data);
+  },
+  /** Apply a renewal notice's proposed changes to its policy, or ignore them. */
+  async answerRenewal(docId: string, apply: boolean): Promise<{ applied: string[] }> {
+    const { data } = await api.post<ApiResponse<{ applied: string[] }>>(
+      `/api/insurance/documents/${docId}/renewal`,
+      { apply },
     );
     return unwrap(data);
   },
