@@ -22,6 +22,7 @@ import {
   listInsuranceDocumentsHandler,
   approveInsuranceDocumentHandler,
   dismissInsuranceDocumentHandler,
+  unlockInsuranceDocumentHandler,
 } from '../controllers/insurance.controller.js';
 import { getCoverageHandler } from '../controllers/insuranceCoverage.controller.js';
 import {
@@ -72,6 +73,8 @@ insuranceRouter.post('/gmail-fetch/:mailboxId/scan', asyncHandler(scanInsuranceN
 insuranceRouter.get('/documents', asyncHandler(listInsuranceDocumentsHandler));
 insuranceRouter.post('/documents/:docId/approve', asyncHandler(approveInsuranceDocumentHandler));
 insuranceRouter.post('/documents/:docId/dismiss', asyncHandler(dismissInsuranceDocumentHandler));
+// Rate-limited like PII endpoints: a password box is a guessing surface.
+insuranceRouter.post('/documents/:docId/password', piiLimiter, asyncHandler(unlockInsuranceDocumentHandler));
 
 // Manual trigger for renewal alerts (useful for testing §9.4)
 insuranceRouter.post('/alerts/trigger', asyncHandler(triggerRenewalAlertsHandler));

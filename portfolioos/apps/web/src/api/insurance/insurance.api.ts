@@ -363,6 +363,14 @@ export const insuranceApi = {
     );
     return unwrap(data);
   },
+  /** Open a locked PDF; the password is tried on every other locked one too. */
+  async unlockDocument(docId: string, password: string, remember: boolean): Promise<{ unlocked: number }> {
+    const { data } = await api.post<ApiResponse<{ unlocked: number }>>(
+      `/api/insurance/documents/${docId}/password`,
+      { password, remember },
+    );
+    return unwrap(data);
+  },
   async dismissDocument(docId: string): Promise<void> {
     await api.post(`/api/insurance/documents/${docId}/dismiss`);
   },
