@@ -27,6 +27,13 @@ import {
 } from '../services/insurance/insuranceExtras.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
+import { logger } from '../lib/logger.js';
+import {
+  approveSuggestedPolicy,
+  dismissInsuranceDocument,
+  listInsuranceDocuments,
+  matchInsuranceDocuments,
+} from '../services/insurance/insuranceDocMatching.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const moneyString = z.string().regex(/^\d+(\.\d+)?$/, 'Expected positive decimal string');
@@ -144,6 +151,13 @@ export async function createPolicyHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const body = createPolicySchema.parse(req.body);
   const policy = await createPolicy(req.user.id, body);
+  // Documents from Gmail that were waiting for this policy link to it now.
+  // The policy is saved either way; the nightly run retries a failure.
+  try {
+    await matchInsuranceDocuments(req.user.id);
+  } catch (err) {
+    logger.error({ err, userId: req.user.id }, '[insurance] matching documents to a new policy failed');
+  }
   res.status(201);
   ok(res, policy);
 }
@@ -237,4 +251,28 @@ export async function triggerRenewalAlertsHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const created = await generateRenewalAlerts(req.user.id);
   ok(res, { created });
+}
+
+// ── Insurance documents found in Gmail ───────────────────────────────
+
+// The policy number always comes from the document, never the request.
+const approvePolicySchema = createPolicySchema.omit({ policyNumber: true });
+
+export async function listInsuranceDocumentsHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  ok(res, await listInsuranceDocuments(req.user.id));
+}
+
+/** Add the policy a document describes, with the figures the user confirmed. */
+export async function approveInsuranceDocumentHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const body = approvePolicySchema.parse(req.body);
+  res.status(201);
+  ok(res, await approveSuggestedPolicy(req.user.id, req.params['docId']!, body));
+}
+
+export async function dismissInsuranceDocumentHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  await dismissInsuranceDocument(req.user.id, req.params['docId']!);
+  ok(res, null);
 }

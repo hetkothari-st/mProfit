@@ -66,7 +66,7 @@ describe('insurance document verification', () => {
         SCHEDULE,
       ),
     ).toEqual([
-      'policy number 21345679 does not appear in the document',
+      'policy number ending 5679 does not appear in the document',
       'policy holder "Rahul Sharma" does not appear in the document',
       'sum assured 50000000.00 does not appear in the document',
       'next premium due 2027-05-15 does not appear in the document',
@@ -153,11 +153,15 @@ describe('insurance document pipeline', () => {
     const rows = await scope.runAs(() =>
       prisma.insuranceDocument.findMany({ where: { userId: scope.userId }, orderBy: { fileName: 'asc' } }),
     );
+    // Read, then matched: no policy has this number yet, so it is suggested.
     expect(rows.map((r) => [r.gmailDocId, r.status, r.docKind])).toEqual([
-      [docs[0]!.id, 'READ', 'POLICY_DOCUMENT'],
+      [docs[0]!.id, 'SUGGESTED', 'POLICY_DOCUMENT'],
       [docs[1]!.id, 'NEEDS_REVIEW', 'PREMIUM_RECEIPT'],
     ]);
     expect(rows[1]!.problems).toEqual(['premium paid 99999.00 does not appear in the document']);
+    // The reading is stored encrypted, the policy number by fingerprint only.
+    expect(rows[0]!.extract).toBeNull();
+    expect(JSON.stringify(rows)).not.toContain('21345678');
 
     // A second run reads nothing again.
     const again = await scope.runAs(() => processInsuranceDocuments(scope.userId, { callModel }));

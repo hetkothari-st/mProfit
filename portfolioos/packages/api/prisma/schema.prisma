@@ -1530,8 +1530,15 @@ model InsuranceDocument {
   receivedAt   DateTime?            @db.Timestamptz(3)
   docKind      InsuranceDocKind?
   status       InsuranceDocStatus   @default(PENDING)
-  /// The reader's output (ingestion/insurance/insuranceDocReader).
+  /// Legacy plaintext reading — no longer written; sealed into extractEnc.
   extract      Json?
+  /// The reader's output (ingestion/insurance/insuranceDocReader), as
+  /// encrypted JSON: it holds the policy number and the people named.
+  extractEnc   String?
+  /// HMAC fingerprint of the policy number (insurance.service hashPolicyNumber).
+  policyNumberHash String?
+  /// What matching did with it, in words ("Premium of ₹12,345 recorded").
+  note         String?
   /// Fields the document does not actually contain; non-empty = review.
   problems     Json?
   errorMessage String?
@@ -1542,6 +1549,7 @@ model InsuranceDocument {
 
   @@unique([userId, contentHash])
   @@index([userId, status])
+  @@index([userId, policyNumberHash])
 }
 
 enum InsuranceDocKind {
@@ -1561,6 +1569,7 @@ enum InsuranceDocStatus {
   MATCHED
   SUGGESTED
   FILED
+  DISMISSED
 }
 
 enum GmailScanKind {

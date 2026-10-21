@@ -11,6 +11,7 @@ import { apiErrorMessage } from '@/api/client';
 import {
   insuranceApi,
   type CreatePolicyInput,
+  type InsuranceDocumentDTO,
   type InsurancePolicyDTO,
   type UpdatePolicyInput,
 } from '@/api/insurance/insurance.api';
@@ -63,18 +64,42 @@ function formFrom(p: InsurancePolicyDTO | null | undefined): FormState {
   };
 }
 
+/** A new policy as a document found in Gmail describes it, for the user to check. */
+function formFromDocument(d: InsuranceDocumentDTO): FormState {
+  const x = d.extract;
+  const f = formFrom(null);
+  if (!x) return f;
+  return {
+    ...f,
+    insurer: x.insurer ?? '',
+    type: x.policy_type && (POLICY_TYPES as readonly string[]).includes(x.policy_type) ? x.policy_type : f.type,
+    planName: x.plan_name ?? '',
+    policyHolder: x.policy_holder ?? '',
+    sumAssured: x.sum_assured ?? '',
+    premiumAmount: x.premium_amount ?? '',
+    premiumFrequency: x.premium_frequency ?? f.premiumFrequency,
+    startDate: x.start_date ?? '',
+    maturityDate: x.end_date ?? '',
+    nextPremiumDue: x.next_premium_due ?? '',
+  };
+}
+
 export function PolicyFormDialog({
   open,
   onOpenChange,
   initial,
+  fromDocument,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   initial?: InsurancePolicyDTO | null;
+  /** Adding a policy suggested by a document from Gmail. */
+  fromDocument?: InsuranceDocumentDTO | null;
 }) {
   const qc = useQueryClient();
   const isEdit = !!initial;
-  const [form, setForm] = useState<FormState>(() => formFrom(initial));
+  const fromDoc = !isEdit && fromDocument ? fromDocument : null;
+  const [form, setForm] = useState<FormState>(() => (fromDoc ? formFromDocument(fromDoc) : formFrom(initial)));
   const [openedNextDue, setOpenedNextDue] = useState('');
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [catalogId, setCatalogId] = useState<string | null>(null);
@@ -83,13 +108,13 @@ export function PolicyFormDialog({
 
   useEffect(() => {
     if (!open) return;
-    const f = formFrom(initial);
+    const f = fromDoc ? formFromDocument(fromDoc) : formFrom(initial);
     setForm(f);
     setOpenedNextDue(f.nextPremiumDue);
     setErrors({});
     setCatalogId(initial ? inferCatalogId(initial.insurer, initial.planName) : null);
     setPendingFile(null);
-  }, [open, initial]);
+  }, [open, initial, fromDoc]);
 
   function applyCatalogProduct(product: CatalogProduct | null) {
     setCatalogId(product?.id ?? null);
@@ -98,6 +123,11 @@ export function PolicyFormDialog({
 
   const mutation = useMutation({
     mutationFn: async (input: UpdatePolicyInput) => {
+      if (fromDoc) {
+        // validate() has checked every field a new policy needs; the number comes from the document.
+        const r = await insuranceApi.approveDocument(fromDoc.id, input as Omit<CreatePolicyInput, 'policyNumber'>);
+        return { id: r.policyId ?? '' };
+      }
       const policy = isEdit
         ? await insuranceApi.updatePolicy(initial!.id, input)
         : // validate() has checked every field a new policy needs.
@@ -121,6 +151,7 @@ export function PolicyFormDialog({
       qc.invalidateQueries({ queryKey: ['insurance-policies'] });
       qc.invalidateQueries({ queryKey: ['insurance-policy', policy.id] });
       qc.invalidateQueries({ queryKey: ['documents'] });
+      qc.invalidateQueries({ queryKey: ['insurance-documents'] });
       toast.success(isEdit ? 'Policy updated' : 'Policy added');
       onOpenChange(false);
     },
@@ -129,7 +160,7 @@ export function PolicyFormDialog({
   function validate(): boolean {
     const errs: Partial<Record<keyof FormState, string>> = {};
     if (!form.insurer.trim()) errs.insurer = 'Required';
-    if (!isEdit && !form.policyNumber.trim()) errs.policyNumber = 'Required';
+    if (!isEdit && !fromDoc && !form.policyNumber.trim()) errs.policyNumber = 'Required';
     if (!form.policyHolder.trim()) errs.policyHolder = 'Required';
     if (!MONEY.test(form.sumAssured.trim())) errs.sumAssured = 'Enter an amount, like 5000000';
     if (!MONEY.test(form.premiumAmount.trim())) errs.premiumAmount = 'Enter an amount, like 25000';
@@ -173,7 +204,10 @@ export function PolicyFormDialog({
     if (form.policyNumber.trim()) input.policyNumber = form.policyNumber.trim();
     // The next due date also decides which earlier premiums count as settled,
     // so send it only when it was actually changed.
-    if (form.nextPremiumDue && form.nextPremiumDue !== openedNextDue) input.nextPremiumDue = form.nextPremiumDue;
+    // From a document, the date the document gives is new information too.
+    if (form.nextPremiumDue && (form.nextPremiumDue !== openedNextDue || fromDoc)) {
+      input.nextPremiumDue = form.nextPremiumDue;
+    }
     mutation.mutate(input);
   }
 
@@ -192,11 +226,17 @@ export function PolicyFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit policy' : 'Add a policy'}</DialogTitle>
+          <DialogTitle>{isEdit ? 'Edit policy' : fromDoc ? 'Add this policy' : 'Add a policy'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          {!isEdit && (
+          {fromDoc && (
+            <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              Filled in from <span className="font-medium text-foreground">{fromDoc.fileName}</span>. Check each
+              figure against the document before adding.
+            </p>
+          )}
+          {!isEdit && !fromDoc && (
             <div className="space-y-2">
               <Label>Pick the plan (optional)</Label>
               <InsuranceCatalogPicker selectedId={catalogId} onSelect={applyCatalogProduct} />
@@ -221,8 +261,11 @@ export function PolicyFormDialog({
               <Label htmlFor="policy-policyNumber">Policy number</Label>
               <Input
                 autoComplete="off"
+                disabled={Boolean(fromDoc)}
                 placeholder={
-                  isEdit
+                  fromDoc
+                    ? `From the document${fromDoc.policyNumberLast4 ? `, ending ${fromDoc.policyNumberLast4}` : ''}`
+                    : isEdit
                     ? initial?.policyNumberLast4
                       ? `Saved, ending ${initial.policyNumberLast4} — type to replace`
                       : 'Not saved — add it here'
@@ -364,6 +407,7 @@ export function PolicyFormDialog({
             </div>
           )}
 
+          {!fromDoc && (
           <div className="border-t pt-4">
             <Label>Policy document (optional)</Label>
             <p className="mb-2 mt-1 text-xs text-muted-foreground">
@@ -400,6 +444,7 @@ export function PolicyFormDialog({
               </label>
             )}
           </div>
+          )}
         </div>
 
         {mutation.isError && (
