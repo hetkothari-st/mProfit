@@ -196,7 +196,7 @@ const CORE_LIBRARY: readonly KnowledgeEntry[] = [
       'Most long-run damage comes from panic selling, chasing whatever is hot and trading too often, not from picking a slightly worse fund. The adviser’s job is often to slow a decision down.',
     source: FRAMEWORK,
     topics: ['behaviour'],
-    keywords: ['panic', 'fomo', 'overtrading', 'emotion', 'fear', 'greed', 'sell everything', 'everyone is buying'],
+    keywords: ['panic', 'fomo', 'overtrading', 'emotion', 'fear', 'greed', 'sell everything', 'everyone is buying', 'should I sell', 'sell my shares', 'stop my SIP', 'market fall', 'crash'],
   },
 
   // Switched off 2026-10-19 at the user's request: Graham, Bogle, Malkiel, Housel.

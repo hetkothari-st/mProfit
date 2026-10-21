@@ -139,7 +139,7 @@ export const XA_17: readonly KnowledgeEntry[] = [
       'A minor (under 18) cannot contract, so a natural or court-appointed guardian invests; the minor must be the sole holder (no joint holders), the guardian completes KYC and signs, and date-of-birth proof plus proof of the guardian relationship are needed. A change of guardian needs the old guardian’s consent, a court order or a death certificate, plus the new guardian’s KYC. At 18 the minor-turned-major must complete their own KYC, get their signature attested by their bank, reissue the PAN card with their signature, and open a new demat account to receive the holdings. Mutual fund folios freeze for the guardian on the date of majority and all SIPs, STPs and SWPs stop until the change-of-status documents arrive.',
     source: SRC,
     topics: ['operations', 'mutual-funds', 'goals'],
-    keywords: ['minor investment', 'guardian', 'minor turned major', 'minor attains majority', 'SIP stops at 18', 'change of guardian', 'child investment account'],
+    keywords: ['minor investment', 'guardian', 'minor turned major', 'minor attains majority', 'minor SIP mandate at majority', 'change of guardian', 'child investment account'],
   },
   {
     id: 'xa-17-payments',

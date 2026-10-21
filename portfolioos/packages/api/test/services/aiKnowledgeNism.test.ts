@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { searchKnowledge } from '../../src/ai/knowledge/search.js';
+import { knowledgeForTurn, searchKnowledge } from '../../src/ai/knowledge/search.js';
 import { NISM_LIBRARY } from '../../src/ai/knowledge/nism/index.js';
 
 // One natural question per NISM chapter must find that chapter's key entry in
@@ -371,5 +371,47 @@ describe('NISM retrieval, chapter by chapter', () => {
   });
   it('X-B 17: too many funds', () => {
     expect(ids('I own twelve mutual funds, is that too many')).toContain('xb-17-over-under-diversification');
+  });
+});
+
+// Final-review fixes: facts the first draft got wrong.
+describe('NISM corrections', () => {
+  const principle = (id: string) => NISM_LIBRARY.find((e) => e.id === id)?.principle ?? '';
+
+  it('a specified mutual fund holds more than 65% in debt, as s.50AA defines it', () => {
+    for (const id of ['xb-08-holding-periods', 'xb-10-mutual-fund-tax-categories']) {
+      expect(principle(id), id).toMatch(/more than 65%/);
+      expect(principle(id), id).not.toMatch(/65% or more/);
+    }
+  });
+
+  it('the holding-period entry does not call post-2023 debt funds long-term', () => {
+    expect(principle('xb-08-holding-periods')).not.toMatch(/(^|\. )Funds with 35% or less/);
+  });
+
+  it('F&O turnover follows the 2022 ICAI note, which dropped option premium', () => {
+    expect(principle('xb-11-derivatives-tax')).not.toMatch(/plus premium on options sold/);
+  });
+});
+
+// Only passages that clear the injection floor ride along with a chat message.
+describe('knowledge injected into a chat turn', () => {
+  const turn = (q: string) => knowledgeForTurn(q).map((h) => h.entry.id);
+
+  it('a data request with no matching idea injects nothing', () => {
+    expect(turn('show me my holdings')).toEqual([]);
+  });
+  it('SIP panic gets behaviour, not the rules for minors', () => {
+    const got = turn('Markets are down 12%. Should I stop my SIPs?');
+    expect(got).not.toContain('xa-17-minors');
+    expect(got.some((id) => id === 'plan-behaviour' || id === 'xb-17-overtrading-action-bias')).toBe(true);
+  });
+  it('should I sell a stock gets the behaviour framework', () => {
+    expect(turn('Should I sell my Reliance shares?')).toContain('plan-behaviour');
+  });
+  it('core planning questions still find their framework entry', () => {
+    expect(turn('How big should my emergency fund be?')).toContain('plan-emergency-fund');
+    expect(turn('how much term insurance do I need')).toContain('plan-term-cover');
+    expect(turn('what is my XIRR')).toContain('xa-16-twrr-vs-mwrr');
   });
 });

@@ -1,7 +1,7 @@
 /**
  * Finds the library passages that fit a question — BM25 over each entry's
  * title, principle, keywords and topics, in-process. The library is a few
- * dozen curated entries, so this is instant and needs no embeddings service
+ * hundred curated entries, so this is instant and needs no embeddings service
  * or database.
  */
 import { KNOWLEDGE_LIBRARY, type KnowledgeEntry } from './library.js';
@@ -118,6 +118,19 @@ export function searchKnowledge(
     if (score >= minScore) hits.push({ entry: d.entry, score });
   }
   return hits.sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+/** How many passages ride along with a chat message, and the score they must clear. */
+const TURN_LIMIT = 3;
+const TURN_MIN_SCORE = 6;
+
+/**
+ * The passages attached to a chat message. Stricter than a tool search: with a
+ * few hundred entries, weak matches are mostly off-topic and would pull an
+ * answer sideways, so a message with no strong match gets none.
+ */
+export function knowledgeForTurn(message: string): KnowledgeHit[] {
+  return searchKnowledge(message, { limit: TURN_LIMIT, minScore: TURN_MIN_SCORE });
 }
 
 const EDITION_LABEL: Record<string, string> = { '2025-06': 'Jun 2025', '2025-12': 'Dec 2025' };

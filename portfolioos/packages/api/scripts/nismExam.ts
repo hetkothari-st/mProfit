@@ -191,7 +191,7 @@ export async function main(argv: string[]): Promise<number> {
   const { AI_ASSISTANT_SYSTEM_PROMPT } = await import('../src/ai/systemPrompt.js');
   const { ADVISOR_TOOLS, runAdvisorTool } = await import('../src/ai/advisorTools.js');
   const { buildUserTurn, runAdvisorTurn } = await import('../src/ai/claudeClient.js');
-  const { searchKnowledge } = await import('../src/ai/knowledge/search.js');
+  const { knowledgeForTurn } = await import('../src/ai/knowledge/search.js');
 
   if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set.');
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, ...ANTHROPIC_CLIENT_OPTIONS });
@@ -217,7 +217,7 @@ export async function main(argv: string[]): Promise<number> {
         factsText: 'No client facts: this is a general knowledge question.',
         facts: null,
         financialYear,
-        knowledge: searchKnowledge(message, { limit: 3 }),
+        knowledge: knowledgeForTurn(message),
       },
     );
     const turn = runAdvisorTurn({
