@@ -7,5 +7,6 @@
 import type { KnowledgeEntry } from '../library.js';
 import { FA2026_CHANGES } from './fa2026-changes.js';
 import { ITA25_BASICS } from './ita25-basics.js';
+import { ITA25_CAPITAL_GAINS } from './ita25-capital-gains.js';
 
-export const LAW_LIBRARY: readonly KnowledgeEntry[] = [...FA2026_CHANGES, ...ITA25_BASICS];
+export const LAW_LIBRARY: readonly KnowledgeEntry[] = [...FA2026_CHANGES, ...ITA25_BASICS, ...ITA25_CAPITAL_GAINS];

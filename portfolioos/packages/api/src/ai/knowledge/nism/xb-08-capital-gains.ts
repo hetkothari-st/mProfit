@@ -21,6 +21,7 @@ export const XB_08: readonly KnowledgeEntry[] = [
   },
   {
     id: 'xb-08-holding-periods',
+    supersededBy: 'ita25-cg-holding-periods',
     title: 'Short-term versus long-term: holding periods (transfers from 23 July 2024)',
     principle:
       'Most assets turn long-term after more than 24 months. Listed shares, listed securities (bonds, debentures, government securities, units), UTI units, equity-oriented fund units (listed or not), zero-coupon bonds and taxable ULIPs turn long-term after more than 12 months. Unlisted shares, REIT or InvIT units that are unlisted, and property need more than 24 months. Some are always short-term whatever the holding: depreciable assets, market-linked debentures, unlisted bonds and debentures redeemed or sold after 23 July 2024, and "specified mutual funds" bought from April 2023 (funds with more than 65% in debt or money-market instruments). Other funds with 35% or less in domestic equity (gold, international, fund-of-funds), bought from April 2023 and sold from April 2025, are long-term after 12 months (listed) or 24 (unlisted).',
@@ -71,6 +72,7 @@ export const XB_08: readonly KnowledgeEntry[] = [
   },
   {
     id: 'xb-08-rates',
+    supersededBy: 'ita25-cg-equity',
     title: 'Capital gains tax rates (transfers from 23 July 2024)',
     principle:
       'Short-term: listed equity shares, equity-oriented fund units, taxable equity ULIPs and business-trust units on which STT is paid are taxed at 20% (section 111A); all other short-term gains at slab rates. Long-term: 12.5% for all assets; for STT-paid listed equity, equity funds, taxable equity ULIPs and business-trust units the first 1.25 lakh of long-term gains each year is exempt (section 112A). Property bought before 23 July 2024 can instead use 20% with indexation if lower. Debt funds bought from April 2023, market-linked debentures and unlisted bonds are taxed as short-term at slab rates whatever the holding.',

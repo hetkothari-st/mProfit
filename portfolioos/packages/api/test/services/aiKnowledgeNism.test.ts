@@ -274,7 +274,7 @@ describe('NISM retrieval, chapter by chapter', () => {
     expect(ids('no tax up to 12 lakh new regime rebate 87A')).toContain('xb-07-deductions-rebate');
   });
   it('X-B 8: holding period', () => {
-    expect(ids('after how many months is a debt fund or unlisted share long term')).toContain('xb-08-holding-periods');
+    expect(ids('after how many months is a debt fund or unlisted share long term')).toContain('ita25-cg-holding-periods'); // superseded by the Income-tax Act 2025 entry
   });
   it('X-B 8: indexation on property', () => {
     expect(ids('property bought before July 2024 indexation 20% or 12.5%')).toContain('xb-08-indexation');

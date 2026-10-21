@@ -123,6 +123,14 @@ describe('Income-tax Act 2025 retrieval', () => {
     ['old regime tax slabs for a senior citizen', 'ita25-old-regime'],
     ['is income up to 12 lakh tax free under the rebate', 'ita25-rebate'],
     ['what surcharge applies above 2 crore income', 'ita25-surcharge'],
+    ['when does a listed share become long term', 'ita25-cg-holding-periods'],
+    ['how much tax on long term capital gains from equity mutual funds', 'ita25-cg-equity'],
+    ['tax on selling a flat bought in 2015 indexation option', 'ita25-cg-other-assets'],
+    ['debt fund bought after april 2023 capital gains tax', 'ita25-cg-specified-mf'],
+    ['save capital gains tax by buying another house', 'ita25-cg-house-to-house'],
+    ['54EC bonds limit to save capital gains', 'ita25-cg-bonds'],
+    ['sold shares and want to buy a house to save tax', 'ita25-cg-asset-to-house'],
+    ['can I carry forward a long term capital loss', 'ita25-cg-losses'],
   ];
   for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
 });
