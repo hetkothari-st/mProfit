@@ -1,6 +1,6 @@
 import {
-  FOREIGN_LAW_MESSAGE, MARITAL_STATUSES, MUSLIM_LAW_MESSAGE, PERSONAL_LAWS,
-  type MaritalStatus, type PersonalLaw, type WillDetails,
+  FOREIGN_LAW_MESSAGE, MARITAL_STATUSES, MUSLIM_LAW_MESSAGE, PERSONAL_LAWS, WILL_PARENTAGE_RELATIONS,
+  type MaritalStatus, type PersonalLaw, type WillDetails, type WillParentageRelation,
 } from '@everypaisa/shared';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,10 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Field, FindingList, LAW_LABEL, MARITAL_LABEL, Notice } from '../parts';
 import type { WillStepProps } from './types';
+
+const PARENTAGE_LABEL: Record<WillParentageRelation, string> = {
+  SON_OF: 'Son of', DAUGHTER_OF: 'Daughter of', WIFE_OF: 'Wife of', HUSBAND_OF: 'Husband of', CHILD_OF: 'Child of', SPOUSE_OF: 'Spouse of',
+};
 
 const yesNo = (v: boolean | null) => (v === null ? '' : v ? 'yes' : 'no');
 const fromYesNo = (v: string) => (v === '' ? null : v === 'yes');
@@ -24,6 +28,27 @@ export function DetailsStep({ payload, update, findings, today }: WillStepProps)
         <Field id="will-name" label="Full legal name" required hint="As on your PAN or passport.">
           <Input id="will-name" value={d.legalName} maxLength={120} autoComplete="name" onChange={(e) => set({ legalName: e.target.value })} />
         </Field>
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]">
+          <Field id="will-parentage-relation" label="Described as" hint="Optional. Printed after your name.">
+            <Select
+              id="will-parentage-relation"
+              value={d.parentage.relation ?? ''}
+              onChange={(e) => set({ parentage: { ...d.parentage, relation: (e.target.value || null) as WillParentageRelation | null } })}
+            >
+              <option value="">Leave out</option>
+              {WILL_PARENTAGE_RELATIONS.map((r) => <option key={r} value={r}>{PARENTAGE_LABEL[r]}</option>)}
+            </Select>
+          </Field>
+          <Field id="will-parentage-name" label="Father's, mother's or spouse's full name" hint="As on your ID, e.g. Mohan Lal Verma.">
+            <Input
+              id="will-parentage-name"
+              value={d.parentage.name}
+              maxLength={120}
+              disabled={!d.parentage.relation}
+              onChange={(e) => set({ parentage: { ...d.parentage, name: e.target.value } })}
+            />
+          </Field>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field id="will-dob" label="Date of birth" required>
             <Input id="will-dob" type="date" min="1900-01-01" max={today} value={d.dob ?? ''} onChange={(e) => set({ dob: e.target.value || null })} />
@@ -73,7 +98,7 @@ export function DetailsStep({ payload, update, findings, today }: WillStepProps)
       <Card tone="muted" className="h-fit min-w-0 space-y-2 p-4 text-sm">
         <p className="font-medium text-foreground">Why we ask</p>
         <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-          <li>Your name, date of birth and address identify you in the will.</li>
+          <li>Your name, date of birth and address identify you in the will. Wills in India usually also say whose son, daughter or spouse you are.</li>
           <li>Your religion decides which succession law applies.</li>
           <li>Marriage and children decide who your family is in law, and whether a guardian is needed.</li>
         </ul>

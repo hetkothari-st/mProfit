@@ -13,7 +13,9 @@ describe('BlocksView', () => {
     render(<BlocksView testId="doc" blocks={selectWillTemplate(m).render(m, { generatedOn: TODAY })} />);
     const doc = screen.getByTestId('doc');
     expect(screen.getByRole('heading', { name: 'LAST WILL AND TESTAMENT' })).toBeTruthy();
-    expect(doc.textContent).toContain('1. Declaration');
+    expect(doc.textContent).toContain('1. REVOCATION');
+    expect(screen.getAllByRole('table').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('columnheader', { name: 'Passes under' }).length).toBe(1);
     expect(doc.textContent).toContain('Equity - My Portfolio');
     expect(doc.textContent).toContain('Witness 2');
     expect(doc.textContent).toContain('Signature of the Testator');

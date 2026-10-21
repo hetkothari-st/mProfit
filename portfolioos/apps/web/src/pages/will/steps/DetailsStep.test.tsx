@@ -26,6 +26,22 @@ describe('DetailsStep', () => {
     expect(p.update).toHaveBeenLastCalledWith('details', expect.objectContaining({ hasChildren: true }));
   });
 
+  it('saves the optional "son of / wife of" description, and keeps the name field off until a relation is chosen', () => {
+    const p = props();
+    render(<DetailsStep {...p} />);
+    const name = screen.getByLabelText(/father's, mother's or spouse's full name/i) as HTMLInputElement;
+    expect(name.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/described as/i), { target: { value: 'DAUGHTER_OF' } });
+    expect(p.update).toHaveBeenLastCalledWith('details', expect.objectContaining({ parentage: { relation: 'DAUGHTER_OF', name: '' } }));
+    cleanup();
+    const payload = emptyWillPayload();
+    payload.details.parentage = { relation: 'SON_OF', name: '' };
+    const q = props({ payload });
+    render(<DetailsStep {...q} />);
+    fireEvent.change(screen.getByLabelText(/father's, mother's or spouse's full name/i), { target: { value: 'Mohan Lal Verma' } });
+    expect(q.update).toHaveBeenLastCalledWith('details', expect.objectContaining({ parentage: { relation: 'SON_OF', name: 'Mohan Lal Verma' } }));
+  });
+
   it('explains Muslim personal law and other countries', () => {
     const payload = emptyWillPayload();
     payload.details.personalLaw = 'MUSLIM';

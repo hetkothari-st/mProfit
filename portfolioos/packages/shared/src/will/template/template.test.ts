@@ -1,16 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { regimeForLaw, renderWillSummary, selectWillTemplate, WILL_TEMPLATES } from './index.js';
+import { regimeForLaw, selectWillTemplate, WILL_TEMPLATES } from './index.js';
 import { renderWillText } from '../ast.js';
 import { item, person, TODAY, validWillPayload } from '../__tests__/fixtures.js';
 import type { WillPayload } from '../schema.js';
 import { ISA_HINDU_V1 } from './isaHindu.v1.js';
 import { ISA_GENERAL_V1 } from './isaGeneral.v1.js';
+import { SUMMARY_V1 } from './summary.v1.js';
 import { inrFigure, moneyText, pctText } from './common.v1.js';
 import { formatINR } from '../../format/number.js';
 import { formatDateOnly } from '../../format/date.js';
 
 const ctx = { generatedOn: TODAY };
-const docText = (m: WillPayload) => renderWillText(selectWillTemplate(m).render(m, ctx));
+// These tests pin the v1 wording (still locked: wills already generated were printed from it).
+// The current template is tested in templateV2.test.ts.
+const v1For = (m: WillPayload) => (regimeForLaw(m.details.personalLaw) === 'ISA_HINDU' ? ISA_HINDU_V1 : ISA_GENERAL_V1);
+const docText = (m: WillPayload) => renderWillText(v1For(m).render(m, ctx));
+const renderWillSummary = (m: WillPayload, c: typeof ctx) => SUMMARY_V1.render(m, c);
 
 describe('template selection', () => {
   it('maps personal law to a regime', () => {
@@ -34,7 +39,7 @@ describe('template selection', () => {
   });
 
   it('lists one template per regime', () => {
-    expect(WILL_TEMPLATES.map((t) => `${t.id}@${t.version}`)).toEqual(['isa-hindu@1', 'isa-general@1']);
+    expect(WILL_TEMPLATES.map((t) => `${t.id}@${t.version}`)).toEqual(['isa-hindu@2', 'isa-general@2']);
   });
 });
 
@@ -212,7 +217,7 @@ describe('review fixes (round 1)', () => {
   it('frames additional wishes so they cannot override the gifts, user lines kept as paragraphs', () => {
     const m = validWillPayload();
     m.instructions.text = 'First wish.\n\n  Second wish.  ';
-    const blocks = selectWillTemplate(m).render(m, ctx);
+    const blocks = v1For(m).render(m, ctx);
     const wishes = blocks.find((b) => b.t === 'clause' && b.title === 'Additional wishes');
     expect(wishes).toEqual({
       t: 'clause',

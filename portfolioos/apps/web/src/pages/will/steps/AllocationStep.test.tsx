@@ -173,4 +173,15 @@ describe('AllocationStep', () => {
     expect(colours.slice(0, 2).every((c) => /--chart-\d/.test(c ?? ''))).toBe(true);
     expect(screen.getByRole('tablist').className).toContain('flex-wrap');
   });
+
+  it('saves the survival period the user picks, keeping the rest of the allocation', () => {
+    const p = setup();
+    const select = screen.getByLabelText(/how long must someone outlive you/i) as HTMLSelectElement;
+    expect(select.value).toBe('30');
+    expect([...select.options].map((o) => o.value)).toEqual(['0', '7', '15', '30', '60', '90']);
+    fireEvent.change(select, { target: { value: '90' } });
+    const a = lastAllocation(p);
+    expect(a.survivalDays).toBe(90);
+    expect(a.residuary).toEqual(fullPayload().allocation.residuary);
+  });
 });

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  hasWillBlockers, renderWillSummary, renderWillText, runWillRules, selectWillTemplate,
+  hasWillBlockers, oneLineWillText, renderWillSummary, renderWillTextV2, runWillRules, selectWillTemplate,
   WILL_PDF_FOOTER, WILL_RULESET_VERSION,
   type WillFinding, type WillGenerateResultWire, type WillPayload, type WillPreviewWire,
 } from '@everypaisa/shared';
@@ -93,7 +93,10 @@ export async function generateWill(
   const template = selectWillTemplate(payload);
   const blocks = template.render(payload, { generatedOn: today });
   const canonical = canonicalJson(payload);
-  const pdf = await deps.renderPdf({ blocks, generatedOn: today, footer: WILL_PDF_FOOTER });
+  const pdf = await deps.renderPdf({
+    blocks, generatedOn: today, footer: WILL_PDF_FOOTER,
+    runningHead: `Last Will and Testament of ${oneLineWillText(payload.details.legalName)}`,
+  });
   const versionId = randomUUID();
   const snapshotSealed = await sealForUser(userId, `willversion:${versionId}`, Buffer.from(canonical, 'utf8'));
   const doc = await createDocument({
@@ -128,7 +131,7 @@ export async function generateWill(
           templateVersion: template.version,
           rulesetVersion: WILL_RULESET_VERSION,
           inputHash: sha256Hex(canonical),
-          textHash: sha256Hex(renderWillText(blocks)),
+          textHash: sha256Hex(renderWillTextV2(blocks)),
           snapshotSealed,
           documentId: doc.id,
           pdfSha256: sha256Hex(pdf),

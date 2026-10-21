@@ -4,7 +4,7 @@
 
 - `will.service.ts`, `willStore.ts` — the draft and its storage.
 - `estate/` — gathers the user's assets into the estate schedule (one adapter per asset type, then reconciliation).
-- `willGenerate.service.ts`, `willPdf.ts`, `willFonts.ts` — rendering the will document.
+- `willGenerate.service.ts`, `willPdf.ts`, `willFonts.ts` — rendering the will document (template v2: `docs/will/WILL-V2-REDESIGN.md`; sample PDFs: `scripts/willSamplePdfs.ts`).
 - `willReview.service.ts` — periodic "review your will" reminders.
 - `willExecute.service.ts` — recording that the will was signed, and storing the signed copy.
 - `willOrphanSweep.ts` — removes orphaned will documents.

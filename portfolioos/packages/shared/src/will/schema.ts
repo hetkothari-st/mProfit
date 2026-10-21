@@ -35,6 +35,12 @@ export const WILL_OWNERSHIP_TYPES = ['SOLE', 'JOINT', 'NOMINEE_ONLY', 'HUF'] as 
 export type WillOwnershipType = (typeof WILL_OWNERSHIP_TYPES)[number];
 export const WILL_REVIEW_STATES = ['NEEDS_REVIEW', 'CONFIRMED', 'EXCLUDED', 'STALE'] as const;
 export type WillReviewState = (typeof WILL_REVIEW_STATES)[number];
+/** How the testator is described after their name ("son of ..."). The user picks the words; nothing is inferred. */
+export const WILL_PARENTAGE_RELATIONS = ['SON_OF', 'DAUGHTER_OF', 'WIFE_OF', 'HUSBAND_OF', 'CHILD_OF', 'SPOUSE_OF'] as const;
+export type WillParentageRelation = (typeof WILL_PARENTAGE_RELATIONS)[number];
+/** Days a beneficiary must outlive the testator to take a gift (0 = only survive). */
+export const WILL_SURVIVAL_DAYS = [0, 7, 15, 30, 60, 90] as const;
+export const WILL_DEFAULT_SURVIVAL_DAYS = 30;
 export const WILL_SECTIONS = ['details', 'people', 'estate', 'allocation', 'instructions'] as const;
 export type WillSection = (typeof WILL_SECTIONS)[number];
 
@@ -62,6 +68,10 @@ export const willDetailsSchema = z.object({
   maritalStatus: z.enum(MARITAL_STATUSES).nullable().default(null),
   hasChildren: z.boolean().nullable().default(null),
   hasDependents: z.boolean().nullable().default(null),
+  /** Optional "son of / wife of NAME" after the testator's name. Printed only when both are set. */
+  parentage: z
+    .object({ relation: z.enum(WILL_PARENTAGE_RELATIONS).nullable().default(null), name: text(120).default('') })
+    .default({}),
 });
 
 export const willPersonSchema = z.object({
@@ -113,6 +123,12 @@ export const willAllocationSchema = z.object({
     .max(200)
     .default([]),
   fixedGifts: z.array(z.object({ personId: ref, amount })).max(60).default([]),
+  /** Survivorship period in days. 30 matches every will drafted before this field existed. */
+  survivalDays: z
+    .number()
+    .int()
+    .refine((v) => (WILL_SURVIVAL_DAYS as readonly number[]).includes(v), { message: 'not an offered period' })
+    .default(WILL_DEFAULT_SURVIVAL_DAYS),
 });
 
 export const willInstructionsSchema = z.object({ text: z.string().max(1000).default('') });

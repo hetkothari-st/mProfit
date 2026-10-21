@@ -8,11 +8,13 @@ import { fileURLToPath } from 'node:url';
 
 const FONT_DIR = fileURLToPath(new URL('../../../assets/fonts/', import.meta.url));
 
+/** Serif faces for the legal text; Noto Serif carries the rupee sign. */
 export const WILL_FONTS = {
-  regular: join(FONT_DIR, 'NotoSans-Regular.ttf'),
-  bold: join(FONT_DIR, 'NotoSans-Bold.ttf'),
-  deva: join(FONT_DIR, 'NotoSansDevanagari-Regular.ttf'),
-  devaBold: join(FONT_DIR, 'NotoSansDevanagari-Bold.ttf'),
+  regular: join(FONT_DIR, 'NotoSerif-Regular.ttf'),
+  bold: join(FONT_DIR, 'NotoSerif-Bold.ttf'),
+  italic: join(FONT_DIR, 'NotoSerif-Italic.ttf'),
+  deva: join(FONT_DIR, 'NotoSerifDevanagari-Regular.ttf'),
+  devaBold: join(FONT_DIR, 'NotoSerifDevanagari-Bold.ttf'),
 } as const;
 
 export interface ScriptRun {
@@ -30,8 +32,8 @@ const JOINERS = new Set([0x200c, 0x200d]);
 const isNeutral = (ch: string): boolean => NEUTRAL.test(ch) || JOINERS.has(ch.codePointAt(0) ?? 0);
 
 /**
- * Split text into runs that one font can draw. Noto Sans has Latin and the
- * rupee sign; Noto Sans Devanagari has Devanagari. pdfkit draws each run with
+ * Split text into runs that one font can draw. Noto Serif has Latin and the
+ * rupee sign; Noto Serif Devanagari has Devanagari. pdfkit draws each run with
  * `continued: true` so the line reads as one.
  */
 export function scriptRuns(text: string): ScriptRun[] {

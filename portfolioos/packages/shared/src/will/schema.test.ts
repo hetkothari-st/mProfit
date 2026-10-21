@@ -12,11 +12,12 @@ describe('will payload schema', () => {
     expect(p.details).toEqual({
       legalName: '', dob: null, jurisdiction: 'IN', personalLaw: null, address: '',
       maritalStatus: null, hasChildren: null, hasDependents: null,
+      parentage: { relation: null, name: '' },
     });
     expect(p.people).toEqual([]);
     expect(p.roles).toEqual({ executorId: null, altExecutorId: null, guardianId: null, altGuardianId: null });
     expect(p.estate).toEqual({ asOf: null, items: [], failedSources: [] });
-    expect(p.allocation).toEqual({ residuary: [], specificGifts: [], fixedGifts: [] });
+    expect(p.allocation).toEqual({ residuary: [], specificGifts: [], fixedGifts: [], survivalDays: 30 });
     expect(p.instructions).toEqual({ text: '' });
   });
 
@@ -71,5 +72,18 @@ describe('will payload schema', () => {
   it('knows its section names', () => {
     expect(isWillSection('estate')).toBe(true);
     expect(isWillSection('roles')).toBe(false);
+  });
+});
+
+describe('fields added for the v2 will', () => {
+  it('reads a draft saved before they existed with the old behaviour (30-day survival, no parentage)', () => {
+    const old = willPayloadSchema.parse({ details: { legalName: 'A' }, allocation: { residuary: [] } });
+    expect(old.allocation.survivalDays).toBe(30);
+    expect(old.details.parentage).toEqual({ relation: null, name: '' });
+  });
+
+  it('accepts only the offered survival periods', () => {
+    for (const d of [0, 7, 15, 30, 60, 90]) expect(willPayloadSchema.safeParse({ allocation: { survivalDays: d } }).success).toBe(true);
+    for (const d of [-1, 5, 31, 365, 1.5]) expect(willPayloadSchema.safeParse({ allocation: { survivalDays: d } }).success).toBe(false);
   });
 });

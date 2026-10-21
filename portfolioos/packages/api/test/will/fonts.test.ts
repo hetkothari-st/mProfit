@@ -8,12 +8,13 @@ const FONT_DIR = fileURLToPath(new URL('../../assets/fonts/', import.meta.url));
 const DOCKERFILE = fileURLToPath(new URL('../../Dockerfile', import.meta.url));
 
 const PINNED: Record<string, string> = {
-  'NotoSans-Regular.ttf': '478c558ea716033cd60c03438f628dfa75694dcf6b5f6d505a2f05fd2b4f3823',
-  'NotoSans-Bold.ttf': '1df075a380fc7cb898acf64c1f7b3b4dd780de3caa860178bf929de35817a913',
-  'NotoSansDevanagari-Regular.ttf': '4e3c66638958c3e2ab5d37f47a8deb89fffeb7be9985c665a519bbc7ba762313',
-  'NotoSansDevanagari-Bold.ttf': '6a09c8d797cfc803d32cdc731e809424d74cbaff59f503de34ade421a08e5bc2',
   'OFL.txt': 'cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a',
-  'OFL-NotoSansDevanagari.txt': 'a216f6f8d85c7228093e0ee5e258d9d377e6671f68acb4db1930b29583d0f331',
+  'OFL-NotoSerifDevanagari.txt': 'a216f6f8d85c7228093e0ee5e258d9d377e6671f68acb4db1930b29583d0f331',
+  'NotoSerif-Regular.ttf': '19e72cd8d595fae5bd74a5206f5d938512e1183d4fed7abb1ec1be1d7efa5f88',
+  'NotoSerif-Bold.ttf': '96656aa5cec8f1d6fd0e804c1fad397e1a1cfa082e6642124e0bda68cd8363ce',
+  'NotoSerif-Italic.ttf': '749e80e313ef711f9373c6cce17c72297ef05490b3dcda7967d1d5d90bf1183f',
+  'NotoSerifDevanagari-Regular.ttf': 'e272d11d271c61a8d5d0f65764fd368ae53b9f9dabcce244a8941aa8f32ccc70',
+  'NotoSerifDevanagari-Bold.ttf': '0544878a7b09ea1dc16d9de1f7a1f8cf82beb255d66a287712bb05a24336bcc0',
 };
 
 describe('bundled will fonts', () => {

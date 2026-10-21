@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { Decimal, formatINR, sumPercents, type WillAllocation } from '@everypaisa/shared';
+import { Decimal, formatINR, sumPercents, WILL_SURVIVAL_DAYS, type WillAllocation } from '@everypaisa/shared';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
@@ -238,6 +238,22 @@ export function AllocationStep({ payload, update, findings, wide }: WillStepProp
           </Card>
         </TabsContent>
       </Tabs>
+      <Card className="min-w-0 space-y-2 p-4 sm:p-5">
+        <Field
+          id="will-survival-days"
+          label="How long must someone outlive you to inherit?"
+          hint="If they die within this period, their gifts go to their back-up, or else into the rest of your estate. 30 days is common."
+        >
+          <Select
+            id="will-survival-days"
+            className="sm:max-w-xs"
+            value={String(a.survivalDays)}
+            onChange={(e) => set({ survivalDays: Number.parseInt(e.target.value, 10) })}
+          >
+            {WILL_SURVIVAL_DAYS.map((d) => <option key={d} value={d}>{d === 0 ? 'No waiting period' : `${d} days`}</option>)}
+          </Select>
+        </Field>
+      </Card>
     </div>
   );
 }

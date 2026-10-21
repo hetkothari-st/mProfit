@@ -21,7 +21,7 @@ export const WILL_SHARED_SRC_DIR = fileURLToPath(new URL('../../shared/src/', im
 export const WILL_TEMPLATE_DIR = join(WILL_SHARED_SRC_DIR, 'will', 'template');
 
 /** Files outside the template folder whose output is printed in the will (paths relative to shared/src). */
-export const WILL_LOCKED_EXTRA_FILES: readonly string[] = ['amountInWords.ts', 'will/ast.ts'];
+export const WILL_LOCKED_EXTRA_FILES: readonly string[] = ['amountInWords.ts', 'will/ast.ts', 'will/astV2.ts'];
 
 function sha256(path: string): string {
   // CRLF normalised so a Windows checkout hashes the same.
