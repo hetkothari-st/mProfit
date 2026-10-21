@@ -15,6 +15,7 @@ import { ComingUpPanel } from '@/components/insurance/ComingUpPanel';
 import { OpenClaimsPanel } from '@/components/insurance/OpenClaimsPanel';
 import { TaxSummaryCard } from '@/components/insurance/TaxSummaryCard';
 import { InsuranceGmailFetchCard } from '@/components/insurance/InsuranceGmailFetchCard';
+import { InsuranceDocumentsCard } from '@/components/insurance/InsuranceDocumentsCard';
 import { PolicyCard } from '@/components/insurance/PolicyCard';
 import { PolicyFormDialog } from '@/components/insurance/PolicyFormDialog';
 import { RecordPremiumDialog } from '@/components/insurance/RecordPremiumDialog';
@@ -144,6 +145,7 @@ export function InsuranceListPage() {
       />
 
       <InsuranceGmailFetchCard />
+      <InsuranceDocumentsCard />
 
       {isLoading && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">

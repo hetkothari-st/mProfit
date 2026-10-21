@@ -19,6 +19,9 @@ import {
   linkImportedPremiumHandler,
   dismissImportSuggestionHandler,
   taxSummaryHandler,
+  listInsuranceDocumentsHandler,
+  approveInsuranceDocumentHandler,
+  dismissInsuranceDocumentHandler,
 } from '../controllers/insurance.controller.js';
 import { getCoverageHandler } from '../controllers/insuranceCoverage.controller.js';
 import {
@@ -64,6 +67,11 @@ insuranceRouter.get('/tax-summary', asyncHandler(taxSummaryHandler));
 insuranceRouter.get('/gmail-fetch', asyncHandler(getInsuranceFetchHandler));
 insuranceRouter.put('/gmail-fetch/:mailboxId', asyncHandler(setInsuranceFetchHandler));
 insuranceRouter.post('/gmail-fetch/:mailboxId/scan', asyncHandler(scanInsuranceNowHandler));
+
+// What was found: linked to policies, suggested as new policies, or waiting.
+insuranceRouter.get('/documents', asyncHandler(listInsuranceDocumentsHandler));
+insuranceRouter.post('/documents/:docId/approve', asyncHandler(approveInsuranceDocumentHandler));
+insuranceRouter.post('/documents/:docId/dismiss', asyncHandler(dismissInsuranceDocumentHandler));
 
 // Manual trigger for renewal alerts (useful for testing §9.4)
 insuranceRouter.post('/alerts/trigger', asyncHandler(triggerRenewalAlertsHandler));

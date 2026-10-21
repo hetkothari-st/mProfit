@@ -12,8 +12,8 @@
  *   FAILED          unreadable (no text, or the reader's output was invalid)
  *   PENDING         not read yet, or a temporary failure — retried next run
  *
- * Nothing here touches a policy: matching and filing are later steps that
- * start from READ documents.
+ * The reading is stored encrypted (it holds the policy number). Once read,
+ * documents are matched to policies (insuranceDocMatching).
  */
 
 import { Prisma, type InsuranceDocStatus } from '@prisma/client';
@@ -25,6 +25,7 @@ import {
   readInsuranceDocument,
   type CallModel,
 } from '../../ingestion/insurance/insuranceDocReader.js';
+import { matchInsuranceDocuments, sealedExtractColumns } from './insuranceDocMatching.js';
 
 export interface InsuranceDocRunSummary {
   created: number;
@@ -128,7 +129,7 @@ export async function processInsuranceDocuments(
     const review = result.problems.length > 0;
     await setOutcome(doc.id, review ? 'NEEDS_REVIEW' : 'READ', {
       docKind: result.extract.doc_kind,
-      extract: result.extract as Prisma.InputJsonValue,
+      ...(await sealedExtractColumns(result.extract)),
       problems: review ? (result.problems as Prisma.InputJsonValue) : Prisma.DbNull,
       errorMessage: null,
     });
@@ -139,5 +140,6 @@ export async function processInsuranceDocuments(
   if (todo.length > 0 || summary.created > 0) {
     logger.info({ userId, ...summary }, '[insurance] documents read');
   }
+  await matchInsuranceDocuments(userId);
   return summary;
 }

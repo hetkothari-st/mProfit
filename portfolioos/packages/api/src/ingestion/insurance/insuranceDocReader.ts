@@ -171,7 +171,8 @@ export function verifyInsuranceExtract(x: InsuranceDocExtract, text: string): st
   const compactText = compact(text);
 
   if (x.policy_number && !compactText.includes(compact(x.policy_number))) {
-    problems.push(`policy number ${x.policy_number} does not appear in the document`);
+    // Problems are stored in plain text: name the number by its last 4 only.
+    problems.push(`policy number ending ${compact(x.policy_number).slice(-4)} does not appear in the document`);
   }
   if (x.policy_holder && !nameAppears(x.policy_holder, src)) {
     problems.push(`policy holder "${x.policy_holder}" does not appear in the document`);

@@ -217,6 +217,37 @@ export type UpdateClaimInput = Partial<AddClaimInput>;
 
 // ── API client ────────────────────────────────────────────────────────
 
+/** An insurance document found in Gmail; the policy number only by its last 4. */
+export interface InsuranceDocumentDTO {
+  id: string;
+  fileName: string;
+  fromAddress: string | null;
+  receivedAt: string | null;
+  docKind: 'POLICY_DOCUMENT' | 'PREMIUM_RECEIPT' | 'RENEWAL_NOTICE' | 'CLAIM_LETTER' | 'OTHER' | null;
+  status: 'PENDING' | 'NEEDS_PASSWORD' | 'READ' | 'NEEDS_REVIEW' | 'FAILED' | 'MATCHED' | 'SUGGESTED' | 'FILED';
+  problems: string[];
+  errorMessage: string | null;
+  note: string | null;
+  policyId: string | null;
+  policyNumberLast4: string | null;
+  extract: {
+    insurer: string | null;
+    policy_type: string | null;
+    plan_name: string | null;
+    policy_holder: string | null;
+    sum_assured: string | null;
+    premium_amount: string | null;
+    premium_frequency: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    next_premium_due: string | null;
+    premium_paid_amount: string | null;
+    premium_paid_on: string | null;
+  } | null;
+}
+
+export type ApproveDocumentPolicyInput = Omit<CreatePolicyInput, 'policyNumber'>;
+
 export const insuranceApi = {
   async listPolicies(): Promise<InsurancePolicyDTO[]> {
     const { data } = await api.get<ApiResponse<InsurancePolicyDTO[]>>('/api/insurance/policies');
@@ -319,6 +350,21 @@ export const insuranceApi = {
   },
   async scanGmailNow(mailboxId: string): Promise<void> {
     await api.post(`/api/insurance/gmail-fetch/${mailboxId}/scan`);
+  },
+  async listDocuments(): Promise<InsuranceDocumentDTO[]> {
+    const { data } = await api.get<ApiResponse<InsuranceDocumentDTO[]>>('/api/insurance/documents');
+    return unwrap(data);
+  },
+  /** Add the policy a document describes; its number comes from the document. */
+  async approveDocument(docId: string, input: ApproveDocumentPolicyInput): Promise<{ policyId: string | null }> {
+    const { data } = await api.post<ApiResponse<{ policyId: string | null }>>(
+      `/api/insurance/documents/${docId}/approve`,
+      input,
+    );
+    return unwrap(data);
+  },
+  async dismissDocument(docId: string): Promise<void> {
+    await api.post(`/api/insurance/documents/${docId}/dismiss`);
   },
   async triggerRenewalAlerts(): Promise<{ created: number }> {
     const { data } = await api.post<ApiResponse<{ created: number }>>(
