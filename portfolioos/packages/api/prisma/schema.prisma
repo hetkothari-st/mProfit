@@ -249,6 +249,7 @@ model User {
   @@index([deletionScheduledFor])
   @@index([managedById])
   documentPersons DocumentPerson[]
+  insuranceDocuments InsuranceDocument[]
 }
 
 model UserNotificationConfig {
@@ -1510,6 +1511,56 @@ model GmailDiscoveredDoc {
   @@index([userId, status, receivedAt])
   @@index([scanJobId, status])
   @@index([userId, fromAddress, isFinancial])
+}
+
+// One insurance document found in the user's Gmail (with their permission —
+// MailboxAccount.insuranceFetchEnabled) and read into structured fields.
+// services/insurance/insuranceDocPipeline.ts. Steps after reading (matching a
+// policy, filing under the policy holder in Documents) move it through
+// `status`; nothing here writes to a policy by itself.
+model InsuranceDocument {
+  id           String               @id @default(cuid())
+  userId       String
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gmailDocId   String?              @unique
+  fileName     String
+  blobKey      String?
+  contentHash  String
+  fromAddress  String?
+  receivedAt   DateTime?            @db.Timestamptz(3)
+  docKind      InsuranceDocKind?
+  status       InsuranceDocStatus   @default(PENDING)
+  /// The reader's output (ingestion/insurance/insuranceDocReader).
+  extract      Json?
+  /// Fields the document does not actually contain; non-empty = review.
+  problems     Json?
+  errorMessage String?
+  policyId     String?
+  documentId   String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@unique([userId, contentHash])
+  @@index([userId, status])
+}
+
+enum InsuranceDocKind {
+  POLICY_DOCUMENT
+  PREMIUM_RECEIPT
+  RENEWAL_NOTICE
+  CLAIM_LETTER
+  OTHER
+}
+
+enum InsuranceDocStatus {
+  PENDING
+  NEEDS_PASSWORD
+  READ
+  NEEDS_REVIEW
+  FAILED
+  MATCHED
+  SUGGESTED
+  FILED
 }
 
 enum GmailScanKind {
