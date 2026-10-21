@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { AlertTriangle, FileText, Lock, Plus, X } from 'lucide-react';
 import { formatINR } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
 import { insuranceApi, type InsuranceDocumentDTO } from '@/api/insurance/insurance.api';
@@ -43,6 +44,73 @@ function subtitle(d: InsuranceDocumentDTO): string {
     .join(' · ');
 }
 
+/** "starhealth.in" from "policy@starhealth.in" — insurers lock all their PDFs alike. */
+function senderOf(d: InsuranceDocumentDTO): string {
+  return d.fromAddress?.split('@').pop()?.toLowerCase() ?? 'an unknown sender';
+}
+
+/**
+ * Locked PDFs from one sender, unlocked with one password. Remembered by
+ * default (encrypted), so later PDFs from the insurer open without asking.
+ */
+function LockedGroup({ sender, docs }: { sender: string; docs: InsuranceDocumentDTO[] }) {
+  const qc = useQueryClient();
+  const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(true);
+  const unlock = useMutation({
+    mutationFn: () => insuranceApi.unlockDocument(docs[0]!.id, password, remember),
+    onSuccess: (r) => {
+      toast.success(r.unlocked === 1 ? 'Opened 1 PDF' : `Opened ${r.unlocked} PDFs`);
+      setPassword('');
+      void qc.invalidateQueries({ queryKey: ['insurance-documents'] });
+      void qc.invalidateQueries({ queryKey: ['insurance-policies'] });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Could not open the PDF')),
+  });
+  const id = `unlock-${sender}`;
+
+  return (
+    <li className="rounded-md border p-3 text-sm">
+      <div className="flex items-start gap-2">
+        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <label htmlFor={id} className="font-medium">
+            {docs.length === 1 ? '1 locked PDF' : `${docs.length} locked PDFs`} from {sender}
+          </label>
+          <p className="text-muted-foreground">
+            The email from the insurer usually says what the password is, such as your date of birth or policy
+            number.
+          </p>
+          <form
+            className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (password) unlock.mutate();
+            }}
+          >
+            <Input
+              id={id}
+              type="password"
+              autoComplete="off"
+              placeholder="PDF password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="sm:max-w-xs"
+            />
+            <Button type="submit" size="sm" disabled={!password || unlock.isPending}>
+              {unlock.isPending ? 'Opening…' : 'Open'}
+            </Button>
+          </form>
+          <label className="mt-2 flex items-center gap-2 text-muted-foreground">
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            Remember it (encrypted) for future PDFs
+          </label>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 /**
  * What the Gmail search found and what became of it: policies to add (the
  * user checks the figures first), readings that did not match the document,
@@ -64,7 +132,11 @@ export function InsuranceDocumentsCard() {
 
   const suggested = docs.filter((d) => d.status === 'SUGGESTED');
   const review = docs.filter((d) => d.status === 'NEEDS_REVIEW');
-  const rest = docs.filter((d) => d.status !== 'SUGGESTED' && d.status !== 'NEEDS_REVIEW');
+  const locked = new Map<string, InsuranceDocumentDTO[]>();
+  for (const d of docs.filter((x) => x.status === 'NEEDS_PASSWORD')) {
+    locked.set(senderOf(d), [...(locked.get(senderOf(d)) ?? []), d]);
+  }
+  const rest = docs.filter((d) => !['SUGGESTED', 'NEEDS_REVIEW', 'NEEDS_PASSWORD'].includes(d.status));
 
   return (
     <Card className="mb-4">
@@ -112,6 +184,17 @@ export function InsuranceDocumentsCard() {
                     </Button>
                   </div>
                 </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {locked.size > 0 && (
+          <section>
+            <h3 className="mb-2 text-sm font-medium">Password protected</h3>
+            <ul className="space-y-2">
+              {[...locked].map(([sender, group]) => (
+                <LockedGroup key={sender} sender={sender} docs={group} />
               ))}
             </ul>
           </section>

@@ -8,7 +8,10 @@
  *
  *   READ            every field checked out against the document
  *   NEEDS_REVIEW    the reader returned something the PDF does not contain
- *   NEEDS_PASSWORD  locked, and none of the user's saved passwords opened it
+ *   NEEDS_PASSWORD  locked, and nothing we could try opened it: the user's
+ *                   saved and derived passwords (lib/decryptIfNeeded), then
+ *                   their own policy numbers — insurers often lock with one.
+ *                   unlockInsuranceDocument asks the user once.
  *   FAILED          unreadable (no text, or the reader's output was invalid)
  *   PENDING         not read yet, or a temporary failure — retried next run
  *
@@ -19,6 +22,10 @@
 import { Prisma, type InsuranceDocStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
+import { BadRequestError, NotFoundError } from '../../lib/errors.js';
+import { saveDocPassword } from '../../lib/userDocPasswords.js';
+import { decryptIdentifier } from '../pf/pfCredentials.service.js';
+import { normalizePolicyNumber } from './insurance.service.js';
 import { readBuffer } from '../../lib/documentStorage.js';
 import { decryptIfNeeded } from '../../lib/decryptIfNeeded.js';
 import {
@@ -83,13 +90,34 @@ async function setOutcome(
   await prisma.insuranceDocument.update({ where: { id }, data: { status, ...data } });
 }
 
+/** The user's policy numbers, as printed and compacted — common PDF passwords. */
+async function policyNumberPasswords(userId: string): Promise<string[]> {
+  const policies = await prisma.insurancePolicy.findMany({
+    where: { userId, policyNumberEnc: { not: null } },
+    select: { policyNumberEnc: true },
+  });
+  const out = new Set<string>();
+  for (const p of policies) {
+    const raw = (await decryptIdentifier(p.policyNumberEnc!)).trim();
+    out.add(raw);
+    out.add(normalizePolicyNumber(raw));
+  }
+  return [...out].filter(Boolean);
+}
+
+export interface ProcessDeps {
+  callModel?: CallModel;
+  /** Passwords the user just typed: tried on every locked document this run. */
+  extraPasswords?: string[];
+}
+
 /**
  * Read every pending (or still-locked) insurance document of one user.
  * Must run as that user. `callModel` is for tests.
  */
 export async function processInsuranceDocuments(
   userId: string,
-  deps: { callModel?: CallModel } = {},
+  deps: ProcessDeps = {},
 ): Promise<InsuranceDocRunSummary> {
   const summary: InsuranceDocRunSummary = { created: 0, read: 0, needsReview: 0, needsPassword: 0, failed: 0, stillPending: 0 };
   summary.created = await enqueueNewDocuments(userId);
@@ -100,6 +128,7 @@ export async function processInsuranceDocuments(
     orderBy: { createdAt: 'asc' },
   });
 
+  let policyPasswords: string[] | undefined;
   for (const doc of todo) {
     if (!doc.blobKey) {
       await setOutcome(doc.id, 'FAILED', { errorMessage: 'The file was not stored, so it cannot be read.' });
@@ -107,7 +136,18 @@ export async function processInsuranceDocuments(
       continue;
     }
     const bytes = await readBuffer(userId, doc.blobKey);
-    const opened = await decryptIfNeeded(bytes, { fileName: doc.fileName, userId, allowedKinds: ['pdf'] });
+    let opened = await decryptIfNeeded(bytes, {
+      fileName: doc.fileName,
+      userId,
+      allowedKinds: ['pdf'],
+      extraPasswords: deps.extraPasswords,
+    });
+    if (!opened.ok && opened.requiresPassword) {
+      policyPasswords ??= await policyNumberPasswords(userId);
+      if (policyPasswords.length > 0) {
+        opened = await decryptIfNeeded(bytes, { fileName: doc.fileName, allowedKinds: ['pdf'], extraPasswords: policyPasswords });
+      }
+    }
     if (!opened.ok) {
       if (opened.requiresPassword) {
         await setOutcome(doc.id, 'NEEDS_PASSWORD', { errorMessage: 'This PDF is password protected.' });
@@ -119,7 +159,7 @@ export async function processInsuranceDocuments(
       continue;
     }
 
-    const result = await readInsuranceDocument(opened.text ?? '', { userId, sourceRef: doc.id }, deps);
+    const result = await readInsuranceDocument(opened.text ?? '', { userId, sourceRef: doc.id }, { callModel: deps.callModel });
     if (!result.ok) {
       const transient = result.reason === 'llm_unavailable' || result.reason === 'over_budget' || result.reason === 'model_error';
       await setOutcome(doc.id, transient ? 'PENDING' : 'FAILED', { errorMessage: result.message });
@@ -143,4 +183,34 @@ export async function processInsuranceDocuments(
   }
   await matchInsuranceDocuments(userId);
   return summary;
+}
+
+/**
+ * The user typed the password for a locked document. It must open that
+ * document; then every locked insurance document is tried with it (one
+ * insurer locks all its PDFs the same way), and — unless the user said not
+ * to — it joins their saved, encrypted file passwords (lib/userDocPasswords),
+ * so future documents open without asking again.
+ */
+export async function unlockInsuranceDocument(
+  userId: string,
+  docId: string,
+  password: string,
+  remember: boolean,
+  deps: Pick<ProcessDeps, 'callModel'> = {},
+): Promise<{ unlocked: number }> {
+  const doc = await prisma.insuranceDocument.findFirst({ where: { id: docId, userId } });
+  if (!doc) throw new NotFoundError(`InsuranceDocument ${docId} not found`);
+  if (doc.status !== 'NEEDS_PASSWORD') throw new BadRequestError('This document is not waiting for a password');
+  if (!doc.blobKey) throw new BadRequestError('The file was not stored, so it cannot be opened');
+
+  const bytes = await readBuffer(userId, doc.blobKey);
+  const opened = await decryptIfNeeded(bytes, { fileName: doc.fileName, allowedKinds: ['pdf'], extraPasswords: [password] });
+  if (!opened.ok) throw new BadRequestError("That password didn't open this PDF");
+  if (remember) await saveDocPassword(userId, password);
+
+  const locked = () => prisma.insuranceDocument.count({ where: { userId, status: 'NEEDS_PASSWORD' } });
+  const before = await locked();
+  await processInsuranceDocuments(userId, { ...deps, extraPasswords: [password] });
+  return { unlocked: before - (await locked()) };
 }

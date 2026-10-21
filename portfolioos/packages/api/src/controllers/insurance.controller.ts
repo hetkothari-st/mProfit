@@ -34,6 +34,7 @@ import {
   listInsuranceDocuments,
   matchInsuranceDocuments,
 } from '../services/insurance/insuranceDocMatching.js';
+import { unlockInsuranceDocument } from '../services/insurance/insuranceDocPipeline.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const moneyString = z.string().regex(/^\d+(\.\d+)?$/, 'Expected positive decimal string');
@@ -275,4 +276,17 @@ export async function dismissInsuranceDocumentHandler(req: Request, res: Respons
   if (!req.user) throw new UnauthorizedError();
   await dismissInsuranceDocument(req.user.id, req.params['docId']!);
   ok(res, null);
+}
+
+const unlockSchema = z.object({
+  password: z.string().min(1).max(200),
+  /** Keep it (encrypted) so later PDFs from the insurer open on their own. */
+  remember: z.boolean().default(true),
+});
+
+/** Open a locked PDF with the password the user typed, then every other locked one it fits. */
+export async function unlockInsuranceDocumentHandler(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const { password, remember } = unlockSchema.parse(req.body ?? {});
+  ok(res, await unlockInsuranceDocument(req.user.id, req.params['docId']!, password, remember));
 }
