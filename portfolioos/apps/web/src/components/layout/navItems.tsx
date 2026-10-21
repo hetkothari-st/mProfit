@@ -34,7 +34,6 @@ import {
   // Bug, — used only by the hidden Failures (DLQ) nav item
   Globe,
   Calculator,
-  Split,
   UsersRound,
   Target,
   HeartPulse,
@@ -114,7 +113,6 @@ export const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Import', to: '/import', icon: Upload },
       { label: 'Connectors', to: '/connectors', icon: Plug },
       { label: 'CAS', to: '/cas', icon: FileDown },
-      { label: 'Corporate Actions', to: '/corporate-actions', icon: Split },
       { label: 'Accounting', to: '/accounting', icon: BookOpenCheck },
       { label: 'Split Expenses', to: '/split', icon: UsersRound },
       { label: 'EMI Calculator', to: '/emi', icon: Percent },
