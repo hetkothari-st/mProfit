@@ -147,3 +147,22 @@ describe('Income-tax Act 2025 retrieval', () => {
   ];
   for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
 });
+
+// SEBI Investment Advisers Regulations 2013 (to 25 Nov 2025) and the IA Master Circular (6 Feb 2026).
+describe('SEBI investment adviser rules retrieval', () => {
+  const turn = (q: string) => knowledgeForTurn(q).map((h) => h.entry.id);
+  const cases: [string, string][] = [
+    ['what is the maximum fee a SEBI registered investment adviser can charge', 'sebi-ia-fees'],
+    ['can my investment adviser also sell me mutual funds for commission', 'sebi-ia-segregation'],
+    ['what must the investment advisory agreement and MITC contain', 'sebi-ia-agreement'],
+    ['what information must an adviser collect for risk profiling', 'sebi-ia-risk-profiling'],
+    ['adviser suitability obligations for complex products', 'sebi-ia-suitability'],
+    ['must an investment adviser disclose use of AI tools', 'sebi-ia-disclosures-ai'],
+    ['fiduciary duty and conflicts of interest of an investment adviser', 'sebi-ia-fiduciary'],
+    ['can an investment adviser advertise past performance or testimonials', 'sebi-ia-advertising'],
+    ['how do I complain against a SEBI registered investment adviser', 'sebi-ia-grievance'],
+    ['how long must an investment adviser keep records and audits', 'sebi-ia-records-audit'],
+    ['qualification needed to register as a SEBI investment adviser', 'sebi-ia-registration'],
+  ];
+  for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
+});
