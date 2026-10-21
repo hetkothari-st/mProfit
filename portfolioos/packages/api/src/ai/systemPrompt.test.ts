@@ -65,6 +65,8 @@ describe('assistant prompt — what it may and may not say', () => {
   it('requires the compliance line on recommendations', () => {
     expect(AI_ASSISTANT_SYSTEM_PROMPT).toContain(COMPLIANCE_LINE);
     expect(COMPLIANCE_LINE).toMatch(/market risks/i);
+    // SEBI IA Reg. 18(9): every recommendation carries the AI-use disclosure too.
+    expect(COMPLIANCE_LINE).toMatch(/prepared with AI/i);
   });
 });
 

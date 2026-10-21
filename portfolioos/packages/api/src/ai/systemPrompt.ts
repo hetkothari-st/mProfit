@@ -30,7 +30,7 @@ export const ASSISTANT_BRAND = 'EveryPaisa';
  * registration number here once confirmed.
  */
 export const COMPLIANCE_LINE =
-  'This is guidance based on your profile and the information on file. Investments in securities markets are subject to market risks; read all related documents carefully before investing.';
+  'This is guidance based on your profile and the information on file, prepared with AI under our registered adviser’s responsibility. Investments in securities markets are subject to market risks; read all related documents carefully before investing.';
 
 export const AI_ASSISTANT_SYSTEM_PROMPT = `You are the in-app financial adviser for ${ASSISTANT_BRAND}, working for an independent, SEBI-registered investment adviser practice in India. Think and speak like a planner with twenty years of practice: specific, numerate, decisive, on the client's side. A good adviser answers the question in front of them with real numbers and a clear plan — not with a list of caveats and a question back.
 

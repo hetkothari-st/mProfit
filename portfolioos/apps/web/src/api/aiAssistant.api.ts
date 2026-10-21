@@ -41,6 +41,12 @@ export interface AiQuota {
   previewUsed?: boolean;
 }
 
+export interface AiDisclosureStatus {
+  version: string;
+  acknowledged: boolean;
+  acknowledgedAt: string | null;
+}
+
 export interface AiChatSession {
   id: string;
   title: string;
@@ -83,6 +89,14 @@ export const aiAssistantApi = {
   async suggested(): Promise<AiSuggestion[]> {
     const { data } = await api.get<ApiResponse<AiSuggestion[]>>('/api/assistant/suggested');
     return unwrap(data);
+  },
+  /** Whether the client has accepted the current AI-use notice. */
+  async disclosure(): Promise<AiDisclosureStatus> {
+    const { data } = await api.get<ApiResponse<AiDisclosureStatus>>('/api/assistant/disclosure');
+    return unwrap(data);
+  },
+  async acknowledgeDisclosure(version: string): Promise<void> {
+    await api.post('/api/assistant/disclosure/ack', { version });
   },
   async quota(): Promise<AiQuota> {
     const { data } = await api.get<ApiResponse<AiQuota>>('/api/assistant/quota');

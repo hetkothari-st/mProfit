@@ -19,6 +19,7 @@ if (!('ResizeObserver' in globalThis)) {
 
 const hook = vi.hoisted(() => ({ state: {} as Record<string, unknown> }));
 vi.mock('@/hooks/useAIAssistant', () => ({ useAIAssistant: () => hook.state }));
+vi.mock('@/hooks/useAiDisclosure', () => ({ useAiDisclosure: () => ({ status: 'ok', accept: async () => undefined }) }));
 vi.mock('@/stores/auth.store', () => ({
   useAuthStore: (sel: (s: unknown) => unknown) => sel({ user: { id: 'u1', name: 'Het Kothari' } }),
 }));

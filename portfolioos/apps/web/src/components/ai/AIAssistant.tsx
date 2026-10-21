@@ -16,6 +16,8 @@ import {
   Check,
 } from 'lucide-react';
 import { useAIAssistant } from '@/hooks/useAIAssistant';
+import { useAiDisclosure } from '@/hooks/useAiDisclosure';
+import { AiDisclosureCard } from './AiDisclosureCard';
 import { MessageBubble } from './MessageBubble';
 import { SuggestedQuestions } from './SuggestedQuestions';
 import { useAuthStore } from '@/stores/auth.store';
@@ -117,6 +119,7 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
     removeSession,
     renameChat,
   } = useAIAssistant(open);
+  const disclosure = useAiDisclosure(open);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -239,6 +242,8 @@ export function AIAssistant({ open, onClose, pendingPrompt }: Props) {
             onNewChat={handleNewChat}
             newChatDisabled={previewLocked}
           />
+        ) : disclosure.status === 'needed' ? (
+          <AiDisclosureCard onAccept={disclosure.accept} />
         ) : (
           <>
             <div ref={scrollRef} className="flex-1 overflow-y-auto flex flex-col scroll-smooth">
@@ -728,8 +733,16 @@ function Composer({
             <span>
               {locked
                 ? 'Answers are locked on the Free plan.'
-                : 'Based on your live portfolio data. Not investment advice.'}
+                : 'AI-written answers from your live portfolio data.'}
               {' '}
+              {!locked && (
+                <>
+                  <Link to="/legal/ai-use" className="underline underline-offset-2 hover:text-foreground">
+                    How we use AI
+                  </Link>
+                  {' · '}
+                </>
+              )}
               <Link to="/settings/ai-connectors" className="underline underline-offset-2 hover:text-foreground">
                 Prefer your own ChatGPT or Claude? Connect it
               </Link>

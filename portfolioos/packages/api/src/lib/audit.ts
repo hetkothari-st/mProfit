@@ -68,7 +68,8 @@ export type AuditAction =
   | 'mcp_refresh_reuse'
   | 'mcp_tool_called'
   | 'insurance_gmail_fetch_enabled'
-  | 'insurance_gmail_fetch_disabled';
+  | 'insurance_gmail_fetch_disabled'
+  | 'ai_disclosure_acknowledged';
 
 export interface AuditInput {
   userId?: string | null;

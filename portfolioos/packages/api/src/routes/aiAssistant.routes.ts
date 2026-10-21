@@ -48,6 +48,7 @@ import { logger } from '../lib/logger.js';
 import { checkQuota, refundQuota, reserveQuota } from '../ai/rateLimit.js';
 import { computeSuggestedQuestions } from '../ai/suggestedQuestions.js';
 import { parseFamilyId } from '../lib/familyHeader.js';
+import { acknowledgeAiDisclosure, aiDisclosureStatus } from '../ai/aiDisclosure.js';
 
 export const aiAssistantRouter = Router();
 
@@ -83,6 +84,10 @@ const chatSchema = z.object({
   sessionId: z.string().min(1),
 });
 
+const disclosureAckSchema = z.object({
+  version: z.string().min(1).max(40),
+});
+
 const renameSchema = z.object({
   title: z.string().min(1).max(200),
 });
@@ -96,6 +101,28 @@ aiAssistantRouter.get(
     // user's quota response doesn't need it.
     const previewUsed = quota.reason === 'tier_locked' ? await hasUsedLockedPreview(userId) : false;
     ok(res, { ...quota, previewUsed });
+  }),
+);
+
+// The AI-use notice (SEBI IA Regulations 15(14), 18(9)): the panel shows it
+// until the client accepts the current version, and /chat refuses until then.
+aiAssistantRouter.get(
+  '/disclosure',
+  asyncHandler(async (req: Request, res: Response) => {
+    ok(res, await aiDisclosureStatus(callerId(req)));
+  }),
+);
+
+aiAssistantRouter.post(
+  '/disclosure/ack',
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = disclosureAckSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.message });
+      return;
+    }
+    await acknowledgeAiDisclosure(callerId(req), parsed.data.version, req);
+    noContent(res);
   }),
 );
 
@@ -183,6 +210,15 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
     }
     const { message, sessionId } = parsed.data;
     await assertSessionOwnership(userId, sessionId);
+
+    if (!(await aiDisclosureStatus(userId)).acknowledged) {
+      res.status(409).json({
+        success: false,
+        error: 'ai_disclosure_required',
+        message: 'Please read and accept how we use AI in advice before asking a question.',
+      });
+      return;
+    }
 
     const quota = await checkQuota(userId);
     if (!quota.allowed) {
