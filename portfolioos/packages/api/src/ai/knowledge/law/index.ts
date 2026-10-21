@@ -13,5 +13,6 @@ import { ITA25_TRADING } from './ita25-trading.js';
 import { ITA25_NRI } from './ita25-nri.js';
 import { SEBI_IA } from './sebi-ia.js';
 import { SEBI_MF } from './sebi-mf.js';
+import { SEBI_PMS_AIF_RA } from './sebi-pms-aif-ra.js';
 
-export const LAW_LIBRARY: readonly KnowledgeEntry[] = [...FA2026_CHANGES, ...ITA25_BASICS, ...ITA25_CAPITAL_GAINS, ...ITA25_INCOME, ...ITA25_TRADING, ...ITA25_NRI, ...SEBI_IA, ...SEBI_MF];
+export const LAW_LIBRARY: readonly KnowledgeEntry[] = [...FA2026_CHANGES, ...ITA25_BASICS, ...ITA25_CAPITAL_GAINS, ...ITA25_INCOME, ...ITA25_TRADING, ...ITA25_NRI, ...SEBI_IA, ...SEBI_MF, ...SEBI_PMS_AIF_RA];

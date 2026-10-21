@@ -177,6 +177,9 @@ describe('SEBI mutual fund rules retrieval', () => {
     ['what is a life cycle fund with a target year', 'sebi-mf-life-cycle'],
     ['what is a specialized investment fund SIF minimum investment', 'sebi-mf-sif'],
     ['mutual fund NAV cut off time and redemption payout days', 'sebi-mf-nav-redemption'],
+    ['PMS exit load and operating expense limits', 'sebi-pms-charges'],
+    ['do AIFs have a direct plan without distribution commission', 'sebi-aif-direct-plan'],
+    ['how much can a SEBI research analyst charge for stock tips subscription', 'sebi-ra-fees'],
   ];
   for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
 });
