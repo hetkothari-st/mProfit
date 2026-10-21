@@ -142,6 +142,8 @@ describe('Income-tax Act 2025 retrieval', () => {
     ['do I need a tax audit for my trading turnover', 'ita25-audit-presumptive'],
     ['how is crypto taxed in India', 'ita25-crypto'],
     ['advance tax due dates and instalments', 'ita25-advance-tax'],
+    ['how is an NRI taxed on capital gains in India', 'ita25-nri'],
+    ['special tax regime for NRI investment income in foreign exchange', 'ita25-nri-special'],
   ];
   for (const [q, id] of cases) it(`${id}: ${q}`, () => expect(turn(q)).toContain(id));
 });
