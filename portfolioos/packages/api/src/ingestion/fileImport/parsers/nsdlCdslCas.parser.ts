@@ -1,5 +1,5 @@
 import { Decimal } from '@everypaisa/shared';
-import type { Parser, ParserResult, ParsedTransaction } from './types.js';
+import type { Parser, ParserResult, ParsedTransaction, StatementHolding, StatementSnapshot } from './types.js';
 import { logger } from '../../../lib/logger.js';
 import { readPdfText, getUserPdfPasswords, isPdfPasswordError } from '../../../lib/pdf.js';
 import { openingHoldingHash } from '../../../services/imports/sourceHash.js';
@@ -20,6 +20,13 @@ import { openingHoldingHash } from '../../../services/imports/sourceHash.js';
  * price is missing we set it to 0 and flag a warning — the user can refine
  * prices via contract notes later, or use the CAS purely for holdings
  * reconciliation.
+ *
+ * The "holdings as on" table is returned twice: as the statement snapshot
+ * (the closing units the reconciliation checks the app against), and as
+ * opening-balance rows. The import adds only the units the user's
+ * transactions don't already account for (import.service), so a statement
+ * imported after its trades — or a second month's statement — doesn't count
+ * the same shares twice.
  */
 
 const ISIN_RE = /\b(IN[EF][0-9A-Z]{9})\b/;
@@ -177,7 +184,7 @@ export const nsdlCdslCasParser: Parser = {
       '[nsdl-cdsl-cas] PDF text extracted',
     );
 
-    const { transactions, warnings, depository, isTxnOnly } = parseNsdlCdslText(text);
+    const { transactions, warnings, depository, isTxnOnly, statement } = parseNsdlCdslText(text);
 
     // Opening-holding-snapshot rows ("cost basis unknown") get a
     // content-based sourceHash instead of the default file-byte-position
@@ -222,9 +229,11 @@ export const nsdlCdslCasParser: Parser = {
     return {
       broker: depository ? `${depository} CAS` : 'Depository CAS',
       adapter: 'cas.depository.nsdl_cdsl',
-      adapterVer: '1',
+      // v2: returns the holdings table as a statement snapshot.
+      adapterVer: '2',
       transactions,
       warnings: adjustedWarnings,
+      statement,
     };
   },
 };
@@ -239,6 +248,7 @@ export function parseNsdlCdslText(text: string): {
   warnings: string[];
   depository: 'NSDL' | 'CDSL' | null;
   isTxnOnly: boolean;
+  statement?: StatementSnapshot;
 } {
   const { depository, isTxnOnly } = detectFormat(text);
   const lines = text.split(/\r?\n/);
@@ -337,6 +347,7 @@ export function parseNsdlCdslText(text: string): {
   // current market price, not purchase price), so users get a warning to
   // fix cost basis manually.
   const holdingsBefore = txs.length;
+  const statementHoldings: StatementHolding[] = [];
   // Match both "HOLDINGS AS ON 31-03-2026" (NSDL/Zerodha format) and
   // "HOLDING STATEMENT AS ON 31-03-2026" (CDSL eCAS format).
   const holdingsAsOnMatch = text.match(
@@ -358,6 +369,7 @@ export function parseNsdlCdslText(text: string): {
           .replace(/\s+/g, ' ')
           .replace(/\s*-\s*EQ\b/i, '')
           .trim();
+        statementHoldings.push({ isin: buf.isin, folio: null, schemeName: name || null, units: qty.abs().toString() });
         txs.push({
           assetClass: 'EQUITY',
           transactionType: 'OPENING_BALANCE',
@@ -459,10 +471,18 @@ export function parseNsdlCdslText(text: string): {
     }
     if (holdingsAdded > 0) {
       warnings.push(
-        `Imported ${holdingsAdded} holding${holdingsAdded === 1 ? '' : 's'} as opening positions dated ${holdingsDate}. Cost basis is set to 0 because the depository statement only prints current market rate, not purchase price — edit each transaction's price on the Transactions page to match your actual cost for accurate P&L.`,
+        `Read ${holdingsAdded} holding${holdingsAdded === 1 ? '' : 's'} as on ${holdingsDate}. Units your transactions don't already account for are added as opening positions on that date, with cost basis 0 because the depository statement only prints current market rate, not purchase price — edit each such transaction's price on the Transactions page to match your actual cost for accurate P&L.`,
       );
     }
   }
 
-  return { transactions: txs, warnings, depository, isTxnOnly };
+  return {
+    transactions: txs,
+    warnings,
+    depository,
+    isTxnOnly,
+    ...(holdingsDate && statementHoldings.length > 0
+      ? { statement: { asOf: holdingsDate, holdings: statementHoldings } }
+      : {}),
+  };
 }

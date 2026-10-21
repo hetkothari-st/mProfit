@@ -15,7 +15,9 @@ import {
   userIncomeReport,
   userUnrealisedReport,
   userSummary,
+  historicalValuation,
 } from '../../src/services/reports/reports.service.js';
+import { computePortfolioXirr } from '../../src/services/analytics/xirr.service.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { createTestScope, seedStockMaster, prisma, type TestScope } from '../helpers/db.js';
 
@@ -41,6 +43,21 @@ import { createTestScope, seedStockMaster, prisma, type TestScope } from '../hel
  *     Dividend 2024-10-01: ₹80
  *
  *   Schedule 112A, FY 2024-25: LTCG 500, allowance ₹1,25,000 → taxable 0.
+ *
+ *   XIRR, second portfolio (nothing left, so no terminal value):
+ *     −480 on 2024-02-01, +600 on 2024-09-01 (213 days), +80 on 2024-10-01 (243 days)
+ *     solve −480 + 600/(1+r)^(213/365) + 80/(1+r)^(243/365) = 0 → r = 0.799189
+ *     (worked out by plain bisection outside the app's solver)
+ *
+ *   Historical valuation, main portfolio (month ends; GOLD-P also priced
+ *   ₹105 on 2023-12-29 and ₹140 on 2024-03-28; latest price on or before
+ *   the snapshot, else cost):
+ *     2022-01-31  10 units, cost 1,000, no price yet  → value 1,000
+ *     2023-12-31  10 units, cost 1,000, @105         → value 1,050
+ *     2024-01-31  20 units, cost 2,100, @105         → value 2,100
+ *     2024-03-31  20 units, cost 2,100, @140         → value 2,800
+ *     2024-06-30   5 units, cost   550, @140         → value   700
+ *     GOLD-Q's same-day buy and sell leave nothing; dividends hold no units.
  */
 
 const FY = '2024-25';
@@ -59,6 +76,13 @@ describe('golden report figures and cross-report consistency', () => {
         const stock = await prisma.stockMaster.findUniqueOrThrow({ where: { symbol } });
         await prisma.stockPrice.create({
           data: { stockId: stock.id, date: new Date(new Date().toISOString().slice(0, 10)), open: close, high: close, low: close, close },
+        });
+      }
+      // Two past closes for GOLD-P, for the historical valuation.
+      const gp = await prisma.stockMaster.findUniqueOrThrow({ where: { symbol: p } });
+      for (const [date, close] of [['2023-12-29', '105'], ['2024-03-28', '140']] as const) {
+        await prisma.stockPrice.create({
+          data: { stockId: gp.id, date: new Date(date), open: close, high: close, low: close, close },
         });
       }
     });
@@ -188,5 +212,35 @@ describe('golden report figures and cross-report consistency', () => {
 
       const all = await userSummary(scope.userId);
       expect(all.counts.transactions).toBe(9);
+    }), 120_000);
+
+  it('XIRR matches the hand-solved rate, and the flows behind it add up', () =>
+    scope.runAs(async () => {
+      const r = await computePortfolioXirr(secondPortfolioId);
+      expect(r.xirr).not.toBeNull();
+      expect(Math.abs(r.xirr! - 0.799189)).toBeLessThan(0.000001);
+      expect(d(r.totalInvested).equals(480)).toBe(true);
+      expect(d(r.totalReceived).equals(680)).toBe(true);
+      expect(d(r.terminalValue).equals(0)).toBe(true);
+    }), 120_000);
+
+  it('historical valuation matches the hand-worked month ends', () =>
+    scope.runAs(async () => {
+      const { points } = await historicalValuation(scope.portfolioId);
+      const at = (day: string) => {
+        const pt = points.find((x) => x.date.toISOString().slice(0, 10) === day);
+        if (!pt) throw new Error(`no snapshot for ${day}`);
+        return [pt.holdings, d(pt.cost).toNumber(), d(pt.value).toNumber()];
+      };
+      expect(at('2022-01-31')).toEqual([1, 1000, 1000]);
+      expect(at('2023-12-31')).toEqual([1, 1000, 1050]);
+      expect(at('2024-01-31')).toEqual([1, 2100, 2100]);
+      expect(at('2024-03-31')).toEqual([1, 2100, 2800]);
+      expect(at('2024-06-30')).toEqual([1, 550, 700]);
+      // The latest snapshot uses today's price: it agrees with the live holdings report.
+      const last = points[points.length - 1]!;
+      const u = await unrealisedReport(scope.portfolioId);
+      expect(d(last.cost).equals(d(u.totalCost))).toBe(true);
+      expect(d(last.value).equals(d(u.totalValue))).toBe(true);
     }), 120_000);
 });

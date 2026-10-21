@@ -4,6 +4,7 @@ exports[`parser golden fixtures > Depository CAS (NSDL/CDSL, PDF text) > nsdl-cd
 {
   "depository": "NSDL",
   "isTxnOnly": false,
+  "statement": null,
   "transactions": [
     {
       "assetClass": "EQUITY",
@@ -74,6 +75,7 @@ exports[`parser golden fixtures > Depository CAS (NSDL/CDSL, PDF text) > nsdl-cd
 {
   "depository": "CDSL",
   "isTxnOnly": false,
+  "statement": null,
   "transactions": [
     {
       "assetClass": "EQUITY",
@@ -144,6 +146,7 @@ exports[`parser golden fixtures > Depository CAS (NSDL/CDSL, PDF text) > nsdl-cd
 {
   "depository": "NSDL",
   "isTxnOnly": false,
+  "statement": null,
   "transactions": [
     {
       "assetClass": "EQUITY",
@@ -204,6 +207,29 @@ exports[`parser golden fixtures > Depository CAS (NSDL/CDSL, PDF text) > nsdl-cd
 {
   "depository": "CDSL",
   "isTxnOnly": false,
+  "statement": {
+    "asOf": "2024-01-31",
+    "holdings": [
+      {
+        "folio": null,
+        "isin": "INE062A01020",
+        "schemeName": "STATE BANK OF INDIA",
+        "units": "150",
+      },
+      {
+        "folio": null,
+        "isin": "INE002A01018",
+        "schemeName": "RELIANCE INDUSTRIES LIMITED",
+        "units": "20",
+      },
+      {
+        "folio": null,
+        "isin": "INE040A01034",
+        "schemeName": "HDFC BANK LIMITED",
+        "units": "25",
+      },
+    ],
+  },
   "transactions": [
     {
       "assetClass": "EQUITY",
@@ -255,7 +281,7 @@ exports[`parser golden fixtures > Depository CAS (NSDL/CDSL, PDF text) > nsdl-cd
     },
   ],
   "warnings": [
-    "Imported 3 holdings as opening positions dated 2024-01-31. Cost basis is set to 0 because the depository statement only prints current market rate, not purchase price — edit each transaction's price on the Transactions page to match your actual cost for accurate P&L.",
+    "Read 3 holdings as on 2024-01-31. Units your transactions don't already account for are added as opening positions on that date, with cost basis 0 because the depository statement only prints current market rate, not purchase price — edit each such transaction's price on the Transactions page to match your actual cost for accurate P&L.",
   ],
 }
 `;
@@ -264,6 +290,7 @@ exports[`parser golden fixtures > Depository CAS (NSDL/CDSL, PDF text) > nsdl-cd
 {
   "depository": "NSDL",
   "isTxnOnly": false,
+  "statement": null,
   "transactions": [],
   "warnings": [
     "No transactions or holdings detected in NSDL statement — if the PDF is password-protected, remove the password and re-upload. If it is a scanned image, depository statements are not yet OCR-supported.",

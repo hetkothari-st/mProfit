@@ -210,7 +210,7 @@ export const genericBrokerContractNoteAdapter = makeAdapter(
 export const nsdlCdslCasAdapter = makeAdapter(
   nsdlCdslCasParser,
   'cas.depository.nsdl_cdsl',
-  '1',
+  '2',
 );
 export const mfCasAdapter = makeAdapter(mfCasParser, 'cas.mf.cams_kfintech', '1');
 export const bankStatementAdapter = makeAdapter(bankStatementParser, 'bank.statement.pdf', '1');
