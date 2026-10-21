@@ -33,6 +33,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.
 import type { InsuranceDocExtract } from '../../ingestion/insurance/insuranceDocReader.js';
 import { extractOf, sealedExtractColumns } from './insuranceDocExtract.js';
 import { fileMatchedInsuranceDocuments } from './insuranceDocFiling.js';
+import { pendingRenewals, type RenewalChange } from './insuranceRenewal.js';
 import {
   addClaim,
   addPremiumPayment,
@@ -297,6 +298,8 @@ export interface InsuranceDocumentDto {
   policyId: string | null;
   policyNumberLast4: string | null;
   extract: Omit<InsuranceDocExtract, 'policy_number'> | null;
+  /** A renewal notice's proposed policy changes, while waiting for the user's answer. */
+  renewal: RenewalChange[] | null;
 }
 
 export async function listInsuranceDocuments(userId: string): Promise<InsuranceDocumentDto[]> {
@@ -305,6 +308,7 @@ export async function listInsuranceDocuments(userId: string): Promise<InsuranceD
     orderBy: [{ receivedAt: 'desc' }, { createdAt: 'desc' }],
     take: 200,
   });
+  const renewals = await pendingRenewals(userId);
   const out: InsuranceDocumentDto[] = [];
   for (const r of rows) {
     const x = await extractOf(r);
@@ -328,6 +332,7 @@ export async function listInsuranceDocuments(userId: string): Promise<InsuranceD
       policyId: r.policyId,
       policyNumberLast4: last4,
       extract: shown,
+      renewal: renewals.get(r.id) ?? null,
     });
   }
   return out;
