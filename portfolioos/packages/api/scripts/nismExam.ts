@@ -143,11 +143,16 @@ function formatQuestion(q: ExamQuestion): string {
   ].join('\n');
 }
 
-function reportMarkdown(r: ExamReport, questions: ExamQuestion[], costUsd: number): string {
+/** Where a run's report goes and what it is called, so law and NISM runs on the same day stay apart. */
+export function reportName(bank: 'nism' | 'law', date: string, model: string): { file: string; heading: string } {
+  return { file: `${date}-${bank}-${model}`, heading: bank === 'law' ? 'Current-law exam report' : 'NISM exam report' };
+}
+
+function reportMarkdown(r: ExamReport, questions: ExamQuestion[], costUsd: number, heading: string): string {
   const byId = new Map(questions.map((q) => [q.id, q]));
   const bar = r.pct >= 90 && Object.values(r.byChapter).every((c) => c.pct >= 75);
   const lines = [
-    `# NISM exam report: ${r.pct}% on ${r.model}`,
+    `# ${heading}: ${r.pct}% on ${r.model}`,
     '',
     `- Scored questions: ${r.correct} / ${r.total} (${r.pct}%). Bar: 90% overall and 75% per chapter: **${bar ? 'met' : 'not met'}**.`,
     `- Law-sensitive questions (not in the bar): ${r.lawSensitive.correct} / ${r.lawSensitive.n}.`,
@@ -255,9 +260,9 @@ export async function main(argv: string[]): Promise<number> {
     (tokens.input * 3 + tokens.output * 15 + tokens.cacheRead * 0.3 + tokens.cacheWrite * 3.75) / 1_000_000;
   const outDir = fileURLToPath(new URL('../../../../docs/ai/nism-exam/', import.meta.url));
   mkdirSync(outDir, { recursive: true });
-  const stamp = `${new Date().toISOString().slice(0, 10)}-${model}`;
+  const { file: stamp, heading } = reportName(arg(argv, 'bank') === 'law' ? 'law' : 'nism', new Date().toISOString().slice(0, 10), model);
   writeFileSync(`${outDir}${stamp}.json`, `${JSON.stringify({ ...report, tokens, costUsd }, null, 2)}\n`);
-  writeFileSync(`${outDir}${stamp}.md`, reportMarkdown(report, questions, costUsd));
+  writeFileSync(`${outDir}${stamp}.md`, reportMarkdown(report, questions, costUsd, heading));
   console.log(`\n${report.pct}% (${report.correct}/${report.total}); law-sensitive ${report.lawSensitive.correct}/${report.lawSensitive.n}; ~$${costUsd.toFixed(2)}`);
   console.log(`Report: docs/ai/nism-exam/${stamp}.md`);
   return 0;

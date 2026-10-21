@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { main, parseLetter, scoreExam, type ExamQuestion } from '../../scripts/nismExam.js';
+import { main, parseLetter, reportName, scoreExam, type ExamQuestion } from '../../scripts/nismExam.js';
 
 const q = (id: string, chapter: number, answer: ExamQuestion['answer'], lawSensitive = false): ExamQuestion => ({
   id,
@@ -90,5 +90,12 @@ describe('nismExam CLI', () => {
     expect(code).toBe(2);
     expect(log.mock.calls.flat().join(' ')).toMatch(/60 questions/);
     log.mockRestore();
+  });
+});
+
+describe('reportName', () => {
+  it('keeps law and NISM reports for the same day apart', () => {
+    expect(reportName('nism', '2026-10-21', 'm')).toEqual({ file: '2026-10-21-nism-m', heading: 'NISM exam report' });
+    expect(reportName('law', '2026-10-21', 'm')).toEqual({ file: '2026-10-21-law-m', heading: 'Current-law exam report' });
   });
 });
