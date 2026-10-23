@@ -152,8 +152,12 @@ export async function updateForexBalance(
   if (patch.bankName !== undefined) data.bankName = patch.bankName;
   if (patch.country !== undefined) data.country = patch.country;
   if (patch.notes !== undefined) data.notes = patch.notes;
-  if (patch.accountNumber !== undefined) {
-    if (patch.accountNumber === null || patch.accountNumber === '') {
+  // Blank means "keep what is saved": the edit form says "leave blank to keep
+  // existing", and the stored number is never sent back to prefill it. Only an
+  // explicit null clears it. Treating "" as clear wiped the account number on
+  // every edit that did not retype it.
+  if (patch.accountNumber !== undefined && patch.accountNumber !== '') {
+    if (patch.accountNumber === null) {
       data.accountNumberEnc = null;
       data.accountLast4 = null;
     } else {
@@ -394,8 +398,8 @@ export async function deleteTcsCredit(userId: string, id: string) {
 // ─── Forex pair P&L ────────────────────────────────────────────────
 //
 // FOREX_PAIR trades are speculative business income — they skip the CG FIFO
-// engine. P&L here is the simple "sell proceeds minus buy cost" net per
-// (portfolio, pair) bucket, aggregated by financial year.
+// engine. P&L is FIFO-matched per (portfolio, pair) across years and reported
+// per financial year — see forexPairPnlFromTxs.
 
 export interface ForexPairPnlRow {
   portfolioId: string;
@@ -405,56 +409,99 @@ export interface ForexPairPnlRow {
   sellQty: string;
   buyCost: string;
   sellProceeds: string;
-  realisedPnl: string; // sellProceeds − costBasis (FIFO matched, capped at min(buy, sell) qty)
-  unrealisedPosition: string; // net qty still open
+  realisedPnl: string; // P&L of lots closed in this FY (FIFO across all years)
+  unrealisedPosition: string; // net qty still open at the end of this FY
 }
 
 export async function computeForexPairPnL(portfolioId: string): Promise<ForexPairPnlRow[]> {
   const txs = await prisma.transaction.findMany({
     where: { portfolioId, assetClass: 'FOREX_PAIR' },
-    orderBy: { tradeDate: 'asc' },
+    orderBy: [{ tradeDate: 'asc' }, { createdAt: 'asc' }],
   });
-  const buckets = new Map<string, typeof txs>();
+  return forexPairPnlFromTxs(portfolioId, txs);
+}
+
+interface PairTx {
+  tradeDate: Date;
+  transactionType: string;
+  quantity: { toString(): string };
+  netAmount: { toString(): string };
+  isin: string | null;
+  assetName: string | null;
+}
+
+/**
+ * FIFO per pair across the pair's whole history, with each closed lot's P&L
+ * booked to the financial year of the trade that closed it.
+ *
+ * This used to bucket trades by FY first and match only within a bucket, so a
+ * position bought in one FY and sold in the next matched nothing on either
+ * side and showed no P&L at all. Rows are still one per (pair, FY): buy/sell
+ * figures are that year's trades, realised P&L is what closed that year, and
+ * the open position is the net quantity still open at the end of that year.
+ * A sell with nothing open opens a short, which a later buy closes.
+ */
+export function forexPairPnlFromTxs(portfolioId: string, txs: PairTx[]): ForexPairPnlRow[] {
+  interface Lot { qty: Decimal; price: Decimal; long: boolean }
+  interface Year { buyQty: Decimal; sellQty: Decimal; buyCost: Decimal; sellProceeds: Decimal; realised: Decimal; open: Decimal }
+  const zero = () => new Decimal(0);
+  const byPair = new Map<string, PairTx[]>();
   for (const t of txs) {
     const pair = t.isin ?? t.assetName ?? 'UNKNOWN';
-    const key = `${portfolioId}|${pair}|${financialYearOf(t.tradeDate)}`;
-    const arr = buckets.get(key) ?? [];
+    const arr = byPair.get(pair) ?? [];
     arr.push(t);
-    buckets.set(key, arr);
+    byPair.set(pair, arr);
   }
+
   const rows: ForexPairPnlRow[] = [];
-  for (const [key, list] of buckets) {
-    const [, pair, fy] = key.split('|');
-    let buyQty = new Decimal(0);
-    let sellQty = new Decimal(0);
-    let buyCost = new Decimal(0);
-    let sellProceeds = new Decimal(0);
-    for (const t of list) {
+  for (const [pair, list] of byPair) {
+    const sorted = [...list].sort((a, b) => a.tradeDate.getTime() - b.tradeDate.getTime());
+    const lots: Lot[] = [];
+    const years = new Map<string, Year>();
+    for (const t of sorted) {
+      const isBuy = t.transactionType === 'BUY';
+      if (!isBuy && t.transactionType !== 'SELL') continue;
       const qty = new Decimal(t.quantity.toString());
+      if (qty.lte(0)) continue;
       const net = new Decimal(t.netAmount.toString());
-      if (t.transactionType === 'BUY') {
-        buyQty = buyQty.plus(qty);
-        buyCost = buyCost.plus(net);
-      } else if (t.transactionType === 'SELL') {
-        sellQty = sellQty.plus(qty);
-        sellProceeds = sellProceeds.plus(net);
+      const price = net.dividedBy(qty);
+      const fy = financialYearOf(t.tradeDate);
+      const y = years.get(fy) ?? { buyQty: zero(), sellQty: zero(), buyCost: zero(), sellProceeds: zero(), realised: zero(), open: zero() };
+      if (isBuy) {
+        y.buyQty = y.buyQty.plus(qty);
+        y.buyCost = y.buyCost.plus(net);
+      } else {
+        y.sellQty = y.sellQty.plus(qty);
+        y.sellProceeds = y.sellProceeds.plus(net);
       }
+      // Close opposite-side lots first (FIFO), then open what is left.
+      let remaining = qty;
+      while (remaining.gt(0) && lots.length > 0 && lots[0]!.long !== isBuy) {
+        const lot = lots[0]!;
+        const take = Decimal.min(lot.qty, remaining);
+        // Long closed by a sell: sell − buy. Short closed by a buy: short sale − buy.
+        y.realised = y.realised.plus(lot.long ? price.minus(lot.price).times(take) : lot.price.minus(price).times(take));
+        lot.qty = lot.qty.minus(take);
+        remaining = remaining.minus(take);
+        if (lot.qty.isZero()) lots.shift();
+      }
+      if (remaining.gt(0)) lots.push({ qty: remaining, price, long: isBuy });
+      y.open = lots.reduce((s, l) => (l.long ? s.plus(l.qty) : s.minus(l.qty)), zero());
+      years.set(fy, y);
     }
-    const matchedQty = Decimal.min(buyQty, sellQty);
-    const avgBuy = buyQty.isZero() ? new Decimal(0) : buyCost.dividedBy(buyQty);
-    const avgSell = sellQty.isZero() ? new Decimal(0) : sellProceeds.dividedBy(sellQty);
-    const realised = avgSell.minus(avgBuy).times(matchedQty);
-    rows.push({
-      portfolioId,
-      pair: pair ?? 'UNKNOWN',
-      financialYear: fy ?? '',
-      buyQty: buyQty.toFixed(6),
-      sellQty: sellQty.toFixed(6),
-      buyCost: buyCost.toFixed(4),
-      sellProceeds: sellProceeds.toFixed(4),
-      realisedPnl: realised.toFixed(4),
-      unrealisedPosition: buyQty.minus(sellQty).toFixed(6),
-    });
+    for (const [fy, y] of years) {
+      rows.push({
+        portfolioId,
+        pair,
+        financialYear: fy,
+        buyQty: y.buyQty.toFixed(6),
+        sellQty: y.sellQty.toFixed(6),
+        buyCost: y.buyCost.toFixed(4),
+        sellProceeds: y.sellProceeds.toFixed(4),
+        realisedPnl: y.realised.toFixed(4),
+        unrealisedPosition: y.open.toFixed(6),
+      });
+    }
   }
   return rows;
 }

@@ -12,7 +12,12 @@ export interface CashFlowDTO {
   portfolioName: string;
   date: string;
   type: 'INFLOW' | 'OUTFLOW';
+  /** In `currency`; INR when currency is null. */
   amount: string;
+  /** ISO code of a non-INR cash flow (e.g. a split settled in USD); null = INR. */
+  currency?: string | null;
+  /** INR value of a non-INR amount, when a rate was available. */
+  inrEquivalent?: string | null;
   description: string | null;
   createdAt: string;
 }

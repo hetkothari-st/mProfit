@@ -4,6 +4,7 @@ exports[`parsePnbPpfPassbook > parses synthetic PNB PPF statement 1`] = `
 [
   {
     "amount": "80000.00",
+    "balance": "80000.00",
     "eventDate": "2023-04-01",
     "memberIdLast4": "3456",
     "notes": "Opening Balance",
@@ -12,6 +13,7 @@ exports[`parsePnbPpfPassbook > parses synthetic PNB PPF statement 1`] = `
   },
   {
     "amount": "10000.00",
+    "balance": "90000.00",
     "eventDate": "2023-07-15",
     "memberIdLast4": "3456",
     "notes": "PPF Deposit",
@@ -20,6 +22,7 @@ exports[`parsePnbPpfPassbook > parses synthetic PNB PPF statement 1`] = `
   },
   {
     "amount": "10000.00",
+    "balance": "100000.00",
     "eventDate": "2024-01-20",
     "memberIdLast4": "3456",
     "notes": "Self Deposit",
@@ -28,6 +31,7 @@ exports[`parsePnbPpfPassbook > parses synthetic PNB PPF statement 1`] = `
   },
   {
     "amount": "6710.00",
+    "balance": "106710.00",
     "eventDate": "2024-03-31",
     "memberIdLast4": "3456",
     "notes": "Interest Credited",

@@ -13,6 +13,9 @@ import { logger } from '../lib/logger.js';
 import { emitStaleAccountAlerts } from '../services/pf/pfNudges.service.js';
 import { runAsSystem } from '../lib/requestContext.js';
 
+/** 09:00 every day, IST (see the timezone passed to cron.schedule). */
+export const PF_NUDGE_CRON = '0 9 * * *';
+
 let running = false;
 
 async function runPfNudgeJob(): Promise<void> {
@@ -40,8 +43,11 @@ async function runPfNudgeJob(): Promise<void> {
  */
 export function startPfNudgeJob(): void {
   if (process.env.ENABLE_PF_NUDGE_CRON === 'false') return;
-  // 09:00 IST = 03:30 UTC
-  cron.schedule('30 3 * * *', () => void runPfNudgeJob(), {
+  // The expression is read in Asia/Kolkata (the timezone option), so it is
+  // written in IST. It used to be '30 3' — 03:30 UTC converted by hand — which
+  // with the IST timezone fired at 03:30 IST, raising the reminder in the
+  // middle of the night instead of at the 09:00 the docs promise.
+  cron.schedule(PF_NUDGE_CRON, () => void runPfNudgeJob(), {
     timezone: 'Asia/Kolkata',
   });
   logger.info('[pf.nudges.cron] scheduled (daily 09:00 IST)');

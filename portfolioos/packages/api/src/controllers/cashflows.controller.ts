@@ -61,6 +61,11 @@ export async function listCashFlows(req: Request, res: Response) {
       date: cf.date,
       type: cf.type,
       amount: cf.amount.toString(),
+      // Native currency (null = INR) and its INR equivalent. A split expense
+      // settled in USD is stored in USD; without these the page printed the
+      // USD figure with a ₹ sign.
+      currency: cf.currency ?? null,
+      inrEquivalent: cf.inrEquivalent?.toString() ?? null,
       description: cf.description ?? null,
       createdAt: cf.createdAt,
     })),

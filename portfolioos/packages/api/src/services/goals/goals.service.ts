@@ -212,7 +212,10 @@ async function withProgress(userId: string, goal: RawGoal) {
     goal.inflationRate ? d(goal.inflationRate) : null,
     years,
   );
-  const requiredCagr = calcRequiredCagr(target, currentValue, years); // number | null
+  // The target is in today's rupees; what has to exist on the target date is
+  // the inflation-adjusted figure. Required return is measured against that
+  // when an inflation rate is set — otherwise the rate changed nothing shown.
+  const requiredCagr = calcRequiredCagr(inflationAdjustedTarget ?? target, currentValue, years); // number | null
 
   return {
     id: goal.id,

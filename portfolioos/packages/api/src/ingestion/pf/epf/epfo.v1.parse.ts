@@ -46,7 +46,7 @@ export function parseEpfoPassbook(input: ParseInput): ParseResult<PfCanonicalEve
   for (const line of input.tokens.lines) {
     const m = line.match(ROW_RE);
     if (!m) continue;
-    const [, , dateRaw, descRaw, amtRaw] = m;
+    const [, , dateRaw, descRaw, amtRaw, balRaw] = m;
     const type = classify(descRaw ?? '');
     if (!type) continue;
     const eventDate = toIsoDate(dateRaw ?? '');
@@ -61,6 +61,7 @@ export function parseEpfoPassbook(input: ParseInput): ParseResult<PfCanonicalEve
       memberIdLast4: input.memberId.slice(-4),
       notes: (descRaw ?? '').trim(),
       sequence: seq,
+      balance: toDecimalStr(balRaw ?? '0'),
     });
   }
 

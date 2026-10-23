@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { Plus, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatINR, formatCurrency, Decimal, formatDateOnly } from '@everypaisa/shared';
@@ -23,18 +22,7 @@ import { forexApi, type LrsRemittanceDTO } from '@/api/forex.api';
 import { apiErrorMessage } from '@/api/client';
 import { SUPPORTED_CCY, LRS_PURPOSES as PURPOSES } from './constants';
 
-const lrsSchema = z.object({
-  remittanceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  currency: z.string().min(3).max(3),
-  foreignAmount: z.string().regex(/^-?\d+(\.\d+)?$/),
-  fxRate: z.string().regex(/^-?\d+(\.\d+)?$/).optional(),
-  purpose: z.enum(PURPOSES),
-  bankName: z.string().max(160).optional(),
-  remittanceRef: z.string().max(200).optional(),
-  tcsDeducted: z.string().regex(/^-?\d+(\.\d+)?$/).optional(),
-  notes: z.string().max(2000).optional(),
-});
-type LrsForm = z.infer<typeof lrsSchema>;
+import { lrsSchema, type LrsForm } from './lrsSchema';
 
 export function LrsTab() {
   const queryClient = useQueryClient();
@@ -366,6 +354,9 @@ function LrsDialog({
             <div>
               <Label htmlFor="fxRate">FX rate (optional)</Label>
               <Input id="fxRate" placeholder="auto" {...register('fxRate')} />
+              {errors.fxRate && (
+                <p className="text-xs text-destructive">{errors.fxRate.message}</p>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -382,6 +373,9 @@ function LrsDialog({
             <div>
               <Label htmlFor="tcsDeducted">TCS deducted</Label>
               <Input id="tcsDeducted" placeholder="0" {...register('tcsDeducted')} />
+              {errors.tcsDeducted && (
+                <p className="text-xs text-destructive">{errors.tcsDeducted.message}</p>
+              )}
             </div>
             <div>
               <Label htmlFor="notes">Notes</Label>

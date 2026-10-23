@@ -18,7 +18,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { goalsApi, type GoalDTO, type GoalCategory, type GoalPriority } from '@/api/goals.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
-import { formatINR, formatDateIST } from '@everypaisa/shared';
+import { formatINR, formatDateIST, Decimal } from '@everypaisa/shared';
 import { LockedFeature } from '@/components/common/LockedFeature';
 import { GoalDialog } from './GoalDialog';
 
@@ -271,6 +271,12 @@ function GoalCard({ goal, portfolios, onEdit, onDelete }: CardProps) {
             label="Target date"
             value={formatDateIST(goal.targetDate)}
           />
+          {goal.inflationAdjustedTarget != null && goal.inflationRate != null && (
+            <Cell
+              label={`Target with ${inflationPct(goal.inflationRate)}% inflation`}
+              value={formatINR(goal.inflationAdjustedTarget)}
+            />
+          )}
         </div>
 
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground border-t border-border/60 pt-2">
@@ -308,6 +314,11 @@ function GoalCard({ goal, portfolios, onEdit, onDelete }: CardProps) {
       </CardContent>
     </Card>
   );
+}
+
+/** Stored as a fraction ("0.06"); shown as a percentage ("6"). */
+function inflationPct(rate: string): string {
+  return new Decimal(rate).times(100).toDecimalPlaces(2).toString();
 }
 
 function Cell({ label, value }: { label: string; value: string }) {

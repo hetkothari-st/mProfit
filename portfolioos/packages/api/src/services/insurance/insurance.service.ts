@@ -607,6 +607,14 @@ export async function updatePolicy(
         ...extrasColumns(input.type ?? existing.type, input),
       },
     });
+    // New reminders are only generated for ACTIVE policies; also retire the
+    // ones already raised, so a policy marked matured or lapsed stops nagging.
+    if (row.status !== 'ACTIVE') {
+      await prisma.alert.updateMany({
+        where: { userId, type: 'INSURANCE_PREMIUM', isActive: true, metadata: { path: ['policyId'], equals: policyId } },
+        data: { isActive: false },
+      });
+    }
     return toPolicyDto(row);
   } catch (err) {
     if (isUniqueViolation(err)) throw new ConflictError(DUPLICATE_POLICY);

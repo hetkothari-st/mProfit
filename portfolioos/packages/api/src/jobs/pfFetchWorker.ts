@@ -38,6 +38,7 @@ import { startSession, transition, reportStatus, complete, fail } from '../servi
 import { buildCanonicalEvents } from '../services/pf/pfCanonicalize.service.js';
 import { runPfChain } from '../ingestion/pf/chain.js';
 import { recomputeForAsset } from '../services/holdings/holdingsProjection.js';
+import { refreshPfAccountBalance } from '../services/pf/pfBalance.service.js';
 import { incCounter } from '../lib/metrics.js';
 import { randomUUID } from 'node:crypto';
 import type { ScrapeContext } from '../ingestion/pf/types.js';
@@ -294,7 +295,9 @@ export function startPfFetchWorker(): void {
                   status: 'CONFIRMED',
                   metadata: e.metadata as Prisma.InputJsonValue,
                 },
-                update: {},
+                // Refresh metadata on a re-import so passbooks imported before running
+                // balances were captured gain them (it is derived only from the same row).
+                update: { metadata: e.metadata as Prisma.InputJsonValue },
               });
               eventsInserted++;
             } catch (upsertErr) {
@@ -326,6 +329,7 @@ export function startPfFetchWorker(): void {
             lastFetchSource: 'SERVER_HEADLESS',
           },
         });
+        await refreshPfAccountBalance(userId, account.id);
 
         // 9. Complete session
         await complete(sessionId, eventsInserted);

@@ -41,6 +41,13 @@ export interface PfCanonicalEventInput {
   memberIdLast4?: string;
   notes?: string;
   sequence: number;
+  /**
+   * Running balance printed on the passbook row, when the passbook has one.
+   * Not part of the idempotency hash: it is what lets the account balance be
+   * set from the latest row (see pfBalance.service.ts) instead of summing
+   * events, which double-counts the yearly opening-balance rows.
+   */
+  balance?: string;
 }
 
 export interface ScrapeContext {

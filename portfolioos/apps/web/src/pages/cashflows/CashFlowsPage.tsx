@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
-import { Decimal, formatINR, formatDateIST } from '@everypaisa/shared';
+import { Decimal, formatINR, formatCurrency, formatDateIST } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,13 +31,15 @@ export function CashFlowsPage() {
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  // Summary for visible items
+  // Summary for visible items, in rupees: a foreign-currency flow counts at its
+  // INR equivalent (and not at all when no rate was available), never at its
+  // face value in another currency.
   const totalInflow = items
     .filter((cf) => cf.type === 'INFLOW')
-    .reduce((sum, cf) => sum.plus(new Decimal(cf.amount)), new Decimal(0));
+    .reduce((sum, cf) => sum.plus(inrValue(cf) ?? 0), new Decimal(0));
   const totalOutflow = items
     .filter((cf) => cf.type === 'OUTFLOW')
-    .reduce((sum, cf) => sum.plus(new Decimal(cf.amount)), new Decimal(0));
+    .reduce((sum, cf) => sum.plus(inrValue(cf) ?? 0), new Decimal(0));
 
   return (
     <div>
@@ -175,6 +177,16 @@ export function CashFlowsPage() {
   );
 }
 
+function isForeign(cf: CashFlowDTO): boolean {
+  return !!cf.currency && cf.currency.toUpperCase() !== 'INR';
+}
+
+/** The flow in rupees, or null for a foreign amount with no INR equivalent. */
+function inrValue(cf: CashFlowDTO): Decimal | null {
+  if (!isForeign(cf)) return new Decimal(cf.amount);
+  return cf.inrEquivalent != null ? new Decimal(cf.inrEquivalent) : null;
+}
+
 function CashFlowRow({ cf }: { cf: CashFlowDTO }) {
   const isInflow = cf.type === 'INFLOW';
   const dateStr = formatDateIST(cf.date);
@@ -215,7 +227,12 @@ function CashFlowRow({ cf }: { cf: CashFlowDTO }) {
         ].join(' ')}
       >
         {isInflow ? '+' : '−'}
-        {formatINR(amountDecimal.toString())}
+        {formatCurrency(amountDecimal.toString(), cf.currency)}
+        {isForeign(cf) && cf.inrEquivalent != null && (
+          <div className="text-[11px] font-normal text-muted-foreground">
+            ≈ {formatINR(cf.inrEquivalent)}
+          </div>
+        )}
       </td>
     </tr>
   );

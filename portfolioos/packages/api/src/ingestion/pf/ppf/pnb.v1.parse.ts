@@ -61,7 +61,7 @@ export function parsePnbPpfPassbook(input: ParseInput): ParseResult<PfCanonicalE
       const bucket = `${eventDate}|${type5}|${amount}`;
       const seqIdx = seq.get(bucket) ?? 0;
       seq.set(bucket, seqIdx + 1);
-      events.push({ type: type5, eventDate, amount, memberIdLast4: input.accountIdentifier.slice(-4), notes: (descRaw ?? '').trim(), sequence: seqIdx });
+      events.push({ type: type5, eventDate, amount, memberIdLast4: input.accountIdentifier.slice(-4), notes: (descRaw ?? '').trim(), sequence: seqIdx, balance: toDecimalStr(m5[5] ?? '0') });
       continue;
     }
 
@@ -83,6 +83,7 @@ export function parsePnbPpfPassbook(input: ParseInput): ParseResult<PfCanonicalE
       memberIdLast4: input.accountIdentifier.slice(-4),
       notes: (descRaw ?? '').trim(),
       sequence: seqIdx,
+      balance: toDecimalStr(m4[4] ?? '0'),
     });
   }
 

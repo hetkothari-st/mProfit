@@ -4,6 +4,7 @@ exports[`parseHdfcPpfPassbook > parses synthetic HDFC PPF statement 1`] = `
 [
   {
     "amount": "175000.00",
+    "balance": "175000.00",
     "eventDate": "2023-04-01",
     "memberIdLast4": "1234",
     "notes": "Opening Balance",
@@ -12,6 +13,7 @@ exports[`parseHdfcPpfPassbook > parses synthetic HDFC PPF statement 1`] = `
   },
   {
     "amount": "10000.00",
+    "balance": "185000.00",
     "eventDate": "2023-05-05",
     "memberIdLast4": "1234",
     "notes": "PPF Deposit",
@@ -20,6 +22,7 @@ exports[`parseHdfcPpfPassbook > parses synthetic HDFC PPF statement 1`] = `
   },
   {
     "amount": "20000.00",
+    "balance": "205000.00",
     "eventDate": "2023-10-10",
     "memberIdLast4": "1234",
     "notes": "Self Deposit",
@@ -28,6 +31,7 @@ exports[`parseHdfcPpfPassbook > parses synthetic HDFC PPF statement 1`] = `
   },
   {
     "amount": "14000.00",
+    "balance": "219000.00",
     "eventDate": "2024-03-31",
     "memberIdLast4": "1234",
     "notes": "Interest Credited",

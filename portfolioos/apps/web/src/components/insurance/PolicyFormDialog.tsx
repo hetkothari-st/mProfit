@@ -17,7 +17,7 @@ import {
 } from '@/api/insurance/insurance.api';
 import { documentsApi } from '@/api/documents.api';
 import { findCatalogProduct, type CatalogProduct } from '@/data/insuranceCatalog';
-import { FREQUENCY_LABELS, POLICY_TYPES, POLICY_TYPE_LABELS, plural } from '@/lib/insurance';
+import { FREQUENCY_LABELS, POLICY_STATUS_LABELS, POLICY_TYPES, POLICY_TYPE_LABELS, plural } from '@/lib/insurance';
 import { CatalogBrief, InsuranceCatalogPicker, inferCatalogId } from './InsuranceCatalogPicker';
 
 const MONEY = /^\d+(\.\d+)?$/;
@@ -39,6 +39,8 @@ interface FormState {
   /** '' = not recorded. */
   criticalIllness: '' | 'YES' | 'NO';
   criticalIllnessSumAssured: string;
+  /** ACTIVE / LAPSED / SURRENDERED / MATURED / CLAIMED. Only editable on edit. */
+  status: string;
 }
 
 /** API dates are full ISO timestamps; <input type="date"> wants YYYY-MM-DD. */
@@ -61,6 +63,7 @@ function formFrom(p: InsurancePolicyDTO | null | undefined): FormState {
     gracePeriodDays: p?.gracePeriodDays != null ? String(p.gracePeriodDays) : '',
     criticalIllness: p?.criticalIllnessCover === true ? 'YES' : p?.criticalIllnessCover === false ? 'NO' : '',
     criticalIllnessSumAssured: p?.criticalIllnessSumAssured ?? '',
+    status: p?.status ?? 'ACTIVE',
   };
 }
 
@@ -200,6 +203,9 @@ export function PolicyFormDialog({
     input.criticalIllnessCover = ciApplies && form.criticalIllness ? form.criticalIllness === 'YES' : null;
     input.criticalIllnessSumAssured =
       ciApplies && form.criticalIllness === 'YES' ? form.criticalIllnessSumAssured.trim() || null : null;
+    // A matured, lapsed or surrendered policy stops getting premium reminders;
+    // this was the only way to say so, and the form never offered it.
+    if (isEdit) input.status = form.status;
     // Blank on edit keeps the saved number.
     if (form.policyNumber.trim()) input.policyNumber = form.policyNumber.trim();
     // The next due date also decides which earlier premiums count as settled,
@@ -318,6 +324,29 @@ export function PolicyFormDialog({
               {error('premiumAmount')}
             </div>
           </div>
+
+          {isEdit && (
+            <div>
+              <Label htmlFor="policy-status">Status</Label>
+              <select
+                id="policy-status"
+                className={SELECT}
+                value={form.status}
+                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+              >
+                {Object.entries(POLICY_STATUS_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              {form.status !== 'ACTIVE' && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  No premium reminders are sent for a policy that is not active.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>

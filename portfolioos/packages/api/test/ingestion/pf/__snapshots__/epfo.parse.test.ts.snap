@@ -4,6 +4,7 @@ exports[`parseEpfoPassbook > parses the synthetic fixture into canonical events 
 [
   {
     "amount": "5000.00",
+    "balance": "105000.00",
     "eventDate": "2024-04-01",
     "memberIdLast4": "2345",
     "notes": "CR EMPLOYER SHARE",
@@ -12,6 +13,7 @@ exports[`parseEpfoPassbook > parses the synthetic fixture into canonical events 
   },
   {
     "amount": "5000.00",
+    "balance": "110000.00",
     "eventDate": "2024-04-01",
     "memberIdLast4": "2345",
     "notes": "CR EMPLOYEE SHARE",
@@ -20,6 +22,7 @@ exports[`parseEpfoPassbook > parses the synthetic fixture into canonical events 
   },
   {
     "amount": "4800.00",
+    "balance": "102200.00",
     "eventDate": "2024-02-01",
     "memberIdLast4": "2345",
     "notes": "CR EMPLOYER SHARE",
@@ -28,6 +31,7 @@ exports[`parseEpfoPassbook > parses the synthetic fixture into canonical events 
   },
   {
     "amount": "4800.00",
+    "balance": "107000.00",
     "eventDate": "2024-02-01",
     "memberIdLast4": "2345",
     "notes": "CR EMPLOYEE SHARE",

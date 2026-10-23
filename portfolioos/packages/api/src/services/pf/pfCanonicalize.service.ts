@@ -29,7 +29,7 @@ export interface BuiltCanonicalEvent {
 }
 
 export function buildCanonicalEvents(input: CanonicalizeInput): BuiltCanonicalEvent[] {
-  return input.events.map((ev) => ({
+  return input.events.map((ev, index) => ({
     userId: input.userId,
     sourceAdapter: input.adapterId,
     sourceAdapterVer: input.adapterVersion,
@@ -50,6 +50,10 @@ export function buildCanonicalEvents(input: CanonicalizeInput): BuiltCanonicalEv
       memberIdLast4: ev.memberIdLast4 ?? null,
       notes: ev.notes ?? null,
       sequence: ev.sequence,
+      // Running balance and row position feed pfBalance.service, which sets the
+      // account balance from the latest passbook row. Neither is in the hash.
+      balance: ev.balance ?? null,
+      position: index,
     },
     status: 'CONFIRMED' as const,
   }));

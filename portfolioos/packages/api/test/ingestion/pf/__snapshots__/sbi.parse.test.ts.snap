@@ -4,6 +4,7 @@ exports[`parseSbiPpfPassbook > parses synthetic SBI PPF statement 1`] = `
 [
   {
     "amount": "150000.00",
+    "balance": "150000.00",
     "eventDate": "2023-04-01",
     "memberIdLast4": "8901",
     "notes": "Opening Balance",
@@ -12,6 +13,7 @@ exports[`parseSbiPpfPassbook > parses synthetic SBI PPF statement 1`] = `
   },
   {
     "amount": "10000.00",
+    "balance": "160000.00",
     "eventDate": "2023-05-15",
     "memberIdLast4": "8901",
     "notes": "PPF Deposit",
@@ -20,6 +22,7 @@ exports[`parseSbiPpfPassbook > parses synthetic SBI PPF statement 1`] = `
   },
   {
     "amount": "15000.00",
+    "balance": "175000.00",
     "eventDate": "2023-08-20",
     "memberIdLast4": "8901",
     "notes": "PPF Deposit",
@@ -28,6 +31,7 @@ exports[`parseSbiPpfPassbook > parses synthetic SBI PPF statement 1`] = `
   },
   {
     "amount": "12150.00",
+    "balance": "187150.00",
     "eventDate": "2024-03-31",
     "memberIdLast4": "8901",
     "notes": "Interest Credited",
