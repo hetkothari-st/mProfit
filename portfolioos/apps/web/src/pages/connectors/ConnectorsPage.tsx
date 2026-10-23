@@ -1,5 +1,5 @@
 import { useAuthStore } from '@/stores/auth.store';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -22,6 +22,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { brokerApi, type BrokerId, type BrokerStatus } from '@/api/fo.api';
 import { connectorsApi } from '@/api/connectors.api';
 import { apiErrorMessage } from '@/api/client';
+import { readBrokerOauthMessage } from '@/lib/brokerOauthMessage';
 
 import { formatDateTimeIST } from '@everypaisa/shared';
 interface BrokerMeta {
@@ -121,17 +122,22 @@ export function ConnectorsPage() {
     return m;
   }, [statuses]);
 
+  // The login popup we opened; only it may report a result.
+  const popupRef = useRef<Window | null>(null);
+
   // Listen for the popup's postMessage payload — broker callback page sends
   // { type: 'broker_oauth_result', payload: { ok, brokerId?, error? } }.
+  // readBrokerOauthMessage drops anything not from that popup on the API origin.
   useEffect(() => {
     function onMessage(e: MessageEvent) {
-      const data = e.data as { type?: string; payload?: { ok?: boolean; brokerId?: string; error?: string } };
-      if (data?.type !== 'broker_oauth_result') return;
-      if (data.payload?.ok) {
-        toast.success(`Connected: ${data.payload.brokerId}`);
+      const result = readBrokerOauthMessage(e, popupRef.current);
+      if (!result) return;
+      popupRef.current = null;
+      if (result.ok) {
+        toast.success(`Connected: ${result.brokerId ?? 'broker'}`);
         qc.invalidateQueries({ queryKey: ['broker-status'] });
       } else {
-        toast.error(data.payload?.error ?? 'OAuth failed');
+        toast.error(result.error ?? 'OAuth failed');
       }
     }
     window.addEventListener('message', onMessage);
@@ -168,6 +174,7 @@ export function ConnectorsPage() {
         return;
       }
       const w = window.open(url, 'broker-oauth', 'width=520,height=720');
+      popupRef.current = w;
       if (!w) toast.error('Popup blocked — allow popups for this site');
     },
     onError: (e) => toast.error(apiErrorMessage(e)),
