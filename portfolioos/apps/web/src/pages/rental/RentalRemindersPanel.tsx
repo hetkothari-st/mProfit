@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
 import { rentalApi, type RentReminderDTO } from '@/api/rental/rental.api';
 import { gmailApi } from '@/api/gmail/gmail.api';
+import { apiErrorMessage } from '@/api/client';
 
 // Map raw provider/server error codes to landlord-friendly text. Anything
 // not matched falls through unchanged so genuine carrier errors still
@@ -202,7 +203,7 @@ function ReminderPreviewDialog({ reminder, open, onOpenChange }: PreviewProps) {
       qc.invalidateQueries({ queryKey: ['rental-reminders'] });
       toast.success('Reminder updated');
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Update failed'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Update failed')),
   });
 
   return (
@@ -570,7 +571,7 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
         qc.refetchQueries({ queryKey: ['rental-property'] }),
       ]);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Save failed'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Save failed')),
   });
 
   const sortedReminders = [...reminders].sort((a, b) => {
@@ -636,7 +637,7 @@ function TenancyBlock({ tenancyId, reminders, onPreview, onReconnectNeeded }: Te
       }
       setSelected(new Set());
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Approve failed'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Approve failed')),
   });
 
   const rejectAllMut = useMutation({
@@ -889,7 +890,7 @@ function ReconnectGmailDialog({
       }, 800);
     } catch (err) {
       setOpening(false);
-      toast.error(err instanceof Error ? err.message : 'Reconnect failed');
+      toast.error(apiErrorMessage(err, 'Reconnect failed'));
     }
   }
 
@@ -949,7 +950,7 @@ export function RentalRemindersPanel() {
         { duration: 6000 },
       );
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Scan failed', { duration: 8000 }),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Scan failed'), { duration: 8000 }),
   });
 
   const reminders = remindersQuery.data ?? [];

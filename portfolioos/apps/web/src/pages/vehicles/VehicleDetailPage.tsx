@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 import {
   ArrowLeft,
   Edit,
@@ -128,7 +129,7 @@ export function VehicleDetailPage() {
   const [smsOpen, setSmsOpen] = useState(false);
   const [challanTab, setChallanTab] = useState<ChallanTab>('ALL');
 
-  const { data: vehicle, isLoading } = useQuery({
+  const { data: vehicle, isLoading, isError, error } = useQuery({
     queryKey: ['vehicles', id],
     queryFn: () => vehiclesApi.get(id),
     enabled: Boolean(id),
@@ -223,9 +224,26 @@ export function VehicleDetailPage() {
     return { counts, sums };
   }, [challanRows]);
 
-  if (isLoading || !vehicle) {
+  if (isLoading) {
     return (
       <div className="py-10 text-center text-sm text-muted-foreground">Loading…</div>
+    );
+  }
+  // No vehicle and not loading means the id is missing, or the fetch failed
+  // (404 for an id that isn't the user's or no longer exists). This used to
+  // fall into the "Loading…" branch above and spin forever.
+  if (!vehicle) {
+    const notFound =
+      !id || !isError || (axios.isAxiosError(error) && [403, 404].includes(error.response?.status ?? 0));
+    return (
+      <div className="py-20 text-center text-sm text-muted-foreground">
+        {notFound ? 'Vehicle not found.' : apiErrorMessage(error, 'Could not load this vehicle.')}
+        <div className="mt-4">
+          <Button variant="ghost" onClick={() => navigate('/vehicles')}>
+            Back to vehicles
+          </Button>
+        </div>
+      </div>
     );
   }
 

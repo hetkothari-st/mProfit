@@ -116,10 +116,18 @@ export function VehicleFormDialog({ open, onOpenChange, initial }: Props) {
 
   const normalise = (values: FormValues) => {
     // React-hook-form preserves "" for empty inputs; the API expects null /
-    // absent, not empty strings, so flatten here.
+    // absent, not empty strings. On create an empty field is simply absent.
+    // On edit it must be sent as null: dropping it meant a field the user
+    // cleared (an old PUC date, a wrong colour) was left untouched by the
+    // PATCH, so nothing could ever be cleared. registrationNo is required and
+    // never cleared.
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(values)) {
-      if (v === '' || v === undefined) continue;
+      if (v === undefined) continue;
+      if (v === '') {
+        if (isEdit && k !== 'registrationNo') out[k] = null;
+        continue;
+      }
       out[k] = v;
     }
     return out;

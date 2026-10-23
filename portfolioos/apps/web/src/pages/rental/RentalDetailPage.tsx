@@ -781,7 +781,7 @@ function AddTenancyDialog({
         </div>
         {mutation.isError && (
           <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Error'}
+            {apiErrorMessage(mutation.error, 'Could not save')}
           </p>
         )}
         <DialogFooter>
@@ -896,7 +896,7 @@ function AddExpenseDialog({
         </div>
         {mutation.isError && (
           <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Error'}
+            {apiErrorMessage(mutation.error, 'Could not save')}
           </p>
         )}
         <DialogFooter>

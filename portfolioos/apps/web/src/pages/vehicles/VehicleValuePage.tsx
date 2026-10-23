@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -93,11 +93,16 @@ export function VehicleValuePage() {
     enabled: Boolean(make && model && year),
   });
 
-  // Reset downstream selects when upstream changes
-  useEffect(() => { setMake(''); setModel(''); setYear(''); setTrim(''); }, [category]);
-  useEffect(() => { setModel(''); setYear(''); setTrim(''); }, [make]);
-  useEffect(() => { setYear(''); setTrim(''); }, [model]);
-  useEffect(() => { setTrim(''); }, [year]);
+  // Reset downstream selects when the USER changes an upstream one. This
+  // lives in the change handlers, not in effects keyed on the values: "Use
+  // my car" sets all five at once, and effects watching category/make/model
+  // then ran after that render and blanked Model, Year and Trim again.
+  const changeCategory = (v: string) => {
+    setCategory(v); setMake(''); setModel(''); setYear(''); setTrim('');
+  };
+  const changeMake = (v: string) => { setMake(v); setModel(''); setYear(''); setTrim(''); };
+  const changeModel = (v: string) => { setModel(v); setYear(''); setTrim(''); };
+  const changeYear = (v: number | '') => { setYear(v); setTrim(''); };
 
   // Live recompute from sliders + quote anchor
   const adjustedPrice = useMemo(() => {
@@ -251,7 +256,7 @@ export function VehicleValuePage() {
 
             <div>
               <Label>Category</Label>
-              <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+              <Select value={category} onChange={(e) => changeCategory(e.target.value)}>
                 <option value="">Any</option>
                 {(categoriesQ.data ?? []).map((c) => (
                   <option key={c} value={c}>{c}</option>
@@ -261,7 +266,7 @@ export function VehicleValuePage() {
 
             <div>
               <Label>Make</Label>
-              <Select value={make} onChange={(e) => setMake(e.target.value)}>
+              <Select value={make} onChange={(e) => changeMake(e.target.value)}>
                 <option value="">Select make</option>
                 {(makesQ.data ?? []).map((m) => (
                   <option key={m} value={m}>{m}</option>
@@ -271,7 +276,7 @@ export function VehicleValuePage() {
 
             <div>
               <Label>Model</Label>
-              <Select value={model} onChange={(e) => setModel(e.target.value)} disabled={!make}>
+              <Select value={model} onChange={(e) => changeModel(e.target.value)} disabled={!make}>
                 <option value="">{make ? 'Select model' : 'Pick a make first'}</option>
                 {(modelsQ.data ?? []).map((m) => (
                   <option key={m} value={m}>{m}</option>
@@ -283,7 +288,7 @@ export function VehicleValuePage() {
               <Label>Year</Label>
               <Select
                 value={year ? String(year) : ''}
-                onChange={(e) => setYear(e.target.value ? Number(e.target.value) : '')}
+                onChange={(e) => changeYear(e.target.value ? Number.parseInt(e.target.value, 10) : '')}
                 disabled={!model}
               >
                 <option value="">{model ? 'Select year' : 'Pick a model first'}</option>
