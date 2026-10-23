@@ -224,9 +224,12 @@ describe('FundAnalysis — RIA gating (06 §4, §6)', () => {
     renderAnalysis(gatedVerdictFixture());
     const shut = screen.getByTestId('mf-switch-cost');
     expect(shut.textContent).toContain('1,482.50');
-    // Break-even is unknown here, and says so instead of showing a zero that
-    // would read as "switching pays for itself immediately".
-    expect(shut.textContent).toContain('Not available');
+    // Break-even is not calibrated yet (REPLACEMENT_EXPECTED_EDGE is null by
+    // design). It says so in words — not a zero that would read as "switching
+    // pays for itself immediately", and not a bare "Not available" that reads
+    // as a broken metric.
+    expect(screen.getByTestId('mf-break-even-uncalibrated').textContent).toBe('Not calculated yet');
+    expect(shut.textContent).toContain('how long a switch would take to earn back');
   });
 
   it('surfaces the verdict reasons so the conclusion is traceable to its evidence', () => {

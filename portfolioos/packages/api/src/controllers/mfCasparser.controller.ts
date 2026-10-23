@@ -40,6 +40,8 @@ const kfintechSchema = z.object({
   email: z.string().email().max(120),
   fromDate: isoDate.nullable().optional(),
   toDate: isoDate.nullable().optional(),
+  portfolioId: z.string().nullable().optional(),
+  nickname: z.string().max(80).nullable().optional(),
 });
 
 export async function requestCdslOtp(req: Request, res: Response) {

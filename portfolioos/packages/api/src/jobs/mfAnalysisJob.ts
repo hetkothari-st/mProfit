@@ -23,12 +23,12 @@
  * Registration
  * ---------------------------------------------------------------------------
  *
- * Deliberately absent: no import in `src/index.ts` or `jobs/index.ts`. This
- * module exports `startMfAnalysisJob` and the three trigger entry points, and
- * the boot sequence wires them — matching `startMfPeerRankJob` and
- * `startNetWorthSnapshotJob`. The trigger points are also exported so the
- * holdings-projection path and the scoring job can call them directly without
- * importing an orchestrator.
+ * `src/index.ts` calls `startMfAnalysisJob`. The trigger entry points are
+ * called by their real events: `recomputeForAsset` (holdings-projection
+ * path) calls `onMfHoldingsChanged` after an MF/ETF holding is rewritten, and
+ * `runMfScoreForUniverses` (scoring job) calls `onMfSchemeScoresUpdated` with
+ * the schemes that received new score rows. Both reach this module through a
+ * lazy import, so neither imports an orchestrator at load time.
  *
  * ---------------------------------------------------------------------------
  * Why an in-process queue rather than Bull
@@ -101,7 +101,50 @@ let draining = false;
  */
 export function enqueueMfAnalysis(userId: string, trigger: MfAnalysisTrigger): void {
   pending.set(userId, trigger);
-  if (started && !draining) void drainMfAnalysisQueue();
+  if (started) scheduleDrain();
+}
+
+/**
+ * How long the queue waits for a burst to finish before draining it.
+ *
+ * The `Map` collapses a burst into one run per user only if the burst is over
+ * by the time the drain starts. Draining on the first trigger — as this queue
+ * originally did — meant a CAS import that recomputes forty holdings ran the
+ * analysis after holding #1 (against a half-imported portfolio) and then again
+ * after the rest. Waiting for a quiet period lets the whole import land first,
+ * and also lets a recompute that ran inside a caller's transaction commit
+ * before the analysis reads the projection it is reacting to.
+ */
+export const MF_ANALYSIS_DEBOUNCE_MS = 5_000;
+
+/** A steady trickle of triggers must not postpone a run forever. */
+export const MF_ANALYSIS_MAX_WAIT_MS = 60_000;
+
+let drainTimer: ReturnType<typeof setTimeout> | null = null;
+let firstQueuedAt: number | null = null;
+
+/** Trailing debounce with a ceiling: every trigger pushes the drain back by
+ *  `MF_ANALYSIS_DEBOUNCE_MS`, but never past `MF_ANALYSIS_MAX_WAIT_MS` after
+ *  the first trigger of the burst. */
+function scheduleDrain(): void {
+  const now = Date.now();
+  if (firstQueuedAt === null) firstQueuedAt = now;
+  const deadline = firstQueuedAt + MF_ANALYSIS_MAX_WAIT_MS;
+  const delay = Math.max(0, Math.min(MF_ANALYSIS_DEBOUNCE_MS, deadline - now));
+  if (drainTimer !== null) clearTimeout(drainTimer);
+  drainTimer = setTimeout(() => {
+    drainTimer = null;
+    firstQueuedAt = null;
+    void drainMfAnalysisQueue();
+  }, delay);
+  // A pending analysis is not a reason to keep the process (or a test run)
+  // alive; a run lost to shutdown is re-triggered by the next change.
+  drainTimer.unref?.();
+}
+
+/** The users with a run queued and what triggered each. For tests. */
+export function pendingMfAnalysis(): ReadonlyMap<string, MfAnalysisTrigger> {
+  return new Map(pending);
 }
 
 /**
@@ -306,7 +349,7 @@ export function startMfAnalysisJob(): void {
     { queued: pending.size },
     '[mfAnalysis] job started — trigger-driven (holdings change, score update, user refresh)',
   );
-  if (pending.size > 0) void drainMfAnalysisQueue();
+  if (pending.size > 0) scheduleDrain();
 }
 
 /** Stop accepting drains and forget anything queued. For tests and shutdown;
@@ -315,4 +358,7 @@ export function startMfAnalysisJob(): void {
 export function stopMfAnalysisJob(): void {
   started = false;
   pending.clear();
+  if (drainTimer !== null) clearTimeout(drainTimer);
+  drainTimer = null;
+  firstQueuedAt = null;
 }

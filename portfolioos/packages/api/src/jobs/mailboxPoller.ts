@@ -15,6 +15,7 @@ import { uploadRoot } from '../lib/uploadRoot.js';
 import { logger } from '../lib/logger.js';
 import { decryptSecret } from '../lib/secrets.js';
 import { createImportJob } from '../services/imports/import.service.js';
+import { casMailbackTarget } from '../services/mf/mfCasMailback/mfCasMailback.service.js';
 import { syncGmailAccount } from '../ingestion/gmail/gmail.connector.js';
 import { pollMonitoredSendersForAccount } from '../ingestion/gmail/poller.js';
 import { runAsSystem, runAsUser } from '../lib/requestContext.js';
@@ -133,9 +134,16 @@ async function pollOne(
             const type = inferType(fileName, subject);
             const broker = inferBroker(subject, from);
 
+            // A CAS requested by mailback goes to the portfolio picked in
+            // the request dialog (see casMailbackTarget); else the default.
+            const portfolioId =
+              type === 'MF_CAS_PDF' || type === 'MF_CAS_EXCEL'
+                ? await casMailbackTarget(acc.userId, from, parsed.date ?? new Date())
+                : null;
+
             await createImportJob({
               userId: acc.userId,
-              portfolioId: null,
+              portfolioId,
               type,
               fileName,
               filePath,

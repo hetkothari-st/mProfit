@@ -15,6 +15,7 @@ import { uploadRoot } from '../../lib/uploadRoot.js';
 import { logger } from '../../lib/logger.js';
 import { encryptSecret, decryptSecret } from '../../lib/secrets.js';
 import { createImportJob } from '../../services/imports/import.service.js';
+import { casMailbackTarget } from '../../services/mf/mfCasMailback/mfCasMailback.service.js';
 import { issueOAuthState } from '../../lib/oauthState.js';
 import { BadRequestError, NotFoundError } from '../../lib/errors.js';
 
@@ -330,6 +331,13 @@ async function saveAttachment(buf: Buffer, originalName: string): Promise<string
   return filePath;
 }
 
+/** Gmail's `internalDate` (epoch ms, as a string) — when the message reached
+ *  the mailbox. Falls back to now for a message without one. */
+function gmailReceivedAt(internalDate: string | null | undefined): Date {
+  const ms = internalDate ? Number.parseInt(internalDate, 10) : Number.NaN;
+  return Number.isFinite(ms) ? new Date(ms) : new Date();
+}
+
 function headerValue(headers: Array<{ name?: string | null; value?: string | null }> | undefined, name: string): string {
   if (!headers) return '';
   const h = headers.find((x) => x.name?.toLowerCase() === name.toLowerCase());
@@ -487,9 +495,16 @@ async function _syncGmailAccount(
           const type = inferType(fileName, subject);
           const broker = inferBroker(subject, from);
 
+          // A CAS the user asked for by mailback goes to the portfolio they
+          // picked in that dialog; anything else to the default (null).
+          const portfolioId =
+            type === 'MF_CAS_PDF' || type === 'MF_CAS_EXCEL'
+              ? await casMailbackTarget(acc.userId, from, gmailReceivedAt(full.data.internalDate))
+              : null;
+
           await createImportJob({
             userId: acc.userId,
-            portfolioId: null,
+            portfolioId,
             type,
             fileName,
             filePath,

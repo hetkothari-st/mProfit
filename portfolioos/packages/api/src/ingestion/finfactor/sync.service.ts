@@ -8,7 +8,7 @@
  *      via the Finfactor client (demo mode short-circuits to fixtures).
  *   3. Upsert each scheme into MutualFundMaster by ISIN.
  *   4. Project each Finvu statement row into a Transaction with a
- *      deterministic sourceHash = sha256("finvu:" + txnId). Re-runs are
+ *      deterministic sourceHash = sha256("finvu:" + userId + ":" + txnId). Re-runs are
  *      idempotent — same Finvu txnIds → 0 new rows.
  *   5. Replay holdings projection for every touched assetKey so the
  *      Mutual Funds page picks up the new numbers immediately.
@@ -32,6 +32,16 @@ const DEFAULT_PORTFOLIO_NAME = 'Finvu Imports';
 
 function sha256(input: string): string {
   return crypto.createHash('sha256').update(input).digest('hex');
+}
+
+/** Idempotency key for one Finvu statement row, scoped to the importing user. */
+export function finvuSourceHash(userId: string, txnId: string): string {
+  return sha256(`finvu:${userId}:${txnId}`);
+}
+
+/** The pre-scoping key. Read-only: kept so rows written with it are recognised. */
+function legacyFinvuSourceHash(txnId: string): string {
+  return sha256(`finvu:${txnId}`);
 }
 
 function asStr(v: unknown): string | null {
@@ -221,10 +231,24 @@ export async function syncFinvuMutualFunds(
       skipped += 1;
       continue;
     }
-    const sourceHash = sha256(`finvu:${txnIdRaw}`);
+    // `Transaction.sourceHash` is unique across ALL users, and a Finvu
+    // txnId identifies a folio transaction, not whose account fetched it —
+    // two users (or a user and a family member) importing the same folio get
+    // the same txnId. Unscoped, the second import hit the global unique index
+    // (or, under RLS, the first user's invisible row). The user id makes the
+    // key "this user already has this txn".
+    const sourceHash = finvuSourceHash(userId, txnIdRaw);
 
-    // Idempotency — if we already projected this Finvu txn, move on.
-    const exists = await prisma.transaction.findUnique({ where: { sourceHash } });
+    // Idempotency — if we already projected this Finvu txn, move on. Rows
+    // written before the hash was user-scoped carry the legacy key; count
+    // them only when they sit in this user's own portfolios, so a re-sync
+    // after the change does not duplicate them.
+    const exists =
+      (await prisma.transaction.findUnique({ where: { sourceHash }, select: { id: true } })) ??
+      (await prisma.transaction.findFirst({
+        where: { sourceHash: legacyFinvuSourceHash(txnIdRaw), portfolio: { userId } },
+        select: { id: true },
+      }));
     if (exists) {
       skipped += 1;
       continue;

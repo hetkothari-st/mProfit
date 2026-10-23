@@ -164,6 +164,9 @@ export async function runMfScoreForUniverses(
   asOf: Date = todayAsOf(),
 ): Promise<MfScoreJobResult> {
   const result = emptyResult(refs.length);
+  // Schemes that received a new score row in this run — the `01 §5(b)`
+  // trigger for re-running the analysis of everyone who holds them.
+  const rescored = new Set<string>();
 
   for (let i = 0; i < refs.length; i += UNIVERSE_CHUNK_SIZE) {
     const slice = refs.slice(i, i + UNIVERSE_CHUNK_SIZE);
@@ -177,6 +180,9 @@ export async function runMfScoreForUniverses(
         result.rowsWritten += u.written;
         result.rowsSkippedExisting += u.skippedExisting;
         result.schemesSkippedUnmeasured += u.skippedUnmeasured;
+        // A universe that wrote nothing (a same-day re-run) changed no score,
+        // so it is no reason to re-analyse anyone.
+        if (u.written > 0) for (const row of u.rows) rescored.add(row.schemeCode);
         for (const [status, n] of Object.entries(u.ratingStatusCounts)) {
           result.ratingStatusCounts[status as MfRatingStatus] += n;
         }
@@ -193,6 +199,21 @@ export async function runMfScoreForUniverses(
         { elapsed, budgetMs: SLICE_BUDGET_MS, sliceSize: slice.length },
         '[mfScore] slice exceeded its budget — reduce UNIVERSE_CHUNK_SIZE if this persists',
       );
+    }
+  }
+
+  if (rescored.size > 0) {
+    try {
+      // Lazy, like the rating chain's import of this module: the analysis job
+      // pulls in the whole engine. It only queues; runs happen later, per user.
+      const { onMfSchemeScoresUpdated } = await import('./mfAnalysisJob.js');
+      const users = await onMfSchemeScoresUpdated([...rescored]);
+      logger.info({ schemes: rescored.size, users }, '[mfScore] queued MF analysis for holders of rescored schemes');
+    } catch (err) {
+      // The scores are written; failing the job now would report a scoring
+      // failure that did not happen. Holders are re-analysed on their next
+      // holdings change or refresh.
+      logger.error({ err, schemes: rescored.size }, '[mfScore] could not queue MF analysis after scoring');
     }
   }
 

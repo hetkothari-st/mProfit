@@ -25,6 +25,7 @@ import {
 } from '@/api/mf/mfCasparser.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
+import { useAuthStore } from '@/stores/auth.store';
 
 type Step =
   | { phase: 'idle' }
@@ -73,10 +74,13 @@ export function MFCasparserDialog({ open, onOpenChange, onSuccess }: Props) {
     enabled: open,
   });
 
+  // The credit balance is the operator's casparser.in account, shared by every
+  // user — not something a user should see. The endpoint is admin-only.
+  const isAdmin = useAuthStore((s) => s.user?.role === 'ADMIN');
   const creditsQuery = useQuery({
     queryKey: ['casparser-credits'],
     queryFn: () => mfCasparserApi.credits(),
-    enabled: open,
+    enabled: open && isAdmin,
     retry: false,
   });
 
@@ -88,6 +92,10 @@ export function MFCasparserDialog({ open, onOpenChange, onSuccess }: Props) {
         email: email.trim(),
         fromDate: from,
         toDate: to,
+        // The statement arrives later by email; the server records these so
+        // the import lands in the chosen portfolio.
+        portfolioId: portfolioId || null,
+        nickname: nickname.trim() || null,
       });
     },
     onSuccess: (r) => {
@@ -132,7 +140,7 @@ export function MFCasparserDialog({ open, onOpenChange, onSuccess }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        {creditsQuery.data && (
+        {isAdmin && creditsQuery.data && (
           <div
             className={`flex items-center gap-2 rounded border p-2 text-xs ${
               lowCredits
