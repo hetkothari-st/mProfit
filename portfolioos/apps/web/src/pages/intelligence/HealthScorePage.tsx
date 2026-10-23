@@ -125,7 +125,7 @@ export function HealthScorePage() {
       <PageHeader
         eyebrow="Intelligence"
         title="Financial Health Score"
-        description="One number summarizing six areas of your financial life — emergency readiness, investing discipline, debt load, diversification, insurance, and goal progress — each weighted by importance. Recalculated automatically every 24 hours."
+        description="One number summarizing six areas of your financial life — emergency readiness, investing discipline, debt load, diversification, insurance, and goal progress — each weighted by importance. Refreshed when you open this page if the last score is more than 24 hours old, or any time with Recalculate."
         actions={
           <Button variant="outline" size="sm" onClick={recalculate} disabled={isFetching}>
             {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}

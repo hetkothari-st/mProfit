@@ -4,6 +4,7 @@ import { formatINR, formatPercent, toDecimal, ASSET_CLASS_LABELS } from '@everyp
 import type { HoldingRankRow, ConcentrationRow, AssetClassXirrRow } from '@/api/analytics.api';
 import { POS_COLOR, NEG_COLOR } from '../chartColors';
 import { AnalyticsInfo } from '../AnalyticsInfo';
+import { isConcentrated, CONCENTRATION_FLAG_PCT, CONCENTRATION_TOP_N } from '@/lib/reportDownloads';
 
 const TOOLTIP_STYLE = {
   background: 'hsl(var(--popover))',
@@ -127,6 +128,16 @@ export function ConcentrationCard({ rows }: { rows: ConcentrationRow[] }) {
                 </>
               )}
             </p>
+            {/* The flag the help text describes: the largest few holdings
+                together above the threshold. */}
+            {isConcentrated(rows) && (
+              <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-xs text-warning">
+                <span className="font-semibold">Concentrated:</span> your top{' '}
+                {Math.min(CONCENTRATION_TOP_N, rows.length)} holding{rows.length === 1 ? ' is' : 's are'}{' '}
+                {rows[Math.min(CONCENTRATION_TOP_N, rows.length) - 1]!.cumulativePct.toFixed(0)}% of the
+                portfolio — above {CONCENTRATION_FLAG_PCT}%.
+              </p>
+            )}
             {rows.map((r, i) => (
               <div key={`${r.assetName}-${i}`} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">

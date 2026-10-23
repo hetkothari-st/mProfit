@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
-import { portfoliosApi } from '@/api/portfolios.api';
+import { useReportablePortfolios } from '@/hooks/useReportablePortfolios';
 import { analyticsApi, type Period } from '@/api/analytics.api';
 import { KpiCards } from './widgets/KpiCards';
 import { AllocationByClassPie, SectorPie } from './widgets/AllocationWidgets';
@@ -62,10 +62,9 @@ export function AnalyticsPage() {
     setSearchParams(params, { replace: true });
   };
 
-  const portfoliosQuery = useQuery({
-    queryKey: ['portfolios'],
-    queryFn: () => portfoliosApi.list(),
-  });
+  // Only the books the analytics API serves (the caller's own). A family
+  // view's list also carries other members' portfolios, which 403'd here.
+  const portfoliosQuery = useReportablePortfolios();
   const portfolios = portfoliosQuery.data ?? [];
 
   const scopeId = selectedId === 'ALL' ? undefined : selectedId;
