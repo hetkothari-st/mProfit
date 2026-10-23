@@ -1,4 +1,4 @@
-import { Briefcase, Target, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react';
+import { Briefcase, Target, TrendingUp, TrendingDown } from 'lucide-react';
 import type { AiCard } from '@/api/aiAssistant.api';
 
 import { signTone } from '@/lib/signTone';
@@ -145,14 +145,10 @@ function ActionCard({ data }: { data: Record<string, unknown> }) {
           {String(data.description)}
         </div>
       )}
-      {data.ctaLabel !== undefined && data.ctaLabel !== null && (
-        <button
-          type="button"
-          className="mt-2 inline-flex items-center gap-1 text-xs text-accent hover:underline"
-        >
-          {String(data.ctaLabel)} <ArrowRight className="h-3 w-3" strokeWidth={2} />
-        </button>
-      )}
+      {/* No call-to-action button. The model's ctaLabel/ctaAction pair had no
+          defined meaning in the app (ctaAction is free text), so the button
+          had no handler and did nothing when tapped. The prompt no longer
+          asks for them; older saved messages that carry them are ignored. */}
     </div>
   );
 }

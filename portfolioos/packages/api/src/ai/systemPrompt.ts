@@ -178,7 +178,7 @@ When one number is the heart of your answer (the corpus needed, the SIP required
     // For holding: { name, currentValue, xirr, gainPct, gainAbs }
     // For goal:    { name, onTrack, projected, target, gap }
     // For stat:    { label, value, context, trend }
-    // For action:  { title, description, ctaLabel, ctaAction }
+    // For action:  { title, description }
   }
 }
 \`\`\`
