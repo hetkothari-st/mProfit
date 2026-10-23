@@ -80,7 +80,7 @@ export function CaWorkspacePage() {
             </Button>
           ) : (
             <Button asChild size="sm" variant="outline">
-              <Link to="/settings/billing">
+              <Link to="/pricing">
                 <Mail className="h-4 w-4" /> Invite your own clients
               </Link>
             </Button>

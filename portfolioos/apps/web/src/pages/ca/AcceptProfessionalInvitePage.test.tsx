@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth.store';
@@ -16,10 +16,11 @@ import { AcceptProfessionalInvitePage } from './AcceptProfessionalInvitePage';
 const api = vi.hoisted(() => ({
   me: vi.fn(),
   peek: vi.fn(),
+  accept: vi.fn(),
 }));
 vi.mock('@/api/auth.api', () => ({ authApi: { me: api.me, logout: vi.fn() } }));
 vi.mock('@/api/ca.api', () => ({
-  professionalInviteApi: { peek: api.peek, accept: vi.fn() },
+  professionalInviteApi: { peek: api.peek, accept: api.accept },
 }));
 
 const INVITE = {
@@ -78,5 +79,27 @@ describe('opening an invitation in a new tab', () => {
 
     expect(await screen.findByText(/create account/i)).toBeTruthy();
     expect(api.me).not.toHaveBeenCalled();
+  });
+});
+
+describe('what accepting grants', () => {
+  it('says access starts view-only, as the grant does', async () => {
+    renderPage();
+
+    expect(await screen.findByText(/starts view-only/i)).toBeTruthy();
+    expect(screen.queryByText(/and keep\s+their books/i)).toBeNull();
+  });
+
+  it('points "See advisor plans" at the pricing page, not a missing route', async () => {
+    useAuthStore.setState({ accessToken: 'token', refreshToken: 'refresh', user: null });
+    api.me.mockResolvedValue({ id: 'u2', email: 'mahesh@example.com', name: 'Mahesh Iyer' });
+    api.accept.mockResolvedValue({});
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /accept and open their books/i }));
+
+    const link = await screen.findByRole('link', { name: /see advisor plans/i });
+    expect(link.getAttribute('href')).toBe('/pricing');
+    expect(screen.getByText(/view-only until they let you edit/i)).toBeTruthy();
   });
 });
