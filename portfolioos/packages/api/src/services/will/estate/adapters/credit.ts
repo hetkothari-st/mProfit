@@ -1,7 +1,7 @@
 import { Decimal, toAmount2 } from '@everypaisa/shared';
 import { prisma } from '../../../../lib/prisma.js';
 import { loanGivenOutstanding } from '../../../loans/loansGiven.service.js';
-import { loanPosition, type LoanPosition, type StoredLoan } from '../../../loans/loans.service.js';
+import { loanPosition, OUTSTANDING_LOAN_STATUSES, type LoanPosition, type StoredLoan } from '../../../loans/loans.service.js';
 import { computeCardSummary } from '../../../banking/creditCards.service.js';
 import { clip, SOLE, type EstateAdapter, type EstateCandidate } from '../types.js';
 
@@ -53,8 +53,9 @@ export const loansAdapter: EstateAdapter = {
   id: 'loans',
   version: '1',
   async collect({ userId }) {
+    // A defaulted loan is still a debt of the estate.
     const rows = await prisma.loan.findMany({
-      where: { userId, status: 'ACTIVE' },
+      where: { userId, status: { in: OUTSTANDING_LOAN_STATUSES } },
       include: { payments: { orderBy: { paidOn: 'asc' } } },
       orderBy: { createdAt: 'asc' },
     });

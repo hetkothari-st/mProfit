@@ -8,7 +8,7 @@ import { decryptSecret } from '../../lib/secrets.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { readBuffer } from '../../lib/documentStorage.js';
 import { willDocumentTags } from '../documents/document.service.js';
-import { emiDueDayFrom } from '../loans/loans.service.js';
+import { emiDueDayFrom, OUTSTANDING_LOAN_STATUSES } from '../loans/loans.service.js';
 
 /**
  * The nominee's read-only view. Owner data is read under runAsUser(owner) so
@@ -63,7 +63,8 @@ async function loadCategory(ownerId: string, c: LegacyCategory): Promise<RawItem
       }));
     }
     case 'LIABILITIES': {
-      const loans = await prisma.loan.findMany({ where: { userId: ownerId, status: 'ACTIVE' } });
+      // A defaulted loan is still owed; heirs need to know about it too.
+      const loans = await prisma.loan.findMany({ where: { userId: ownerId, status: { in: OUTSTANDING_LOAN_STATUSES } } });
       const cards = await prisma.creditCard.findMany({ where: { userId: ownerId, status: 'ACTIVE' } });
       return [
         ...loans.map((l) => item(`${l.lenderName} ${l.loanType}`, {

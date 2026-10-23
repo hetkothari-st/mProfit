@@ -37,6 +37,7 @@ import { computePortfolioFoPnl } from '../fo/foPnl.service.js';
 import { derivativePositionValue } from '../fo/derivativePosition.service.js';
 import { replayTransactions } from '../holdings/holdingsProjection.js';
 import { getDashboardNetWorth } from '../analytics/dashboard.service.js';
+import { OUTSTANDING_LOAN_STATUSES } from '../loans/loans.service.js';
 import {
   drawPieChart,
   drawHorizontalBarChart,
@@ -258,8 +259,9 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     where: { userId: params.userId, status: 'ACTIVE' },
     orderBy: { nextPremiumDue: 'asc' },
   });
+  // DEFAULT loans are still owed, as in the dashboard liabilities above.
   const loans = await prisma.loan.findMany({
-    where: { userId: params.userId, status: 'ACTIVE' },
+    where: { userId: params.userId, status: { in: OUTSTANDING_LOAN_STATUSES } },
   });
   const creditCards = await prisma.creditCard.findMany({
     where: { userId: params.userId },
@@ -714,13 +716,13 @@ export async function streamDashboardPdf(res: Response, params: DashboardReportP
     cy = drawMetricCards(doc, ML, W, cy, [
       { label: 'TOTAL OUTSTANDING',   value: `Rs. ${fmtNum(nw.liabilities.totalOutstanding)}`, neg: false },
       { label: 'MONTHLY EMI TOTAL',   value: `Rs. ${fmtNum(nw.liabilities.monthlyEmiTotal)}`, neg: false },
-      { label: 'ACTIVE LOANS',        value: String(nw.liabilities.loanCount), neg: false },
+      { label: 'LOANS OWED',          value: String(nw.liabilities.loanCount), neg: false },
       { label: 'CC OUTSTANDING',      value: `Rs. ${fmtNum(nw.liabilities.totalCreditCardOutstanding)}`, neg: false },
     ], C);
 
     if (loans.length > 0) {
       cy = ensureSpace(cy, 40);
-      const loanSec = sectionBand(`Active Loans (${loans.length})`, cy, liabSec.bookmark);
+      const loanSec = sectionBand(`Loans (${loans.length})`, cy, liabSec.bookmark);
       cy = loanSec.cy;
       const loanRows = loans.map(l => ({
         lender:     l.lenderName,

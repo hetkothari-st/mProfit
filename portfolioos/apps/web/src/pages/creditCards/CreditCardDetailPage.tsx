@@ -31,6 +31,7 @@ import {
   type AddStatementInput,
   type MarkStatementPaidInput,
 } from '@/api/creditCards.api';
+import { apiErrorMessage } from '@/api/client';
 import { CreditCardVisual } from '@/components/creditCards/CreditCardVisual';
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -169,7 +170,7 @@ function AddStatementDialog({
         </div>
         {mutation.isError && (
           <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Failed to add statement'}
+            {apiErrorMessage(mutation.error, 'Failed to add statement')}
           </p>
         )}
         <DialogFooter>
@@ -249,7 +250,7 @@ function MarkPaidDialog({
         </div>
         {mutation.isError && (
           <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Failed to update'}
+            {apiErrorMessage(mutation.error, 'Failed to update')}
           </p>
         )}
         <DialogFooter>

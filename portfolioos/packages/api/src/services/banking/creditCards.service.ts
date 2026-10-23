@@ -282,6 +282,47 @@ export async function revealCardNumber(
 
 // ── Statement management ─────────────────────────────────────────────────────
 
+/** Statement statuses that still owe money. PAID and WAIVED owe nothing. */
+const UNPAID_STATEMENT_STATUSES = new Set(['PENDING', 'PARTIAL', 'OVERDUE']);
+
+/**
+ * What a card owes: the unpaid remainder (amount − paid, never below zero) of
+ * every PENDING / PARTIAL / OVERDUE statement.
+ */
+export function outstandingFromStatements(
+  statements: Array<{ status: string; statementAmount: Prisma.Decimal | string; paidAmount: Prisma.Decimal | string | null }>,
+): Decimal {
+  const ZERO = new Decimal(0);
+  return statements
+    .filter((s) => UNPAID_STATEMENT_STATUSES.has(s.status))
+    .reduce((sum, s) => {
+      const remaining = new Decimal(s.statementAmount.toString()).minus(s.paidAmount ? s.paidAmount.toString() : 0);
+      return sum.plus(Decimal.max(ZERO, remaining));
+    }, ZERO);
+}
+
+/**
+ * Re-derive `CreditCard.outstandingBalance` from the card's statements after
+ * every statement add / pay / un-pay / delete.
+ *
+ * It used to be overwritten with the newest unpaid statement's amount on add
+ * and never touched again, so paying or deleting a statement left the card
+ * (and utilisation, the dashboard liability and the AI connector) showing the
+ * old debt forever. A balance typed on the card itself (create/update card)
+ * still stands until the next statement change replaces it.
+ */
+async function syncCardOutstanding(cardId: string): Promise<void> {
+  const statements = await prisma.creditCardStatement.findMany({
+    where: { cardId },
+    select: { status: true, statementAmount: true, paidAmount: true },
+  });
+  await prisma.creditCard.update({
+    where: { id: cardId },
+    data: { outstandingBalance: new Prisma.Decimal(outstandingFromStatements(statements).toString()) },
+  });
+}
+
+
 export async function addStatement(
   userId: string,
   cardId: string,
@@ -304,14 +345,7 @@ export async function addStatement(
     },
   });
 
-  // Keep outstandingBalance in sync: always update for non-PAID statements
-  if (input.status !== 'PAID') {
-    await prisma.creditCard.update({
-      where: { id: cardId },
-      data: { outstandingBalance: new Prisma.Decimal(input.statementAmount) },
-    });
-  }
-
+  await syncCardOutstanding(cardId);
   return statement;
 }
 
@@ -343,7 +377,7 @@ export async function markStatementPaid(
     }
   }
 
-  return prisma.creditCardStatement.update({
+  const updated = await prisma.creditCardStatement.update({
     where: { id: statementId },
     data: {
       paidAmount: paidAmt,
@@ -351,6 +385,9 @@ export async function markStatementPaid(
       status,
     },
   });
+  // Paying (or un-paying, with a zero amount / PENDING status) moves what is owed.
+  await syncCardOutstanding(statement.cardId);
+  return updated;
 }
 
 export async function deleteStatement(userId: string, statementId: string) {
@@ -362,6 +399,7 @@ export async function deleteStatement(userId: string, statementId: string) {
     throw new NotFoundError(`CreditCardStatement ${statementId} not found`);
   }
   await prisma.creditCardStatement.delete({ where: { id: statementId } });
+  await syncCardOutstanding(statement.cardId);
 }
 
 // ── Computed summary ─────────────────────────────────────────────────────────
@@ -382,9 +420,10 @@ export function computeCardSummary(
   const ZERO = new Decimal(0);
 
   const totalLimit = new Decimal(card.creditLimit.toString());
+  // A card never given a balance falls back to its unpaid statements.
   const outstanding = card.outstandingBalance
     ? new Decimal(card.outstandingBalance.toString())
-    : ZERO;
+    : outstandingFromStatements(card.statements);
 
   const utilizationPct = totalLimit.greaterThan(0)
     ? outstanding.dividedBy(totalLimit).times(100).toDecimalPlaces(2).toNumber()

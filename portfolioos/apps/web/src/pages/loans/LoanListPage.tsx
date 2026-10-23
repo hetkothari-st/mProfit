@@ -50,6 +50,8 @@ import {
   type LoanDTO,
   type CreateLoanInput,
 } from '@/api/loans/loans.api';
+import { apiErrorMessage } from '@/api/client';
+import { cn } from '@/lib/cn';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -118,13 +120,17 @@ function LoanCard({
   const navigate = useNavigate();
   const { panel, accent } = useReceiptLook(loan.lenderName, LOAN_FALLBACK);
   const active = loan.status === 'ACTIVE';
+  // A defaulted loan is still owed: it shows its outstanding balance like an
+  // active one, but no next-EMI date or due reminders.
+  const defaulted = loan.status === 'DEFAULT';
+  const owed = active || defaulted;
 
   // Outstanding balance, next due date, EMIs left and amounts paid come from
   // the server's amortization (prepayments included), not re-derived here.
   const { data: summary } = useQuery({
     queryKey: ['loans', loan.id, 'summary'],
     queryFn: () => loansApi.getSummary(loan.id),
-    enabled: active,
+    enabled: owed,
   });
 
   // The list only carries a loan's latest few payments, so the count of EMIs
@@ -133,7 +139,7 @@ function LoanCard({
   const tenure = loan.tenureMonths;
   // A prepayment that reduces tenure shortens the plan; count against that.
   const plan = summary?.scheduledEmiCount ?? tenure;
-  const progress = active ? (plan > 0 ? Math.min(100, (emiCount / plan) * 100) : 0) : 100;
+  const progress = owed ? (plan > 0 ? Math.min(100, (emiCount / plan) * 100) : 0) : 100;
   const emisLeft = summary ? summary.remainingEmiCount : Math.max(0, tenure - emiCount);
 
   const firstEmi = loan.firstEmiDate.slice(0, 10);
@@ -152,7 +158,7 @@ function LoanCard({
 
   const typeLabel = LOAN_TYPE_LABELS[loan.loanType] ?? loan.loanType;
   const TypeIcon = LOAN_TYPE_ICONS[loan.loanType] ?? Landmark;
-  const stamp = loan.status === 'DEFAULT' ? 'Default' : active ? null : 'Closed';
+  const stamp = defaulted ? 'Defaulted' : active ? null : 'Closed';
   const rate = loan.interestRate ? new Decimal(loan.interestRate).toString() : null;
   const owner = [
     loan.borrowerName,
@@ -238,10 +244,10 @@ function LoanCard({
         <div className="min-w-0 flex-1 space-y-4 p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-sm text-muted-foreground">{active ? 'Outstanding' : 'Loan amount'}</p>
+              <p className="text-sm text-muted-foreground">{owed ? 'Outstanding' : 'Loan amount'}</p>
               <AutoFitText>
                 <p className="money-digits font-display text-[28px] leading-tight tabular-nums text-foreground">
-                  {active ? (summary ? formatINR(summary.outstandingBalance) : '—') : formatINR(loan.principalAmount)}
+                  {owed ? (summary ? formatINR(summary.outstandingBalance) : '—') : formatINR(loan.principalAmount)}
                 </p>
               </AutoFitText>
             </div>
@@ -254,7 +260,7 @@ function LoanCard({
           </div>
 
           <div>
-            <InstallmentTracker done={active ? emiCount : plan} total={plan} accent={accent} />
+            <InstallmentTracker done={owed ? emiCount : plan} total={plan} accent={accent} />
             <div className="mt-2 flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
               <span>First EMI {formatDate(firstEmi)}</span>
               {lastEmi && <span>Last EMI {formatDate(lastEmi)}</span>}
@@ -286,13 +292,13 @@ function LoanCard({
             >
               {nextEmi ? formatDate(nextEmi) : active ? '—' : 'None'}
             </Figure>
-            <Figure label="EMIs left">{active ? emisLeft : 0}</Figure>
+            <Figure label="EMIs left">{owed ? emisLeft : 0}</Figure>
             <Figure label="Paid so far">
               <span className="money-digits">{paidSoFar ? formatINR(paidSoFar.toString()) : '—'}</span>
             </Figure>
           </div>
 
-          <InstallmentProgress done={active ? emiCount : plan} total={plan} accent={accent} />
+          <InstallmentProgress done={owed ? emiCount : plan} total={plan} accent={accent} />
 
           <p className="truncate border-t border-dashed border-border/70 pt-3 text-xs text-muted-foreground">
             {owner}
@@ -584,7 +590,7 @@ export function CreateLoanDialog({
 
         {mutation.isError && (
           <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Failed to save loan'}
+            {apiErrorMessage(mutation.error, 'Failed to save loan')}
           </p>
         )}
 
@@ -647,19 +653,23 @@ export function LoanListPage() {
 
   const list = loans ?? [];
   const active = list.filter((l) => l.status === 'ACTIVE');
-  const inactive = list.filter((l) => l.status !== 'ACTIVE');
+  // Defaulted loans are still owed: they count in the total owed and get their
+  // own group, not the closed one.
+  const defaulted = list.filter((l) => l.status === 'DEFAULT');
+  const owedLoans = [...active, ...defaulted];
+  const inactive = list.filter((l) => l.status !== 'ACTIVE' && l.status !== 'DEFAULT');
   const given = givenLoans ?? [];
   const givenActive = given.filter((l) => l.status === 'ACTIVE');
 
   // Same query keys as each card, so these share one request per loan.
   const summaries = useQueries({
-    queries: active.map((l) => ({
+    queries: owedLoans.map((l) => ({
       queryKey: ['loans', l.id, 'summary'],
       queryFn: () => loansApi.getSummary(l.id),
     })),
   });
 
-  const owed = active.reduce(
+  const owed = owedLoans.reduce(
     (s, l, i) => s.plus(summaries[i]?.data?.outstandingBalance ?? l.principalAmount),
     new Decimal(0),
   );
@@ -709,6 +719,39 @@ export function LoanListPage() {
     return () => scroller.removeEventListener('scroll', update);
   }, [isLoading, givenLoading]);
 
+  const loanGrid = (group: LoanDTO[], className?: string) => (
+    <div className={cn('grid grid-cols-1 md:grid-cols-2 gap-4', className)}>
+      {group.map((loan) =>
+        confirmDeleteId === loan.id ? (
+          <Card key={loan.id} className="border-destructive">
+            <CardContent className="p-5 flex items-center justify-between gap-3">
+              <p className="text-sm font-medium truncate">Delete "{loan.lenderName}" loan?</p>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={deleteMutation.isPending}
+                  onClick={() => deleteMutation.mutate(loan.id)}
+                >
+                  {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>No</Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <LoanCard
+            key={loan.id}
+            loan={loan}
+            onEdit={() => { setEditLoan(loan); setCreateOpen(true); }}
+            onDelete={() => setConfirmDeleteId(loan.id)}
+            isDeleting={deleteMutation.isPending && confirmDeleteId === loan.id}
+          />
+        ),
+      )}
+    </div>
+  );
+
   return (
     <div>
       <PageHeader title="Loans" description="Money you owe and money owed to you, in one place" />
@@ -720,6 +763,9 @@ export function LoanListPage() {
           lines: [
             { label: 'EMIs / month', value: isLoading ? '…' : formatINR(emiOut.toString()) },
             { label: 'Active loans', value: isLoading ? '…' : String(active.length) },
+            ...(defaulted.length > 0
+              ? [{ label: 'Defaulted', value: String(defaulted.length), warn: true }]
+              : []),
             { label: 'Closed', value: isLoading ? '…' : String(inactive.length) },
           ],
         }}
@@ -789,72 +835,19 @@ export function LoanListPage() {
           />
         )}
 
-        {!isLoading && active.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {active.map((loan) =>
-              confirmDeleteId === loan.id ? (
-                <Card key={loan.id} className="border-destructive">
-                  <CardContent className="p-5 flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium truncate">Delete "{loan.lenderName}" loan?</p>
-                    <div className="flex gap-2 shrink-0">
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        disabled={deleteMutation.isPending}
-                        onClick={() => deleteMutation.mutate(loan.id)}
-                      >
-                        {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>No</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <LoanCard
-                  key={loan.id}
-                  loan={loan}
-                  onEdit={() => { setEditLoan(loan); setCreateOpen(true); }}
-                  onDelete={() => setConfirmDeleteId(loan.id)}
-                  isDeleting={deleteMutation.isPending && confirmDeleteId === loan.id}
-                />
-              )
-            )}
-          </div>
+        {!isLoading && active.length > 0 && loanGrid(active)}
+
+        {!isLoading && defaulted.length > 0 && (
+          <>
+            <h3 className="text-sm font-medium text-negative mt-8 mb-3">Defaulted · still owed</h3>
+            {loanGrid(defaulted)}
+          </>
         )}
 
         {!isLoading && inactive.length > 0 && (
           <>
             <h3 className="text-sm font-medium text-muted-foreground mt-8 mb-3">Closed / Foreclosed</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-60">
-              {inactive.map((loan) =>
-                confirmDeleteId === loan.id ? (
-                  <Card key={loan.id} className="border-destructive">
-                    <CardContent className="p-5 flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium truncate">Delete "{loan.lenderName}"?</p>
-                      <div className="flex gap-2 shrink-0">
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={deleteMutation.isPending}
-                          onClick={() => deleteMutation.mutate(loan.id)}
-                        >
-                          {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>No</Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <LoanCard
-                    key={loan.id}
-                    loan={loan}
-                    onEdit={() => { setEditLoan(loan); setCreateOpen(true); }}
-                    onDelete={() => setConfirmDeleteId(loan.id)}
-                    isDeleting={deleteMutation.isPending && confirmDeleteId === loan.id}
-                  />
-                )
-              )}
-            </div>
+            {loanGrid(inactive, 'opacity-60')}
           </>
         )}
       </section>
