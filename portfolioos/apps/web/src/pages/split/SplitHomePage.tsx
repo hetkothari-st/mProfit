@@ -80,6 +80,9 @@ export function SplitHomePage() {
   const owe = list.reduce((a, f) => (toDecimal(f.net).lt(0) ? a.plus(toDecimal(f.net).abs()) : a), new Decimal(0));
   const currency = list[0]?.currency ?? 'INR';
   const approx = list.some((f) => f.approx) ? '≈ ' : '';
+  // Balances in a currency with no rate to the home currency are not in the
+  // totals above; name them so the totals are not read as complete.
+  const unconverted = [...new Set(list.flatMap((f) => (f.missingRates ?? []).map((m) => `${m.groupName} (${m.currency})`)))];
 
   return (
     <div className="space-y-6 pb-24">
@@ -106,6 +109,11 @@ export function SplitHomePage() {
           <p data-testid="split-owe-total" className="text-xl font-semibold tabular-nums mt-1">{friends.isSuccess ? `${approx}${formatSplitMoney(owe, currency)}` : '—'}</p>
         </CardContent></Card>
       </div>
+      {friends.isSuccess && unconverted.length > 0 && (
+        <p role="note" className="text-xs text-muted-foreground">
+          {`Totals leave out ${unconverted.join(', ')} — no exchange rate to ${currency} yet.`}
+        </p>
+      )}
       {friends.isError && (
         <p role="alert" className="text-sm text-muted-foreground">
           Couldn't load balances. <Button variant="link" size="sm" className="px-1" onClick={() => void friends.refetch()}>Retry</Button>

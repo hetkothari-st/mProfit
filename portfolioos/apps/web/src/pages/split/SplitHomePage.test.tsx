@@ -112,6 +112,16 @@ describe('SplitHomePage', () => {
     expect(await screen.findByText('2 people · INR')).toBeTruthy();
   });
 
+  it('names the balances the totals leave out for want of an exchange rate', async () => {
+    seed();
+    api.friends.mockResolvedValue([{ key: 'u:u2', displayName: 'Bob', userId: 'u2', contactId: 'c2', currency: 'INR', net: '50.0000', approx: true,
+      groups: [{ groupId: 'g1', groupName: 'Goa trip', net: '50.0000', currency: 'INR' }, { groupId: 'g3', groupName: 'Odd trip', net: '20.0000', currency: 'QQQ' }],
+      missingRates: [{ groupId: 'g3', groupName: 'Odd trip', currency: 'QQQ', net: '20.0000' }] }]);
+    renderWithProviders(<SplitHomePage />, { route: '/split', path: '/split' });
+    await screen.findByText('Bob');
+    expect(screen.getByRole('note').textContent).toBe('Totals leave out Odd trip (QQQ) — no exchange rate to INR yet.');
+  });
+
   it('totals are marked approximate when any friend balance is', async () => {
     seed();
     renderWithProviders(<SplitHomePage />, { route: '/split', path: '/split' });
