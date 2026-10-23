@@ -6,7 +6,7 @@ import type { TransactionDTO } from '@everypaisa/shared';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { transactionsApi } from '@/api/transactions.api';
+import { listAllTransactions } from '@/api/listAllTransactions';
 import { api } from '@/api/client';
 
 interface Props {
@@ -94,7 +94,7 @@ export function GoldAssetDetailSheet({ holding, livePrice, open, onClose, onEdit
 
   const { data: txnData } = useQuery({
     queryKey: ['transactions', holding?.assetClass, holding?.assetName],
-    queryFn: () => transactionsApi.list({ assetClass: holding!.assetClass, pageSize: 200 }),
+    queryFn: () => listAllTransactions({ assetClass: holding!.assetClass }),
     enabled: !!holding,
   });
 

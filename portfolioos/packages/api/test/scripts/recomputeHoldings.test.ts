@@ -15,7 +15,7 @@ afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();
 });
 
-const MARKER = 'holdings.recompute.2026-09-fifo-book-cost';
+const MARKER = 'holdings.recompute.2026-10-asset-valuation';
 
 async function seeded() {
   const scope = await createTestScope('recompute-hook');

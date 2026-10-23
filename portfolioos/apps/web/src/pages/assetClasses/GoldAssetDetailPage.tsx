@@ -22,6 +22,7 @@ import { Decimal, formatINR, type HoldingRow, type AssetClass, formatDateOnly } 
 import type { TransactionDTO } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { transactionsApi } from '@/api/transactions.api';
+import { listAllTransactions } from '@/api/listAllTransactions';
 import { assetsApi } from '@/api/assets.api';
 import { api, apiErrorMessage } from '@/api/client';
 import { NEUTRAL_COLOR, POS_COLOR, NEG_COLOR } from '../analytics/chartColors';
@@ -334,7 +335,7 @@ export function GoldAssetDetailPage() {
 
   const { data: txnData, isLoading: txnLoading } = useQuery({
     queryKey: txnQueryKey,
-    queryFn: () => transactionsApi.list({ assetClass: holding!.assetClass, pageSize: 200 }),
+    queryFn: () => listAllTransactions({ assetClass: holding!.assetClass }),
     enabled: !!holding,
   });
 

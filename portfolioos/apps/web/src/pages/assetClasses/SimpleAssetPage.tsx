@@ -19,12 +19,14 @@ import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/common/EmptyState';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { transactionsApi } from '@/api/transactions.api';
+import { listAllTransactions } from '@/api/listAllTransactions';
 import { api, apiErrorMessage } from '@/api/client';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
 import type { FormDialogProps } from './FDFormDialog';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 
 import { signTone } from '@/lib/signTone';
+import { summariseHoldings, unpricedHint } from '@/lib/holdingsSummary';
 interface FormOption {
   label: string;
   assetClass: AssetClass;
@@ -137,7 +139,7 @@ export function SimpleAssetPage({
   const txnQueries = useQueries({
     queries: assetClasses.map((ac) => ({
       queryKey: ['transactions', ac],
-      queryFn: () => transactionsApi.list({ assetClass: ac, pageSize: 200 }),
+      queryFn: () => listAllTransactions({ assetClass: ac }),
     })),
   });
 
@@ -184,19 +186,18 @@ export function SimpleAssetPage({
     .flatMap((q) => q.data?.items ?? [])
     .sort((a, b) => b.tradeDate.localeCompare(a.tradeDate));
 
-  // Summary
-  const totalInvested = allHoldings.reduce(
-    (s, h) => s.plus(new Decimal(h.totalCost)),
-    new Decimal(0),
-  );
-  const totalValue = allHoldings.reduce(
-    (s, h) => (h.currentValue ? s.plus(new Decimal(h.currentValue)) : s),
-    new Decimal(0),
-  );
-  const totalPnL = totalValue.minus(totalInvested);
-  const pnlPct = totalInvested.isZero()
-    ? null
-    : totalPnL.div(totalInvested).times(100).toNumber();
+  // Summary — unpriced holdings (Bonds, NPS, Other… have no price feed)
+  // at cost, gain from priced ones only: the dashboard's rule.
+  const {
+    cost: totalInvested,
+    value: totalValue,
+    pnl: totalPnL,
+    pnlPct,
+    unpricedCount,
+  } = summariseHoldings(allHoldings);
+  const pnlText = totalPnL
+    ? `${totalPnL.gte(0) ? '+' : ''}${formatINR(totalPnL.toString())}${pnlPct != null ? ` (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : ''}`
+    : '—';
 
   function openAdd(assetClass?: AssetClass) {
     if (assetClass) setActiveFormAssetClass(assetClass);
@@ -260,13 +261,19 @@ export function SimpleAssetPage({
       {!isLoading && allHoldings.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
           {[
-            { label: 'Invested', value: formatINR(totalInvested.toString()), extra: null },
-            { label: 'Current value', value: formatINR(totalValue.toString()), extra: liveIndicator ?? null },
+            { label: 'Invested', value: formatINR(totalInvested.toString()), extra: null, note: null },
+            {
+              label: 'Current value',
+              value: formatINR(totalValue.toString()),
+              extra: liveIndicator ?? null,
+              note: unpricedHint(unpricedCount) ?? null,
+            },
             {
               label: 'Unrealised P&L',
-              value: `${totalPnL.gte(0) ? '+' : ''}${formatINR(totalPnL.toString())}${pnlPct != null ? ` (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : ''}`,
-              className: signTone(totalPnL.toString()),
+              value: pnlText,
+              className: totalPnL ? signTone(totalPnL.toString()) : 'text-muted-foreground',
               extra: null,
+              note: totalPnL && unpricedCount > 0 ? 'Priced holdings only' : null,
             },
           ].map((m) => (
             <Card key={m.label}>
@@ -280,6 +287,7 @@ export function SimpleAssetPage({
                 <p className={`text-lg sm:text-xl font-semibold tabular-nums mt-1 break-words ${m.className ?? ''}`}>
                   {m.value}
                 </p>
+                {m.note && <p className="text-xs text-muted-foreground mt-0.5">{m.note}</p>}
               </CardContent>
             </Card>
           ))}
@@ -551,7 +559,12 @@ function HoldingsSection({
                     {formatINR(h.totalCost)}
                   </td>
                   <td data-label="Current" className="px-4 py-3 text-right tabular-nums hidden lg:table-cell">
-                    {h.currentValue ? formatINR(h.currentValue) : '—'}
+                    {h.currentValue ? formatINR(h.currentValue) : (
+                      // No price source: carried at cost, like the summary and the dashboard.
+                      <span title="No market price — shown at cost">
+                        {formatINR(h.totalCost)} <span className="text-xs text-muted-foreground">at cost</span>
+                      </span>
+                    )}
                   </td>
                   <td data-label="P&L" className="px-4 py-3 text-right tabular-nums hidden lg:table-cell">
                     {pnl ? (

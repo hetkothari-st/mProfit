@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
 import { transactionsApi } from '@/api/transactions.api';
+import { listAllTransactions } from '@/api/listAllTransactions';
 import {
   accruedValue, monthsBetween, addMonthsIso, shortMonth, formatDate, daysUntil,
   normalizeText, INR_COMPACT, TOOLTIP_STYLE, TOOLTIP_LABEL_STYLE,
@@ -324,7 +325,7 @@ export function PostOfficeDetailPage() {
 
   const { data: txnData, isLoading: txnLoading } = useQuery({
     queryKey: ['transactions', holding?.assetClass],
-    queryFn: () => transactionsApi.list({ assetClass: holding!.assetClass, pageSize: 500 }),
+    queryFn: () => listAllTransactions({ assetClass: holding!.assetClass }),
     enabled: !!holding,
   });
 

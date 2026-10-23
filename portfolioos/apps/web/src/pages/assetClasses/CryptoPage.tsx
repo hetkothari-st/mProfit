@@ -13,6 +13,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { transactionsApi } from '@/api/transactions.api';
+import { listAllTransactions } from '@/api/listAllTransactions';
 import { assetsApi, type LiveCryptoCoin } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
 import { CryptoFormDialog } from './CryptoFormDialog';
@@ -191,7 +192,7 @@ export function CryptoPage() {
 
   const txnQuery = useQuery({
     queryKey: ['transactions', 'CRYPTOCURRENCY'],
-    queryFn: () => transactionsApi.list({ assetClass: 'CRYPTOCURRENCY', pageSize: 200 }),
+    queryFn: () => listAllTransactions({ assetClass: 'CRYPTOCURRENCY' }),
   });
 
   const { data: live, isFetching: liveFetching } = useQuery({

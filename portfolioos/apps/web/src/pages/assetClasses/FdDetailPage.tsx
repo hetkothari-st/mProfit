@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
 import { transactionsApi } from '@/api/transactions.api';
+import { listAllTransactions } from '@/api/listAllTransactions';
 import { portfoliosApi } from '@/api/portfolios.api';
 import {
   accruedValue, monthsBetween, addMonthsIso, shortMonth, formatDate, daysUntil,
@@ -389,7 +390,7 @@ export function FdDetailPage() {
 
   const { data: txnData, isLoading: txnLoading } = useQuery({
     queryKey: ['transactions', holding?.assetClass],
-    queryFn: () => transactionsApi.list({ assetClass: holding!.assetClass, pageSize: 500 }),
+    queryFn: () => listAllTransactions({ assetClass: holding!.assetClass }),
     enabled: !!holding,
   });
 

@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 import { portfoliosApi } from '@/api/portfolios.api';
-import { transactionsApi } from '@/api/transactions.api';
+import { listAllTransactions } from '@/api/listAllTransactions';
 import { FDFormDialog } from './FDFormDialog';
 import { useThemeStore } from '@/stores/theme.store';
 import { Figure, ProgressBar, ReceiptHeader, ReceiptShell } from '@/components/receipt/Receipt';
@@ -558,7 +558,7 @@ export function FixedDepositsPage() {
   const txnQueries = useQueries({
     queries: (['FIXED_DEPOSIT', 'RECURRING_DEPOSIT'] as const).map((ac) => ({
       queryKey: ['transactions', ac],
-      queryFn: () => transactionsApi.list({ assetClass: ac, pageSize: 500 }),
+      queryFn: () => listAllTransactions({ assetClass: ac }),
     })),
   });
 

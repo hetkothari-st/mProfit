@@ -24,7 +24,9 @@ import { persistCapitalGainsForPortfolio } from '../services/tax/capitalGains.se
  * once more; the old key's marker row is left as a record of when the last
  * one ran.
  */
-const MARKER_KEY = 'holdings.recompute.2026-09-fifo-book-cost';
+// 2026-10: deposit withdrawals / maturities by amount, gold & silver by
+// purity, gold ETFs at their own price (asset-valuation fixes).
+const MARKER_KEY = 'holdings.recompute.2026-10-asset-valuation';
 
 export interface RecomputeResult {
   skipped: boolean;

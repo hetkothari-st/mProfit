@@ -22,6 +22,7 @@ import { PriceAsOf } from '@/components/common/PriceAsOf';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { transactionsApi } from '@/api/transactions.api';
+import { listAllTransactions } from '@/api/listAllTransactions';
 import { apiErrorMessage } from '@/api/client';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
 import { formatINR, formatPercent, Decimal, toDecimal, serializeMoney, serializeQuantity, formatDateOnly } from '@everypaisa/shared';
@@ -83,14 +84,14 @@ export function StocksPage() {
   const txnQueries = useQueries({
     queries: ['EQUITY', 'ETF'].map((ac) => ({
       queryKey: ['transactions', ac],
-      queryFn: () => transactionsApi.list({ assetClass: ac, pageSize: 200 }),
+      queryFn: () => listAllTransactions({ assetClass: ac }),
     })),
   });
 
   const refreshMutation = useMutation({
     mutationFn: () => assetsApi.refreshAll(),
     onSuccess: (r) => {
-      toast.success(`Refreshed ${r.stocks.updated} stock prices`);
+      toast.success(`Re-priced ${r.holdings.updated} holding${r.holdings.updated !== 1 ? 's' : ''} at the latest prices`);
       queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
       queryClient.invalidateQueries({ queryKey: ['portfolio-summary'] });
     },

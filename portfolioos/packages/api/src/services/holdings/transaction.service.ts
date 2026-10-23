@@ -592,6 +592,19 @@ export interface ListTransactionsQuery {
   pageSize?: number;
 }
 
+/**
+ * Most rows one page returns. The API validator already allows 1000, and the
+ * FD / Post Office pages ask for 500; this used to clip every request to 200
+ * without saying so, so the 201st installment silently vanished from a page
+ * that showed "all" transactions. Callers that need everything page through
+ * (`pagination.totalPages`).
+ */
+export const MAX_TRANSACTION_PAGE_SIZE = 1000;
+
+export function resolvePageSize(requested: number | null | undefined): number {
+  return requested && requested > 0 ? Math.min(requested, MAX_TRANSACTION_PAGE_SIZE) : 50;
+}
+
 export async function listTransactions(
   userId: string,
   q: ListTransactionsQuery,
@@ -607,7 +620,7 @@ export async function listTransactions(
     scope.allowedAssetClasses !== null &&
     !scope.allowedAssetClasses.includes(q.assetClass)
   ) {
-    const pageSize = q.pageSize && q.pageSize > 0 ? Math.min(q.pageSize, 200) : 50;
+    const pageSize = resolvePageSize(q.pageSize);
     return { items: [], pagination: { page: 1, pageSize, total: 0, totalPages: 1 } };
   }
 
@@ -657,7 +670,7 @@ export async function listTransactions(
   );
 
   const page = q.page && q.page > 0 ? q.page : 1;
-  const pageSize = q.pageSize && q.pageSize > 0 ? Math.min(q.pageSize, 200) : 50;
+  const pageSize = resolvePageSize(q.pageSize);
   const skip = (page - 1) * pageSize;
   const rows = allRows.slice(skip, skip + pageSize);
 

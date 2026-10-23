@@ -18,6 +18,15 @@ const STOCK_ASSET_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
  * distinct instrument). Equity-style holdings projection skips these
  * outright; the F&O page reads from `DerivativePosition`.
  */
+// NSE gold ETF tickers commonly typed into a holding's name.
+const GOLD_ETF_TICKER =
+  /\b(GOLDBEES|GOLDIETF|AXISGOLD|HDFCGOLD|KOTAKGOLD|SETFGOLD|LICMFGOLD|QGOLDHALF|GOLDCASE|GOLD1|BSLGOLDETF|TATAGOLD|GOLDSHARE|IVZINGOLD|EGOLD|UTIGOLD|MOGOLD|GROWWGOLD|GOLDETF)\b/;
+
+/** The NSE ticker inside a gold ETF holding's free-text name, if any. */
+export function goldEtfTicker(name: string | null | undefined): string | null {
+  return name?.toUpperCase().match(GOLD_ETF_TICKER)?.[1] ?? null;
+}
+
 const SKIP_PROJECTION: ReadonlySet<AssetClass> = new Set<AssetClass>(['FUTURES', 'OPTIONS']);
 
 // Post Office schemes where interest accrues (not paid out) — we compute
@@ -57,13 +66,22 @@ function accrualValuationDay(): Date {
   return new Date(`${istCalendarDate(new Date())}T00:00:00Z`);
 }
 
+/** Principal still open in each deposit row, keyed by its transaction id. */
+function remainingPrincipalByDeposit(txs: Transaction[]): Map<string, Decimal> {
+  const out = new Map<string, Decimal>();
+  for (const lot of replayLots(txs).lots) {
+    out.set(lot.txId, (out.get(lot.txId) ?? new Decimal(0)).plus(lot.qty.times(lot.costPerUnit)));
+  }
+  return out;
+}
+
 /**
  * FDs and similar bank-deposit assets: compound each DEPOSIT row independently
  * using its own interestRate + interestFrequency. Falls back to null (caller
  * uses totalCost) when no rates are recorded so the column never shows blank
  * for legacy entries.
  */
-function computeFdAccruedValue(txs: Transaction[]): Decimal | null {
+export function computeFdAccruedValue(txs: Transaction[]): Decimal | null {
   const today = accrualValuationDay();
   const deposits = txs.filter(
     (t) =>
@@ -71,12 +89,14 @@ function computeFdAccruedValue(txs: Transaction[]): Decimal | null {
       t.interestRate != null,
   );
   if (deposits.length === 0) return null;
+  const remaining = remainingPrincipalByDeposit(txs);
 
   let total = new Decimal(0);
   for (const dep of deposits) {
-    const principal = new Decimal(dep.price.toString()).times(
-      new Decimal(dep.quantity.toString()),
-    );
+    // What is still in this deposit after withdrawals / maturities, not
+    // what went in: a drawn-down FD must not keep accruing on the full sum.
+    const principal = remaining.get(dep.id) ?? new Decimal(0);
+    if (principal.lte(0)) continue;
     const annualRate = new Decimal(dep.interestRate!.toString()).div(100);
     const valuationDate =
       dep.maturityDate && dep.maturityDate < today ? dep.maturityDate : today;
@@ -103,7 +123,7 @@ function computeFdAccruedValue(txs: Transaction[]): Decimal | null {
  * DEPOSIT/BUY that carries an interestRate. Caps at maturityDate if passed.
  * Returns null if no interest rates are recorded (will show invested only).
  */
-function computePoAccruedValue(txs: Transaction[], assetClass: AssetClass): Decimal | null {
+export function computePoAccruedValue(txs: Transaction[], assetClass: AssetClass): Decimal | null {
   const today = accrualValuationDay();
   const deposits = txs.filter(
     (t) =>
@@ -111,6 +131,7 @@ function computePoAccruedValue(txs: Transaction[], assetClass: AssetClass): Deci
       t.interestRate != null,
   );
   if (deposits.length === 0) return null;
+  const remaining = remainingPrincipalByDeposit(txs);
 
   // Quarterly-compounding schemes: P × (1 + r/4)^(4t)
   // Annual-compounding schemes: P × (1 + r)^t
@@ -118,9 +139,10 @@ function computePoAccruedValue(txs: Transaction[], assetClass: AssetClass): Deci
 
   let total = new Decimal(0);
   for (const dep of deposits) {
-    const principal = new Decimal(dep.price.toString()).times(
-      new Decimal(dep.quantity.toString()),
-    );
+    // What is still in this deposit after withdrawals / maturities, not
+    // what went in: a drawn-down FD must not keep accruing on the full sum.
+    const principal = remaining.get(dep.id) ?? new Decimal(0);
+    if (principal.lte(0)) continue;
     const annualRate = new Decimal(dep.interestRate!.toString()).div(100);
     const valuationDate = dep.maturityDate && dep.maturityDate < today
       ? dep.maturityDate
@@ -159,6 +181,18 @@ async function resolveMasterIds(meta: {
     const resolved = await resolveStockMasterId({
       isin: meta.isin,
       symbol: meta.assetName,
+      assetName: meta.assetName,
+    });
+    return { stockId: resolved, fundId: meta.fundId };
+  }
+  if (meta.assetClass === 'GOLD_ETF' && !meta.stockId) {
+    // Gold ETFs are listed securities (priced from StockPrice like any ETF).
+    // The Gold form takes a free-text name, so pull an NSE ticker out of it
+    // when one is there ("Nippon GOLDBEES" → GOLDBEES), else try it whole.
+    const ticker = goldEtfTicker(meta.assetName) ?? meta.assetName;
+    const resolved = await resolveStockMasterId({
+      isin: meta.isin,
+      symbol: ticker,
       assetName: meta.assetName,
     });
     return { stockId: resolved, fundId: meta.fundId };
@@ -252,12 +286,53 @@ export function compareReplayOrder(a: Transaction, b: Transaction): number {
   );
 }
 
-export function replayTransactions(txs: Transaction[]): ProjectionAggregate {
-  const lots: Array<{ qty: Decimal; costPerUnit: Decimal }> = [];
+/**
+ * Classes whose entries are amounts, not units: the forms store each deposit
+ * (an FD, one RD installment, a PPF/NPS/EPF contribution, a Post Office
+ * deposit) as quantity 1 at price = amount. A unit-wise FIFO would make a
+ * ₹10,000 withdrawal remove a whole ₹5,00,000 FD "unit", and an RD maturity
+ * remove one installment and leave the RD open. So withdrawals on these
+ * classes come out of principal by amount, and a maturity closes the deposit.
+ */
+const AMOUNT_BASED_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
+  'FIXED_DEPOSIT', 'RECURRING_DEPOSIT', 'NPS', 'PPF', 'EPF',
+  'NSC', 'KVP', 'SCSS', 'SSY',
+  'POST_OFFICE_MIS', 'POST_OFFICE_RD', 'POST_OFFICE_TD', 'POST_OFFICE_SAVINGS',
+]);
+
+/**
+ * Installment schemes: every DEPOSIT row is one installment of the same
+ * account, so its maturity pays out — and closes — all of them.
+ */
+const INSTALLMENT_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
+  'RECURRING_DEPOSIT', 'POST_OFFICE_RD',
+]);
+
+/** One open FIFO lot, tagged with the transaction that opened it. */
+export interface OpenLot {
+  txId: string;
+  qty: Decimal;
+  costPerUnit: Decimal;
+}
+
+/**
+ * The FIFO replay itself: the open lots left at the end plus realised P&L.
+ * `replayTransactions` sums the lots; the deposit accrual reads them per
+ * deposit so a partly withdrawn FD accrues only on what is still in it.
+ */
+export function replayLots(txs: Transaction[]): {
+  lots: OpenLot[];
+  realisedPnL: Decimal;
+  sourceTxCount: number;
+} {
+  const lots: OpenLot[] = [];
   let realisedPnL = new Decimal(0);
   const openQuantity = () => lots.reduce((s, l) => s.plus(l.qty), new Decimal(0));
 
   const sorted = [...txs].sort(compareReplayOrder);
+
+  // Opening row of each lot, for the maturity dates an FD maturity matches on.
+  const byId = new Map(sorted.map((t) => [t.id, t]));
 
   for (const tx of sorted) {
     const qty = new Decimal(tx.quantity.toString());
@@ -284,8 +359,10 @@ export function replayTransactions(txs: Transaction[]): ProjectionAggregate {
 
     if (BUY_TYPES.has(tx.transactionType)) {
       // Bonus shares land at zero cost — units go up, cost stays.
-      const costPerUnit = tx.transactionType === 'BONUS' ? new Decimal(0) : net.dividedBy(qty);
-      lots.push({ qty, costPerUnit });
+      const costPerUnit = tx.transactionType === 'BONUS' || qty.isZero() ? new Decimal(0) : net.dividedBy(qty);
+      lots.push({ txId: tx.id, qty, costPerUnit });
+    } else if (SELL_TYPES.has(tx.transactionType) && AMOUNT_BASED_CLASSES.has(tx.assetClass)) {
+      realisedPnL = realisedPnL.plus(takeByAmount(lots, tx, net, byId));
     } else if (SELL_TYPES.has(tx.transactionType)) {
       // Oldest lots first, as the capital-gains engine and the books do.
       let remaining = Decimal.min(qty, openQuantity());
@@ -313,7 +390,64 @@ export function replayTransactions(txs: Transaction[]): ProjectionAggregate {
     }
   }
 
-  const quantity = openQuantity();
+  return { lots, realisedPnL, sourceTxCount: sorted.length };
+}
+
+/**
+ * A withdrawal / maturity on an amount-based class (see AMOUNT_BASED_CLASSES).
+ * Mutates `lots`; returns the realised P&L.
+ *
+ * - MATURITY on an RD closes every installment; on anything else it closes
+ *   the deposits whose own maturity date has arrived, or — when none carries
+ *   one — the whole holding. The payout over their principal is interest.
+ * - Anything else (WITHDRAWAL, REDEMPTION, SELL) takes its amount out of
+ *   principal, oldest deposit first. A lot partly drawn keeps the same cost
+ *   per unit and fewer units, so quantity stays proportional to principal.
+ *   Drawing more than the principal closes it all; the excess is interest.
+ */
+function takeByAmount(
+  lots: OpenLot[],
+  tx: Transaction,
+  net: Decimal,
+  byId: Map<string, Transaction>,
+): Decimal {
+  const lotCost = (l: OpenLot) => l.qty.times(l.costPerUnit);
+
+  if (tx.transactionType === 'MATURITY') {
+    let closing = lots;
+    if (!INSTALLMENT_CLASSES.has(tx.assetClass)) {
+      const due = lots.filter((l) => {
+        const m = byId.get(l.txId)?.maturityDate;
+        return m != null && m.getTime() <= tx.tradeDate.getTime();
+      });
+      if (due.length > 0) closing = due;
+    }
+    const cost = closing.reduce((s, l) => s.plus(lotCost(l)), new Decimal(0));
+    const closed = new Set(closing);
+    const keep = lots.filter((l) => !closed.has(l));
+    lots.splice(0, lots.length, ...keep);
+    return net.minus(cost);
+  }
+
+  let remaining = net;
+  while (remaining.greaterThan(0) && lots.length > 0) {
+    const lot = lots[0]!;
+    const cost = lotCost(lot);
+    if (cost.lessThanOrEqualTo(remaining) || lot.costPerUnit.isZero()) {
+      remaining = remaining.minus(cost);
+      lots.shift();
+    } else {
+      lot.qty = lot.qty.minus(remaining.dividedBy(lot.costPerUnit));
+      remaining = new Decimal(0);
+    }
+  }
+  // Whatever the principal could not cover was interest paid out.
+  return remaining;
+}
+
+export function replayTransactions(txs: Transaction[]): ProjectionAggregate {
+  const { lots, realisedPnL, sourceTxCount } = replayLots(txs);
+  const quantity = lots.reduce((s, l) => s.plus(l.qty), new Decimal(0));
   const totalCost = lots.reduce((s, l) => s.plus(l.qty.times(l.costPerUnit)), new Decimal(0));
 
   return {
@@ -321,7 +455,7 @@ export function replayTransactions(txs: Transaction[]): ProjectionAggregate {
     totalCost,
     avgCostPrice: quantity.isZero() ? new Decimal(0) : totalCost.dividedBy(quantity),
     realisedPnL,
-    sourceTxCount: sorted.length,
+    sourceTxCount,
   };
 }
 
@@ -397,12 +531,14 @@ async function currentPriceFor(opts: {
   stockId: string | null;
   fundId: string | null;
   isin: string | null;
+  assetName: string | null;
 }): Promise<PriceQuote | null> {
   return routePriceQuote({
     assetClass: opts.assetClass,
     stockId: opts.stockId,
     fundId: opts.fundId,
     isin: opts.isin,
+    assetName: opts.assetName,
   });
 }
 
@@ -472,6 +608,7 @@ export async function recomputeForAsset(
       stockId: resolved.stockId,
       fundId: resolved.fundId,
       isin: meta.isin,
+      assetName: meta.assetName,
     });
     price = quote?.price ?? null;
     priceAsOf = quote?.asOf ?? null;
@@ -633,6 +770,7 @@ async function refreshPricesForRows(rows: Array<{
       stockId: resolved.stockId,
       fundId: resolved.fundId,
       isin: row.isin,
+      assetName: row.assetName,
     });
     const price = quote?.price ?? null;
     const patch: Prisma.HoldingProjectionUpdateInput = { computedAt: new Date() };
@@ -728,4 +866,19 @@ export async function refreshPortfolioProjectionPrices(
   const priced = await refreshPricesForRows(rows);
   const accrued = await recomputeAccrualProjections({ portfolioId });
   return { updated: priced + accrued };
+}
+
+/**
+ * A user's "Refresh prices": re-price that user's own holdings from market
+ * data already loaded by the scheduled feeds. Deliberately no outbound fetch
+ * and nothing outside the user's portfolios — the old button re-priced every
+ * user's holdings and hit Yahoo for every held symbol on every click.
+ */
+export async function refreshUserProjectionPrices(userId: string): Promise<{ updated: number }> {
+  const portfolios = await prisma.portfolio.findMany({ where: { userId }, select: { id: true } });
+  let updated = 0;
+  for (const p of portfolios) {
+    updated += (await refreshPortfolioProjectionPrices(p.id)).updated;
+  }
+  return { updated };
 }

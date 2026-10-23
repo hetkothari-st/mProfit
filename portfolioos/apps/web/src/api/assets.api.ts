@@ -54,14 +54,11 @@ export const assetsApi = {
     );
     return unwrap(data);
   },
-  async refreshAll(): Promise<{ stocks: { updated: number; failed: number }; holdings: { updated: number } }> {
-    const { data } = await api.post<ApiResponse<{ stocks: { updated: number; failed: number }; holdings: { updated: number } }>>(
+  /** Re-price the signed-in user's own holdings from already-loaded market prices. */
+  async refreshAll(): Promise<{ holdings: { updated: number } }> {
+    const { data } = await api.post<ApiResponse<{ holdings: { updated: number } }>>(
       '/api/assets/refresh-prices',
     );
-    return unwrap(data);
-  },
-  async amfiSync(): Promise<{ fetchedRows: number; mastersCreated: number; mastersUpdated: number; navsUpserted: number }> {
-    const { data } = await api.post<ApiResponse<any>>('/api/assets/amfi/sync');
     return unwrap(data);
   },
   async commoditiesLive(): Promise<LiveCommodityPrices> {
