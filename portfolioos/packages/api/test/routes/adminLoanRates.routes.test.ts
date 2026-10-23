@@ -104,8 +104,8 @@ describe('gate', () => {
     expect((await call('POST', '/run', { token: null, body: {} })).status).toBe(401);
   });
 
-  it('investor -> 401, admin without two-factor -> 403, admin session without a code -> 403, verified admin -> 200', async () => {
-    expect((await call('GET', '/', { token: tokenFor(investor, 'INVESTOR', true) })).status).toBe(401);
+  it('investor -> 403, admin without two-factor -> 403, admin session without a code -> 403, verified admin -> 200', async () => {
+    expect((await call('GET', '/', { token: tokenFor(investor, 'INVESTOR', true) })).status).toBe(403);
     const no2fa = await call('GET', '/', { token: tokenFor(adminNo2fa, 'ADMIN', true) });
     expect(no2fa.status).toBe(403);
     expect((await no2fa.json()).code).toBe('TWO_FACTOR_REQUIRED');

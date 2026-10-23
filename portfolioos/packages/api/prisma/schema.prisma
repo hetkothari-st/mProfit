@@ -3744,14 +3744,14 @@ model AaConsent {
 // with RLS as defense-in-depth):
 //   - OWNER    → sees every member's personal assets + all family
 //                assets; can invite/remove/edit members.
-//   - CONTRIBUTOR → sees own personal + family-shared, filtered by
-//                own visibleAssetClasses / visibleCategories; can
-//                write to family portfolios.
+//   - CONTRIBUTOR → sees every ACTIVE member's personal assets + family
+//                assets, filtered by their own visibleAssetClasses /
+//                visibleCategories (empty = sees nothing; only an OWNER
+//                is unrestricted); can write to family portfolios.
 //   - VIEWER   → same visibility as CONTRIBUTOR but read-only on
 //                family portfolios.
-// CONTRIBUTOR/VIEWER never see another member's personal data (rule
-// A locked in Phase 3). To grant cross-member visibility → promote
-// to OWNER.
+// Cross-member visibility is governed by the caps, not the role (family
+// scope became the union of members in eab3acf0).
 
 enum FamilyRole {
   OWNER
