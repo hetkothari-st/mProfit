@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { splitErrorMessage } from './errors';
 import { SPLIT_KEYS, splitApi } from '@/api/split.api';
 import { BalancePill } from './BalancePill';
+import { formatSplitMoney } from '@/lib/splitFormat';
 import { AddExpenseDialog } from './AddExpenseDialog';
 import { useSplitDisplayName } from './useSplitDisplayName';
 
@@ -53,6 +54,12 @@ export function FriendPage() {
         <BalancePill net={friend.net} currency={friend.currency} approx={friend.approx} className="text-base" />
       </CardContent></Card>
       {friend.approx && <p className="text-xs text-muted-foreground">Includes groups in other currencies, converted at the latest rate.</p>}
+      {/* A balance with no exchange rate cannot be added in; say so rather than show a partial total as the whole. */}
+      {(friend.missingRates?.length ?? 0) > 0 && (
+        <p role="note" className="text-xs text-foreground rounded-md border border-warning/40 bg-warning/10 px-3 py-2">
+          {`Overall leaves out ${friend.missingRates!.map((m) => `${m.groupName} (${formatSplitMoney(m.net, m.currency)})`).join(', ')} — no exchange rate to ${friend.currency} yet.`}
+        </p>
+      )}
       {!friend.contactId && <p className="text-sm text-muted-foreground">{`Add expenses with ${friend.displayName} inside your shared groups.`}</p>}
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">By group</h2>

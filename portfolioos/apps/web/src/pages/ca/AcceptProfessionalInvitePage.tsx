@@ -105,8 +105,9 @@ export function AcceptProfessionalInvitePage() {
               </h1>
             </div>
             <p className="text-[13.5px] leading-relaxed text-muted-foreground">
-              Open them from Client books. They decide what you can see and can change or withdraw
-              it at any time, and everything you do is on a trail they can read.
+              Open them from Client books. Your access is view-only until they let you edit. They
+              decide what you can see and do, can change or withdraw it at any time, and
+              everything you do is on a trail they can read.
             </p>
             <Button onClick={() => navigate('/ca')} className="w-full">
               Open their books <ArrowRight className="h-4 w-4" />
@@ -132,7 +133,7 @@ export function AcceptProfessionalInvitePage() {
                 <Link to="/dashboard">Set up my portfolio</Link>
               </Button>
               <Button asChild size="sm">
-                <Link to="/settings/billing">See advisor plans</Link>
+                <Link to="/pricing">See advisor plans</Link>
               </Button>
             </div>
           </CardContent>
@@ -153,9 +154,10 @@ export function AcceptProfessionalInvitePage() {
           </div>
 
           <p className="text-[13.5px] leading-relaxed text-muted-foreground">
-            Accepting lets you open their holdings, transactions, statements and reports, and keep
-            their books. They choose how much of that you get, they can see everything you do, and
-            they can withdraw it at any time.
+            Accepting lets you see their holdings, transactions, statements and reports. Access
+            starts view-only: you can keep their books or correct entries only once they allow it.
+            They choose how much you see, they can see everything you do, and they can withdraw it
+            at any time.
           </p>
 
           <p className="text-[12.5px] leading-relaxed text-muted-foreground">

@@ -66,3 +66,14 @@ describe('FriendPage', () => {
     expect(screen.getByText('Goa trip')).toBeTruthy();
   });
 });
+
+describe('FriendPage — balances with no exchange rate', () => {
+  it('says the overall leaves a group out instead of showing a partial total as the whole', async () => {
+    api.friends.mockResolvedValue([{ ...FRIENDS[0]!, approx: true, net: '50.0000',
+      missingRates: [{ groupId: 'g3', groupName: 'Odd trip', currency: 'USD', net: '20.0000' }] }]);
+    renderWithProviders(<FriendPage />, { route: '/split/friends/u%3Au2', path: '/split/friends/:key' });
+    const note = await screen.findByRole('note');
+    expect(note.textContent).toContain('Odd trip ($20.00)');
+    expect(note.textContent).toContain('no exchange rate to INR');
+  });
+});

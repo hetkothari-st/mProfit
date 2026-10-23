@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { priorityTone } from './recommendationPriority';
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -65,13 +66,6 @@ const STATUS_LABEL: Record<RecommendationStatus, string> = {
   SNOOZED: 'Snoozed',
   DONE: 'Done',
 };
-
-/** Priority 1 is the most urgent. Anything past 3 is "when you get to it". */
-function priorityTone(priority: number): { label: string; className: string } {
-  if (priority <= 1) return { label: 'Do first', className: 'border-negative/40 text-negative' };
-  if (priority <= 3) return { label: 'Soon', className: 'border-orange-500/40 text-orange-600' };
-  return { label: 'When convenient', className: 'border-border text-muted-foreground' };
-}
 
 /**
  * Where the instrument came from, shown on every card rather than buried in

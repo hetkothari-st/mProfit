@@ -614,6 +614,46 @@ describe('CA access boundary', () => {
     });
   });
 
+  it('adds charges to the net amount when correcting a SIP, as the client form does', async () => {
+    // A SIP is a purchase: charges raise its cost. The correction handler used
+    // to treat every non-BUY type as a sale and subtract them.
+    const { caCorrectTransaction } = await import(
+      '../../src/controllers/caAccounting.controller.js'
+    );
+    const sipId = await runAsSystem(async () =>
+      (
+        await prisma.transaction.create({
+          data: {
+            portfolioId: client.portfolioId,
+            assetClass: 'MUTUAL_FUND',
+            transactionType: 'SIP',
+            tradeDate: new Date('2025-06-05'),
+            quantity: '10',
+            price: '50',
+            grossAmount: '500',
+            netAmount: '500',
+            assetName: 'Client SIP fund',
+          },
+        })
+      ).id,
+    );
+    cleanups.push(() =>
+      runAsSystem(async () => {
+        await prisma.caAuditLog.deleteMany({ where: { resourceId: sipId } });
+        await prisma.transaction.deleteMany({ where: { id: sipId } });
+      }),
+    );
+
+    const req = fakeCaRequest(ca.userId, clientId, { otherCharges: '5' });
+    (req.params as Record<string, string>).id = sipId;
+    const res = fakeResponse();
+    await runAsVerified(ca.userId, () => caCorrectTransaction(req, res));
+
+    const row = await runAsSystem(() => prisma.transaction.findUniqueOrThrow({ where: { id: sipId } }));
+    expect(row.grossAmount.toString()).toBe('500');
+    expect(row.netAmount.toString()).toBe('505');
+  });
+
   it('rebuilds derived rows under the CA own identity, without impersonation', async () => {
     // recomputeForAsset writes HoldingProjection and CapitalGain. Those carry a
     // CA write policy precisely so a correction can rebuild them without

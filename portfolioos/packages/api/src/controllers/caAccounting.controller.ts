@@ -71,7 +71,7 @@ import {
   upsertUserFmv,
   deleteUserFmv,
 } from '../services/tax/fmvOverride.service.js';
-import { createTransaction } from '../services/holdings/transaction.service.js';
+import { createTransaction, netAmountFor } from '../services/holdings/transaction.service.js';
 import { baseTransactionSchema } from './transaction.controller.js';
 import { createImportJob, listImportJobs } from '../services/imports/import.service.js';
 import {
@@ -585,11 +585,9 @@ export async function caCorrectTransaction(req: Request, res: Response) {
 
   const gross = qty.times(price);
   patch.grossAmount = serializeMoney(gross);
-  // A buy costs more than the trade; a sale nets less. Anything else is a
-  // movement of units, where charges still reduce the value received.
-  patch.netAmount = serializeMoney(
-    before.transactionType === 'BUY' ? gross.plus(charges) : gross.minus(charges),
-  );
+  // Same rule as the client's own form: any acquisition (BUY, SIP, switch-in,
+  // dividend reinvest, …) costs gross + charges; anything else nets less.
+  patch.netAmount = serializeMoney(netAmountFor(before.transactionType, gross, charges));
 
   const updated = await runInTransaction(async (tx) => {
     const row = await tx.transaction.update({ where: { id }, data: patch });

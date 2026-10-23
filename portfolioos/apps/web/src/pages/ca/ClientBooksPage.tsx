@@ -378,7 +378,10 @@ export function ClientBooksPage() {
                     label={`Delete ${a.name}`}
                     danger
                     disabled={removeAccount.isPending}
-                    onClick={() => removeAccount.mutate(a.id)}
+                    onClick={() => {
+                      // Same confirm as the client's own Accounting page — this is their ledger.
+                      if (window.confirm(`Delete account "${a.name}"?`)) removeAccount.mutate(a.id);
+                    }}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </RowButton>
@@ -481,7 +484,9 @@ export function ClientBooksPage() {
                       label={`Delete voucher ${v.voucherNo}`}
                       danger
                       disabled={removeVoucher.isPending}
-                      onClick={() => removeVoucher.mutate(v.id)}
+                      onClick={() => {
+                        if (window.confirm(`Delete voucher ${v.voucherNo}?`)) removeVoucher.mutate(v.id);
+                      }}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </RowButton>
@@ -650,7 +655,9 @@ export function ClientBooksPage() {
                     label={`Remove ${f.isin}`}
                     danger
                     disabled={removeFmv.isPending}
-                    onClick={() => removeFmv.mutate(f.isin)}
+                    onClick={() => {
+                      if (window.confirm(`Remove the 31-Jan-2018 value for ${f.isin}?`)) removeFmv.mutate(f.isin);
+                    }}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </RowButton>

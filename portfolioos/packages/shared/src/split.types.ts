@@ -21,7 +21,12 @@ export interface SplitExpenseDto {
 export interface SplitSettlementDto { id: string; groupId: string; fromMemberId: string; toMemberId: string; amount: Money; currency: string; fxRate: string; baseAmount: Money; method: SplitSettleMethodDto; date: string; createdById: string; createdAt: string; deletedAt: string | null }
 export interface SplitTransferDto { fromMemberId: string; toMemberId: string; amount: Money }
 export interface SplitBalancesDto { groupId: string; baseCurrency: string; nets: Array<{ memberId: string; net: Money }>; transfers: SplitTransferDto[]; simplified: boolean }
-export interface SplitFriendDto { key: string; displayName: string; userId: string | null; contactId: string | null; currency: string; net: Money; approx: boolean; groups: Array<{ groupId: string; groupName: string; groupType?: SplitGroupTypeDto; net: Money; currency: string }> }
+export interface SplitFriendDto {
+  key: string; displayName: string; userId: string | null; contactId: string | null; currency: string; net: Money; approx: boolean;
+  groups: Array<{ groupId: string; groupName: string; groupType?: SplitGroupTypeDto; net: Money; currency: string }>;
+  /** Groups with an outstanding balance that `net` leaves out because no exchange rate to `currency` exists. Empty when the total is complete. */
+  missingRates?: Array<{ groupId: string; groupName: string; currency: string; net: Money }>;
+}
 export interface SplitContactDto { id: string; name: string; email: string | null; phone: string | null; upiId: string | null; linkedUserId: string | null }
 export interface SplitActivityDto { id: string; groupId: string; groupName: string; actorUserId: string; actorName: string; kind: string; payload: unknown; createdAt: string }
 
