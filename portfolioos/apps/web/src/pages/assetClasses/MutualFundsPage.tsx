@@ -16,6 +16,7 @@ import { PriceAsOf } from '@/components/common/PriceAsOf';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { assetsApi } from '@/api/assets.api';
 import { transactionsApi } from '@/api/transactions.api';
+import { listAllTransactions } from '@/api/listAllTransactions';
 import { apiErrorMessage } from '@/api/client';
 import { importsApi } from '@/api/imports/imports.api';
 import { useScan } from '@/context/ScanContext';
@@ -72,13 +73,15 @@ export function MutualFundsPage() {
 
   const txnQuery = useQuery({
     queryKey: ['transactions', 'MUTUAL_FUND'],
-    queryFn: () => transactionsApi.list({ assetClass: 'MUTUAL_FUND', pageSize: 200 }),
+    queryFn: () => listAllTransactions({ assetClass: 'MUTUAL_FUND' }),
   });
 
   const syncMutation = useMutation({
-    mutationFn: () => assetsApi.amfiSync(),
+    // Re-prices the user's own funds at the latest NAVs the daily AMFI job
+    // loaded. The full AMFI sync is a market-wide admin tool now.
+    mutationFn: () => assetsApi.refreshAll(),
     onSuccess: (r) => {
-      toast.success(`AMFI sync: ${r.navsUpserted} NAVs upserted, ${r.mastersCreated} new schemes`);
+      toast.success(`Re-priced ${r.holdings.updated} holding${r.holdings.updated !== 1 ? 's' : ''} at the latest NAVs`);
       queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
       queryClient.invalidateQueries({ queryKey: ['portfolio-summary'] });
     },
@@ -226,7 +229,7 @@ export function MutualFundsPage() {
             <Button variant="outline" onClick={scrollToUpload}><Upload className="h-4 w-4" /> Import CAS PDF</Button>
             <Button variant="outline" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
               {syncMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Sync AMFI NAV
+              Refresh NAVs
             </Button>
             <Button variant="outline" onClick={openAdd}><Plus className="h-4 w-4" /> Add transaction</Button>
           </div>

@@ -115,7 +115,7 @@ async function valueAt(scope: XirrScope, asOf: Date): Promise<Decimal> {
     // only), else carry at cost.
     const price =
       current && !FOREIGN_PRICED.has(h.assetClass)
-        ? await routePriceLookup({ assetClass: h.assetClass, stockId: h.stockId, fundId: h.fundId, isin: h.isin })
+        ? await routePriceLookup({ assetClass: h.assetClass, stockId: h.stockId, fundId: h.fundId, isin: h.isin, assetName: h.assetName })
         : null;
     total = total.plus(price ? toDecimal(h.quantity).times(price) : toDecimal(h.totalCost));
   }

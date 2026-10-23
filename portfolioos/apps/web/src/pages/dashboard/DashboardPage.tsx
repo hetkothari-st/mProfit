@@ -433,10 +433,10 @@ export function DashboardPage() {
   const refreshMutation = useMutation({
     mutationFn: () => assetsApi.refreshAll(),
     onSuccess: async (r) => {
-      const updatedCount = r.stocks.updated + r.holdings.updated;
+      const n = r.holdings.updated;
       toast.success(
-        updatedCount > 0
-          ? `Updated ${r.stocks.updated} price${r.stocks.updated !== 1 ? 's' : ''} · ${r.holdings.updated} holding${r.holdings.updated !== 1 ? 's' : ''}`
+        n > 0
+          ? `Re-priced ${n} holding${n !== 1 ? 's' : ''} at the latest prices`
           : 'Data refreshed — no new prices available',
       );
       await Promise.all([

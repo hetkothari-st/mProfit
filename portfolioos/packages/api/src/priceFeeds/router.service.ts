@@ -7,6 +7,7 @@ import { getLatestNavQuoteForFund } from './amfi.service.js';
 import { getLatestCommodityQuote } from './commodity.service.js';
 import { getLatestCryptoQuote, getLatestCryptoQuoteByCoinGeckoId } from './crypto.service.js';
 import { getLatestFxRate } from './fx.service.js';
+import { priceAtPurity } from '@everypaisa/shared';
 
 /**
  * Unified price feed router — dispatches a price lookup to the correct
@@ -23,6 +24,9 @@ export interface PriceLookupInput {
   // F&O — when provided, FUTURES/OPTIONS lookups dispatch to FoContractPrice
   // instead of (incorrectly) returning the underlying spot.
   assetKey?: string | null;
+  // Physical gold / silver carry their purity on the name ("22K Gold ring");
+  // without it they are valued as 24K / 999.
+  assetName?: string | null;
 }
 
 export async function routePriceLookup(input: PriceLookupInput): Promise<Decimal | null> {
@@ -60,13 +64,24 @@ export async function routePriceQuote(input: PriceLookupInput): Promise<PriceQuo
     case 'MUTUAL_FUND':
       return input.fundId ? getLatestNavQuoteForFund(input.fundId) : null;
 
+    // The commodity feed is ₹ per gram of 24K gold / 999 silver.
     case 'PHYSICAL_GOLD':
+    case 'PHYSICAL_SILVER': {
+      const q = await getLatestCommodityQuote(input.assetClass === 'PHYSICAL_GOLD' ? 'GOLD' : 'SILVER');
+      if (!q) return null;
+      return { price: priceAtPurity(q.price, input.assetClass, input.assetName), asOf: q.asOf };
+    }
+
     case 'GOLD_BOND':
-    case 'GOLD_ETF':
+      // One SGB unit is one gram of 999 gold — RBI prices issues and
+      // redemptions off the per-gram 999 rate — so no purity scaling.
       return getLatestCommodityQuote('GOLD');
 
-    case 'PHYSICAL_SILVER':
-      return getLatestCommodityQuote('SILVER');
+    case 'GOLD_ETF':
+      // A gold ETF unit is a listed security worth roughly 1/100 g (GOLDBEES
+      // ≈ ₹80 when gold is ₹8,000/g). Pricing it at the per-gram rate
+      // overstated holdings ~100×; it takes its own market price like any ETF.
+      return input.stockId ? getLatestStockQuote(input.stockId) : null;
 
     case 'CRYPTOCURRENCY':
       // Crypto holdings store the CoinGecko slug in the `isin` field — no FK

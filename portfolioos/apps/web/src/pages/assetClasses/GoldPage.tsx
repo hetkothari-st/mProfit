@@ -1,25 +1,11 @@
 import { useNavigate } from 'react-router-dom';
 import { Coins, Loader2 } from 'lucide-react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { Decimal, type HoldingRow } from '@everypaisa/shared';
+import { Decimal, priceAtPurity, type HoldingRow } from '@everypaisa/shared';
 import { SimpleAssetPage } from './SimpleAssetPage';
 import { GoldFormDialog } from './GoldFormDialog';
 import { GoldSilverTopBar } from './GoldSilverTopBar';
 import { assetsApi } from '@/api/assets.api';
-
-function detectCarat(assetName: string | null | undefined): number {
-  if (!assetName) return 24;
-  const m = assetName.match(/\b(\d+)\s*[kK]\b/);
-  if (m) { const k = parseInt(m[1]!, 10); if (k >= 6 && k <= 24) return k; }
-  return 24;
-}
-
-function detectSilverPurity(assetName: string | null | undefined): string {
-  if (!assetName) return '1';
-  const m = assetName.match(/^(999|925|800)\b/);
-  if (m) return ({ '999': '1', '925': '0.925', '800': '0.8' } as Record<string, string>)[m[1]!] ?? '1';
-  return '1';
-}
 
 const KNOWN_GOLD_ETFS = /\b(GOLDBEES|GOLDIETF|AXISGOLD|HDFCGOLD|KOTAKGOLD|SETFGOLD|LICMFGOLD|QGOLDHALF)\b/;
 const KNOWN_SILVER_ETFS = /\b(SILVERBEES|SILVERIETF)\b/;
@@ -44,9 +30,12 @@ export function GoldPage() {
 
   function computeLiveValue(h: HoldingRow & { portfolioName: string }): string | null {
     try {
-      if (h.assetClass === 'PHYSICAL_GOLD') {
-        if (!live?.GOLD) return null;
-        return new Decimal(live.GOLD).times(detectCarat(h.assetName)).div(24).times(new Decimal(h.quantity)).toFixed(4);
+      // Physical metal: the same purity rule the server values it with
+      // (priceAtPurity), on the live per-gram rate.
+      if (h.assetClass === 'PHYSICAL_GOLD' || h.assetClass === 'PHYSICAL_SILVER') {
+        const base = h.assetClass === 'PHYSICAL_GOLD' ? live?.GOLD : live?.SILVER;
+        if (!base) return null;
+        return priceAtPurity(base, h.assetClass, h.assetName).times(new Decimal(h.quantity)).toFixed(4);
       }
       if (h.assetClass === 'GOLD_BOND') {
         // SGB: 1 unit = 1 g of 24K-equivalent gold; no carat scaling.
@@ -55,16 +44,13 @@ export function GoldPage() {
       }
       if (h.assetClass === 'GOLD_ETF') {
         // ETF NAV per unit (not per gram). Match the holding's name to a
-        // known NSE gold ETF ticker; fall back to whatever the DB has.
+        // known NSE gold ETF ticker for a live price; otherwise the server's
+        // value stands — it prices the ETF at its own market close.
         const ticker = detectEtfTicker(h.assetName, KNOWN_GOLD_ETFS)
           ?? detectEtfTicker(h.symbol, KNOWN_GOLD_ETFS);
         const nav = ticker ? live?.etfNavs?.[ticker] : null;
         if (!nav) return null;
         return new Decimal(nav).times(new Decimal(h.quantity)).toFixed(4);
-      }
-      if (h.assetClass === 'PHYSICAL_SILVER') {
-        if (!live?.SILVER) return null;
-        return new Decimal(live.SILVER).times(detectSilverPurity(h.assetName)).times(new Decimal(h.quantity)).toFixed(4);
       }
     } catch { return null; }
     return null;

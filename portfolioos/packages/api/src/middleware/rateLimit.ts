@@ -239,6 +239,18 @@ export const loanRatesRunLimiter = rateLimit({
   message: { success: false, error: 'Too many runs - please wait a minute', code: 'RATE_LIMITED' },
 });
 
+/** A user's "Refresh prices" button: re-prices their holdings. 5 a minute per user. */
+export const priceRefreshLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  passOnStoreError: true,
+  keyGenerator: userOrIp,
+  store: makeStore('price-refresh'),
+  message: { success: false, error: 'Prices were just refreshed - try again in a minute', code: 'RATE_LIMITED' },
+});
+
 export const importLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,

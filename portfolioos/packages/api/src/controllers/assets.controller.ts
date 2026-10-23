@@ -10,7 +10,6 @@ import {
 import {
   fetchQuote,
   getLatestStockPrice,
-  updateStockPricesFromYahoo,
 } from '../priceFeeds/yahoo.service.js';
 import { getLatestNavForFund, syncAmfiNav } from '../priceFeeds/amfi.service.js';
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
@@ -21,6 +20,7 @@ import { syncCryptoPrices, searchCrypto, fetchLiveCryptoPrices } from '../priceF
 import { syncFxRates, getLatestFxRate } from '../priceFeeds/fx.service.js';
 import { runMasterSync, runPriceSync } from '../priceFeeds/router.service.js';
 import { refreshAllHoldingPrices, refreshPortfolioPrices } from '../services/holdings/holdings.service.js';
+import { refreshUserProjectionPrices } from '../services/holdings/holdingsProjection.js';
 import { prisma } from '../lib/prisma.js';
 import { ok, created } from '../lib/response.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
@@ -82,12 +82,13 @@ export async function refreshPortfolio(req: Request, res: Response) {
   ok(res, result);
 }
 
-export async function refreshAllPrices(_req: Request, res: Response) {
-  // Only fetch prices for stocks the user actually holds — fetching the full
-  // NSE/BSE universe (5 000+ symbols) would time out a user-facing request.
-  const stocks = await updateStockPricesFromYahoo({ onlyHeld: true });
-  const holdings = await refreshAllHoldingPrices();
-  ok(res, { stocks, holdings });
+export async function refreshAllPrices(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  // The caller's holdings only, from prices the scheduled feeds already
+  // loaded. This used to fetch quotes for every user's stocks and re-price
+  // every user's holdings — one click did the whole platform's work.
+  const holdings = await refreshUserProjectionPrices(req.user.id);
+  ok(res, { holdings });
 }
 
 export async function amfiSync(_req: Request, res: Response) {

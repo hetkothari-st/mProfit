@@ -7,7 +7,7 @@ import {
 import { Decimal, formatINR, type HoldingRow, type TransactionDTO, formatDateOnly } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { transactionsApi } from '@/api/transactions.api';
+import { listAllTransactions } from '@/api/listAllTransactions';
 import { assetsApi, type LiveCryptoCoin } from '@/api/assets.api';
 import { CryptoFormDialog } from './CryptoFormDialog';
 import { CoinAvatar } from './CryptoPage';
@@ -57,7 +57,7 @@ export function CryptoDetailPage() {
 
   const { data: txnData, isLoading: txnLoading } = useQuery({
     queryKey: ['transactions', 'CRYPTOCURRENCY', holding?.isin, holding?.assetName],
-    queryFn: () => transactionsApi.list({ assetClass: 'CRYPTOCURRENCY', pageSize: 200 }),
+    queryFn: () => listAllTransactions({ assetClass: 'CRYPTOCURRENCY' }),
     enabled: !!holding,
   });
 

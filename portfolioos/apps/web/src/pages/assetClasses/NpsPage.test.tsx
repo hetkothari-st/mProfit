@@ -58,3 +58,15 @@ describe('NpsPage smoke', () => {
     expect(await screen.findByText('NSDL Pension Fund — Tier I')).toBeTruthy();
   });
 });
+
+describe('NpsPage with no price source', () => {
+  it('carries the holding at cost instead of showing a −100% loss', async () => {
+    renderPage();
+    await screen.findByText('NSDL Pension Fund — Tier I');
+    const card = screen.getByText('Current value').closest('div')!.parentElement!;
+    expect(card.textContent).toContain('2,50,000');
+    expect(card.textContent).toContain('at cost');
+    expect(document.body.textContent).not.toContain('-100');
+    expect(document.body.textContent).not.toContain('−100');
+  });
+});
