@@ -263,10 +263,8 @@ export async function rejectExpiryJob(req: Request, res: Response) {
   const job = await prisma.expiryCloseJob.findUnique({ where: { id } });
   if (!job) throw new NotFoundError('Expiry job not found');
   await assertPortfolio(userId, job.portfolioId);
-  await prisma.expiryCloseJob.update({
-    where: { id },
-    data: { status: 'REJECTED', reviewedAt: new Date() },
-  });
+  const { rejectExpiryClose } = await import('../services/fo/foExpiry.service.js');
+  await rejectExpiryClose(id);
   return ok(res, { success: true });
 }
 

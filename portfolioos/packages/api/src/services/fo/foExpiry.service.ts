@@ -20,6 +20,12 @@ import { findDuplicateTransaction } from '../imports/duplicateMatch.js';
  * Approval projects a closing SELL/BUY transaction at settlement → triggers
  * recompute → status=CLOSED with closeReason=EXPIRY (or
  * EXPIRED_WORTHLESS for OTM options worth 0).
+ *
+ * Rejection (rejectExpiryClose) puts the position back to OPEN: the user has
+ * said the auto-close is wrong and will record the close themselves. A scan
+ * does not re-flag a position whose job for that expiry is still pending or
+ * was rejected at the same open quantity — only a changed quantity (a trade
+ * added or edited since) earns a fresh job.
  */
 
 export async function scanExpiringPositions(): Promise<{
@@ -45,6 +51,18 @@ export async function scanExpiringPositions(): Promise<{
 
   for (const p of positions) {
     try {
+      const prior = await prisma.expiryCloseJob.findMany({
+        where: { positionId: p.id, expiryDate: p.expiryDate },
+        select: { status: true, openQty: true },
+      });
+      const alreadyDecided = prior.some(
+        (j) =>
+          j.status === 'PENDING_REVIEW' ||
+          j.status === 'APPROVED' ||
+          (j.status === 'REJECTED' && new Decimal(j.openQty.toString()).equals(p.netQuantity.toString())),
+      );
+      if (alreadyDecided) continue;
+
       const ltp = await getLatestFoContractPrice(p.assetKey);
       const settlementPrice = ltp ? new Decimal(ltp.settlementPrice) : null;
       const job = await prisma.expiryCloseJob.create({
@@ -86,6 +104,29 @@ export async function scanExpiringPositions(): Promise<{
   }
 
   return { scanned: positions.length, jobsCreated, autoClosed };
+}
+
+/**
+ * The user says the expiry close is wrong. Mark the job rejected and return
+ * the position to OPEN so it reads as "still open — needs your action"
+ * rather than sitting on "EXPIRY ?" with nothing left to approve.
+ */
+export async function rejectExpiryClose(jobId: string): Promise<void> {
+  const job = await prisma.expiryCloseJob.findUnique({ where: { id: jobId } });
+  if (!job) throw new Error(`ExpiryCloseJob ${jobId} not found`);
+  if (job.status === 'COMPLETED') {
+    throw new BadRequestError('This expiry close has already been booked.');
+  }
+  await prisma.expiryCloseJob.update({
+    where: { id: job.id },
+    data: { status: 'REJECTED', reviewedAt: new Date() },
+  });
+  // Only undo the flag this job set — a position that has since been closed
+  // or recomputed keeps whatever status it has now.
+  await prisma.derivativePosition.updateMany({
+    where: { id: job.positionId, status: 'PENDING_EXPIRY_APPROVAL' },
+    data: { status: 'OPEN' },
+  });
 }
 
 export async function approveExpiryClose(jobId: string): Promise<void> {

@@ -52,10 +52,12 @@ export async function syncFnoBroker(input: {
 
   for (const t of result.trades) {
     try {
-      const created = await ingestFnoTrade(input.userId, input.portfolioId, t);
-      if (created) {
+      const row = await ingestFnoTrade(input.userId, input.portfolioId, t);
+      // Brokers return the whole day's trade book on every sync, so most
+      // rows are usually already stored; only fresh inserts count as "new".
+      if (row.inserted) {
         ingested += 1;
-        touchedKeys.add(created.assetKey);
+        touchedKeys.add(row.assetKey);
       }
     } catch (err) {
       logger.warn({ err, sourceHash: t.sourceHash }, '[fno.sync] trade ingest failed');
@@ -91,10 +93,10 @@ async function ingestFnoTrade(
   userId: string,
   portfolioId: string,
   t: FnoNormalizedTrade,
-): Promise<{ id: string; assetKey: string } | null> {
+): Promise<{ id: string; assetKey: string; inserted: boolean }> {
   // Idempotency.
   const dup = await prisma.transaction.findUnique({ where: { sourceHash: t.sourceHash } });
-  if (dup) return { id: dup.id, assetKey: dup.assetKey ?? '' };
+  if (dup) return { id: dup.id, assetKey: dup.assetKey ?? '', inserted: false };
 
   // Ensure FoInstrument so DerivativePosition.recompute can resolve it.
   await ensureFoInstrument({
@@ -141,7 +143,7 @@ async function ingestFnoTrade(
       { transactionId: twin.id, brokerId: t.brokerId, tradeNo: t.tradeNo },
       '[fno-sync] trade already on the books under another source',
     );
-    return { id: twin.id, assetKey };
+    return { id: twin.id, assetKey, inserted: false };
   }
 
   const tx = await prisma.transaction.create({
@@ -177,7 +179,7 @@ async function ingestFnoTrade(
     select: { id: true, assetKey: true },
   });
 
-  return { id: tx.id, assetKey: tx.assetKey ?? assetKey };
+  return { id: tx.id, assetKey: tx.assetKey ?? assetKey, inserted: true };
 }
 
 function sumCharges(c: FnoNormalizedTrade['charges'] | undefined): Decimal {
