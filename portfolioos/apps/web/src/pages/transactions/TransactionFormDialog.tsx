@@ -46,9 +46,15 @@ const isDuplicateError = (err: unknown) => apiErrorCode(err) === 'DUPLICATE_TRAN
 // union both branches and collapse the required-branch output to
 // `number | undefined`.
 const numPreprocess = (v: unknown) => (v === '' || v === null ? undefined : v);
+// Only Price uses this. Its messages are spelled out because the form shows
+// them: a blank price coerces to NaN, whose default message is zod's
+// "Expected number, received nan".
 const moneyInRequired = z.preprocess(
   numPreprocess,
-  z.coerce.number({ invalid_type_error: 'Must be a number' }).nonnegative(),
+  z.coerce
+    .number({ invalid_type_error: 'Enter a price' })
+    .refine((n) => !Number.isNaN(n), 'Enter a price')
+    .refine((n) => n >= 0, "Price can't be negative"),
 );
 const moneyInOptional = z.preprocess(
   numPreprocess,
@@ -71,7 +77,10 @@ const schema = z.object({
   amcName: z.string().optional(),
   assetName: z.string().optional(),
   isin: z.string().optional(),
-  tradeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  // A message is required: without one the field failed validation with no
+  // visible error, so a blank date (the default when opened from Reports)
+  // made "Add transaction" look like it did nothing.
+  tradeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the trade date'),
   settlementDate: z.string().optional(),
   quantity: qtyIn,
   price: moneyInRequired,
@@ -280,8 +289,12 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
         if (fx.greaterThan(0)) payload.inrEquivalent = grossD.times(fx).toFixed(4);
       }
 
-      if (isEdit && initial) return transactionsApi.update(initial.id, payload);
-      return transactionsApi.create({ ...payload, ...(allowDuplicate ? { allowDuplicate: true } : {}) });
+      // The override goes on edits too: the server's duplicate check runs on
+      // update as well, so sending it only on create made "Record it anyway"
+      // re-trigger the same 409 forever.
+      const override = allowDuplicate ? { allowDuplicate: true } : {};
+      if (isEdit && initial) return transactionsApi.update(initial.id, { ...payload, ...override });
+      return transactionsApi.create({ ...payload, ...override });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -518,6 +531,9 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
                 max={!isEdit && prefill?.onOrBefore ? prefill.onOrBefore : undefined}
                 {...register('tradeDate')}
               />
+              {formState.errors.tradeDate && (
+                <p className="text-xs text-negative mt-1">{formState.errors.tradeDate.message}</p>
+              )}
               {!isEdit && prefill?.onOrBefore && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   When you bought these units — on or before the sale on {prefill.onOrBefore}.
@@ -534,6 +550,9 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
             <div>
               <Label htmlFor="price">Price</Label>
               <Input id="price" type="number" step="0.0001" className="mt-1 tabular-nums" {...register('price')} />
+              {formState.errors.price && (
+                <p className="text-xs text-negative mt-1">{formState.errors.price.message}</p>
+              )}
             </div>
           </div>
 
