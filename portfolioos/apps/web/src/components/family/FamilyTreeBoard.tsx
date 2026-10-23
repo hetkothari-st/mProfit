@@ -9,6 +9,7 @@ import {
   type PartnerPair,
 } from '@everypaisa/shared';
 import { familiesApi, type FamilyMemberRow } from '@/api/family/families.api';
+import { seesNoOtherMembersData } from '@/lib/familyVisibility';
 import { managedProfilesApi } from '@/api/family/managedProfiles.api';
 import { apiErrorMessage } from '@/api/client';
 import {
@@ -494,6 +495,27 @@ function PersonCard({
               </span>
             </span>
           </button>
+        </div>
+      )}
+
+      {isOwner && seesNoOtherMembersData(member) && (
+        <p
+          role="note"
+          className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50/60 px-2.5 py-1.5 text-[11.5px] leading-snug text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300"
+        >
+          Sees no other members&apos; data — choose what they can see under Edit.
+        </p>
+      )}
+
+      {/* Whoever keeps a managed member's books may hand them to someone else
+          (and hand the account over) without being an owner — the API allows
+          it (setManagedMemberManager / inviteProfileClaim), so the Edit that
+          leads there is offered to them too. The rest stays owner-only. */}
+      {!isOwner && member.managed && iKeepTheirBooks && (
+        <div className="mt-2.5 border-t border-border/70 pt-2.5">
+          <CardAction onClick={() => onEdit(member)} icon={<Pencil className="h-3.5 w-3.5" />}>
+            Edit
+          </CardAction>
         </div>
       )}
 

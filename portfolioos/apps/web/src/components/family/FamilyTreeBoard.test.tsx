@@ -168,6 +168,41 @@ describe('the family tree board', () => {
     expect(onManage).toHaveBeenCalledWith(expect.objectContaining({ userId: 'kavya' }));
   });
 
+  /**
+   * The API lets whoever keeps a managed member's books change who keeps them
+   * without being an owner; the Edit that leads there used to be owner-only.
+   */
+  it('offers Edit to a non-owner on the people whose books they keep, and only them', async () => {
+    const onEdit = vi.fn();
+    renderBoard({ isOwner: false, currentUserId: 'rajesh', onEdit });
+    fireEvent.click(await pill('Kavya Shah'));
+    fireEvent.click(await screen.findByText('Edit'));
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ userId: 'kavya' }));
+
+    fireEvent.click(await pill('Kusum Shah'));
+    await waitFor(() => expect(screen.queryByText('Edit')).toBeNull());
+  });
+
+  /** Empty visibility lists are deny-all on the server; the owner is told. */
+  it('tells the owner when a member sees none of the other members data', async () => {
+    renderBoard({
+      members: [
+        ...members.slice(0, 3),
+        member('kavya', 'Kavya Shah', {
+          managed: false,
+          email: 'kavya@example.com',
+          relation: 'Daughter',
+          relatedTo: { id: 'rajesh', name: 'Rajesh Shah' },
+        }),
+      ],
+    });
+    fireEvent.click(await pill('Kavya Shah'));
+    expect(screen.getByRole('note').textContent).toMatch(/Sees no other members/);
+
+    fireEvent.click(await pill('Harish Shah'));
+    expect(screen.queryByRole('note')).toBeNull();
+  });
+
   it('says so rather than drawing nothing when the family is empty', async () => {
     renderBoard({ members: [] });
     expect(await screen.findByText(/Nobody on the tree yet/)).toBeTruthy();

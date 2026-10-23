@@ -114,11 +114,43 @@ export function defaultFamilyInviteMessage(
   );
 }
 
+/**
+ * Is this a hand-over (claim) invitation for a managed profile whose books the
+ * caller keeps? The keeper may create that invitation without being an owner
+ * (inviteProfileClaim), so they must also be able to preview and send its
+ * email — otherwise the flow stops halfway for a non-owner keeper. Ordinary
+ * join-the-family invitations stay owner-only.
+ *
+ * Privileged read, deliberately narrow: pinned to one invitation in one
+ * family, selecting only the ids needed to answer yes/no.
+ */
+async function keepsBooksForClaim(
+  callerId: string,
+  familyId: string,
+  invitationId: string,
+): Promise<boolean> {
+  return runAsSystem(async () => {
+    const inv = await prisma.familyInvitation.findFirst({
+      where: { id: invitationId, familyId, claimForUserId: { not: null } },
+      select: { claimForUserId: true },
+    });
+    if (!inv?.claimForUserId) return false;
+    const profile = await prisma.user.findUnique({
+      where: { id: inv.claimForUserId },
+      select: { managedById: true },
+    });
+    return profile?.managedById === callerId;
+  });
+}
+
 /** The invitation this request is about, or a refusal that names the reason. */
 async function loadInvitation(callerId: string, familyId: string, invitationId: string) {
-  await assertOwnerOf(callerId, familyId);
+  if (!(await keepsBooksForClaim(callerId, familyId, invitationId))) {
+    await assertOwnerOf(callerId, familyId);
+  }
   // Privileged: FamilyInvitation's policy shows an owner only the rows they
-  // sent. Ownership of this family is proven above and the read is pinned to it.
+  // sent. The caller's right to this invitation is proven above and the read
+  // is pinned to it.
   const inv = await runAsSystem(() =>
     prisma.familyInvitation.findUnique({
       where: { id: invitationId },
