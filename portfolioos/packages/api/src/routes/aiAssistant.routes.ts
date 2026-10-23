@@ -9,6 +9,7 @@
  * POST   /chat                        — SSE streaming Claude response, within a session.
  * GET    /suggested                   — 4 contextually-relevant question suggestions.
  * GET    /quota                       — remaining daily quota (drives the input UI).
+ * GET    /status                      — { enabled }: whether the feature is on (answers even when off).
  */
 
 import { Router } from 'express';
@@ -49,14 +50,30 @@ import { checkQuota, refundQuota, reserveQuota } from '../ai/rateLimit.js';
 import { computeSuggestedQuestions } from '../ai/suggestedQuestions.js';
 import { parseFamilyId } from '../lib/familyHeader.js';
 import { acknowledgeAiDisclosure, aiDisclosureStatus } from '../ai/aiDisclosure.js';
+import { runAsUser } from '../lib/requestContext.js';
 
 export const aiAssistantRouter = Router();
 
+function assistantEnabled(): boolean {
+  return Boolean(env.ANTHROPIC_API_KEY) && env.ENABLE_LLM_INSIGHTS !== 'false';
+}
+
+// Whether the assistant is switched on, for the launcher button. Registered
+// ahead of the feature-flag preflight below, which 404s everything else when
+// the feature is off — the web app showed the button anyway (the feature is
+// off by default) and every tap ended in an error.
+aiAssistantRouter.get(
+  '/status',
+  authenticate,
+  (_req: Request, res: Response) => {
+    ok(res, { enabled: assistantEnabled() });
+  },
+);
+
 // Preflight to feature flag. When disabled, the router mounts but every
-// endpoint 404s so a solo deploy without ANTHROPIC_API_KEY can silently
-// keep the frontend widget hidden.
+// other endpoint 404s.
 aiAssistantRouter.use((req, res, next) => {
-  if (env.ANTHROPIC_API_KEY && env.ENABLE_LLM_INSIGHTS !== 'false') {
+  if (assistantEnabled()) {
     next();
     return;
   }
@@ -79,6 +96,31 @@ function callerId(req: Request): string {
   return req.user.id;
 }
 
+/**
+ * The person at the keyboard, who pays for and is shown the assistant.
+ *
+ * While managing a family member (X-Act-As), authenticate() makes req.user the
+ * managed profile and keeps the manager in req.actor. The chat's DATA follows
+ * req.user like every other data route — sessions, history and the portfolio
+ * the answer is built from are the profile's, which the manager can already
+ * open while acting, so nothing new becomes readable. The daily quota and the
+ * AI-use notice follow the manager instead: the profile sits on FREE in the
+ * database, so counting against it would lock the manager out of a feature
+ * they pay for (resolveActAs: "features follow the person paying"), and the
+ * SEBI notice must be accepted by whoever is actually reading the answers.
+ */
+function payerId(req: Request): string {
+  return req.actor?.id ?? callerId(req);
+}
+
+/**
+ * Run a quota read/write as `id`. AiUsage is RLS-scoped, and while acting the
+ * ambient context is the profile — the manager's usage row is invisible to it.
+ */
+function asPayer<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  return runAsUser(id, fn);
+}
+
 const chatSchema = z.object({
   message: z.string().min(1).max(2000),
   sessionId: z.string().min(1),
@@ -96,7 +138,8 @@ aiAssistantRouter.get(
   '/quota',
   asyncHandler(async (req: Request, res: Response) => {
     const userId = callerId(req);
-    const quota = await checkQuota(userId);
+    const payer = payerId(req);
+    const quota = await asPayer(payer, () => checkQuota(payer));
     // Only worth the extra query when it's actually relevant — a paid
     // user's quota response doesn't need it.
     const previewUsed = quota.reason === 'tier_locked' ? await hasUsedLockedPreview(userId) : false;
@@ -109,7 +152,7 @@ aiAssistantRouter.get(
 aiAssistantRouter.get(
   '/disclosure',
   asyncHandler(async (req: Request, res: Response) => {
-    ok(res, await aiDisclosureStatus(callerId(req)));
+    ok(res, await aiDisclosureStatus(payerId(req)));
   }),
 );
 
@@ -121,7 +164,7 @@ aiAssistantRouter.post(
       res.status(400).json({ success: false, error: parsed.error.message });
       return;
     }
-    await acknowledgeAiDisclosure(callerId(req), parsed.data.version, req);
+    await acknowledgeAiDisclosure(payerId(req), parsed.data.version, req);
     noContent(res);
   }),
 );
@@ -192,7 +235,7 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
     const id = reservedFor;
     reservedFor = null;
     try {
-      await refundQuota(id);
+      await asPayer(id, () => refundQuota(id));
     } catch (err) {
       // The request already failed; a lost refund only costs the user one
       // message of today's allowance, so log it rather than mask the error.
@@ -202,6 +245,7 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
   try {
     if (!req.user) throw new UnauthorizedError();
     const userId = req.user.id;
+    const payer = payerId(req);
     const familyId = parseFamilyId(req) ?? null;
     const parsed = chatSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -211,7 +255,7 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
     const { message, sessionId } = parsed.data;
     await assertSessionOwnership(userId, sessionId);
 
-    if (!(await aiDisclosureStatus(userId)).acknowledged) {
+    if (!(await aiDisclosureStatus(payer)).acknowledged) {
       res.status(409).json({
         success: false,
         error: 'ai_disclosure_required',
@@ -220,7 +264,7 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
       return;
     }
 
-    const quota = await checkQuota(userId);
+    const quota = await asPayer(payer, () => checkQuota(payer));
     if (!quota.allowed) {
       if (quota.reason === 'tier_locked') {
         // FREE tier gets exactly one real (but unbilled) preview, ever —
@@ -289,7 +333,7 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
     // Take this message from the allowance now, before any work: the check
     // above alone let parallel requests all through (F9). Given back only if
     // the request fails before the assistant produced anything.
-    if (!(await reserveQuota(userId, quota.limit))) {
+    if (!(await asPayer(payer, () => reserveQuota(payer, quota.limit)))) {
       res.status(429).json({
         success: false,
         error: 'daily_cap',
@@ -300,7 +344,7 @@ aiAssistantRouter.post('/chat', async (req: Request, res: Response) => {
       });
       return;
     }
-    reservedFor = userId;
+    reservedFor = payer;
 
     // Persist the user's turn BEFORE calling Claude so we always have a
     // record even if Claude errors mid-stream.

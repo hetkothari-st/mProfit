@@ -30,6 +30,7 @@ import { AccountNumberReveal } from '@/components/bankAccounts/AccountNumberReve
 import { ShareBankDetailsButton } from '@/components/bankAccounts/ShareBankDetailsButton';
 import { BankAccountDialog } from './BankAccountDialog';
 import { usePrivacyStore } from '@/stores/privacy.store';
+import { HIDDEN_VALUE, maskedValue } from '@/lib/chartPrivacy';
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -323,7 +324,7 @@ export function BankAccountDetailPage() {
                     />
                     <YAxis
                       tick={{ fontSize: 11 }}
-                      tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
+                      tickFormatter={(v: number) => (hideSensitive ? HIDDEN_VALUE : `₹${(v / 1000).toFixed(0)}k`)}
                       width={60}
                     />
                     <Tooltip
@@ -334,7 +335,7 @@ export function BankAccountDetailPage() {
                         const str =
                           (item?.payload as { balanceStr?: string } | undefined)?.balanceStr ??
                           String(_v);
-                        return formatINR(str);
+                        return maskedValue(formatINR(str), hideSensitive);
                       }}
                       labelFormatter={(v) =>
                         formatDateIST(v)

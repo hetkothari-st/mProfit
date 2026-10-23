@@ -55,11 +55,22 @@ export function AssistantButton() {
   const [idx, setIdx] = useState(0);
   const [phase, setPhase] = useState<'welcome' | 'suggested'>('welcome');
 
+  // The feature is off by default on the server, and every other assistant
+  // endpoint 404s while it is. Nothing renders until the server says it is
+  // on — a launcher whose every tap ends in an error is worse than none.
+  const statusQuery = useQuery({
+    queryKey: ['assistant', 'status'],
+    queryFn: () => aiAssistantApi.status(),
+    staleTime: 10 * 60 * 1000,
+    retry: 0,
+  });
+  const enabled = statusQuery.data?.enabled === true;
+
   const suggestedQuery = useQuery({
     queryKey: ['assistant', 'suggested-teaser'],
     queryFn: () => aiAssistantApi.suggested(),
     staleTime: 5 * 60 * 1000,
-    enabled: !open && !dismissed,
+    enabled: enabled && !open && !dismissed,
     retry: 0,
   });
 
@@ -133,6 +144,8 @@ export function AssistantButton() {
     // the whole session after a single click, and never comes back
     // when the user closes the panel.
   };
+
+  if (!enabled) return null;
 
   return (
     <>

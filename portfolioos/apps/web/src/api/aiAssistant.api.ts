@@ -3,6 +3,7 @@ import type { ApiResponse } from '@everypaisa/shared';
 import { getApiBaseUrl } from './baseUrl';
 import { useAuthStore } from '@/stores/auth.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
+import { useActingAsStore } from '@/stores/actingAs.store';
 
 export type AiCardType = 'holding' | 'goal' | 'stat' | 'action';
 
@@ -98,6 +99,14 @@ export const aiAssistantApi = {
   async acknowledgeDisclosure(version: string): Promise<void> {
     await api.post('/api/assistant/disclosure/ack', { version });
   },
+  /**
+   * Whether the assistant is switched on for this deploy (off by default).
+   * The one assistant endpoint that answers when it is off.
+   */
+  async status(): Promise<{ enabled: boolean }> {
+    const { data } = await api.get<ApiResponse<{ enabled: boolean }>>('/api/assistant/status');
+    return unwrap(data);
+  },
   async quota(): Promise<AiQuota> {
     const { data } = await api.get<ApiResponse<AiQuota>>('/api/assistant/quota');
     return unwrap(data);
@@ -123,6 +132,11 @@ export const aiAssistantApi = {
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
     if (familyId) headers['X-Viewing-As-Family'] = familyId;
+    // Managing a family member: the session list and history (axios) already
+    // run as them, so the chat must too, or the server looks the session up
+    // in your own account and answers "Chat session not found".
+    const acting = useActingAsStore.getState().profile;
+    if (acting) headers['X-Act-As'] = acting.id;
 
     const response = await fetch(`${getApiBaseUrl()}/api/assistant/chat`, {
       method: 'POST',

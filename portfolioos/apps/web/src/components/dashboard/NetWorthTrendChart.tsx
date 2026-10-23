@@ -9,6 +9,8 @@ import { intelligenceApi, type NetWorthHistoryPeriod } from '@/api/intelligence.
 import { formatINR, toDecimal, formatDateIST } from '@everypaisa/shared';
 import { EstimatedChip } from '@/pages/family/widgets/RestrictedNotice';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { usePrivacyStore } from '@/stores/privacy.store';
+import { compactRupeeTick, maskedValue } from '@/lib/chartPrivacy';
 
 const PERIOD_OPTIONS: { label: string; value: NetWorthHistoryPeriod }[] = [
   { label: '1M', value: '1M' },
@@ -31,6 +33,8 @@ export function NetWorthTrendChart() {
   // Phones: a narrower value axis, and room on the right for the last date,
   // which is centred on the final point and otherwise gets cut in half.
   const isPhone = useMediaQuery('(max-width: 767px)');
+  // "Hide values" — chart text is not inside the masked .money-digits spans.
+  const hideSensitive = usePrivacyStore((s) => s.hideSensitive);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['intelligence', 'net-worth-history', period],
@@ -100,7 +104,7 @@ export function NetWorthTrendChart() {
               }`}
             >
               {isPositive && !isFlat ? '+' : ''}
-              {formatINR(changeAbsolute.toFixed(4))}
+              {maskedValue(formatINR(changeAbsolute.toFixed(4)), hideSensitive)}
             </span>
             {changePct !== null && (
               <span className="text-muted-foreground">
@@ -174,15 +178,7 @@ export function NetWorthTrendChart() {
                 axisLine={false}
                 tickLine={false}
                 width={isPhone ? 52 : 72}
-                tickFormatter={(v: number) =>
-                  v >= 10_000_000
-                    ? `₹${(v / 10_000_000).toFixed(1)}Cr`
-                    : v >= 100_000
-                      ? `₹${(v / 100_000).toFixed(1)}L`
-                      : v >= 1_000
-                        ? `₹${(v / 1_000).toFixed(0)}K`
-                        : `₹${v.toFixed(0)}`
-                }
+                tickFormatter={(v: number) => compactRupeeTick(v, hideSensitive)}
               />
               <Tooltip
                 cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '3 3', strokeOpacity: 0.4 }}
@@ -194,7 +190,7 @@ export function NetWorthTrendChart() {
                   padding: '10px 12px',
                 }}
                 formatter={(v: number, _name, item) => [
-                  formatINR(v.toFixed(4)),
+                  maskedValue(formatINR(v.toFixed(4)), hideSensitive),
                   (item?.payload as { estimated?: boolean } | undefined)?.estimated
                     ? 'Net worth (estimate)'
                     : 'Net worth',

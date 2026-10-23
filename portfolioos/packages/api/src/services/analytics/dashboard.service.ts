@@ -663,21 +663,29 @@ function mergeNetWorthResults(results: DashboardNetWorth[]): DashboardNetWorth {
   return merged;
 }
 
-function mergeAllocationBreakdown(
+export function mergeAllocationBreakdown(
   slices: DashboardNetWorth['allocationBreakdown'],
 ): DashboardNetWorth['allocationBreakdown'] {
+  // Merge on category + key. Keying on the label merged a rental-property
+  // slice (key REAL_ESTATE, category REAL_ESTATE) into a REAL_ESTATE
+  // asset-class slice, since both are labelled "Real Estate".
   const byKey = new Map<string, DashboardNetWorth['allocationBreakdown'][number]>();
   for (const s of slices) {
-    const key = 'assetClass' in s && typeof (s as { assetClass?: unknown }).assetClass === 'string'
-      ? (s as { assetClass: string }).assetClass
-      : (s as { label: string }).label;
+    const key = `${s.category}:${s.key}`;
     const existing = byKey.get(key);
     if (!existing) {
       byKey.set(key, { ...s });
       continue;
     }
     const combinedValue = toDecimal(existing.value).plus(toDecimal(s.value));
-    byKey.set(key, { ...existing, value: serializeMoney(combinedValue) });
+    // numericValue is what the web ring draws. It must follow the merged
+    // value — left alone it kept the first member's figure, so the family
+    // ring showed one member's slice beside a household total.
+    byKey.set(key, {
+      ...existing,
+      value: serializeMoney(combinedValue),
+      numericValue: combinedValue.toNumber(),
+    });
   }
   // Recompute each share against the merged total.
   //

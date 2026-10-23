@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/common/EmptyState';
-import { alertsApi, type AlertType, type AlertDTO } from '@/api/alerts.api';
+import { alertsApi, totalNewAlerts, type AlertType, type AlertDTO } from '@/api/alerts.api';
 import { cn } from '@/lib/cn';
 import { alertLink, isInformationalAlert } from './alertLinks';
 
@@ -352,7 +352,11 @@ export function AlertsPage() {
 
   const scanMut = useMutation({
     mutationFn: () => alertsApi.triggerScan(),
-    onSuccess: (r) => { toast.success(`Scan complete — ${r.vehicle + r.rent} new alerts`); invalidate(); },
+    onSuccess: (r) => {
+      const n = totalNewAlerts(r);
+      toast.success(`Scan complete — ${n} new alert${n === 1 ? '' : 's'}`);
+      invalidate();
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
