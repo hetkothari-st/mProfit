@@ -11,7 +11,7 @@ import {
   processImportJob,
 } from '../services/imports/import.service.js';
 import { ok, created } from '../lib/response.js';
-import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
+import { AppError, BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
 import { verifyUploadedFile } from '../lib/uploadSecurity.js';
 import { writeIngestionFailure } from '../services/imports/ingestionFailures.service.js';
 import { logger } from '../lib/logger.js';
@@ -209,25 +209,35 @@ export async function reprocess(req: Request, res: Response) {
       select: { status: true },
     });
     const unlocked = after?.status !== 'NEEDS_PASSWORD';
-    if (unlocked) {
-      const trimmed = password.trim().toUpperCase();
-      const isPan = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(trimmed);
-      if (isPan) {
-        const existing = await prisma.user.findUnique({
+    if (!unlocked) {
+      // The job ran and is still locked, so the password was wrong. Saying
+      // 200 here made the Import page announce "Password accepted" and close
+      // the dialog. 422 FILE_LOCKED is the shape every password dialog
+      // already treats as "try another password" (isLockedError).
+      throw new AppError(
+        'That password didn’t unlock the file. Try another.',
+        422,
+        'FILE_LOCKED',
+        { requiresPassword: true },
+      );
+    }
+    const trimmed = password.trim().toUpperCase();
+    const isPan = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(trimmed);
+    if (isPan) {
+      const existing = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { pan: true, panEnc: true },
+      });
+      if (!existing?.pan && !existing?.panEnc) {
+        await prisma.user.update({
           where: { id: req.user.id },
-          select: { pan: true, panEnc: true },
+          // Encrypted columns — never plaintext.
+          data: await panColumns(trimmed),
         });
-        if (!existing?.pan && !existing?.panEnc) {
-          await prisma.user.update({
-            where: { id: req.user.id },
-            // Encrypted columns — never plaintext.
-            data: await panColumns(trimmed),
-          });
-        }
-      } else if (save) {
-        const { saveDocPassword } = await import('../lib/userDocPasswords.js');
-        await saveDocPassword(req.user.id, password);
       }
+    } else if (save) {
+      const { saveDocPassword } = await import('../lib/userDocPasswords.js');
+      await saveDocPassword(req.user.id, password);
     }
   }
 
