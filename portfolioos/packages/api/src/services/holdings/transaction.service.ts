@@ -151,6 +151,29 @@ async function resolveAssetRefs(
   return { stockId: null, fundId: null, assetName: input.schemeName || input.assetName || null, isin: input.isin ?? null };
 }
 
+/** Types that acquire units: charges add to their cost. */
+const BUYISH_TYPES: ReadonlySet<string> = new Set([
+  'BUY',
+  'SWITCH_IN',
+  'SIP',
+  'DIVIDEND_REINVEST',
+  'RIGHTS_ISSUE',
+  'BONUS',
+  'OPENING_BALANCE',
+  'MERGER_IN',
+  'DEMERGER_IN',
+]);
+
+/**
+ * Net amount from gross and charges. An acquisition costs gross + charges;
+ * anything else nets gross − charges. Exported so every write path (the
+ * client's own form and a professional's correction alike) derives it the same
+ * way.
+ */
+export function netAmountFor(transactionType: string, gross: Decimal, charges: Decimal): Decimal {
+  return BUYISH_TYPES.has(transactionType) ? gross.plus(charges) : gross.minus(charges);
+}
+
 function computeGrossAndNet(
   input: CreateTransactionInput,
 ): { gross: Decimal; charges: Decimal; net: Decimal } {
@@ -166,18 +189,7 @@ function computeGrossAndNet(
     .plus(d(input.sebiCharges))
     .plus(d(input.otherCharges));
 
-  const isBuyish = [
-    'BUY',
-    'SWITCH_IN',
-    'SIP',
-    'DIVIDEND_REINVEST',
-    'RIGHTS_ISSUE',
-    'BONUS',
-    'OPENING_BALANCE',
-    'MERGER_IN',
-    'DEMERGER_IN',
-  ].includes(input.transactionType);
-  const net = isBuyish ? gross.plus(charges) : gross.minus(charges);
+  const net = netAmountFor(input.transactionType, gross, charges);
   return { gross, charges, net };
 }
 
