@@ -42,6 +42,7 @@ import { apiErrorMessage } from '@/api/client';
 import { usePrivacyStore } from '@/stores/privacy.store';
 import { useThemeStore } from '@/stores/theme.store';
 import { useAssetSectionsStore } from '@/stores/assetSections.store';
+import { assetClassSidebarKey, allocationSliceSidebarKey, topHoldingsViewAllHref } from './dashboardLinks';
 import { formatINR, formatPercent, ASSET_CLASS_LABELS, Decimal, toDecimal, valuationMethodFor, formatDateIST, formatDateOnly } from '@everypaisa/shared';
 
 const PERIOD_OPTIONS = [
@@ -210,46 +211,6 @@ const ASSET_CLASS_COLORS_LIGHT: Record<string, string> = {
 function assetClassColor(cls: string, dark: boolean): string {
   const map = dark ? ASSET_CLASS_COLORS_DARK : ASSET_CLASS_COLORS_LIGHT;
   return map[cls] ?? (dark ? 'hsl(0 0% 70%)' : 'hsl(0 0% 50%)');
-}
-
-// Map an asset class enum to the sidebar section key that controls its visibility
-// on the dashboard. Hidden sidebar sections cascade to: holdings table rows,
-// breakdown pie slices, and the per-section summary cards at the bottom.
-function assetClassSidebarKey(cls: string): string {
-  switch (cls) {
-    case 'EQUITY':            return '/stocks';
-    case 'FUTURES':
-    case 'OPTIONS':           return '/fo';
-    case 'MUTUAL_FUND':
-    case 'ETF':               return '/mutual-funds';
-    case 'BOND':
-    case 'GOVT_BOND':
-    case 'CORPORATE_BOND':    return '/bonds';
-    case 'FIXED_DEPOSIT':
-    case 'RECURRING_DEPOSIT': return '/fds';
-    case 'GOLD_BOND':
-    case 'GOLD_ETF':
-    case 'PHYSICAL_GOLD':
-    case 'PHYSICAL_SILVER':   return '/gold';
-    case 'CRYPTOCURRENCY':    return '/crypto';
-    case 'FOREIGN_EQUITY':
-    case 'FOREX_PAIR':        return '/forex';
-    case 'PPF':
-    case 'EPF':               return '/provident-fund';
-    case 'NSC':
-    case 'KVP':
-    case 'SCSS':
-    case 'SSY':
-    case 'POST_OFFICE_MIS':
-    case 'POST_OFFICE_RD':
-    case 'POST_OFFICE_TD':
-    case 'POST_OFFICE_SAVINGS': return '/post-office';
-    case 'REAL_ESTATE':       return '/real-estate';
-    case 'ULIP':
-    case 'INSURANCE':         return '/insurance';
-    case 'LOAN_GIVEN':        return '/loans';
-    default:                  return '/others';
-  }
 }
 
 // Map a holding to the route that should open when its row is clicked.
@@ -502,7 +463,7 @@ export function DashboardPage() {
   const topHoldings = visibleHoldings.slice(0, 10);
   const pieData = (nw?.allocationBreakdown ?? [])
     .filter((s) => s.numericValue > 0)
-    .filter((s) => isClassVisible(s.key));
+    .filter((s) => isKeyVisible(allocationSliceSidebarKey(s)));
   const alerts = nw?.alerts ?? [];
 
   return (
@@ -1014,7 +975,7 @@ export function DashboardPage() {
                   <PieChart>
                     <Pie data={pieData} dataKey="numericValue" nameKey="label" cx="50%" cy="50%" innerRadius={48} outerRadius={80} paddingAngle={2}>
                       {pieData.map((entry, index) => (
-                        <Cell key={entry.key} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                        <Cell key={`${entry.category}:${entry.key}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip
@@ -1030,7 +991,7 @@ export function DashboardPage() {
                 </ResponsiveContainer>
                 <div className="mt-1 space-y-1.5 max-h-44 overflow-y-auto pr-1">
                   {pieData.map((s, i) => (
-                    <div key={s.key} className="flex items-center justify-between text-xs">
+                    <div key={`${s.category}:${s.key}`} className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
                         <span className="truncate text-muted-foreground">{labelForKey(s.key)}</span>
@@ -1058,7 +1019,7 @@ export function DashboardPage() {
             </p>
           </div>
           <Button asChild variant="ghost" size="sm">
-            <Link to="/holdings">View all <ArrowRight className="h-3 w-3 ml-1" /></Link>
+            <Link to={topHoldingsViewAllHref(selectedId)}>View all <ArrowRight className="h-3 w-3 ml-1" /></Link>
           </Button>
         </CardHeader>
         <CardContent className="p-0">
