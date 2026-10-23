@@ -52,8 +52,23 @@ export const alertsApi = {
     const { data: res } = await api.post<ApiResponse<AlertDTO>>('/api/alerts', data);
     return unwrap(res);
   },
-  async triggerScan(): Promise<{ vehicle: number; rent: number }> {
-    const { data } = await api.post<ApiResponse<{ vehicle: number; rent: number }>>('/api/alerts/scan');
+  async triggerScan(): Promise<AlertScanResult> {
+    const { data } = await api.post<ApiResponse<AlertScanResult>>('/api/alerts/scan');
     return unwrap(data);
   },
 };
+
+/**
+ * New alerts created per scanner, keyed by scanner (vehicle, rent, loan,
+ * creditCard, deposit, insurance, …). Typed as an open map on purpose: the
+ * server adds scanners over time, and the total must count every one.
+ */
+export type AlertScanResult = Record<string, number>;
+
+/**
+ * Total new alerts from a scan. The toast used to add only `vehicle + rent`,
+ * so a scan that raised loan, card, deposit or insurance alerts said 0.
+ */
+export function totalNewAlerts(r: AlertScanResult): number {
+  return Object.values(r).reduce((sum, n) => (typeof n === 'number' && Number.isFinite(n) ? sum + n : sum), 0);
+}
