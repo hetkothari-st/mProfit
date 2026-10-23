@@ -122,8 +122,9 @@ describe('FD card', () => {
     renderPage();
     const card = await findFd();
     expect(within(card).getByText('At maturity')).toBeTruthy();
-    // ₹1,00,000 at 6.5% compounded quarterly for 18 months.
-    expect(within(card).getByText(/1,10,154\.78/)).toBeTruthy();
+    // ₹1,00,000 at 6.5% compounded quarterly from 1 May 2026 to 10 Nov 2027:
+    // 558 days on the shared 365.25-day convention (depositMath), not a flat 18 months.
+    expect(within(card).getByText(/1,10,351\.8\d/)).toBeTruthy();
   });
 
   it('shows principal, tenure, next payout and how far along it is', async () => {
