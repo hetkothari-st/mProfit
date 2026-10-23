@@ -13,7 +13,15 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
-import { serializeMoney, type LoanRateBenchmark, type LoanRateType } from '@everypaisa/shared';
+import {
+  Decimal as SharedDecimal,
+  indianFy,
+  loanTaxBenefit,
+  serializeMoney,
+  type LoanRateBenchmark,
+  type LoanRateType,
+  type ScheduleRow,
+} from '@everypaisa/shared';
 import { loanAccountNumberColumns, PLATE_SELECT, readLoanAccountNumber, revealVehicle } from '../security/piiAtRest.service.js';
 import { last4 } from '../pf/pfCredentials.service.js';
 import { isRealDate } from './loanRates/sanity.js';
@@ -41,6 +49,14 @@ export const PAYMENT_TYPES = [
 export const PREPAYMENT_OPTIONS = ['REDUCE_TENURE', 'REDUCE_EMI'] as const;
 
 export const LOAN_STATUSES = ['ACTIVE', 'CLOSED', 'FORECLOSED', 'DEFAULT'] as const;
+
+/**
+ * Statuses whose balance is still owed. A DEFAULT loan has stopped being
+ * repaid, not stopped being owed, so it counts as a liability everywhere an
+ * ACTIVE one does (net worth, dashboard, will estate). EMI reminders and
+ * forecasts stay ACTIVE-only: there is no schedule being kept to remind about.
+ */
+export const OUTSTANDING_LOAN_STATUSES = ['ACTIVE', 'DEFAULT'];
 
 /** Days before an EMI on which a reminder is raised; 0 is the due date itself. */
 const ALERT_THRESHOLDS = [30, 15, 7, 1, 0] as const;
@@ -116,7 +132,11 @@ export interface TaxBenefitSummary {
   section: string;
   principalDeduction: string | null;   // 80C principal cap
   interestDeduction: string | null;    // 24b / 80E interest cap
-  estimatedTaxSaving: string;          // at 30% bracket
+  estimatedTaxSaving: string;          // this FY, at `assumption`'s slab, cess included
+  /** What the estimate assumes (regime, slab, cess); shown next to the figure. */
+  assumption: string;
+  /** Why the deduction is nil or limited (e.g. 80E past its 8 years); null when not. */
+  note: string | null;
 }
 
 export interface LoanSummary {
@@ -412,8 +432,38 @@ export interface LoanPosition {
   scheduleFailed: boolean;
 }
 
-/** Where a loan stands today. Shared by the dashboard and the will estate list. */
-export function loanPosition(loan: StoredLoan): LoanPosition {
+/**
+ * The one definition of a loan's outstanding balance on a given day, used by
+ * the Loans page summary and (through `loanPosition`) the dashboard, sidebar
+ * and will estate, which used to disagree with it.
+ *
+ * Past EMIs left unmarked are assumed paid: loans are often added mid-tenure
+ * and their earlier EMIs never recorded. So the balance is the opening balance
+ * of the first unpaid EMI dated on or after `today`; once no EMI is left, it is
+ * the schedule's final closing balance less any prepayment made after it.
+ */
+function scheduleOutstanding(
+  loan: StoredLoan,
+  schedule: AmortizationRow[],
+  today: Date,
+): { outstanding: Decimal; upcoming: AmortizationRow[] } {
+  if (schedule.length === 0) {
+    return { outstanding: new Decimal(loan.principalAmount.toString()), upcoming: [] };
+  }
+  const todayStr = dateToIso(today);
+  const upcoming = schedule.filter((r) => !r.isPaid && r.date >= todayStr);
+  if (upcoming.length > 0) {
+    return { outstanding: new Decimal(upcoming[0]!.openingBalance), upcoming };
+  }
+  const last = schedule[schedule.length - 1]!;
+  return {
+    outstanding: Decimal.max(0, new Decimal(last.closingBalance).minus(principalPaidAfter(loan, last.date))),
+    upcoming,
+  };
+}
+
+/** Where a loan stands today. Shared by the dashboard, sidebar and the will estate list. */
+export function loanPosition(loan: StoredLoan, asOf: Date = new Date()): LoanPosition {
   let schedule: AmortizationRow[];
   try {
     schedule = buildAmortizationSchedule(loan);
@@ -424,10 +474,13 @@ export function loanPosition(loan: StoredLoan): LoanPosition {
     );
     return { outstanding: new Decimal(loan.principalAmount.toString()), firstUnpaid: null, scheduleFailed: true };
   }
-  const firstUnpaid = schedule.find((r) => !r.isPaid) ?? null;
+  const today = new Date(asOf.getTime());
+  today.setUTCHours(0, 0, 0, 0);
   return {
-    outstanding: firstUnpaid ? new Decimal(firstUnpaid.openingBalance) : new Decimal(0),
-    firstUnpaid,
+    outstanding: scheduleOutstanding(loan, schedule, today).outstanding,
+    // The earliest unmarked EMI, past ones included: the dashboard's
+    // upcoming/overdue EMI list reads it. It no longer drives the balance.
+    firstUnpaid: schedule.find((r) => !r.isPaid) ?? null,
     scheduleFailed: false,
   };
 }
@@ -488,16 +541,11 @@ export function computeLoanSummary(loan: StoredLoan, asOf: Date = new Date()): L
   let effectiveEndDate: string | null = null;
 
   if (schedule.length > 0) {
-    // Find the current position in the schedule
-    const todayStr = dateToIso(today);
-    const unpaidRows = schedule.filter((r) => !r.isPaid && r.date >= todayStr);
-    const lastPaidRow = schedule.filter((r) => r.isPaid).pop();
-
-    // Outstanding balance = closing balance of last unpaid row before today,
-    // or the opening balance of the first unpaid row
+    const position = scheduleOutstanding(loan, schedule, today);
+    const unpaidRows = position.upcoming;
+    outstandingBalance = position.outstanding;
     if (unpaidRows.length > 0) {
       const firstUnpaid = unpaidRows[0]!;
-      outstandingBalance = new Decimal(firstUnpaid.openingBalance);
       nextEmiDate = firstUnpaid.date;
       nextEmiAmount = new Decimal(firstUnpaid.emiAmount);
       remainingEmiCount = unpaidRows.length;
@@ -506,11 +554,6 @@ export function computeLoanSummary(loan: StoredLoan, asOf: Date = new Date()): L
         ZERO,
       );
       effectiveEndDate = unpaidRows[unpaidRows.length - 1]!.date;
-    } else if (lastPaidRow) {
-      outstandingBalance = Decimal.max(
-        ZERO,
-        new Decimal(lastPaidRow.closingBalance).minus(principalPaidAfter(loan, lastPaidRow.date)),
-      );
     }
   }
 
@@ -570,9 +613,20 @@ function buildAmortizationScheduleFromScratch(loan: StoredLoan): AmortizationRow
 }
 
 /**
- * Compute tax benefit summary for HOME and EDUCATION loans.
- * - HOME (80C + 24b): principal deduction max ₹1,50,000; interest deduction max ₹2,00,000
- * - EDUCATION (80E): interest deduction unlimited
+ * No tax regime or slab is stored for the user, so the loan panel assumes the
+ * old regime at the 30% slab and says so. Under the new regime none of these
+ * deductions apply to a self-occupied home or an education loan.
+ */
+const TAX_ASSUMED_SLAB_PCT = '30';
+const TAX_ASSUMPTION = 'Assumes the old tax regime at the 30% slab + 4% cess; nil under the new regime';
+const EDUCATION_80E_YEARS = 8;
+
+/**
+ * This financial year's tax benefit for HOME (80C + 24(b), self-occupied) and
+ * EDUCATION (80E) loans, from the same shared calculator the EMI Calculator
+ * uses (`loanTaxBenefit`) so the two never show different figures: 4% cess on
+ * the slab rate, 80C counting prepayments, 24(b) capped at Rs 2 lakh, and 80E
+ * only for the first 8 years from the first repayment.
  */
 function computeTaxBenefit(
   loan: StoredLoan,
@@ -581,50 +635,50 @@ function computeTaxBenefit(
 ): TaxBenefitSummary | null {
   const section = loan.taxBenefitSection;
   if (!section) return null;
+  const isHome = HOME_LOAN_TAX_SECTIONS.has(section);
+  if (!isHome && section !== '80E') return null;
 
-  const ZERO = new Decimal(0);
-  const currentYear = today.getUTCFullYear();
-  const fyStart = today.getUTCMonth() >= 3
-    ? new Date(Date.UTC(currentYear, 3, 1))
-    : new Date(Date.UTC(currentYear - 1, 3, 1));
-  const fyEnd = today.getUTCMonth() >= 3
-    ? new Date(Date.UTC(currentYear + 1, 2, 31))
-    : new Date(Date.UTC(currentYear, 2, 31));
+  // The shared package's Decimal, built from strings, so no decimal.js
+  // instance crosses the package boundary.
+  const S = (v: string) => new SharedDecimal(v);
+  const ZERO = S('0');
+  const rows: ScheduleRow[] = schedule.map((r) => ({
+    month: r.month, date: r.date, opening: S(r.openingBalance), emi: S(r.emiAmount),
+    interest: S(r.interestPart), principal: S(r.principalPart), prepayment: ZERO,
+    closing: S(r.closingBalance), ratePct: S(loan.interestRate.toString()),
+  }));
+  // Prepayments and foreclosures repay principal too, and 80C counts them.
+  for (const p of loan.payments) {
+    if (p.paymentType !== 'PREPAYMENT' && p.paymentType !== 'FORECLOSURE') continue;
+    rows.push({
+      month: 0, date: dateToIso(p.paidOn), opening: ZERO, emi: ZERO, interest: ZERO, principal: ZERO,
+      prepayment: S(p.amount.toString()), closing: ZERO, ratePct: ZERO,
+    });
+  }
+  // The calculator numbers financial years in the order it meets them and
+  // counts 80E's 8 years from the first, so the rows must be in date order.
+  rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-  const fyRows = schedule.filter((r) => {
-    const d = new Date(r.date);
-    return d >= fyStart && d <= fyEnd;
+  const result = loanTaxBenefit(rows, {
+    regime: 'OLD',
+    loanKind: isHome ? 'HOME_SELF' : 'EDUCATION',
+    slabPct: S(TAX_ASSUMED_SLAB_PCT),
+    remaining80C: S('150000'),
   });
+  const thisFy = indianFy(dateToIso(today));
+  const fyIndex = result.years.findIndex((y) => y.fy === thisFy);
+  const year = fyIndex >= 0 ? result.years[fyIndex]! : null;
 
-  const annualPrincipal = fyRows.reduce((s, r) => s.plus(new Decimal(r.principalPart)), ZERO);
-  const annualInterest = fyRows.reduce((s, r) => s.plus(new Decimal(r.interestPart)), ZERO);
-
-  if (HOME_LOAN_TAX_SECTIONS.has(section)) {
-    const principalCap = new Decimal('150000');
-    const interestCap = new Decimal('200000');
-    const principalDeduction = Decimal.min(annualPrincipal, principalCap);
-    const interestDeduction = Decimal.min(annualInterest, interestCap);
-    const taxSaving = principalDeduction.plus(interestDeduction).times('0.30').toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN);
-    return {
-      section: '80C + 24(b)',
-      principalDeduction: serializeMoney(principalDeduction),
-      interestDeduction: serializeMoney(interestDeduction),
-      estimatedTaxSaving: serializeMoney(taxSaving),
-    };
-  }
-
-  if (section === '80E') {
-    // Education loan — interest deduction unlimited
-    const taxSaving = annualInterest.times('0.30').toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN);
-    return {
-      section: '80E',
-      principalDeduction: null,
-      interestDeduction: serializeMoney(annualInterest),
-      estimatedTaxSaving: serializeMoney(taxSaving),
-    };
-  }
-
-  return null;
+  return {
+    section: isHome ? '80C + 24(b)' : '80E',
+    principalDeduction: isHome ? serializeMoney((year?.principalDeduction ?? ZERO).toString()) : null,
+    interestDeduction: serializeMoney((year?.interestDeduction ?? ZERO).toString()),
+    estimatedTaxSaving: serializeMoney((year?.taxSaved ?? ZERO).toString()),
+    assumption: TAX_ASSUMPTION,
+    note: !isHome && fyIndex >= EDUCATION_80E_YEARS
+      ? 'Section 80E allows the interest deduction only for 8 years from the first repayment; that period has ended.'
+      : null,
+  };
 }
 
 // ── Loan type used with prisma include ───────────────────────────────────────

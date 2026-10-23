@@ -65,9 +65,13 @@ export interface LoanSummaryDTO {
   prepaymentSavings: string | null;
   taxBenefit: {
     section: string;
-    principalDeduction: string;
+    principalDeduction: string | null;
     interestDeduction: string;
     estimatedTaxSaving: string;
+    /** What the estimate assumes (regime, slab, cess). */
+    assumption: string;
+    /** Why the deduction is nil or limited, e.g. 80E past its 8 years. */
+    note: string | null;
   } | null;
 }
 

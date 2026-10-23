@@ -54,7 +54,7 @@ import {
   requiredLifeCover,
   isLifePolicyType,
 } from '../analytics/healthScoreMath.js';
-import { buildAmortizationSchedule, computeLoanSummary, type StoredLoan } from '../loans/loans.service.js';
+import { buildAmortizationSchedule, computeLoanSummary, OUTSTANDING_LOAN_STATUSES, type StoredLoan } from '../loans/loans.service.js';
 import { computeCardSummary } from '../banking/creditCards.service.js';
 import { activeMonthlyIncomeTotal } from '../income/income.service.js';
 import { isPriceStale } from '../holdings/priceStaleness.js';
@@ -607,8 +607,9 @@ interface LiabilityTotals {
  */
 async function loadLiabilities(m: MemberContext): Promise<LiabilityTotals> {
   const [loans, cards] = await Promise.all([
+    // DEFAULT loans are still owed, so they count towards liabilities.
     prisma.loan.findMany({
-      where: { userId: m.userId, status: 'ACTIVE', ...categoryGate(m.caps, 'LOAN') },
+      where: { userId: m.userId, status: { in: OUTSTANDING_LOAN_STATUSES }, ...categoryGate(m.caps, 'LOAN') },
       include: { payments: { orderBy: { paidOn: 'asc' } } },
     }),
     prisma.creditCard.findMany({
@@ -620,7 +621,7 @@ async function loadLiabilities(m: MemberContext): Promise<LiabilityTotals> {
   let loanOutstanding = ZERO;
   let monthlyEmi = ZERO;
   for (const loan of loans) {
-    monthlyEmi = monthlyEmi.plus(d(loan.emiAmount));
+    if (loan.status === 'ACTIVE') monthlyEmi = monthlyEmi.plus(d(loan.emiAmount));
     try {
       loanOutstanding = loanOutstanding.plus(
         toDecimal(computeLoanSummary(loan as unknown as StoredLoan).outstandingBalance),

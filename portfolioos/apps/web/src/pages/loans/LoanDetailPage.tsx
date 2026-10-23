@@ -48,6 +48,7 @@ import {
   type AddPaymentInput,
   type CreateLoanInput,
 } from '@/api/loans/loans.api';
+import { apiErrorMessage } from '@/api/client';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -228,7 +229,7 @@ function PaymentDialog({
 
         {mutation.isError && (
           <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Failed to record payment'}
+            {apiErrorMessage(mutation.error, 'Failed to record payment')}
           </p>
         )}
 
@@ -467,7 +468,7 @@ export function EditLoanDialog({
         </div>
         {mutation.isError && (
           <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Failed to update'}
+            {apiErrorMessage(mutation.error, 'Failed to update')}
           </p>
         )}
         <DialogFooter>
@@ -1035,9 +1036,11 @@ function TaxBenefitPanel({ summary }: { summary: LoanSummaryDTO }) {
           <span className="font-medium tabular-nums">{formatINR(tb.interestDeduction)}</span>
         </div>
         <div className="flex justify-between border-t pt-1.5 mt-1">
-          <span className="text-muted-foreground font-medium">Est. tax saving (30% slab)</span>
+          <span className="text-muted-foreground font-medium">Est. tax saving this year</span>
           <span className="font-semibold tabular-nums text-positive">{formatINR(tb.estimatedTaxSaving)}</span>
         </div>
+        {tb.note && <p className="text-xs text-muted-foreground">{tb.note}</p>}
+        <p className="text-xs text-muted-foreground">{tb.assumption}</p>
       </CardContent>
     </Card>
   );

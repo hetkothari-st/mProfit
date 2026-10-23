@@ -550,9 +550,10 @@ function CreateCardDialog({
           </div>
         </div>
 
-        {mutation.isError && (
+        {/* A card-number rejection already shows under that field. */}
+        {mutation.isError && !errors.cardNumber && (
           <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Failed to save card'}
+            {apiErrorMessage(mutation.error, 'Failed to save card')}
           </p>
         )}
 

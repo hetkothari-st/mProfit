@@ -3,7 +3,7 @@ import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { financialYearOf, financialYearRange } from '@everypaisa/shared';
 import { serializeMoney, financialYearFromDate, toDecimal, premiumToAnnual } from '@everypaisa/shared';
-import { loanPosition, type StoredLoan } from '../loans/loans.service.js';
+import { loanPosition, OUTSTANDING_LOAN_STATUSES, type StoredLoan } from '../loans/loans.service.js';
 import { outstandingLoansGiven } from '../loans/loansGiven.service.js';
 import { computeCardSummary } from '../banking/creditCards.service.js';
 import { getEffectiveScope, type EffectiveScope } from '../family/familyScope.service.js';
@@ -236,8 +236,9 @@ export async function getDashboardNetWorth(
     }));
 
   // ── 5. Loans & Liabilities ───────────────────────────────────────────
+  // ACTIVE and DEFAULT loans: a defaulted loan is still owed (see OUTSTANDING_LOAN_STATUSES).
   const activeLoans = await prisma.loan.findMany({
-    where: { userId, status: 'ACTIVE', ...(canSee('LOAN') ? {} : { id: { in: [] } }) },
+    where: { userId, status: { in: OUTSTANDING_LOAN_STATUSES }, ...(canSee('LOAN') ? {} : { id: { in: [] } }) },
     include: { payments: { orderBy: { paidOn: 'asc' } } },
   });
 
@@ -265,12 +266,14 @@ export async function getDashboardNetWorth(
   }> = [];
 
   for (const loan of activeLoans) {
-    monthlyEmiTotal = monthlyEmiTotal.plus(d(loan.emiAmount));
-
-    // Outstanding balance: opening balance of the first unpaid EMI (principal
-    // when the schedule cannot be built) - see loanPosition.
+    // Outstanding balance: the Loans page's definition (principal when the
+    // schedule cannot be built) - see loanPosition.
     const position = loanPosition(loan as unknown as StoredLoan);
     totalOutstanding = totalOutstanding.plus(position.outstanding);
+    // A defaulted loan's EMIs are not being paid to a schedule: it counts as
+    // debt, but not towards monthly EMIs or EMI reminders.
+    if (loan.status !== 'ACTIVE') continue;
+    monthlyEmiTotal = monthlyEmiTotal.plus(d(loan.emiAmount));
     const firstUnpaid = position.firstUnpaid;
     if (!firstUnpaid) continue;
 
