@@ -847,11 +847,15 @@ export interface TaxHarvestSummary {
 export async function getTaxHarvestSummary(scope: AnalyticsScope): Promise<TaxHarvestSummary> {
   const userId = await userIdFor(scope);
   const fy = currentFy();
-  const r = await taxHarvestReport(userId, fy);
-  // Filter to portfolio scope if needed
-  const filtered = scope.kind === 'portfolio'
-    ? r.rows.filter((row) => row.portfolioId === scope.portfolioId)
-    : r.rows;
+  // Scope the whole computation, not just the candidate list: filtering the
+  // rows afterwards left the loss totals, the realised gains and the tax
+  // saving covering every portfolio while the card said it was about one.
+  const r = await taxHarvestReport(
+    userId,
+    fy,
+    scope.kind === 'portfolio' ? [scope.portfolioId] : undefined,
+  );
+  const filtered = r.rows;
   return {
     unrealisedLoss: r.totals.unrealisedLoss,
     stcgLossAvailable: r.totals.stcgLossAvailable,

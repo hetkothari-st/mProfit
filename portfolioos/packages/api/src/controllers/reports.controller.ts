@@ -397,6 +397,7 @@ export async function getHoldingsExport(req: Request, res: Response) {
   const rawIds  = (req.query.portfolioIds as string | undefined) ?? '';
   let portfolioIds = rawIds ? rawIds.split(',').map(s => s.trim()).filter(Boolean) : [];
   if (portfolioIds.some((id) => id === 'all' || id === 'ALL')) portfolioIds = [];
+  if (familyReportCoversEverything(req, resolved, userId)) portfolioIds = [];
 
   // Verify ownership of every requested portfolio
   if (portfolioIds.length > 0) {
@@ -887,6 +888,24 @@ async function emit(
 // portfolios for the user); ownership is verified before any data load.
 
 /**
+ * A report about another family member — or the whole household — covers
+ * every portfolio of each person in it.
+ *
+ * The portfolio pickers list the CALLER's own books, so a portfolio id sent
+ * alongside another member's subject is the caller's, never the member's.
+ * Verifying it against the member could only ever fail ("Forbidden" on a
+ * perfectly allowed download); reading it as "all of that member's
+ * portfolios" is the one coherent meaning, and it is the rule the on-screen
+ * reports (`resolveScope`) already follow. Nothing widens: the member was
+ * already authorised by `resolveReportSubjects`, and only their own rows are
+ * read. A CA's client keeps the strict check — the CA picks among the
+ * client's own portfolios.
+ */
+function familyReportCoversEverything(req: Request, resolved: ResolvedSubjects, userId: string): boolean {
+  return resolved.via === 'FAMILY' && (resolved.isFamily || userId !== req.user!.id);
+}
+
+/**
  * Portfolio ids for a report, verified against whoever the report is about.
  *
  * `subjectUserId` is the person the report covers, which is not always the
@@ -895,7 +914,11 @@ async function emit(
  * anybody else's. Passing the caller's id here — the old behaviour — would
  * have rejected every portfolio belonging to the member being reported on.
  */
-async function resolveOwnedPortfolioIds(req: Request, subjectUserId?: string): Promise<string[]> {
+async function resolveOwnedPortfolioIds(
+  req: Request,
+  subjectUserId?: string,
+  resolved?: ResolvedSubjects,
+): Promise<string[]> {
   const userId = subjectUserId ?? req.user!.id;
   const raw = (req.query.portfolioIds as string | undefined) ?? '';
   const ids = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
@@ -903,6 +926,7 @@ async function resolveOwnedPortfolioIds(req: Request, subjectUserId?: string): P
   // semantics as the empty list. The cross-portfolio Reports page sends
   // `[all]` here so a single statement download spans every book.
   if (ids.length === 0 || ids.some((id) => id === 'all' || id === 'ALL')) return [];
+  if (resolved && familyReportCoversEverything(req, resolved, userId)) return [];
   const owned = await prisma.portfolio.findMany({
     where: { id: { in: ids }, userId },
     select: { id: true },
@@ -921,7 +945,7 @@ export async function getStatementHoldings(req: Request, res: Response) {
   const payload = await buildPayloadForSubjects(resolved, async (userId) =>
     buildHoldingsStatement({
       userId,
-      portfolioIds: await resolveOwnedPortfolioIds(req, userId),
+      portfolioIds: await resolveOwnedPortfolioIds(req, userId, resolved),
       asOf,
     }),
   );
@@ -939,7 +963,7 @@ export async function getStatementCapitalGains(req: Request, res: Response) {
   const payload = await buildPayloadForSubjects(resolved, async (userId) =>
     buildCapitalGainsStatement({
       userId,
-      portfolioIds: await resolveOwnedPortfolioIds(req, userId),
+      portfolioIds: await resolveOwnedPortfolioIds(req, userId, resolved),
       fy,
       kind,
     }),
@@ -953,7 +977,7 @@ export async function getStatementIncome(req: Request, res: Response) {
   const payload = await buildPayloadForSubjects(resolved, async (userId) =>
     buildIncomeStatement({
       userId,
-      portfolioIds: await resolveOwnedPortfolioIds(req, userId),
+      portfolioIds: await resolveOwnedPortfolioIds(req, userId, resolved),
       fy,
     }),
   );
@@ -971,7 +995,7 @@ export async function getStatementLedger(req: Request, res: Response) {
   const payload = await buildPayloadForSubjects(resolved, async (userId) =>
     buildLedgerStatement({
       userId,
-      portfolioIds: await resolveOwnedPortfolioIds(req, userId),
+      portfolioIds: await resolveOwnedPortfolioIds(req, userId, resolved),
       from,
       to,
     }),
@@ -1098,6 +1122,7 @@ import {
   buildPayloadForSubjects,
   requireSingleSubject,
   runForSubject,
+  type ResolvedSubjects,
 } from '../services/reports/reportSubjects.js';
 import { plateOf, revealVehicle } from '../services/security/piiAtRest.service.js';
 

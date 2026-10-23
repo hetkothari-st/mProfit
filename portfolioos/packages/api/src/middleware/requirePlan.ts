@@ -5,6 +5,8 @@ import type { PlanTier } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem } from '../lib/requestContext.js';
 import { hasEffectiveFeature } from '../lib/effectivePlan.js';
+import { parseClientId } from '../lib/clientHeader.js';
+import { getCaScope } from '../services/ca/caAccess.service.js';
 
 /**
  * Gate a route behind a minimum plan tier. Gated purely on `plan`, same
@@ -60,6 +62,56 @@ export function requireFamilyFeature(
     const familyId = req.params.familyId;
     if (!familyId) return next(refuse);
     lookupPayer(familyId).then(
+      (payer) => next(hasEffectiveFeature(payer, feature) ? undefined : refuse),
+      next,
+    );
+  };
+}
+
+/**
+ * The plan of the client a professional is acting for — after `getCaScope`
+ * has confirmed the grant. A missing, revoked, pending or out-of-window grant
+ * throws (403) here, so no plan is ever read for a client the caller may not
+ * act for. Read as system for the same reason as `familyPayer`: the CA may not
+ * read the client's user row, and only the two plan columns are selected.
+ */
+async function clientPayer(callerId: string, clientId: string): Promise<PlanHolder | null> {
+  const scope = await getCaScope(callerId, clientId);
+  return runAsSystem(() =>
+    prisma.user.findUnique({
+      where: { id: scope.subjectUserId },
+      select: { plan: true, planExpiresAt: true },
+    }),
+  );
+}
+
+/**
+ * Gate a report route on the plan of whoever the report is FOR.
+ *
+ * Normally that is the caller, and this behaves exactly like `requireFeature`.
+ * When the request carries a client (`X-Acting-As-Client` / `?clientId=`), the
+ * professional is acting under a client's grant, and the CA workspace's rule
+ * applies (see the comment on `requireAdvisorPlan` in ca.routes.ts): acting
+ * for a client who invited you is free — the account holder is the customer.
+ * So the CLIENT's plan decides, not the professional's. The caller's own plan
+ * still counts too, so an advisor on Pro/Advisor keeps producing every report
+ * for the clients of their own practice.
+ *
+ * Deliberately a separate middleware, not a change to `requireFeature`: the
+ * client header must never satisfy a gate on the professional's OWN features
+ * (onboarding clients, the CA workspace itself).
+ */
+export function requireFeatureForSubject(
+  feature: FeatureFlag,
+  lookupClientPlan: (callerId: string, clientId: string) => Promise<PlanHolder | null> = clientPayer,
+) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.user) return next(new UnauthorizedError());
+    if (hasFeature(req.user.plan as PlanTierValue, feature)) return next();
+    const refuse = new ForbiddenError(`This feature requires the ${FEATURE_MIN_TIER[feature]} plan or higher`);
+    const clientId = parseClientId(req);
+    if (!clientId) return next(refuse);
+    lookupClientPlan(req.user.id, clientId).then(
       (payer) => next(hasEffectiveFeature(payer, feature) ? undefined : refuse),
       next,
     );

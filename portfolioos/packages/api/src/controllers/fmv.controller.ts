@@ -11,6 +11,7 @@ import {
   type GrandfatheringRow,
 } from '../services/tax/fmvOverride.service.js';
 import { schedule112ACsv, ratesForDate } from '../services/tax/tax.service.js';
+import { asSubject } from './tax.controller.js';
 
 function getFy(req: Request): string | undefined {
   const fy = (req.query.fy as string | undefined)?.trim();
@@ -114,7 +115,11 @@ export async function deleteFmvOverride(req: Request, res: Response) {
 export async function downloadGrandfatheringCsv(req: Request, res: Response) {
   const fy = getFy(req);
   if (!fy) throw new BadRequestError('fy query param required (e.g. 2024-25)');
-  const csv = await schedule112ACsv(req.user!.id, fy);
+  // Follows "Download reports for" exactly like /schedule-112a.csv: the
+  // subject is resolved (and refused) by the shared report-subject rules, then
+  // read as that member. It used to read `req.user.id`, so choosing a family
+  // member saved the caller's own sales under the member's file name.
+  const csv = await asSubject(req, (userId) => schedule112ACsv(userId, fy));
   const filename = `schedule-112a-grandfathering-${fy}.csv`;
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
