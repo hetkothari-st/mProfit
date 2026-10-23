@@ -416,7 +416,9 @@ async function ensureCasSendersMonitored(userId: string): Promise<void> {
           userId,
           address,
           displayLabel: label,
-          autoCommitEnabled: true,
+          // Same rule as user-added senders: start in review, earn trust
+          // through approvals. Existing rows keep their setting (update: {}).
+          autoCommitEnabled: false,
           isActive: true,
         },
         update: {}, // never overwrite user's own settings
