@@ -10,7 +10,14 @@ import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine,
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
-import { Decimal, formatINR, type HoldingRow, type TransactionDTO, formatDateOnly } from '@everypaisa/shared';
+import {
+  Decimal,
+  formatINR,
+  type HoldingRow,
+  type TransactionDTO,
+  formatDateOnly,
+  depositPeriodsPerYear,
+} from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { AutoFitText } from '@/components/ui/AutoFitText';
 import { Badge } from '@/components/ui/badge';
@@ -35,13 +42,6 @@ const FREQ_LABELS: Record<string, string> = {
   AT_MATURITY: 'At maturity',
 };
 
-const FREQ_PERIODS_PER_YEAR: Record<string, number> = {
-  MONTHLY: 12,
-  QUARTERLY: 4,
-  HALF_YEARLY: 2,
-  ANNUAL: 1,
-  AT_MATURITY: 1,
-};
 
 const TXN_LABEL: Record<string, string> = {
   DEPOSIT: 'Deposit',
@@ -455,7 +455,8 @@ export function FdDetailPage() {
   const rate = primary?.interestRate ? new Decimal(primary.interestRate) : null;
   const annualRate = rate ? rate.div(100) : null;
   const freq = primary?.interestFrequency ?? 'QUARTERLY';
-  const periodsPerYear = FREQ_PERIODS_PER_YEAR[freq] ?? 4;
+  // Same compounding the card and the server's accrual use (shared depositMath).
+  const periodsPerYear = depositPeriodsPerYear(freq);
   const maturity = primary?.maturityDate ?? null;
   const openDate = primary?.tradeDate ?? null;
   const tenureMonths = openDate && maturity ? monthsBetween(openDate, maturity) : null;
