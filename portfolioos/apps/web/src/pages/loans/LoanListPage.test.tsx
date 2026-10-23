@@ -245,3 +245,15 @@ describe('Loans page: taken and given together', () => {
     expect(within(nav).getByRole('button', { name: /Given/ }).getAttribute('aria-current')).toBe('true');
   });
 });
+
+describe('Loans page: when the list fails to load', () => {
+  it('says so and offers a retry instead of claiming there are no loans', async () => {
+    api.list.mockRejectedValue(new Error('Network Error'));
+    renderPage();
+    expect(await screen.findByText(/Couldn't load your loans/)).toBeTruthy();
+    expect(screen.queryByText('No loans yet')).toBeNull();
+    api.list.mockResolvedValue([LOAN]);
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await findCard()).toBeTruthy();
+  });
+});

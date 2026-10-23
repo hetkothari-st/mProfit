@@ -39,6 +39,7 @@ import { Input } from '@/components/ui/input';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
 import { MarketCheckCard } from './MarketCheckCard';
 import { LoanRateFields, rateFieldsFrom, rateFieldsPayload, type RateFieldsValue } from './LoanRateFields';
+import { findEmiPayment } from './loanPayments';
 import {
   loansApi,
   type LoanDTO,
@@ -279,7 +280,6 @@ export function EditLoanDialog({
     interestRate: loan.interestRate,
     tenureMonths: loan.tenureMonths,
     emiAmount: loan.emiAmount,
-    emiDueDay: loan.emiDueDay,
     disbursementDate: loan.disbursementDate,
     firstEmiDate: loan.firstEmiDate,
     prepaymentOption: loan.prepaymentOption,
@@ -304,7 +304,6 @@ export function EditLoanDialog({
         interestRate: loan.interestRate,
         tenureMonths: loan.tenureMonths,
         emiAmount: loan.emiAmount,
-        emiDueDay: loan.emiDueDay,
         disbursementDate: toDateInput(loan.disbursementDate),
         firstEmiDate: toDateInput(loan.firstEmiDate),
         prepaymentOption: loan.prepaymentOption,
@@ -320,9 +319,13 @@ export function EditLoanDialog({
   const mutation = useMutation({
     mutationFn: (input: CreateLoanInput) => loansApi.update(loan.id, input),
     onSuccess: () => {
+      // Rate, tenure, EMI and tax section change the summary and schedule too.
       qc.invalidateQueries({ queryKey: ['loan', loan.id] });
+      qc.invalidateQueries({ queryKey: ['loan-summary', loan.id] });
+      qc.invalidateQueries({ queryKey: ['loan-amortization', loan.id] });
       qc.invalidateQueries({ queryKey: ['loans'] });
       qc.invalidateQueries({ queryKey: ['loan-market-check', loan.id] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Loan updated');
       onOpenChange(false);
     },
@@ -393,20 +396,23 @@ export function EditLoanDialog({
               <Input value={form.interestRate}
                 onChange={(e) => set('interestRate', e.target.value)}
                 className={errors['interestRate'] ? 'border-negative' : ''} />
+              {errors['interestRate'] && <p className="text-xs text-negative mt-1">{errors['interestRate']}</p>}
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Tenure (months) *</Label>
               <Input type="number" value={form.tenureMonths}
-                onChange={(e) => set('tenureMonths', Number(e.target.value))} />
+                onChange={(e) => set('tenureMonths', Number(e.target.value))}
+                className={errors['tenureMonths'] ? 'border-negative' : ''} />
+              {errors['tenureMonths'] && <p className="text-xs text-negative mt-1">{errors['tenureMonths']}</p>}
             </div>
             <div>
               <Label>EMI amount (₹) *</Label>
               <div className="flex gap-1.5">
                 <Input value={form.emiAmount}
                   onChange={(e) => set('emiAmount', e.target.value)}
-                  className="flex-1" />
+                  className={`flex-1${errors['emiAmount'] ? ' border-negative' : ''}`} />
                 <Button type="button" variant="outline" size="sm" className="shrink-0 px-2"
                   onClick={() => {
                     const emi = calcEmi(form.principalAmount, form.interestRate, String(form.tenureMonths));
@@ -416,6 +422,7 @@ export function EditLoanDialog({
                   <Calculator className="h-3.5 w-3.5" />
                 </Button>
               </div>
+              {errors['emiAmount'] && <p className="text-xs text-negative mt-1">{errors['emiAmount']}</p>}
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -646,10 +653,7 @@ function AmortizationTable({ loan, rows }: { loan: LoanDTO; rows: AmortizationRo
   });
 
   function findEmiPaymentId(forMonth: string): string | null {
-    const p = loan.payments.find(
-      (x) => x.paymentType === 'EMI' && x.forMonth === forMonth,
-    );
-    return p?.id ?? null;
+    return findEmiPayment(loan.payments, forMonth)?.id ?? null;
   }
 
   return (
@@ -1018,12 +1022,16 @@ function TaxBenefitPanel({ summary }: { summary: LoanSummaryDTO }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1.5 text-sm">
+        {tb.principalDeduction !== null && (
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Principal deduction (80C)</span>
+            <span className="font-medium tabular-nums">{formatINR(tb.principalDeduction)}</span>
+          </div>
+        )}
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Principal deduction (80C)</span>
-          <span className="font-medium tabular-nums">{formatINR(tb.principalDeduction)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Interest deduction (24B)</span>
+          <span className="text-muted-foreground">
+            Interest deduction ({tb.section === '80E' ? '80E' : '24(b)'})
+          </span>
           <span className="font-medium tabular-nums">{formatINR(tb.interestDeduction)}</span>
         </div>
         <div className="flex justify-between border-t pt-1.5 mt-1">

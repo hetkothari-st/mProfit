@@ -342,7 +342,6 @@ export function CreateLoanDialog({
     interestRate: initial?.interestRate ?? '',
     tenureMonths: initial?.tenureMonths ?? 0,
     emiAmount: initial?.emiAmount ?? '',
-    emiDueDay: initial?.emiDueDay ?? 1,
     disbursementDate: initial?.disbursementDate ?? '',
     firstEmiDate: initial?.firstEmiDate ?? '',
     prepaymentOption: initial?.prepaymentOption ?? 'REDUCE_TENURE',
@@ -367,8 +366,7 @@ export function CreateLoanDialog({
         interestRate: initial?.interestRate ?? '',
         tenureMonths: initial?.tenureMonths ?? 0,
         emiAmount: initial?.emiAmount ?? '',
-        emiDueDay: initial?.emiDueDay ?? 1,
-        disbursementDate: toDateInput(initial?.disbursementDate),
+            disbursementDate: toDateInput(initial?.disbursementDate),
         firstEmiDate: toDateInput(initial?.firstEmiDate),
         prepaymentOption: initial?.prepaymentOption ?? 'REDUCE_TENURE',
         taxBenefitSection: initial?.taxBenefitSection ?? null,
@@ -518,12 +516,6 @@ export function CreateLoanDialog({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <Label>EMI due day (1-28)</Label>
-              <Input type="number" min="1" max="28"
-                value={form.emiDueDay}
-                onChange={(e) => set('emiDueDay', Number(e.target.value))} />
-            </div>
-            <div>
               <Label>Prepayment option</Label>
               <Select
                 className="mt-1"
@@ -634,7 +626,7 @@ export function LoanListPage() {
   const qc = useQueryClient();
   const landedOnRequested = useRef(false);
 
-  const { data: loans, isLoading } = useQuery({
+  const { data: loans, isLoading, isError, refetch } = useQuery({
     queryKey: ['loans'],
     queryFn: () => loansApi.list(),
   });
@@ -777,7 +769,14 @@ export function LoanListPage() {
           </div>
         )}
 
-        {!isLoading && list.length === 0 && (
+        {!isLoading && isError && (
+          <Card className="p-6 text-center space-y-3">
+            <p className="text-sm text-negative">Couldn't load your loans. Check your connection and try again.</p>
+            <Button variant="outline" onClick={() => void refetch()}>Try again</Button>
+          </Card>
+        )}
+
+        {!isLoading && !isError && list.length === 0 && (
           <EmptyState
             icon={Landmark}
             title="No loans yet"

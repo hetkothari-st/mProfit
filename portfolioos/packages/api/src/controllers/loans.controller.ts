@@ -38,7 +38,6 @@ const createLoanSchema = z.object({
   interestRate: moneyString,
   tenureMonths: z.number().int().min(1).max(600),
   emiAmount: moneyString,
-  emiDueDay: z.number().int().min(1).max(31).optional(),
   disbursementDate: isoDate,
   firstEmiDate: isoDate,
   prepaymentOption: z.enum(PREPAYMENT_OPTIONS).optional(),
