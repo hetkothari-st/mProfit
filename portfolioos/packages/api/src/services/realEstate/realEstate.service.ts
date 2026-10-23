@@ -15,7 +15,7 @@
 import { Prisma } from '@prisma/client';
 import { Decimal } from 'decimal.js';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
-import { NotFoundError } from '../../lib/errors.js';
+import { ConflictError, NotFoundError } from '../../lib/errors.js';
 import {
   computePropertyCapitalGain,
   type PropertyForCgInput,
@@ -430,8 +430,16 @@ export async function unlinkFromRental(
     childCount &&
     (childCount._count.tenancies > 0 || childCount._count.expenses > 0)
   ) {
-    throw new Error(
-      'Cannot unlink rental — tenancies or expenses already exist. Delete those first.',
+    // A plain Error here surfaced as a generic 500. The user's own data is
+    // what blocks the action, so say what blocks it and where to remove it.
+    const { tenancies, expenses } = childCount._count;
+    const parts: string[] = [];
+    if (tenancies > 0) parts.push(`${tenancies} ${tenancies === 1 ? 'tenancy' : 'tenancies'}`);
+    if (expenses > 0) parts.push(`${expenses} ${expenses === 1 ? 'expense' : 'expenses'}`);
+    throw new ConflictError(
+      `This property still has ${parts.join(' and ')} in Rentals. Delete ${
+        tenancies + expenses === 1 ? 'it' : 'them'
+      } from the property's page in Rentals first, then remove it from rentals.`,
     );
   }
 

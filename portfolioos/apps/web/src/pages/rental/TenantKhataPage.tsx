@@ -26,6 +26,7 @@ import {
 } from '@/api/rental/rental.api';
 import { invalidateRentalCaches } from '@/api/rental/rentalCache';
 import { RentAccountPicker } from '@/components/rental/RentAccountPicker';
+import { apiErrorMessage } from '@/api/client';
 
 // ── Entry direction ──────────────────────────────────────────────────
 // "You gave" = a charge against the tenant. "You got" = a credit (money in).
@@ -106,7 +107,7 @@ function AddEntryDialog({
       onOpenChange(false);
       resetForm(direction);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to add entry'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed to add entry')),
   });
 
   function handleOpenChange(v: boolean) {
@@ -329,7 +330,7 @@ export function TenantKhataPage() {
         toast.error('Add a phone number for this tenant first');
       }
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to build reminder'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed to build reminder')),
   });
 
   // Where this tenant's rent lands can be set here at any time, not only when
@@ -343,7 +344,7 @@ export function TenantKhataPage() {
       qc.invalidateQueries({ queryKey: ['tenancy-ledger', tenancyId] });
     },
     onError: (err) =>
-      toast.error(err instanceof Error ? err.message : 'Could not update the rent account'),
+      toast.error(apiErrorMessage(err, 'Could not update the rent account')),
   });
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -355,7 +356,7 @@ export function TenantKhataPage() {
       setConfirmDeleteId(null);
       invalidateRentalCaches(qc);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to delete entry'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed to delete entry')),
   });
 
   const statementMutation = useMutation({
@@ -365,7 +366,7 @@ export function TenantKhataPage() {
         `rent-statement-${(ledger?.tenantName ?? 'tenant').replace(/[^\w-]+/g, '-')}.pdf`,
       ),
     onError: (err) =>
-      toast.error(err instanceof Error ? err.message : 'Failed to download statement'),
+      toast.error(apiErrorMessage(err, 'Failed to download statement')),
   });
 
   const months = useMemo(() => {

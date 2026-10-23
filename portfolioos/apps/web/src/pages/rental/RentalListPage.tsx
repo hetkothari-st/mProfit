@@ -50,6 +50,7 @@ import { PropertySlideshow } from '@/components/property/PropertySlideshow';
 import { PropertiesMap } from '@/components/property/PropertiesMap';
 import { ViewToggle } from '@/components/property/ViewToggle';
 import { useListView } from '@/components/property/useListView';
+import { apiErrorMessage } from '@/api/client';
 
 // ── Property type theming ─────────────────────────────────────────────
 
@@ -308,7 +309,7 @@ function CreatePropertyDialog({
         </div>
         {mutation.isError && (
           <p className="text-sm text-negative">
-            {mutation.error instanceof Error ? mutation.error.message : 'Error creating property'}
+            {apiErrorMessage(mutation.error, 'Error creating property')}
           </p>
         )}
         <DialogFooter>
@@ -579,7 +580,7 @@ function CollectionRow({ row }: { row: CollectionRowDTO }) {
         toast.error('Add a phone number for this tenant first');
       }
     },
-    onError: () => toast.error('Failed to prepare reminder link'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed to prepare reminder link')),
   });
 
   return (
@@ -690,7 +691,7 @@ export function RentalListPage() {
       setConfirmDeleteId(null);
       invalidateRentalCaches(qc);
     },
-    onError: () => toast.error('Failed to delete property'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Failed to delete property')),
   });
 
   const list = properties ?? [];

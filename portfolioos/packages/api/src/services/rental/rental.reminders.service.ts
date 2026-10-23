@@ -151,17 +151,18 @@ function startOfDayUtc(d: Date): Date {
  * yet". We use a single row per receipt (uniqued on (receiptId, -1))
  * so a 6-month-overdue tenant gets exactly one pending reminder, not
  * one per missed lead-day. Re-runs of the scan are a no-op once the
- * row exists; the landlord can manually reject + a future scan won't
- * re-create it because the unique constraint still blocks.
+ * row exists; once the landlord rejects it, a future scan leaves it
+ * REJECTED (REJECTED is not revivable — see REVIVABLE_STATUSES).
  */
 const OVERDUE_LEAD_DAYS_SENTINEL = -1;
 
-// Statuses that mean "user is done with this reminder" — re-running the
-// scan should be allowed to revive them back into the queue with fresh
-// copy so the landlord doesn't have to manually delete + re-scan to
-// retry a failed/rejected/superseded send.
+// Statuses a re-run of the scan may revive back into the queue with fresh
+// copy, so the landlord doesn't have to delete + re-scan to retry a failed
+// or superseded send. REJECTED is deliberately NOT here: a rejection is the
+// landlord saying "don't remind this tenant about this month", and reviving
+// it at the next 09:00 scan made the Reject button meaningless. See also the
+// month-level check in enqueueOne.
 const REVIVABLE_STATUSES = new Set<string>([
-  REMINDER_STATUS.REJECTED,
   REMINDER_STATUS.FAILED,
   REMINDER_STATUS.SUPERSEDED,
 ]);
@@ -171,6 +172,15 @@ async function enqueueOne(
   leadDays: number,
   daysOverdue: number,
 ): Promise<boolean> {
+  // A rejection covers the whole month, not just its lead day: rejecting the
+  // 5-day reminder and then getting a fresh 3-day, 1-day, same-day and
+  // overdue one for the same rent would be the same nagging in new rows.
+  const rejected = await prisma.rentReminder.findFirst({
+    where: { receiptId: ctx.receipt.id, status: REMINDER_STATUS.REJECTED },
+    select: { id: true },
+  });
+  if (rejected) return false;
+
   // Resolve landlord name + payment instructions in priority order so a
   // multi-property user can override per flat without losing the
   // account-level defaults: per-property → per-user config → env.
