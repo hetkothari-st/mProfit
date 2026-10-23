@@ -4,6 +4,7 @@ exports[`parseIciciPpfPassbook > parses synthetic ICICI PPF statement 1`] = `
 [
   {
     "amount": "100000.00",
+    "balance": "100000.00",
     "eventDate": "2023-04-01",
     "memberIdLast4": "9012",
     "notes": "Opening Balance",
@@ -12,6 +13,7 @@ exports[`parseIciciPpfPassbook > parses synthetic ICICI PPF statement 1`] = `
   },
   {
     "amount": "15000.00",
+    "balance": "115000.00",
     "eventDate": "2023-06-20",
     "memberIdLast4": "9012",
     "notes": "Self Deposit",
@@ -20,6 +22,7 @@ exports[`parseIciciPpfPassbook > parses synthetic ICICI PPF statement 1`] = `
   },
   {
     "amount": "10000.00",
+    "balance": "125000.00",
     "eventDate": "2023-12-25",
     "memberIdLast4": "9012",
     "notes": "PPF Deposit",
@@ -28,6 +31,7 @@ exports[`parseIciciPpfPassbook > parses synthetic ICICI PPF statement 1`] = `
   },
   {
     "amount": "8875.00",
+    "balance": "133875.00",
     "eventDate": "2024-03-31",
     "memberIdLast4": "9012",
     "notes": "Interest Credited",

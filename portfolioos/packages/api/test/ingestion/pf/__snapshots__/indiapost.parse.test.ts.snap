@@ -4,6 +4,7 @@ exports[`parseIndiaPostPpfPassbook > parses synthetic India Post PPF statement 1
 [
   {
     "amount": "200000.00",
+    "balance": "200000.00",
     "eventDate": "2023-04-01",
     "memberIdLast4": "8901",
     "notes": "Opening Balance",
@@ -12,6 +13,7 @@ exports[`parseIndiaPostPpfPassbook > parses synthetic India Post PPF statement 1
   },
   {
     "amount": "12000.00",
+    "balance": "212000.00",
     "eventDate": "2023-06-10",
     "memberIdLast4": "8901",
     "notes": "Self Deposit",
@@ -20,6 +22,7 @@ exports[`parseIndiaPostPpfPassbook > parses synthetic India Post PPF statement 1
   },
   {
     "amount": "18000.00",
+    "balance": "230000.00",
     "eventDate": "2023-11-15",
     "memberIdLast4": "8901",
     "notes": "PPF Deposit",
@@ -28,6 +31,7 @@ exports[`parseIndiaPostPpfPassbook > parses synthetic India Post PPF statement 1
   },
   {
     "amount": "16330.00",
+    "balance": "246330.00",
     "eventDate": "2024-03-31",
     "memberIdLast4": "8901",
     "notes": "Interest Credited",

@@ -4,6 +4,7 @@ exports[`parseAxisPpfPassbook > parses synthetic Axis PPF statement 1`] = `
 [
   {
     "amount": "250000.00",
+    "balance": "250000.00",
     "eventDate": "2023-04-01",
     "memberIdLast4": "2345",
     "notes": "Opening Balance",
@@ -12,6 +13,7 @@ exports[`parseAxisPpfPassbook > parses synthetic Axis PPF statement 1`] = `
   },
   {
     "amount": "25000.00",
+    "balance": "275000.00",
     "eventDate": "2023-07-01",
     "memberIdLast4": "2345",
     "notes": "Self Deposit",
@@ -20,6 +22,7 @@ exports[`parseAxisPpfPassbook > parses synthetic Axis PPF statement 1`] = `
   },
   {
     "amount": "25000.00",
+    "balance": "300000.00",
     "eventDate": "2024-01-01",
     "memberIdLast4": "2345",
     "notes": "PPF Deposit",
@@ -28,6 +31,7 @@ exports[`parseAxisPpfPassbook > parses synthetic Axis PPF statement 1`] = `
   },
   {
     "amount": "19875.00",
+    "balance": "319875.00",
     "eventDate": "2024-03-31",
     "memberIdLast4": "2345",
     "notes": "Interest Credited",
