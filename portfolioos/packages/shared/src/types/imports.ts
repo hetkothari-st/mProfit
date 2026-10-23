@@ -18,6 +18,11 @@ export interface ImportJobDTO {
     rowErrors?: { row: number; reason: string }[];
     skippedAsDuplicates?: number;
     general?: string;
+    /** Set by the import worker / orphan sweep when the job died outright
+     *  (crash, timeout, server restart) rather than finishing with row errors. */
+    workerError?: string;
+    timedOut?: boolean;
+    orphaned?: boolean;
   } | null;
   contentHash: string | null;
   gmailMessageId: string | null;

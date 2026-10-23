@@ -14,6 +14,7 @@ import { apiErrorMessage } from '@/api/client';
 import type { ImportJobDTO, ImportStatus } from '@everypaisa/shared';
 import { IMPORT_STATUS_LABELS, formatDateTimeIST } from '@everypaisa/shared';
 import { ImportErrorDialog } from './ImportErrorDialog';
+import { importIssueLabel } from './importIssues';
 import { ImportDropzone } from './ImportDropzone';
 import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
 import { useUploadWithPasswordRetry } from '@/hooks/useUploadWithPasswordRetry';
@@ -253,6 +254,7 @@ export function ImportPage() {
                     const pwErr = status === 'NEEDS_PASSWORD';
                     const Icon = STATUS_ICONS[status];
                     const isRunning = status === 'PROCESSING' || status === 'PENDING';
+                    const issueLabel = importIssueLabel(j);
                     return (
                       <tr key={j.id} className={`hover:bg-muted/30 ${selected.has(j.id) ? 'bg-accent/20' : ''}`}>
                         <td data-label="" className="px-4 py-2 w-8">
@@ -304,14 +306,14 @@ export function ImportPage() {
                         </td>
                         <td data-fullrow className="px-4 py-2">
                           <div className="flex flex-wrap justify-end gap-1">
-                            {!pwErr && ((j.failedRows ?? 0) > 0 || (j.errorLog?.parserWarnings?.length ?? 0) > 0 || (j.errorLog?.rowErrors?.length ?? 0) > 0) && (
+                            {!pwErr && issueLabel && (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setViewError(j)}
                               >
                                 <AlertTriangle className="h-3 w-3" />
-                                {(j.failedRows ?? 0) > 0 || (j.errorLog?.rowErrors?.length ?? 0) > 0 ? 'Errors' : 'Warnings'}
+                                {issueLabel}
                               </Button>
                             )}
                             <Button
