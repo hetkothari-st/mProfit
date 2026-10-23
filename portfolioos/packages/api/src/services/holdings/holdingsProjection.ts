@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass, Prisma, Transaction, TransactionType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
 import { routePriceQuote, type PriceQuote } from '../../priceFeeds/router.service.js';
 import { getLatestFxRate } from '../../priceFeeds/fx.service.js';
 import { istCalendarDate } from '@everypaisa/shared';
@@ -551,13 +552,65 @@ export async function recomputeForAsset(
   portfolioId: string,
   assetKey: string,
 ): Promise<void> {
+  const assetClass = await recomputeProjectionRow(portfolioId, assetKey);
+  if (assetClass !== null && MF_ANALYSIS_ASSET_CLASSES.has(assetClass)) {
+    await notifyMfHoldingsChanged(portfolioId);
+  }
+}
+
+/**
+ * Asset classes the MF analysis engine reads. Mirrors `MF_ASSET_CLASSES` in
+ * `mfPortfolioAnalysis.service.ts`; kept local so every holdings recompute
+ * does not pull the analytics module graph in at load time.
+ */
+const MF_ANALYSIS_ASSET_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>(['MUTUAL_FUND', 'ETF']);
+
+/**
+ * `01 §5(a)`: tell the MF analysis job this user's MF holdings changed.
+ *
+ * Only queues — the job debounces and coalesces, so an import that rewrites
+ * forty holdings produces one analysis run, after the import has finished.
+ * A failure here is logged and swallowed on purpose: the projection row is
+ * already written, and a missed analysis is re-triggered by the next change
+ * or the user's refresh, whereas failing the recompute would fail the import.
+ */
+async function notifyMfHoldingsChanged(portfolioId: string): Promise<void> {
+  try {
+    const portfolio = await prisma.portfolio.findUnique({
+      where: { id: portfolioId },
+      select: { userId: true },
+    });
+    if (!portfolio?.userId) return;
+    // Lazy: the job imports the analysis engine, which reads holdings.
+    const { onMfHoldingsChanged } = await import('../../jobs/mfAnalysisJob.js');
+    onMfHoldingsChanged(portfolio.userId);
+  } catch (err) {
+    logger.error({ err, portfolioId }, '[holdings] could not queue MF analysis after recompute');
+  }
+}
+
+/**
+ * Rewrite (or remove) one projection row. Returns the asset class the row
+ * had — before removal, when it was removed — or `null` when there was no
+ * row on either side, so the caller can tell which downstream consumers care.
+ */
+async function recomputeProjectionRow(
+  portfolioId: string,
+  assetKey: string,
+): Promise<AssetClass | null> {
   const meta = await loadAssetMetadata({ portfolioId, assetKey });
 
   if (meta.txs.length === 0 || !meta.assetClass) {
+    // Every transaction for this asset is gone, so the class has to come
+    // from the row being deleted.
+    const prior = await prisma.holdingProjection.findUnique({
+      where: { portfolioId_assetKey: { portfolioId, assetKey } },
+      select: { assetClass: true },
+    });
     await prisma.holdingProjection.deleteMany({
       where: { portfolioId, assetKey },
     });
-    return;
+    return prior?.assetClass ?? null;
   }
 
   // F&O — delegate to the derivative-position aggregate (separate model).
@@ -567,7 +620,7 @@ export async function recomputeForAsset(
     await prisma.holdingProjection.deleteMany({ where: { portfolioId, assetKey } });
     const { recomputeDerivativePosition } = await import('../fo/derivativePosition.service.js');
     await recomputeDerivativePosition(portfolioId, assetKey);
-    return;
+    return meta.assetClass;
   }
 
   const agg = replayTransactions(meta.txs);
@@ -576,7 +629,7 @@ export async function recomputeForAsset(
     await prisma.holdingProjection.deleteMany({
       where: { portfolioId, assetKey },
     });
-    return;
+    return meta.assetClass;
   }
 
   const resolved = await resolveMasterIds({
@@ -691,6 +744,7 @@ export async function recomputeForAsset(
     },
     create: data,
   });
+  return meta.assetClass;
 }
 
 export async function recomputeForTransaction(tx: Transaction): Promise<void> {
