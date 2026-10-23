@@ -59,3 +59,21 @@ export class TooManyRequestsError extends AppError {
     super(message, 429, 'TOO_MANY_REQUESTS', details);
   }
 }
+
+/**
+ * A file the upload endpoint does not accept. Thrown from multer
+ * `fileFilter`s, which otherwise surfaced as a 500 "Internal server error"
+ * for what is simply the wrong kind of file. The message names what is
+ * accepted so the user knows what to drop instead.
+ */
+export class UnsupportedFileTypeError extends AppError {
+  constructor(ext: string, accepted: readonly string[]) {
+    const got = ext ? `“${ext}” files` : 'Files without an extension';
+    super(
+      `${got} can’t be uploaded here. Accepted: ${accepted.join(', ')}.`,
+      400,
+      'UNSUPPORTED_FILE_TYPE',
+      { ext, accepted },
+    );
+  }
+}
