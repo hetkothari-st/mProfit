@@ -296,6 +296,47 @@ describe('pollMonitoredSendersForAccount', () => {
     expect((fakeProcess.mock.calls[0]![0] as { messageId: string }).messageId).toBe('m2');
   });
 
+  it('matches "@domain" senders by domain (and subdomain), preferring an exact address', async () => {
+    // Regression: "@hdfcbank.net" was put into the Gmail query (so Gmail
+    // returned the mail) but the From header was then looked up by exact
+    // address only, so every such message was counted `unmatched` and never
+    // parsed.
+    const acc = await createMailbox(scope.userId);
+    const domain = await addMonitoredSender(scope.userId, '@hdfcbank.net');
+    const exact = await addMonitoredSender(scope.userId, 'vip@hdfcbank.net', {
+      autoCommitEnabled: true,
+    });
+
+    const messages: FakeMessage[] = [
+      { id: 'd1', from: '"HDFC Bank" <alerts@hdfcbank.net>' },
+      { id: 'd2', from: 'HDFC <noreply@mailers.hdfcbank.net>' },
+      { id: 'x1', from: 'HDFC <vip@hdfcbank.net>' },
+      // Look-alike domain must NOT ride on the @hdfcbank.net entry.
+      { id: 'evil', from: 'phish@evilhdfcbank.net' },
+    ];
+    const gmail = makeFakeGmail(messages);
+    const fakeProcess = vi.fn().mockResolvedValue({ kind: 'created', eventIds: [] });
+
+    const out = await scope.runAs(() =>
+      pollMonitoredSendersForAccount(acc.id, {
+        gmailClient: gmail,
+        processEmail: fakeProcess,
+      }),
+    );
+
+    expect(out.unmatched).toBe(1);
+    const calls = fakeProcess.mock.calls.map(
+      (c) => c[0] as { messageId: string; senderAddress: string; autoCommitEnabled: boolean },
+    );
+    const byId = new Map(calls.map((c) => [c.messageId, c]));
+    expect(byId.get('d1')?.senderAddress).toBe(domain.address);
+    expect(byId.get('d1')?.autoCommitEnabled).toBe(false);
+    expect(byId.get('d2')?.senderAddress).toBe(domain.address);
+    expect(byId.get('x1')?.senderAddress).toBe(exact.address);
+    expect(byId.get('x1')?.autoCommitEnabled).toBe(true);
+    expect(byId.has('evil')).toBe(false);
+  });
+
   it('counts message-fetch failures without aborting the tick', async () => {
     const acc = await createMailbox(scope.userId);
     await addMonitoredSender(scope.userId, 'alerts@hdfcbank.net');

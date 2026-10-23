@@ -63,3 +63,43 @@ export function parseFromHeader(raw: string | null | undefined): ParsedFrom {
     displayName: null,
   };
 }
+
+/**
+ * Pick the monitored sender a parsed From address belongs to.
+ *
+ * Senders are stored either as a full address (`alerts@hdfcbank.net`) or
+ * domain-scoped (`@hdfcbank.net`). Both forms go into the Gmail `from:`
+ * query, so the matcher must honour both or domain-scoped senders' mail is
+ * fetched and then silently dropped as "unmatched".
+ *
+ * Precedence: an exact address entry wins (it can carry its own
+ * auto-commit trust); otherwise the most specific domain entry that equals
+ * the address's domain or is a parent of it (`@hdfcbank.net` covers
+ * `x@mailers.hdfcbank.net`, but never `x@evilhdfcbank.net`).
+ */
+export function matchMonitoredSender<T extends { address: string }>(
+  fromAddress: string | null | undefined,
+  senders: readonly T[],
+): T | null {
+  if (!fromAddress) return null;
+  const addr = fromAddress.trim().toLowerCase();
+  const at = addr.lastIndexOf('@');
+  if (at < 0) return null;
+  const domain = addr.slice(at + 1);
+
+  let best: T | null = null;
+  let bestLen = -1;
+  for (const s of senders) {
+    const a = s.address.trim().toLowerCase();
+    if (a === addr) return s;
+    if (!a.startsWith('@')) continue;
+    const d = a.slice(1);
+    if (domain === d || domain.endsWith(`.${d}`)) {
+      if (d.length > bestLen) {
+        best = s;
+        bestLen = d.length;
+      }
+    }
+  }
+  return best;
+}

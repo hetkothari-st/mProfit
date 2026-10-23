@@ -48,7 +48,7 @@ import {
   type LlmParseResult,
 } from '../llm/client.js';
 import { extractEmailBody } from './bodyExtract.js';
-import { parseFromHeader } from './headers.js';
+import { matchMonitoredSender, parseFromHeader } from './headers.js';
 import type { ParsedEvent } from '../llm/schema.js';
 import { projectCanonicalEvent } from '../projection.js';
 import {
@@ -641,16 +641,22 @@ export async function retryGmailFailure(
   // wearing trust earned by a different sender. That defeats the per-sender
   // review model (§12). The primary poll path already matches on `from`.
   const { address: fromAddress } = parseFromHeader(from);
+  // `@domain` senders count too — same matcher as the poll path.
   const monitored = fromAddress
-    ? await prisma.monitoredSender.findFirst({
-        where: { userId, isActive: true, address: fromAddress },
-        select: { address: true, autoCommitEnabled: true },
-      })
+    ? matchMonitoredSender(
+        fromAddress,
+        await prisma.monitoredSender.findMany({
+          where: { userId, isActive: true },
+          select: { address: true, autoCommitEnabled: true },
+        }),
+      )
     : null;
 
   const outcome = await processEmail({
     userId,
-    senderAddress: fromAddress || '',
+    // Attribute to the monitored row's address (what the poll path does) so
+    // approvals bump the right sender's confirmedEventCount.
+    senderAddress: monitored?.address ?? fromAddress ?? '',
     // No matching monitored sender means no earned trust: route to review.
     autoCommitEnabled: monitored?.autoCommitEnabled ?? false,
     messageId: row.sourceRef,
