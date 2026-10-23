@@ -16,6 +16,7 @@ import { logger } from '../../lib/logger.js';
 import { encryptSecret, decryptSecret } from '../../lib/secrets.js';
 import { createImportJob } from '../../services/imports/import.service.js';
 import { issueOAuthState } from '../../lib/oauthState.js';
+import { BadRequestError, NotFoundError } from '../../lib/errors.js';
 
 // readonly for inbox ingestion + send for outbound rent reminders.
 // Existing users who connected before send scope landed will need to
@@ -158,8 +159,11 @@ export async function exchangeGmailCode(
   const client = makeOAuthClient();
   const { tokens } = await client.getToken(code);
   if (!tokens.refresh_token) {
-    throw new Error(
-      'Google did not return a refresh token. Revoke access at https://myaccount.google.com/permissions and try again with prompt=consent.',
+    // Google omits the refresh token when it believes this app already
+    // holds one. Without it we cannot read mail later, so refuse the connect
+    // as a user-fixable 400 (a plain Error became a 500).
+    throw new BadRequestError(
+      'Google did not give EveryPaisa lasting access to this mailbox. Remove EveryPaisa at https://myaccount.google.com/permissions, then connect Gmail again.',
     );
   }
   client.setCredentials(tokens);
@@ -196,8 +200,15 @@ export async function exchangeGmailCode(
 
 export async function getAuthorizedClientFor(accountId: string): Promise<OAuth2Client> {
   const acc = await prisma.mailboxAccount.findUnique({ where: { id: accountId } });
-  if (!acc || acc.provider !== 'GMAIL_OAUTH' || !acc.refreshTokenEnc) {
-    throw new Error('Invalid Gmail account');
+  if (!acc || acc.provider !== 'GMAIL_OAUTH') {
+    throw new NotFoundError('Gmail account not found');
+  }
+  if (!acc.refreshTokenEnc) {
+    // The stored grant is gone (revoked or never completed). The user can
+    // fix this; it is not a server fault.
+    throw new BadRequestError(
+      'This Gmail connection has expired. Reconnect Gmail on the Email ingestion page (“Add another”, then choose this account) to keep importing.',
+    );
   }
   const client = makeOAuthClient();
   const now = Date.now();
@@ -244,7 +255,7 @@ async function markGmailAccountForReauth(accountId: string, reason: string): Pro
       where: { id: accountId },
       data: {
         isActive: false,
-        lastError: `Gmail access lost: ${reason}. Click Reconnect on the Mailboxes page.`,
+        lastError: `Gmail access lost: ${reason}. Reconnect it on the Email ingestion page: click “Add another” and choose this Gmail account.`,
         lastPolledAt: new Date(),
       },
     });

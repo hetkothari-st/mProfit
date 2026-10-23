@@ -132,8 +132,9 @@ export function MailboxesPage() {
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            One-click sign-in via Google. No password, no App Password setup. We only request
-            read-only access to Gmail and you can revoke anytime at{' '}
+            One-click sign-in via Google. No password, no App Password setup. We ask to read
+            Gmail and to send email as you (used only for messages you send from the app, such as
+            rent reminders); we never delete or change your mail. You can revoke anytime at{' '}
             <a
               className="text-accent underline"
               href="https://myaccount.google.com/permissions"

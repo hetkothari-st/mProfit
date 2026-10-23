@@ -4,6 +4,8 @@ import type { MonitoredSender } from '@prisma/client';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { createTestScope, type TestScope } from '../helpers/db.js';
+import { Decimal } from '@everypaisa/shared';
+import type { LlmParseResult } from '../../src/ingestion/llm/client.js';
 import {
   buildPollQuery,
   pollMonitoredSendersForAccount,
@@ -24,6 +26,7 @@ import type {
 interface FakeMessage {
   id: string;
   from: string; // raw From header value
+  body?: string; // defaults to "Body of <id>"
 }
 
 function makeFakeGmail(
@@ -53,7 +56,7 @@ function makeFakeGmail(
     if (failGet.has(params.id)) throw new Error(`forced fetch failure for ${params.id}`);
     const m = messages.find((x) => x.id === params.id);
     if (!m) return { data: {} };
-    const body = Buffer.from(`Body of ${m.id}`, 'utf8').toString('base64url');
+    const body = Buffer.from(m.body ?? `Body of ${m.id}`, 'utf8').toString('base64url');
     return {
       data: {
         id: m.id,
@@ -109,6 +112,8 @@ async function addMonitoredSender(
     autoCommitEnabled?: boolean;
     isActive?: boolean;
     lastFetchedAt?: Date | null;
+    confirmedEventCount?: number;
+    autoCommitAfter?: number;
   } = {},
 ): Promise<MonitoredSender> {
   return runAsSystem(() =>
@@ -119,6 +124,8 @@ async function addMonitoredSender(
         autoCommitEnabled: opts.autoCommitEnabled ?? false,
         isActive: opts.isActive ?? true,
         lastFetchedAt: opts.lastFetchedAt ?? null,
+        confirmedEventCount: opts.confirmedEventCount ?? 0,
+        autoCommitAfter: opts.autoCommitAfter ?? 5,
       },
     }),
   );
@@ -294,6 +301,140 @@ describe('pollMonitoredSendersForAccount', () => {
     // Only the matched one hits the pipeline.
     expect(fakeProcess).toHaveBeenCalledTimes(1);
     expect((fakeProcess.mock.calls[0]![0] as { messageId: string }).messageId).toBe('m2');
+  });
+
+  it('matches "@domain" senders by domain (and subdomain), preferring an exact address', async () => {
+    // Regression: "@hdfcbank.net" was put into the Gmail query (so Gmail
+    // returned the mail) but the From header was then looked up by exact
+    // address only, so every such message was counted `unmatched` and never
+    // parsed.
+    const acc = await createMailbox(scope.userId);
+    const domain = await addMonitoredSender(scope.userId, '@hdfcbank.net');
+    const exact = await addMonitoredSender(scope.userId, 'vip@hdfcbank.net', {
+      autoCommitEnabled: true,
+      confirmedEventCount: 5,
+    });
+
+    const messages: FakeMessage[] = [
+      { id: 'd1', from: '"HDFC Bank" <alerts@hdfcbank.net>' },
+      { id: 'd2', from: 'HDFC <noreply@mailers.hdfcbank.net>' },
+      { id: 'x1', from: 'HDFC <vip@hdfcbank.net>' },
+      // Look-alike domain must NOT ride on the @hdfcbank.net entry.
+      { id: 'evil', from: 'phish@evilhdfcbank.net' },
+    ];
+    const gmail = makeFakeGmail(messages);
+    const fakeProcess = vi.fn().mockResolvedValue({ kind: 'created', eventIds: [] });
+
+    const out = await scope.runAs(() =>
+      pollMonitoredSendersForAccount(acc.id, {
+        gmailClient: gmail,
+        processEmail: fakeProcess,
+      }),
+    );
+
+    expect(out.unmatched).toBe(1);
+    const calls = fakeProcess.mock.calls.map(
+      (c) => c[0] as { messageId: string; senderAddress: string; autoCommitEnabled: boolean },
+    );
+    const byId = new Map(calls.map((c) => [c.messageId, c]));
+    expect(byId.get('d1')?.senderAddress).toBe(domain.address);
+    expect(byId.get('d1')?.autoCommitEnabled).toBe(false);
+    expect(byId.get('d2')?.senderAddress).toBe(domain.address);
+    expect(byId.get('x1')?.senderAddress).toBe(exact.address);
+    expect(byId.get('x1')?.autoCommitEnabled).toBe(true);
+    expect(byId.has('evil')).toBe(false);
+  });
+
+  it('sends events to review when auto-commit is on but the approval threshold was never reached', async () => {
+    // Regression: rows created before senders started in review (including
+    // the auto-seeded CAS @domain senders) carry autoCommitEnabled=true with
+    // zero approvals. Trust is checked at use time, so those land in review
+    // without any data migration.
+    const acc = await createMailbox(scope.userId);
+    await addMonitoredSender(scope.userId, '@hdfcbank.net', {
+      autoCommitEnabled: true,
+      confirmedEventCount: 0,
+      autoCommitAfter: 5,
+    });
+    const gmail = makeFakeGmail([
+      {
+        id: 'unearned-1',
+        from: 'HDFC <alerts@hdfcbank.net>',
+        // Every figure the fake LLM returns appears here, so source
+        // verification passes and only sender trust decides the status.
+        body: 'Rs 500.00 credited to a/c XX1234 on 2026-04-15 by UPI from Rajesh.',
+      },
+    ]);
+    const llm: LlmParseResult = {
+      ok: true,
+      events: [
+        {
+          event_type: 'UPI_CREDIT',
+          event_date: '2026-04-15',
+          amount: '500.00',
+          quantity: null,
+          price: null,
+          counterparty: 'Rajesh',
+          instrument_isin: null,
+          instrument_symbol: null,
+          instrument_name: null,
+          account_last4: '1234',
+          currency: 'INR',
+          confidence: 0.95,
+          notes: null,
+        },
+      ],
+      isMarketing: false,
+      usage: { inputTokens: 100, outputTokens: 30, costInr: new Decimal('0.01') },
+      budget: { status: 'ok', spent: new Decimal('0'), warn: new Decimal('500'), cap: new Decimal('1000') },
+      redaction: { pan: 0, aadhaar: 0, account: 0, phone: 0, secret: 0 },
+    };
+
+    const out = await scope.runAs(() =>
+      pollMonitoredSendersForAccount(acc.id, {
+        gmailClient: gmail,
+        processEmailDeps: { parseEmail: async () => llm, checkGate: () => ({ ok: true }) },
+      }),
+    );
+    expect(out.created).toBe(1);
+
+    const rows = await runAsSystem(() =>
+      prisma.canonicalEvent.findMany({ where: { userId: scope.userId } }),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('PENDING_REVIEW');
+    expect(rows[0]!.projectedTransactionId).toBeNull();
+    expect(rows[0]!.projectedCashFlowId).toBeNull();
+  });
+
+  it('keeps auto-commit for a sender that earned it', async () => {
+    const acc = await createMailbox(scope.userId);
+    await addMonitoredSender(scope.userId, 'alerts@hdfcbank.net', {
+      autoCommitEnabled: true,
+      confirmedEventCount: 3,
+      autoCommitAfter: 3,
+    });
+    await addMonitoredSender(scope.userId, 'contract@zerodha.com', {
+      autoCommitEnabled: false,
+      confirmedEventCount: 9,
+    });
+    const gmail = makeFakeGmail([
+      { id: 'earned', from: 'HDFC <alerts@hdfcbank.net>' },
+      { id: 'not-enabled', from: 'Zerodha <contract@zerodha.com>' },
+    ]);
+    const fakeProcess = vi.fn().mockResolvedValue({ kind: 'created', eventIds: [] });
+
+    await scope.runAs(() =>
+      pollMonitoredSendersForAccount(acc.id, { gmailClient: gmail, processEmail: fakeProcess }),
+    );
+    const flags = new Map(
+      fakeProcess.mock.calls.map((c) => {
+        const i = c[0] as { messageId: string; autoCommitEnabled: boolean };
+        return [i.messageId, i.autoCommitEnabled];
+      }),
+    );
+    expect(flags.get('earned')).toBe(true);
+    expect(flags.get('not-enabled')).toBe(false);
   });
 
   it('counts message-fetch failures without aborting the tick', async () => {

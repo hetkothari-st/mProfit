@@ -82,6 +82,8 @@ describe('SEC-13: DLQ retry uses the message its own sender', () => {
   });
 
   it('defaults to no auto-commit when there is no matching sender', () => {
-    expect(pipeline).toContain('monitored?.autoCommitEnabled ?? false');
+    // No matching sender → false; a matching one must also have reached its
+    // approval threshold (senderHasEarnedAutoCommit), not just carry the flag.
+    expect(pipeline).toContain('monitored ? senderHasEarnedAutoCommit(monitored) : false');
   });
 });

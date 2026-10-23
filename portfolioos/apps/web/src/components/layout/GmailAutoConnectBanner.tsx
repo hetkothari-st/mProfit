@@ -72,7 +72,7 @@ export function GmailAutoConnectBanner() {
           <span className="font-medium">Auto-import statements from your inbox.</span>{' '}
           <span className="text-muted-foreground">
             Connect <span className="font-mono break-all">{userEmail}</span> — we'll fetch contract notes,
-            CAS PDFs, and trade confirmations automatically. You approve each new sender once.
+            CAS PDFs, and trade confirmations automatically. You review what a new sender brings in before anything is added.
           </span>
         </div>
         <Button

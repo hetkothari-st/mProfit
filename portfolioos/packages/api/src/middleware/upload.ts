@@ -4,6 +4,7 @@ import { join, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { env } from '../config/env.js';
 import { uploadRoot } from '../lib/uploadRoot.js';
+import { UnsupportedFileTypeError } from '../lib/errors.js';
 
 
 async function ensureDir(dir: string): Promise<void> {
@@ -58,7 +59,7 @@ export const uploadImportFile = multer({
     const allowed = ['.pdf', '.csv', '.tsv', '.xlsx', '.xls', '.html', '.htm'];
     const ext = extname(file.originalname).toLowerCase();
     if (!allowed.includes(ext)) {
-      cb(new Error(`Unsupported file type: ${ext}. Allowed: ${allowed.join(', ')}`));
+      cb(new UnsupportedFileTypeError(ext, ['PDF', 'CSV', 'TSV', 'Excel (.xlsx/.xls)', 'HTML']));
       return;
     }
     cb(null, true);

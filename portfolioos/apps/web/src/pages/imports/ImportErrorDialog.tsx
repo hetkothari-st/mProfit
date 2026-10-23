@@ -21,6 +21,17 @@ export function ImportErrorDialog({ job, onClose }: Props) {
           </div>
         )}
 
+        {log?.workerError && (
+          <div className="rounded-md border border-negative/40 bg-negative/5 p-3 text-sm text-negative space-y-1">
+            {log.timedOut && (
+              <div className="font-medium">
+                This file took too long to process and was stopped. Try uploading it again, or split it into smaller files.
+              </div>
+            )}
+            <div>{log.workerError}</div>
+          </div>
+        )}
+
         {log?.general && (
           <div className="rounded-md border border-negative/40 bg-negative/5 p-3 text-sm text-negative">
             {log.general}

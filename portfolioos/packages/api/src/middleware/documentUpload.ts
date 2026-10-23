@@ -1,6 +1,7 @@
 import multer from 'multer';
 import { extname } from 'node:path';
 import { env } from '../config/env.js';
+import { UnsupportedFileTypeError } from '../lib/errors.js';
 
 const ALLOWED = new Set([
   '.pdf',
@@ -26,6 +27,16 @@ const ALLOWED = new Set([
   '.tiff',
 ]);
 
+/** Human list for the "can't be uploaded here" message — same set as ALLOWED. */
+const ACCEPTED_LABEL = [
+  'PDF',
+  'Word (.doc/.docx/.odt)',
+  'text (.txt/.rtf)',
+  'spreadsheets (.xls/.xlsx/.ods/.csv)',
+  'slides (.ppt/.pptx/.odp)',
+  'images (.png/.jpg/.jpeg/.heic/.webp/.gif/.bmp/.tiff)',
+];
+
 const memoryStorage = multer.memoryStorage();
 
 export const uploadDocumentFile = multer({
@@ -34,7 +45,7 @@ export const uploadDocumentFile = multer({
   fileFilter: (_req, file, cb) => {
     const ext = extname(file.originalname).toLowerCase();
     if (!ALLOWED.has(ext)) {
-      cb(new Error(`Unsupported file type: ${ext}`));
+      cb(new UnsupportedFileTypeError(ext, ACCEPTED_LABEL));
       return;
     }
     cb(null, true);
@@ -53,7 +64,7 @@ export const uploadSorterFiles = multer({
   fileFilter: (_req, file, cb) => {
     const ext = extname(file.originalname).toLowerCase();
     if (!ALLOWED.has(ext)) {
-      cb(new Error(`Unsupported file type: ${ext}`));
+      cb(new UnsupportedFileTypeError(ext, ACCEPTED_LABEL));
       return;
     }
     cb(null, true);

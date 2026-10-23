@@ -48,7 +48,7 @@ const HOSTED: PrivacyPromise = {
     'Encrypted in transit and at rest. PAN, policy numbers and account numbers are encrypted again, column by column.',
     'Fenced off per account at the database itself, not merely in our code — one account cannot read another’s rows even if we make a mistake.',
     'Never sold, never rented, never used to sell you anything. There are no advertisers here, and no data brokers.',
-    'Read-only where we connect to anything of yours, and only the senders you choose. We never scan an inbox.',
+    'We read only the email senders you choose — we never scan an inbox — and send from your Gmail only messages you ask for, such as rent reminders.',
     'Yours to take and yours to end: export everything whenever you like, and delete the account outright — which deletes the data, not just the login.',
   ],
   footer:

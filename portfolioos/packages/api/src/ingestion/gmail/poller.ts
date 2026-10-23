@@ -27,7 +27,7 @@ import type { MonitoredSender } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { getAuthorizedClientFor } from './gmail.connector.js';
-import { parseFromHeader } from './headers.js';
+import { matchMonitoredSender, parseFromHeader, senderHasEarnedAutoCommit } from './headers.js';
 import {
   processEmail,
   type ProcessEmailDeps,
@@ -151,18 +151,18 @@ async function listMessageIds(
 }
 
 /**
- * Match the message's From header to one of the user's active senders.
- * Returns `null` when the header is unparseable or the address isn't in
- * the monitored list — the caller tallies these as `unmatched` so the
- * operator can spot a query drifting or a spoofed-from bug.
+ * Match the message's From header to one of the user's active senders —
+ * by exact address, or by domain for `@domain` entries (see
+ * `matchMonitoredSender`). Returns `null` when the header is unparseable or
+ * the address isn't covered — the caller tallies these as `unmatched` so
+ * the operator can spot a query drifting or a spoofed-from bug.
  */
 function matchSender(
   from: string | null,
-  byAddress: ReadonlyMap<string, MonitoredSender>,
+  senders: readonly MonitoredSender[],
 ): MonitoredSender | null {
   const { address } = parseFromHeader(from);
-  if (!address) return null;
-  return byAddress.get(address) ?? null;
+  return matchMonitoredSender(address, senders);
 }
 
 function headerValue(
@@ -233,9 +233,6 @@ export async function pollMonitoredSendersForAccount(
   });
   if (senders.length === 0) return zeroResult();
 
-  const byAddress = new Map<string, MonitoredSender>();
-  for (const s of senders) byAddress.set(s.address.toLowerCase(), s);
-
   const since = earliestSince(senders, now);
   const query = buildPollQuery(senders, since);
 
@@ -271,7 +268,7 @@ export async function pollMonitoredSendersForAccount(
     }
 
     const from = headerValue(message.payload?.headers ?? undefined, 'From');
-    const sender = matchSender(from, byAddress);
+    const sender = matchSender(from, senders);
     if (!sender) {
       // The user narrowed their monitored list (or Gmail's `from:`
       // matched a forwarded envelope), so the From header doesn't
@@ -285,7 +282,8 @@ export async function pollMonitoredSendersForAccount(
       {
         userId: acc.userId,
         senderAddress: sender.address,
-        autoCommitEnabled: sender.autoCommitEnabled,
+        // Flag AND approval threshold — see senderHasEarnedAutoCommit.
+        autoCommitEnabled: senderHasEarnedAutoCommit(sender),
         messageId: id,
         message,
       },

@@ -93,10 +93,14 @@ export async function createMonitoredSender(
     if (seed) displayLabel = seed.suggestedDisplayLabel;
   }
 
-  // Per Phase B UX: when the user explicitly approves a sender, treat it as
-  // "trusted from now on". Future events from this sender skip the per-event
-  // review queue and auto-project. Caller can override via `autoCommitEnabled`.
-  const autoCommitEnabled = input.autoCommitEnabled ?? true;
+  // A new sender always starts in review mode (§1 decision 12): its events
+  // wait in the review queue until the user has approved `autoCommitAfter`
+  // of them, at which point the UI offers the "trust this sender?" banner
+  // and the update endpoint lets auto-commit be switched on. Defaulting to
+  // true here skipped that threshold entirely and wrote unreviewed emails
+  // straight to the ledger, contradicting the "everything is reviewable"
+  // promise on the Email Ingestion page.
+  const autoCommitEnabled = input.autoCommitEnabled ?? false;
 
   return prisma.monitoredSender.create({
     data: {
