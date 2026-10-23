@@ -48,7 +48,7 @@ import {
   type LlmParseResult,
 } from '../llm/client.js';
 import { extractEmailBody } from './bodyExtract.js';
-import { matchMonitoredSender, parseFromHeader } from './headers.js';
+import { matchMonitoredSender, parseFromHeader, senderHasEarnedAutoCommit } from './headers.js';
 import type { ParsedEvent } from '../llm/schema.js';
 import { projectCanonicalEvent } from '../projection.js';
 import {
@@ -647,7 +647,7 @@ export async function retryGmailFailure(
         fromAddress,
         await prisma.monitoredSender.findMany({
           where: { userId, isActive: true },
-          select: { address: true, autoCommitEnabled: true },
+          select: { address: true, autoCommitEnabled: true, confirmedEventCount: true, autoCommitAfter: true },
         }),
       )
     : null;
@@ -658,7 +658,8 @@ export async function retryGmailFailure(
     // approvals bump the right sender's confirmedEventCount.
     senderAddress: monitored?.address ?? fromAddress ?? '',
     // No matching monitored sender means no earned trust: route to review.
-    autoCommitEnabled: monitored?.autoCommitEnabled ?? false,
+    // Flag AND approval threshold, same as the poll path.
+    autoCommitEnabled: monitored ? senderHasEarnedAutoCommit(monitored) : false,
     messageId: row.sourceRef,
     message,
   });

@@ -103,3 +103,20 @@ export function matchMonitoredSender<T extends { address: string }>(
   }
   return best;
 }
+
+/**
+ * Whether a monitored sender's events may skip review right now.
+ *
+ * The flag alone is not enough: rows created before new senders started in
+ * review (including the auto-seeded CAS `@domain` senders) carry
+ * `autoCommitEnabled = true` with no approvals behind it. Requiring the
+ * sender's own threshold here, at the point of use, closes that without a
+ * data migration, and senders that genuinely earned auto-commit keep it.
+ */
+export function senderHasEarnedAutoCommit(sender: {
+  autoCommitEnabled: boolean;
+  confirmedEventCount: number;
+  autoCommitAfter: number;
+}): boolean {
+  return sender.autoCommitEnabled && sender.confirmedEventCount >= sender.autoCommitAfter;
+}

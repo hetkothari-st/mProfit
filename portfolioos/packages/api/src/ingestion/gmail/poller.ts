@@ -27,7 +27,7 @@ import type { MonitoredSender } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { getAuthorizedClientFor } from './gmail.connector.js';
-import { matchMonitoredSender, parseFromHeader } from './headers.js';
+import { matchMonitoredSender, parseFromHeader, senderHasEarnedAutoCommit } from './headers.js';
 import {
   processEmail,
   type ProcessEmailDeps,
@@ -282,7 +282,8 @@ export async function pollMonitoredSendersForAccount(
       {
         userId: acc.userId,
         senderAddress: sender.address,
-        autoCommitEnabled: sender.autoCommitEnabled,
+        // Flag AND approval threshold — see senderHasEarnedAutoCommit.
+        autoCommitEnabled: senderHasEarnedAutoCommit(sender),
         messageId: id,
         message,
       },
