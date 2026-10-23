@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { ok } from '../lib/response.js';
+import { env } from '../config/env.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import {
   buildGmailAuthUrl,
@@ -14,7 +15,9 @@ import { discoverFinancialSenders } from '../ingestion/gmail/discovery.js';
 import { consumeOAuthState } from '../lib/oauthState.js';
 
 export async function getGmailConfig(_req: Request, res: Response) {
-  ok(res, { configured: isGmailConfigured() });
+  // pollIntervalMin lets the UI say how often monitored senders are checked
+  // instead of hard-coding a number that drifts from the scheduler's.
+  ok(res, { configured: isGmailConfigured(), pollIntervalMin: env.MAILBOX_POLL_INTERVAL_MIN });
 }
 
 export async function getGmailAuthUrl(req: Request, res: Response) {

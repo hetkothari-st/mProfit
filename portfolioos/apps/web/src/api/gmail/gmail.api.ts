@@ -7,8 +7,10 @@ function unwrap<T>(r: ApiResponse<T>): T {
 }
 
 export const gmailApi = {
-  async config(): Promise<{ configured: boolean }> {
-    const { data } = await api.get<ApiResponse<{ configured: boolean }>>('/api/gmail/config');
+  async config(): Promise<{ configured: boolean; pollIntervalMin?: number }> {
+    const { data } = await api.get<ApiResponse<{ configured: boolean; pollIntervalMin?: number }>>(
+      '/api/gmail/config',
+    );
     return unwrap(data);
   },
   async authUrl(): Promise<{ url: string }> {

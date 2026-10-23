@@ -382,7 +382,7 @@ function ConnectStep({
           <EmptyState
             icon={Chrome}
             title="No Gmail connected yet"
-            description="EveryPaisa scans Gmail for financial emails (read-only) and turns them into transactions. Connect once — we never scan anything except the senders you explicitly allow."
+            description="EveryPaisa reads financial emails from the senders you allow and turns them into transactions — we never scan anything else. Google will also ask to let us send email as you; that is only used for messages you send from the app, such as rent reminders."
             action={
               <Button onClick={() => connectMut.mutate()} disabled={connectMut.isPending}>
                 {connectMut.isPending ? (
@@ -891,6 +891,17 @@ function ReviewStep({
     return Array.from(m.entries());
   }, [events]);
 
+  // How often monitored senders are checked comes from the server's
+  // scheduler setting, not a number baked into this copy.
+  const gmailCfg = useQuery({
+    queryKey: ['gmail', 'config'],
+    queryFn: () => gmailApi.config(),
+    staleTime: 60_000,
+  });
+  const pollMin = gmailCfg.data?.pollIntervalMin;
+  const pollEvery =
+    pollMin === undefined ? 'every few minutes' : pollMin === 1 ? 'every minute' : `every ${pollMin} minutes`;
+
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
@@ -964,7 +975,7 @@ function ReviewStep({
                   ? 'Step 1 above — without a connected Gmail, we have nothing to poll.'
                   : !hasSenders
                     ? 'Step 2 above — add the bank / broker / insurer addresses you want us to watch.'
-                    : 'Nothing waiting for review. New emails from your monitored senders will show up here (poller runs every 10 minutes).'
+                    : `Nothing waiting for review. New emails from your monitored senders will show up here (we check ${pollEvery}).`
               }
             />
           </div>

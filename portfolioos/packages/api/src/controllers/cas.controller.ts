@@ -8,7 +8,8 @@ import { BadRequestError } from '../lib/errors.js';
  *
  * CAMS and KFintech do not expose public APIs to request CAS. Both use a
  * web form and email the password-protected PDF to the investor's registered
- * email. Our mailbox poller auto-picks these up once an IMAP account is set.
+ * email. The Gmail attachment sync (mailboxPoller → syncGmailAccount) picks
+ * these up once the user has connected Gmail.
  *
  * These endpoints return structured guidance + deep-link URLs so the frontend
  * can drive the flow without hardcoding URLs.
@@ -106,8 +107,8 @@ export async function buildCasRequest(req: Request, res: Response) {
     nextSteps: [
       'Open the portal URL and submit the form with the details shown',
       'You will receive a password-protected PDF at your registered email',
-      'If an IMAP mailbox is configured, EveryPaisa will auto-import the PDF',
-      'Otherwise, upload the PDF via Imports → CAS PDF and provide the PDF password',
+      'If your Gmail is connected, EveryPaisa picks the PDF up from your inbox automatically — it appears on the Import page, which asks for the PDF password if it cannot open the file',
+      'Otherwise, upload the PDF on the Import page and enter the PDF password when asked',
     ],
   });
 }
