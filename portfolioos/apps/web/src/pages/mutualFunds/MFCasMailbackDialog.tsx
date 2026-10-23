@@ -22,6 +22,7 @@ import {
 import { authApi } from '@/api/auth.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
+import { useActingAsStore } from '@/stores/actingAs.store';
 
 type Step =
   | { phase: 'idle' }
@@ -70,7 +71,6 @@ export function MFCasMailbackDialog({
   const [step, setStep] = useState<Step>({ phase: 'idle' });
 
   // Form state
-  const [pan, setPan] = useState('');
   const [email, setEmail] = useState('');
   const [period, setPeriod] = useState('ALL');
   const [nickname, setNickname] = useState('');
@@ -79,11 +79,8 @@ export function MFCasMailbackDialog({
   const [kfinCaptcha, setKfinCaptcha] = useState('');
   const [newPan, setNewPan] = useState('');
 
-  const meQuery = useQuery({
-    queryKey: ['auth-me'],
-    queryFn: () => authApi.me(),
-    enabled: open,
-  });
+  // Managing a family member's account: the request goes out for THEIR PAN.
+  const actingAs = useActingAsStore((s) => s.profile);
 
   const portfoliosQuery = useQuery({
     queryKey: ['portfolios'],
@@ -91,31 +88,28 @@ export function MFCasMailbackDialog({
     enabled: open,
   });
 
-  // The profile no longer carries the full PAN. CAS mailback genuinely needs
-  // it, so fetch it from the audited reveal endpoint while the dialog is open.
+  // The PAN the server will use, masked. Read from the mailback route — a
+  // data route, so it carries X-Act-As — not from /api/auth/pan/reveal, which
+  // always answers as the signed-in person: a manager acting for a family
+  // member used to see (and submit) their own PAN here while the PDF
+  // password came from the member's profile. The server now takes the PAN
+  // from the same profile, so the browser never needs the full number.
   const panQuery = useQuery({
-    queryKey: ['auth-pan-reveal'],
-    queryFn: () => authApi.revealPan(),
-    enabled: open && Boolean(meQuery.data?.hasPan),
+    queryKey: ['mfcas-mailback-pan', actingAs?.id ?? null],
+    queryFn: () => mfCasMailbackApi.pan(),
+    enabled: open,
     staleTime: 0,
     gcTime: 0,
   });
-  const profilePan = (panQuery.data ?? '').trim().toUpperCase();
-  const hasPan = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(profilePan);
-
-  // Pre-fill PAN field with profile value when known
-  if (open && hasPan && pan === '') {
-    setPan(profilePan);
-  }
+  const panMasked = panQuery.data?.panMasked ?? null;
+  const hasPan = panMasked !== null;
 
   const updatePanMutation = useMutation({
     mutationFn: (newPan: string) => authApi.updateProfile({ pan: newPan }),
     onSuccess: (u) => {
       toast.success('PAN saved to profile');
       queryClient.invalidateQueries({ queryKey: ['auth-me'] });
-      // updateProfile echoes the masked profile back; we already know what
-      // was typed, so use that rather than re-reading a masked field.
-      setPan(newPan.trim().toUpperCase());
+      queryClient.invalidateQueries({ queryKey: ['mfcas-mailback-pan'] });
       setNewPan('');
       setStep({ phase: 'idle' });
     },
@@ -126,7 +120,7 @@ export function MFCasMailbackDialog({
     mutationFn: () => {
       const { from, to } = periodToRange(period);
       return mfCasMailbackApi.initiate({
-        pan: pan.trim().toUpperCase(),
+        // No PAN: the server uses the one shown above (the effective profile's).
         email: email.trim(),
         portfolioId: portfolioId || null,
         periodFrom: from,
@@ -174,7 +168,6 @@ export function MFCasMailbackDialog({
     setCamsCaptcha('');
     setKfinCaptcha('');
     setNewPan('');
-    // pan kept (matches profile)
   }
 
   function handleClose(next: boolean) {
@@ -182,9 +175,8 @@ export function MFCasMailbackDialog({
     onOpenChange(next);
   }
 
-  const panOk = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/.test(pan.trim());
   const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
-  const canInitiate = panOk && emailOk && !initiateMutation.isPending && hasPan;
+  const canInitiate = emailOk && !initiateMutation.isPending && hasPan;
 
   // Captcha is required only if the adapter returned an image.
   const camsRequiresCaptcha = step.phase === 'captcha' && Boolean(step.init.cams?.captchaImageBase64);
@@ -207,9 +199,30 @@ export function MFCasMailbackDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {meQuery.isLoading ? (
+        {panQuery.isLoading ? (
           <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading profile…
+          </div>
+        ) : panQuery.isError ? (
+          <div className="rounded border border-red-200 bg-red-50/50 p-3 text-sm">
+            {apiErrorMessage(panQuery.error, 'Could not load the PAN for this account')}
+          </div>
+        ) : !hasPan && actingAs ? (
+          // Saving a PAN here goes through the profile route, which always
+          // runs as the signed-in person — it would land on the manager's
+          // profile, not the member's. Say so instead of offering it.
+          <div className="space-y-3">
+            <div
+              data-testid="mb-no-pan-acting"
+              className="rounded border border-amber-300 bg-amber-50/50 p-3 text-sm"
+            >
+              <strong>No PAN on {actingAs.name}'s profile.</strong> The CAS is requested for
+              their PAN and the PDF is locked with it, so it has to be on their profile before
+              a statement can be requested.
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => handleClose(false)}>Close</Button>
+            </DialogFooter>
           </div>
         ) : !hasPan && step.phase !== 'set_pan' ? (
           <div className="space-y-3">
@@ -267,14 +280,14 @@ export function MFCasMailbackDialog({
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
               <Label htmlFor="mb-pan">PAN</Label>
-              <Input
-                id="mb-pan"
-                className="md:col-span-2"
-                placeholder="ABCDE1234F"
-                value={pan}
-                onChange={(e) => setPan(e.target.value.toUpperCase())}
-                maxLength={10}
-              />
+              <div className="md:col-span-2">
+                <Input id="mb-pan" data-testid="mb-pan" value={panMasked ?? ''} readOnly disabled />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {actingAs
+                    ? `From ${actingAs.name}'s profile — the statement is requested for this PAN.`
+                    : 'From your profile — the statement is requested for this PAN.'}
+                </p>
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
               <Label htmlFor="mb-email">Email</Label>
@@ -331,8 +344,8 @@ export function MFCasMailbackDialog({
             </div>
             <div className="rounded border bg-muted/30 p-2 text-xs text-muted-foreground">
               <ShieldCheck className="inline h-3 w-3 mr-1" />
-              PDF will be encrypted with your saved PAN. When the email arrives, we auto-decrypt
-              and import it.
+              PDF will be encrypted with this PAN. When the email arrives, we auto-decrypt and
+              import it.
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => handleClose(false)}>
@@ -353,7 +366,7 @@ export function MFCasMailbackDialog({
             <div className="rounded border bg-muted/30 p-3 text-sm">
               CAS will be emailed to{' '}
               <span className="font-mono font-medium">{step.init.emailMasked}</span>. PDF
-              password = your saved PAN ({profilePan.slice(-4) ? `XXXXXX${profilePan.slice(-4)}` : 'profile'}).
+              password = the PAN above ({panMasked ?? 'profile'}).
             </div>
 
             {step.init.cams && (

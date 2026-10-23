@@ -36,6 +36,9 @@ export interface KfintechMailbackInput {
   email: string;
   fromDate?: string | null;
   toDate?: string | null;
+  /** Portfolio the emailed CAS is imported into; null = default. */
+  portfolioId?: string | null;
+  nickname?: string | null;
 }
 
 export interface KfintechMailbackResult {

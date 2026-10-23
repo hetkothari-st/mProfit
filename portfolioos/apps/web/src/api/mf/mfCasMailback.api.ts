@@ -7,7 +7,8 @@ function unwrap<T>(r: ApiResponse<T>): T {
 }
 
 export interface InitiateInput {
-  pan: string;
+  /** Omit to use the PAN on the effective profile (see `pan()`). */
+  pan?: string;
   email: string;
   portfolioId?: string | null;
   periodFrom?: string | null;
@@ -70,6 +71,13 @@ export interface MFCasMailbackJobDTO {
 }
 
 export const mfCasMailbackApi = {
+  /** The masked PAN a mailback will use — the effective (acted-for) profile's. */
+  async pan(): Promise<{ panMasked: string | null }> {
+    const { data } = await api.get<ApiResponse<{ panMasked: string | null }>>(
+      '/api/mf-cas-mailback/pan',
+    );
+    return unwrap(data);
+  },
   async initiate(input: InitiateInput): Promise<InitiateResult> {
     const { data } = await api.post<ApiResponse<InitiateResult>>(
       '/api/mf-cas-mailback/initiate',

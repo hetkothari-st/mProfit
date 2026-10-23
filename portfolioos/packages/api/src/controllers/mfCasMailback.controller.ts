@@ -5,6 +5,7 @@ import {
   submitMailbackJob,
   getMailbackJob,
   listMailbackJobs,
+  getMailbackPan,
 } from '../services/mf/mfCasMailback/mfCasMailback.service.js';
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
@@ -16,7 +17,9 @@ const initiateSchema = z.object({
     .string()
     .trim()
     .toUpperCase()
-    .regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, 'Invalid PAN'),
+    .regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, 'Invalid PAN')
+    // Omitted by the web app: the server uses the effective profile's PAN.
+    .optional(),
   email: z.string().email().max(120),
   portfolioId: z.string().nullable().optional(),
   periodFrom: isoDate.nullable().optional(),
@@ -63,4 +66,10 @@ export async function listJobs(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const rows = await listMailbackJobs(req.user.id);
   ok(res, rows);
+}
+
+/** The masked PAN a mailback will use — the effective (acted-for) profile's. */
+export async function getPan(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  ok(res, await getMailbackPan(req.user.id));
 }

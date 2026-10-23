@@ -44,6 +44,12 @@ async function resolvePortfolioId(
   return def.id;
 }
 
+function maskEmail(s: string): string {
+  const [local, domain] = s.split('@');
+  if (!local || !domain) return s;
+  return `${local.slice(0, 3)}${'X'.repeat(Math.max(1, local.length - 3))}@${domain}`;
+}
+
 function txnHash(pan: string, schemeKey: string, t: MfTxn): string {
   return createHash('sha256')
     .update(
@@ -329,6 +335,9 @@ export interface KfintechMailbackInput {
   email: string;
   fromDate?: string | null;
   toDate?: string | null;
+  /** Where the CAS lands when it arrives by Gmail; null = default portfolio. */
+  portfolioId?: string | null;
+  nickname?: string | null;
 }
 
 export interface KfintechMailbackResult {
@@ -350,6 +359,13 @@ export async function kfintechMailbackRequest(
   const fromDate = input.fromDate ?? '1990-01-01';
   const toDate = input.toDate ?? new Date().toISOString().slice(0, 10);
 
+  // Validate the target before spending a credit on the request. Null stays
+  // null: "Default" means whatever the default portfolio is when the PDF
+  // arrives, not the one that happened to be default now.
+  const portfolioId = input.portfolioId
+    ? await resolvePortfolioId(input.userId, input.portfolioId)
+    : null;
+
   try {
     const r = await kfintechGenerate({
       pan,
@@ -357,6 +373,27 @@ export async function kfintechMailbackRequest(
       from_date: fromDate,
       to_date: toDate,
       password: pan,
+    });
+
+    // The CAS arrives later, by email, with nothing in it that says which
+    // portfolio or nickname the user picked. Record the request so the Gmail
+    // import can route the statement (`casMailbackTarget`) and the request
+    // shows in the mailback history with its nickname.
+    await prisma.mFCasMailbackJob.create({
+      data: {
+        userId: input.userId,
+        portfolioId,
+        panLast4: pan.slice(-4),
+        emailMasked: maskEmail(input.email),
+        periodFrom: new Date(`${fromDate}T00:00:00.000Z`),
+        periodTo: new Date(`${toDate}T00:00:00.000Z`),
+        nickname: input.nickname?.trim() || null,
+        camsStatus: 'NOT_REQUESTED',
+        kfintechStatus: 'SUBMITTED',
+        kfintechRequestRef: typeof r.request_id === 'string' ? r.request_id : null,
+        status: 'SUBMITTED',
+        submittedAt: new Date(),
+      },
     });
 
     // Auto-add the KFintech CAS sender addresses to the user's MonitoredSender
