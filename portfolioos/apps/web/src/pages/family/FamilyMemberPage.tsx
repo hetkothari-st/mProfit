@@ -39,6 +39,7 @@ import {
   ScopeRestrictedNotice,
 } from './widgets/RestrictedNotice';
 import { isPositiveMoney, moneySign, moneyToNumber } from './widgets/money';
+import { MemberDetailError } from './widgets/MemberDetailError';
 
 /**
  * ONE member of the household, in full — the page behind a name in the family
@@ -223,11 +224,7 @@ export function FamilyMemberPage() {
     return (
       <div className="space-y-6">
         <BackLink />
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-negative">
-            Couldn&apos;t load this member. You may no longer have permission to see them.
-          </CardContent>
-        </Card>
+        <MemberDetailError error={detailQuery.error} />
       </div>
     );
   }
