@@ -41,12 +41,23 @@ import {
 import { EmptyState } from '@/components/common/EmptyState';
 
 import { signOf } from '@/lib/signTone';
+import { readBrokerOauthMessage } from '@/lib/brokerOauthMessage';
+import { todayLocal } from '@/lib/localDate';
 type BrokerId = 'zerodha' | 'upstox' | 'angel';
 
 const BROKER_LABEL: Record<BrokerId, string> = {
   zerodha: 'Kite (Zerodha)',
   upstox: 'Upstox',
   angel: 'Angel One',
+};
+
+// Whether the API has a trade-sync connector for the broker
+// (packages/api/src/ingestion/fno/broker-registry.ts). A broker without one
+// can still be connected, but shows "connect only" instead of a sync action.
+const SYNC_SUPPORTED: Record<BrokerId, boolean> = {
+  zerodha: true,
+  upstox: true,
+  angel: true,
 };
 
 const BROKER_HELP: Record<BrokerId, string> = {
@@ -253,8 +264,8 @@ export function FuturesOptionsPage() {
   const syncMut = useMutation({
     mutationFn: (brokerId: BrokerId) =>
       foApi.syncBroker(brokerId, portfolioId!).then((r) => r.data?.data),
-    onSuccess: (r) => {
-      toast.success(`Synced — ${r?.tradesIngested ?? 0} new trades`);
+    onSuccess: (r, brokerId) => {
+      toast.success(`${BROKER_LABEL[brokerId]} synced — ${r?.tradesIngested ?? 0} new trades`);
       queryClient.invalidateQueries({ queryKey: ['fo'] });
     },
     onError: (err, brokerId) => {
@@ -275,6 +286,26 @@ export function FuturesOptionsPage() {
       toast.error(apiErrorMessage(err, `Sync ${brokerId} failed`));
     },
   });
+
+  // Every connected broker that can sync. With none set up yet, the header
+  // button opens the connect dialog and syncs once credentials are saved.
+  const syncableBrokers = (brokerStatusQ.data ?? [])
+    .filter((st) => st.configured)
+    .map((st) => st.brokerId)
+    .filter((b): b is BrokerId => !!b && SYNC_SUPPORTED[b]);
+
+  const syncAllBrokers = async () => {
+    if (syncableBrokers.length === 0) {
+      setConnect({ broker: 'zerodha', resumeSync: true });
+      return;
+    }
+    // One at a time so each broker's own toast / login prompt is clear.
+    for (const b of syncableBrokers) {
+      // syncMut's onError already told the user (and may have opened a
+      // login popup); a failure here must not stop the remaining brokers.
+      await syncMut.mutateAsync(b).catch(() => undefined);
+    }
+  };
 
   const approveMut = useMutation({
     mutationFn: (id: string) => foApi.approveExpiry(id),
@@ -326,6 +357,8 @@ export function FuturesOptionsPage() {
                   queryClient.invalidateQueries({ queryKey: ['fo', 'broker-status'] }),
                 )
               }
+              onSync={(b) => syncMut.mutate(b)}
+              syncDisabled={!portfolioId || syncMut.isPending}
               onDisconnect={async (b) => {
                 if (!confirm(`Disconnect ${BROKER_LABEL[b]}?`)) return;
                 try {
@@ -340,10 +373,21 @@ export function FuturesOptionsPage() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => syncMut.mutate('zerodha')}
+              onClick={() => void syncAllBrokers()}
               disabled={!portfolioId || syncMut.isPending}
+              title={
+                syncableBrokers.length > 0
+                  ? `Pull today's trades from ${syncableBrokers.map((b) => BROKER_LABEL[b]).join(', ')}`
+                  : 'Connect a broker to sync trades'
+              }
             >
-              {syncMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sync Kite'}
+              {syncMut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : syncableBrokers.length === 1 ? (
+                `Sync ${BROKER_LABEL[syncableBrokers[0]!]}`
+              ) : (
+                'Sync brokers'
+              )}
             </Button>
             <LiveStatusChip status={liveStatus} pending={liveRefreshMut.isPending} />
             <Button
@@ -618,18 +662,27 @@ function SideArrow({ qty }: { qty: string }) {
   );
 }
 
-function StatusPill({ status }: { status: FoPosition['status'] }) {
+function StatusPill({ status, expiryDate }: { status: FoPosition['status']; expiryDate: string }) {
+  // An OPEN position past its expiry is one whose expiry close the user
+  // rejected (or that had no settlement price): it needs the closing trade
+  // recorded by hand, so say so instead of looking like a live position.
+  const pastExpiry = status === 'OPEN' && expiryDate.slice(0, 10) < todayLocal();
   const cls =
-    status === 'OPEN'
+    pastExpiry
+      ? 'bg-amber-100 text-amber-700 ring-amber-200/60 dark:bg-amber-900/40 dark:text-amber-300 dark:ring-amber-700/40'
+      : status === 'OPEN'
       ? 'bg-emerald-100 text-emerald-700 ring-emerald-200/60 dark:bg-emerald-900/40 dark:text-emerald-300 dark:ring-emerald-700/40'
       : status === 'PENDING_EXPIRY_APPROVAL'
         ? 'bg-amber-100 text-amber-700 ring-amber-200/60 dark:bg-amber-900/40 dark:text-amber-300 dark:ring-amber-700/40'
         : status === 'EXPIRED_WORTHLESS'
           ? 'bg-zinc-200 text-zinc-700 ring-zinc-300/60 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-700/40'
           : 'bg-zinc-100 text-zinc-700 ring-zinc-300/60 dark:bg-zinc-800/70 dark:text-zinc-300 dark:ring-zinc-700/40';
-  const label = status === 'PENDING_EXPIRY_APPROVAL' ? 'EXPIRY ?' : status;
+  const label = pastExpiry ? 'OPEN · EXPIRED' : status === 'PENDING_EXPIRY_APPROVAL' ? 'EXPIRY ?' : status;
   return (
-    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ring-1 ${cls}`}>
+    <span
+      className={`text-[10px] font-medium px-1.5 py-0.5 rounded ring-1 ${cls}`}
+      title={pastExpiry ? 'Past expiry and still open — add the closing trade' : undefined}
+    >
       {label}
     </span>
   );
@@ -761,27 +814,6 @@ function ContractTrades({ trades }: { trades: FoTrade[] }) {
   );
 }
 
-/* ───────────────────── Per-underlying expandable activity ────────────────
-   Drill-down per underlying. Each card is a tappable summary; expanding it
-   reveals every transaction we have on file for that underlying. Position
-   details already live in the Futures Ledger / Options Chain above, so the
-   body here intentionally focuses on the *transactions* the user wanted
-   back. */
-
-interface UnderlyingActivityGroup {
-  underlying: string;
-  positions: FoPosition[];
-  trades: FoTrade[];
-  futCount: number;
-  ceCount: number;
-  peCount: number;
-  openCount: number;
-  closedCount: number;
-  totalCost: Decimal;
-  realizedPnl: Decimal;
-  unrealizedPnl: Decimal;
-}
-
 /** Extract the underlying ticker from a trade's full instrument string.
  *  Handles both spaced ("NIFTY 25000 CE 28-APR-2026") and concatenated
  *  ("NIFTY27NOV2525500CE") forms by grabbing the leading run of letters. */
@@ -791,231 +823,6 @@ function tradeUnderlyingOf(t: FoTrade): string {
   const m = name.match(/^([A-Za-z]+)/);
   const head = m?.[1] ?? name.split(/\s+/)[0] ?? 'UNKNOWN';
   return head.toUpperCase();
-}
-
-function groupUnderlyings(
-  positions: FoPosition[],
-  trades: FoTrade[],
-): UnderlyingActivityGroup[] {
-  const map = new Map<string, UnderlyingActivityGroup>();
-  function ensure(u: string): UnderlyingActivityGroup {
-    let g = map.get(u);
-    if (!g) {
-      g = {
-        underlying: u,
-        positions: [],
-        trades: [],
-        futCount: 0,
-        ceCount: 0,
-        peCount: 0,
-        openCount: 0,
-        closedCount: 0,
-        totalCost: new Decimal(0),
-        realizedPnl: new Decimal(0),
-        unrealizedPnl: new Decimal(0),
-      };
-      map.set(u, g);
-    }
-    return g;
-  }
-  for (const p of positions) {
-    const g = ensure(p.underlying);
-    g.positions.push(p);
-    if (p.totalCost) g.totalCost = g.totalCost.plus(toDecimal(p.totalCost));
-    if (p.realizedPnl) g.realizedPnl = g.realizedPnl.plus(toDecimal(p.realizedPnl));
-    if (p.unrealizedPnl) g.unrealizedPnl = g.unrealizedPnl.plus(toDecimal(p.unrealizedPnl));
-    if (p.instrumentType === 'FUTURES') g.futCount++;
-    else if (p.instrumentType === 'CALL') g.ceCount++;
-    else if (p.instrumentType === 'PUT') g.peCount++;
-    if (p.status === 'OPEN' || p.status === 'PENDING_EXPIRY_APPROVAL') g.openCount++;
-    else g.closedCount++;
-  }
-  for (const t of trades) {
-    const g = ensure(tradeUnderlyingOf(t));
-    g.trades.push(t);
-  }
-  return [...map.values()].sort((a, b) => {
-    const e = b.totalCost.abs().comparedTo(a.totalCost.abs());
-    if (e !== 0) return e;
-    return b.openCount - a.openCount;
-  });
-}
-
-function UnderlyingActivity({
-  positions,
-  trades,
-}: {
-  positions: FoPosition[];
-  trades: FoTrade[];
-}) {
-  const groups = useMemo(() => groupUnderlyings(positions, trades), [positions, trades]);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  if (groups.length === 0) return null;
-
-  function toggle(u: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(u)) next.delete(u);
-      else next.add(u);
-      return next;
-    });
-  }
-
-  return (
-    <Card className="overflow-hidden border-border">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-border bg-gradient-to-r from-muted/40 via-card to-muted/40 dark:from-muted/30 dark:via-card dark:to-muted/30">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-accent">
-            Underlying Activity
-          </span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            {groups.length} {groups.length === 1 ? 'underlying' : 'underlyings'} · click to expand
-          </span>
-        </div>
-      </div>
-      <div className="divide-y divide-border">
-        {groups.map((g) => (
-          <UnderlyingRow
-            key={g.underlying}
-            group={g}
-            isOpen={expanded.has(g.underlying)}
-            onToggle={() => toggle(g.underlying)}
-          />
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-function UnderlyingRow({
-  group,
-  isOpen,
-  onToggle,
-}: {
-  group: UnderlyingActivityGroup;
-  isOpen: boolean;
-  onToggle: () => void;
-}) {
-  const netPnl = group.realizedPnl.plus(group.unrealizedPnl);
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors text-left"
-      >
-        <div className="flex items-center gap-3">
-          <span className="text-muted-foreground">
-            {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </span>
-          <span className="font-semibold tracking-wide text-foreground">{group.underlying}</span>
-          <div className="flex items-center gap-1 flex-wrap">
-            {group.futCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-foreground/80 ring-1 ring-border">
-                <Layers className="h-2.5 w-2.5" /> FUT × {group.futCount}
-              </span>
-            )}
-            {group.ceCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/60 dark:bg-emerald-900/40 dark:text-emerald-300 dark:ring-emerald-700/40">
-                <ArrowUpRight className="h-2.5 w-2.5" /> CE × {group.ceCount}
-              </span>
-            )}
-            {group.peCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 ring-1 ring-rose-200/60 dark:bg-rose-900/40 dark:text-rose-300 dark:ring-rose-700/40">
-                <ArrowDownRight className="h-2.5 w-2.5" /> PE × {group.peCount}
-              </span>
-            )}
-          </div>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            <span className="text-emerald-700 dark:text-emerald-400 font-medium">{group.openCount} open</span>
-            {group.closedCount > 0 && <> · {group.closedCount} closed</>}
-            {group.trades.length > 0 && <> · {group.trades.length} txns</>}
-          </span>
-        </div>
-        <div className="flex items-center gap-x-5 gap-y-1 flex-wrap text-xs">
-          <Stat label="Exposure" value={fmtINR(group.totalCost.abs().toString())} />
-          <Stat label="Realized" value={fmtINR(group.realizedPnl.toString())} accent={pnlClass(group.realizedPnl.toString())} />
-          <Stat label="Unrealized" value={fmtINR(group.unrealizedPnl.toString())} accent={pnlClass(group.unrealizedPnl.toString())} />
-          <Stat label="Net P&L" value={fmtINR(netPnl.toString())} accent={pnlClass(netPnl.toString())} bold />
-        </div>
-      </button>
-      {isOpen && (
-        <div className="bg-muted/20 dark:bg-muted/10 border-t border-border px-4 py-3">
-          <UnderlyingTrades trades={group.trades} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function UnderlyingTrades({ trades }: { trades: FoTrade[] }) {
-  if (trades.length === 0) {
-    return (
-      <div>
-        <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-muted-foreground mb-1.5">
-          Transactions
-        </div>
-        <div className="text-xs text-muted-foreground italic">
-          No transactions on file for this underlying.
-        </div>
-      </div>
-    );
-  }
-  const sorted = [...trades].sort((a, b) => b.tradeDate.localeCompare(a.tradeDate));
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-muted-foreground mb-2">
-        Transactions ({trades.length})
-      </div>
-      <div className="overflow-x-auto -mx-2 sm:mx-0 rounded border border-border bg-card">
-        <table className="w-full min-w-[600px] text-xs">
-          <thead className="bg-muted/40 dark:bg-muted/20">
-            <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-              <th className="text-left pl-3 pr-2 py-1.5 font-semibold">Date</th>
-              <th className="text-left px-2 py-1.5 font-semibold">Side</th>
-              <th className="text-left px-2 py-1.5 font-semibold">Instrument</th>
-              <th className="text-right px-2 py-1.5 font-semibold">Strike</th>
-              <th className="text-left px-2 py-1.5 font-semibold">Expiry</th>
-              <th className="text-right px-2 py-1.5 font-semibold">Qty</th>
-              <th className="text-right px-2 py-1.5 font-semibold">Price</th>
-              <th className="text-right px-2 py-1.5 font-semibold">Net</th>
-              <th className="text-left px-2 py-1.5 font-semibold">Broker</th>
-            </tr>
-          </thead>
-          <tbody className="font-mono">
-            {sorted.map((t) => (
-              <tr
-                key={t.id}
-                className="border-t border-border/70 hover:bg-muted/40 dark:hover:bg-muted/20 transition-colors"
-              >
-                <td data-label="Date" className="pl-3 pr-2 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">
-                  <span className="text-accent/60 mr-1.5">▸</span>
-                  {formatDateOnly(t.tradeDate)}
-                </td>
-                <td data-label="Side" className="px-2 py-1.5 font-sans">
-                  <SideTagBadge side={t.transactionType} />
-                </td>
-                <td data-label="Instrument" className="px-2 py-1.5 sm:truncate max-w-[260px] text-[11px] min-w-0 break-words">{t.assetName ?? '—'}</td>
-                <td data-label="Strike" className="px-2 py-1.5 text-right tabular-nums">{t.strikePrice ?? '—'}</td>
-                <td data-label="Expiry" className="px-2 py-1.5 whitespace-nowrap text-muted-foreground tabular-nums">
-                  {t.expiryDate ?? '—'}
-                </td>
-                <td data-label="Qty" className="px-2 py-1.5 text-right tabular-nums">{t.quantity}</td>
-                <td data-label="Price" className="px-2 py-1.5 text-right tabular-nums">{fmtINR(t.price)}</td>
-                <td data-label="Net" className="px-2 py-1.5 text-right tabular-nums font-semibold">
-                  {fmtINR(t.netAmount)}
-                </td>
-                <td data-label="Broker" className="px-2 py-1.5 text-[11px] text-muted-foreground font-sans">
-                  {t.broker ?? '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
 }
 
 /* ───────────────────────────── Futures Ledger ───────────────────────────── */
@@ -1190,7 +997,7 @@ function FuturesLedger({
                     {p.unrealizedPnl ? fmtINR(p.unrealizedPnl) : '—'}
                   </td>
                   <td data-label="Status" className="px-3 py-2.5 font-sans">
-                    <StatusPill status={p.status} />
+                    <StatusPill status={p.status} expiryDate={p.expiryDate} />
                   </td>
                 </tr>
                 {isOpen && (
@@ -1402,7 +1209,7 @@ function OptionsChain({
                     {p.unrealizedPnl ? fmtINR(p.unrealizedPnl) : '—'}
                   </td>
                   <td data-label="Status" className="px-3 py-2.5 font-sans">
-                    <StatusPill status={p.status} />
+                    <StatusPill status={p.status} expiryDate={p.expiryDate} />
                   </td>
                 </tr>
                 {isOpen && (
@@ -1697,11 +1504,15 @@ function BrokerStatusChips({
   statuses,
   onConnect,
   onLogin,
+  onSync,
+  syncDisabled,
   onDisconnect,
 }: {
   statuses: BrokerStatus[];
   onConnect: (b: BrokerId) => void;
   onLogin: (b: BrokerId) => void;
+  onSync: (b: BrokerId) => void;
+  syncDisabled: boolean;
   onDisconnect: (b: BrokerId) => void;
 }) {
   if (statuses.length === 0) {
@@ -1731,6 +1542,19 @@ function BrokerStatusChips({
             {s.configured && !s.connected && (
               <button type="button" className="underline" onClick={() => onLogin(b)}>
                 login
+              </button>
+            )}
+            {s.configured && !SYNC_SUPPORTED[b] && (
+              <span className="opacity-70">connect only — sync not available yet</span>
+            )}
+            {s.configured && s.connected && SYNC_SUPPORTED[b] && (
+              <button
+                type="button"
+                className="underline disabled:opacity-50"
+                onClick={() => onSync(b)}
+                disabled={syncDisabled}
+              >
+                sync
               </button>
             )}
             {s.configured && s.connected && (
@@ -1784,15 +1608,17 @@ async function launchBrokerLogin(brokerId: BrokerId, onSuccess?: () => void): Pr
   await new Promise<void>((resolve) => {
     let done = false;
     const onMsg = (ev: MessageEvent) => {
-      const d = ev.data as { type?: string; payload?: { ok?: boolean; brokerId?: string; error?: string } } | undefined;
-      if (!d || d.type !== 'broker_oauth_result') return;
+      // Only the popup we opened, on the API's callback origin, may report
+      // the login result — see lib/brokerOauthMessage.
+      const result = readBrokerOauthMessage(ev, popup);
+      if (!result) return;
       done = true;
       window.removeEventListener('message', onMsg);
-      if (d.payload?.ok) {
+      if (result.ok) {
         toast.success(`${BROKER_LABEL[brokerId]} login complete`);
         onSuccess?.();
       } else {
-        toast.error(d.payload?.error ?? 'Login failed');
+        toast.error(result.error ?? 'Login failed');
       }
       resolve();
     };
