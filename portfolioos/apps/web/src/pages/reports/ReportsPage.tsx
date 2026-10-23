@@ -16,9 +16,12 @@ import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
-import { portfoliosApi } from '@/api/portfolios.api';
+import { useReportablePortfolios } from '@/hooks/useReportablePortfolios';
+import { apiErrorMessage } from '@/api/client';
+import { errorFromResponse } from '@/lib/reportDownloads';
+import toast from 'react-hot-toast';
 import { reportsApi } from '@/api/reports.api';
-import { useReportSubject } from '@/components/reports/useReportSubject';
+import { useReportSubject, type UseReportSubject } from '@/components/reports/useReportSubject';
 import { DataQualityBanner } from '@/components/reports/DataQualityBanner';
 import { useAuthStore } from '@/stores/auth.store';
 import { InboxImportsTab } from './InboxImportsTab';
@@ -203,10 +206,11 @@ export function ReportsPage() {
     setHighlight(item.reportKey ? { key: item.reportKey, ts: Date.now() } : null);
   };
 
-  const { data: portfolios } = useQuery({
-    queryKey: ['portfolios'],
-    queryFn: () => portfoliosApi.list(),
-  });
+  // Only the books these report endpoints serve — the caller's own. In a
+  // family view the full list also carries other members' portfolios, which
+  // the endpoints refuse (403 → an empty tab). Other members' figures come
+  // through "Report for".
+  const { data: portfolios } = useReportablePortfolios();
 
   const summaryQ = useQuery({
     queryKey: ['report-summary', portfolioId],
@@ -275,7 +279,7 @@ export function ReportsPage() {
     // Authorization header cannot be sent via window.open; fetch + save as blob
     fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
       .then(async (r) => {
-        if (!r.ok) throw new Error(await r.text());
+        if (!r.ok) throw await errorFromResponse(r);
         const blob = await r.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -283,7 +287,7 @@ export function ReportsPage() {
         a.click();
         URL.revokeObjectURL(a.href);
       })
-      .catch((e) => alert(e.message ?? 'Download failed'));
+      .catch((e) => toast.error(apiErrorMessage(e, 'Download failed')));
   };
 
   const needsFy =
@@ -390,6 +394,7 @@ export function ReportsPage() {
           {tab === 'summary' && <SummaryView data={summaryQ.data} loading={summaryQ.isLoading} />}
           {tab === 'statements' && (
             <StatementsView
+              reportSubject={reportSubject}
               portfolioId={portfolioId}
               fy={fy}
               accessToken={accessToken}
@@ -975,14 +980,22 @@ function HistoricalView({
 // the user doesn't have to re-pick.
 
 interface StatementsViewProps {
+  /**
+   * The page's "Report for" selection. It used to be a second, private
+   * `useReportSubject()` here that always said "Me", so a member chosen at the
+   * top of the page was silently ignored by these downloads.
+   */
+  reportSubject: UseReportSubject;
   portfolioId: string;
   fy: string;
   accessToken: string | null;
   highlight?: ReportHighlight | null;
 }
 
-function StatementsView({ portfolioId, fy, accessToken, highlight }: StatementsViewProps) {
-  const reportSubject = useReportSubject();
+function StatementsView({ reportSubject, portfolioId, fy, accessToken, highlight }: StatementsViewProps) {
+  // A member's (or the household's) statement covers all of their portfolios:
+  // the picker lists the caller's own books, which cannot narrow anyone else's.
+  const ids = reportSubject.subject === 'self' ? [portfolioId] : ['all'];
   const [busy, setBusy] = useState<string | null>(null);
   const [flashKey, setFlashKey] = useState<string | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -999,7 +1012,7 @@ function StatementsView({ portfolioId, fy, accessToken, highlight }: StatementsV
 
   async function fetchAndSave(url: string, suggestedFilename: string, key: string) {
     if (!accessToken) {
-      alert('Not signed in');
+      toast.error('Not signed in');
       return;
     }
     setBusy(key);
@@ -1007,7 +1020,7 @@ function StatementsView({ portfolioId, fy, accessToken, highlight }: StatementsV
       const r = await fetch(reportSubject.appendTo(url), {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) throw await errorFromResponse(r);
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -1015,17 +1028,17 @@ function StatementsView({ portfolioId, fy, accessToken, highlight }: StatementsV
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) {
-      alert((e as Error).message ?? 'Download failed');
+      toast.error(apiErrorMessage(e, 'Download failed'));
     } finally {
       setBusy(null);
     }
   }
 
   const buildUrlByKey: Record<string, (format: 'pdf' | 'xlsx') => string> = {
-    holdings: (format) => reportsApi.statementHoldingsUrl(format, [portfolioId]),
-    'capital-gains': (format) => reportsApi.statementCapitalGainsUrl(format, [portfolioId], 'all', fy),
-    income: (format) => reportsApi.statementIncomeUrl(format, [portfolioId], fy),
-    ledger: (format) => reportsApi.statementLedgerUrl(format, [portfolioId]),
+    holdings: (format) => reportsApi.statementHoldingsUrl(format, ids),
+    'capital-gains': (format) => reportsApi.statementCapitalGainsUrl(format, ids, 'all', fy),
+    income: (format) => reportsApi.statementIncomeUrl(format, ids, fy),
+    ledger: (format) => reportsApi.statementLedgerUrl(format, ids),
   };
   const fyDependentByKey: Record<string, boolean> = {
     holdings: false,

@@ -112,7 +112,7 @@ export const ANALYTICS_INFO = {
     title: 'Concentration',
     body: [
       'Your largest holdings by current value, each as a share of the portfolio, with a running total ("cum").',
-      'When a few holdings make up most of your money — above 60% is flagged — a fall in any one of them hits the whole portfolio hard.',
+      'When your three largest holdings together are more than 60% of the portfolio, the card flags it — a fall in any one of them hits the whole portfolio hard.',
     ],
   },
   xirrByClass: {

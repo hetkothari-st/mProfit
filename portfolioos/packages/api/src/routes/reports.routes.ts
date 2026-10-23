@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
-import { requireFeature } from '../middleware/requirePlan.js';
+import { requireFeatureForSubject } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
 import {
   getSummary,
@@ -82,8 +82,13 @@ reportsRouter.use(authenticate);
 // (Plus) or ACCOUNTING_MODULE (Pro/Advisor) for the accounting-specific
 // exports. The non-download endpoints above (/summary, /xirr, /statement/*,
 // etc.) power the core dashboard and stay ungated for every tier.
-const gateTax = requireFeature('TAX_REPORT_CATALOG');
-const gateAccounting = requireFeature('ACCOUNTING_MODULE');
+//
+// The gates follow whoever the report is FOR: a professional acting under a
+// client's grant is gated on the client's plan (or their own), never refused
+// merely because they themselves are on a lower tier — see
+// `requireFeatureForSubject`.
+const gateTax = requireFeatureForSubject('TAX_REPORT_CATALOG');
+const gateAccounting = requireFeatureForSubject('ACCOUNTING_MODULE');
 reportsRouter.get('/summary', asyncHandler(getSummary));
 reportsRouter.get('/intraday', asyncHandler(getIntraday));
 reportsRouter.get('/stcg', asyncHandler(getStcg));

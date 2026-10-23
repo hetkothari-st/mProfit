@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/api/client';
+import { errorFromResponse } from '@/lib/reportDownloads';
 import { FileDown, Loader2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -61,7 +64,7 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
       const r = await fetch(`${getApiBaseUrl()}${path}${sep}theme=${currentReportTheme()}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) throw await errorFromResponse(r);
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -69,7 +72,7 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) {
-      alert((e as Error).message || 'Download failed');
+      toast.error(apiErrorMessage(e, 'Download failed'));
     } finally {
       setBusy(null);
     }
@@ -86,7 +89,7 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
 
       const url = `${getApiBaseUrl()}/api/reports/download/${report.endpoint}?${params.toString()}`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-      if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) throw await errorFromResponse(r);
 
       const blob = await r.blob();
       const a = document.createElement('a');
@@ -96,7 +99,7 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) {
-      alert((e as Error).message || 'Download failed');
+      toast.error(apiErrorMessage(e, 'Download failed'));
     } finally {
       setBusy(null);
     }

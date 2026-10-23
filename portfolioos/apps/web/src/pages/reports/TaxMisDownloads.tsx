@@ -6,6 +6,9 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/api/client';
+import { errorFromResponse } from '@/lib/reportDownloads';
 import { Link } from 'react-router-dom';
 import { Loader2, FileDown, FileText, Sparkles, ArrowRight } from 'lucide-react';
 import { meetsMinTier, type PlanTierValue } from '@everypaisa/shared';
@@ -549,7 +552,7 @@ export function TaxMisDownloads({
 
   async function download(report: ReportDef, format: 'pdf' | 'xlsx' | 'xml' | 'zip') {
     if (!accessToken) {
-      alert('Not signed in');
+      toast.error('Not signed in');
       return;
     }
     setBusy(`${report.key}-${format}`);
@@ -564,7 +567,7 @@ export function TaxMisDownloads({
       for (const [k, v] of Object.entries(reportSubject.params)) params.set(k, v);
       const url = `${getApiBaseUrl()}/api/reports/download/${report.endpoint}?${params.toString()}`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-      if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) throw await errorFromResponse(r);
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -574,7 +577,7 @@ export function TaxMisDownloads({
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) {
-      alert((e as Error).message ?? 'Download failed');
+      toast.error(apiErrorMessage(e, 'Download failed'));
     } finally {
       setBusy(null);
     }

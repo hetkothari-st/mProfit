@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnalyticsPage } from './AnalyticsPage';
 import type { AnalyticsSnapshot } from '@/api/analytics.api';
+import { useAuthStore } from '@/stores/auth.store';
 
 // jsdom has no ResizeObserver; recharts and Radix both want one.
 if (!('ResizeObserver' in globalThis)) {
@@ -28,7 +29,11 @@ const api = vi.hoisted(() => ({
 vi.mock('@/api/analytics.api', () => ({ analyticsApi: api }));
 vi.mock('@/api/portfolios.api', () => ({
   portfoliosApi: {
-    list: vi.fn().mockResolvedValue([{ id: 'pf-1', name: 'My Portfolio' }]),
+    // In a family view the list also carries other members' books.
+    list: vi.fn().mockResolvedValue([
+      { id: 'pf-1', userId: 'u1', name: 'My Portfolio' },
+      { id: 'pf-spouse', userId: 'u2', name: "Spouse's Portfolio" },
+    ]),
     holdings: vi.fn().mockResolvedValue([]),
   },
 }));
@@ -70,6 +75,7 @@ const snapshot = {
 } as unknown as AnalyticsSnapshot;
 
 beforeEach(() => {
+  useAuthStore.setState({ user: { id: 'u1', plan: 'FREE' } as never });
   api.snapshot.mockResolvedValue(snapshot);
   api.risk.mockResolvedValue({
     volatilityPct: 12, sharpe: 0.8, maxDrawdownPct: 18, betaVsNifty: 0.9, observations: 24,
@@ -163,5 +169,17 @@ describe('AnalyticsPage detail tab', () => {
     await screen.findByText('Capital gains by FY');
     expect(screen.queryByText('Sharpe ratio')).toBeNull();
     expect(screen.queryByText('Beta vs NIFTY')).toBeNull();
+  });
+});
+
+describe('AnalyticsPage portfolio picker', () => {
+  // The analytics API serves only the caller's own portfolios; listing a
+  // family member's book led to a 403 and an empty page.
+  it("offers only the caller's own portfolios", async () => {
+    renderPage();
+    await screen.findByText('Current value');
+    expect(screen.getByRole('option', { name: 'My Portfolio' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: "Spouse's Portfolio" })).toBeNull();
+    expect(screen.getByRole('option', { name: 'All portfolios (1)' })).toBeTruthy();
   });
 });

@@ -40,8 +40,12 @@ async function taxSubject(req: Request): Promise<string> {
   return requireSingleSubject(resolved, 'A tax report').userId;
 }
 
-/** Run a tax read as the member it is about, so RLS returns their rows. */
-async function asSubject<T>(req: Request, fn: (userId: string) => Promise<T>): Promise<T> {
+/**
+ * Run a tax read as the member it is about, so RLS returns their rows.
+ * Exported for the FMV controller's 112A download, which must follow the same
+ * "Download reports for" selection and the same permission checks.
+ */
+export async function asSubject<T>(req: Request, fn: (userId: string) => Promise<T>): Promise<T> {
   const userId = await taxSubject(req);
   return runAsUser(userId, () => fn(userId));
 }

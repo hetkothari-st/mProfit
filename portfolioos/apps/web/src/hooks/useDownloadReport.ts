@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuthStore } from '@/stores/auth.store';
 import { getApiBaseUrl } from '@/api/baseUrl';
 import { currentReportTheme } from '@/lib/reportTheme';
+import { errorFromResponse } from '@/lib/reportDownloads';
 
 export type ReportFormat = 'pdf' | 'xlsx';
 
@@ -38,10 +39,8 @@ export function useDownloadReport() {
       const r = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!r.ok) {
-        const msg = await r.text().catch(() => 'Download failed');
-        throw new Error(msg);
-      }
+      // The server's message, not its raw JSON envelope.
+      if (!r.ok) throw await errorFromResponse(r);
       const blob = await r.blob();
       const a = document.createElement('a');
       const objectUrl = URL.createObjectURL(blob);

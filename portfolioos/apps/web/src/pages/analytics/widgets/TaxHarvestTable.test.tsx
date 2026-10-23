@@ -75,3 +75,16 @@ describe('ConcentrationCard headline', () => {
     expect(screen.getByText(/Your top 3 holdings are/)).toBeTruthy();
   });
 });
+
+describe('ConcentrationCard flag', () => {
+  // The help text promises a flag above 60%; there was none.
+  it('flags when the top three holdings pass 60%', () => {
+    render(<ConcentrationCard rows={conc([['Reliance', 30, 30], ['TCS', 20, 50], ['Infosys', 15, 65], ['ITC', 5, 70]])} />);
+    expect(screen.getByText(/Concentrated/)).toBeTruthy();
+  });
+
+  it('stays quiet for a spread portfolio', () => {
+    render(<ConcentrationCard rows={conc([['A', 20, 20], ['B', 18, 38], ['C', 15, 53], ['D', 10, 63]])} />);
+    expect(screen.queryByText(/Concentrated/)).toBeNull();
+  });
+});

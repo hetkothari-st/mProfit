@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { FileDown, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,7 +11,9 @@ import {
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/cn';
-import { portfoliosApi } from '@/api/portfolios.api';
+import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/api/client';
+import { useReportablePortfolios } from '@/hooks/useReportablePortfolios';
 import { useDownloadReport, type ReportFormat } from '@/hooks/useDownloadReport';
 import { useThemeStore } from '@/stores/theme.store';
 import { useReportSubject } from './useReportSubject';
@@ -47,11 +48,13 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
   const { download, loading }     = useDownloadReport();
   const reportSubject             = useReportSubject();
 
-  const { data: portfolios } = useQuery({
-    queryKey: ['portfolios'],
-    queryFn: () => portfoliosApi.list(),
-    staleTime: 60_000,
-  });
+  // Only the caller's own books: in a family view the full list also carries
+  // other members' portfolios, which the export refuses for a self report.
+  const { data: portfolios } = useReportablePortfolios();
+  // A report about someone else always spans all of THEIR portfolios — the
+  // picker lists the caller's books, which can never narrow a member's report.
+  const forOther = reportSubject.subject !== 'self';
+  const onError = (err: unknown) => toast.error(apiErrorMessage(err, 'Download failed'));
 
   const isDashboard = type === 'dashboard';
   const isSection   = (SECTION_TYPES as string[]).includes(type);
@@ -76,12 +79,12 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
         {
           format,
           theme,
-          scope,
-          ...(scope === 'single' && portfolioId ? { portfolioId } : {}),
+          scope: forOther ? 'all' : scope,
+          ...(!forOther && scope === 'single' && portfolioId ? { portfolioId } : {}),
           ...reportSubject.params,
         },
         filename,
-      ).then(() => setOpen(false)).catch(err => alert(String(err)));
+      ).then(() => setOpen(false)).catch(onError);
       return;
     }
 
@@ -90,13 +93,16 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
         '/api/reports/section-export',
         { format, theme, section: type, ...reportSubject.params },
         filename,
-      ).then(() => setOpen(false)).catch(err => alert(String(err)));
+      ).then(() => setOpen(false)).catch(onError);
       return;
     }
 
-    // Holdings report
-    const resolvedIds = portfolioId === '' || portfolioId === 'all'
-      ? (portfolios?.map(p => p.id) ?? [])
+    // Holdings report. "All portfolios" is sent as the `all` token, which the
+    // server resolves against whoever the report is about. Sending every id
+    // in the list used to include other members' books in a family view and
+    // was refused outright.
+    const resolvedIds = forOther || portfolioId === '' || portfolioId === 'all'
+      ? ['all']
       : [portfolioId];
 
     download(
@@ -109,7 +115,7 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
         ...reportSubject.params,
       },
       filename,
-    ).then(() => setOpen(false)).catch(err => alert(String(err)));
+    ).then(() => setOpen(false)).catch(onError);
   }
 
   return (
@@ -158,20 +164,26 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
             {!isDashboard && !isSection && (
               <div className="space-y-1.5">
                 <Label>Portfolio</Label>
-                <Select
-                  value={portfolioId}
-                  onChange={e => setPortfolioId(e.target.value)}
-                >
-                  <option value="">All portfolios</option>
-                  {portfolios?.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </Select>
+                {forOther ? (
+                  <p className="text-xs text-muted-foreground">
+                    Covers all of their portfolios.
+                  </p>
+                ) : (
+                  <Select
+                    value={portfolioId}
+                    onChange={e => setPortfolioId(e.target.value)}
+                  >
+                    <option value="">All portfolios</option>
+                    {portfolios?.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </Select>
+                )}
               </div>
             )}
 
             {/* Dashboard scope picker */}
-            {isDashboard && (
+            {isDashboard && !forOther && (
               <div className="space-y-1.5">
                 <Label>Scope</Label>
                 <Select
@@ -247,7 +259,7 @@ export function DownloadReportButton({ type, assetClasses, label, className }: P
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
             <Button
               onClick={handleDownload}
-              disabled={loading || (isDashboard && scope === 'single' && !portfolioId)}
+              disabled={loading || (isDashboard && !forOther && scope === 'single' && !portfolioId)}
             >
               {loading ? (
                 <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Preparing…</>

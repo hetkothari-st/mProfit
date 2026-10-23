@@ -20,6 +20,11 @@ import {
   type GrandfatheringReport,
 } from '@/api/tax.api';
 import { useReportSubject } from '@/components/reports/useReportSubject';
+import { LockedFeature } from '@/components/common/LockedFeature';
+import { useEntitlement } from '@/hooks/useEntitlement';
+import { apiErrorMessage } from '@/api/client';
+import { errorFromResponse } from '@/lib/reportDownloads';
+import toast from 'react-hot-toast';
 
 import { signTone } from '@/lib/signTone';
 type Tab =
@@ -133,6 +138,9 @@ export function TaxPage() {
   const reportSubject = useReportSubject();
   const [tab, setTab] = useState<Tab>('summary');
   const [fy, setFy] = useState<string>('');
+  // F&O Schedule 43 is a Pro/Advisor feature; the API refuses it below that,
+  // which used to leave the tab blank. Show the lock instead of asking.
+  const fnoEntitlement = useEntitlement('FNO_SCHEDULE_43');
 
   const availableFysQ = useQuery({
     queryKey: ['tax-available-fys'],
@@ -189,7 +197,7 @@ export function TaxPage() {
   const fnoQ = useQuery({
     queryKey: ['tax-fno', fy],
     queryFn: () => taxApi.schedule43(fy),
-    enabled: tab === 'fno' && !!fy,
+    enabled: tab === 'fno' && !!fy && fnoEntitlement.allowed,
   });
   const incomeQ = useQuery({
     queryKey: ['tax-income', fy],
@@ -209,52 +217,42 @@ export function TaxPage() {
     enabled: (tab === 'grandfathering' || tab === 'schedule-112a') && !!fy,
   });
 
-  const downloadCsv = () => {
-    // Both this (Schedule 112A tab) and downloadGrandfatheringCsv now hit
-    // the same enriched endpoint — it fills col 9 (FMV) where known.
-    const url = reportSubject.appendTo(taxApi.grandfatheringCsvUrl(fy));
-    fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+  /**
+   * Fetch a download with the "Download reports for" subject on the URL (raw
+   * fetch skips the axios interceptor that would carry the family header) and
+   * save it. Failures show the server's own message as a toast.
+   */
+  const saveDownload = (url: string, filename: string) => {
+    fetch(reportSubject.appendTo(url), { headers: { Authorization: `Bearer ${accessToken}` } })
       .then(async (r) => {
-        if (!r.ok) throw new Error(await r.text());
+        if (!r.ok) throw await errorFromResponse(r);
         const blob = await r.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `schedule-112a-${fy}${reportSubject.filenameSuffix}.csv`;
+        a.download = filename;
         a.click();
         URL.revokeObjectURL(a.href);
       })
-      .catch((e) => alert(e.message ?? 'Download failed'));
+      .catch((e) => toast.error(apiErrorMessage(e, 'Download failed')));
   };
 
-  const downloadGrandfatheringCsv = () => {
-    const url = reportSubject.appendTo(taxApi.grandfatheringCsvUrl(fy));
-    fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(await r.text());
-        const blob = await r.blob();
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `schedule-112a-grandfathering-${fy}${reportSubject.filenameSuffix}.csv`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      })
-      .catch((e) => alert(e.message ?? 'Download failed'));
-  };
+  // The ITR-portal CSV uses the subject-aware Schedule 112A endpoint; the
+  // Grandfathering tab's copy goes to /grandfathering.csv, which now resolves
+  // the subject the same way. Both fill the FMV column where it is known.
+  const downloadCsv = () =>
+    saveDownload(taxApi.schedule112ACsvUrl(fy), `schedule-112a-${fy}${reportSubject.filenameSuffix}.csv`);
 
-  const downloadTaxReport = () => {
-    const url = reportSubject.appendTo(taxApi.capitalGainsTaxReportUrl(fy));
-    fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(await r.text());
-        const blob = await r.blob();
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `capital-gains-tax-report-${fy}${reportSubject.filenameSuffix}.pdf`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      })
-      .catch((e) => alert(e.message ?? 'Download failed'));
-  };
+  const downloadGrandfatheringCsv = () =>
+    saveDownload(
+      taxApi.grandfatheringCsvUrl(fy),
+      `schedule-112a-grandfathering-${fy}${reportSubject.filenameSuffix}.csv`,
+    );
+
+  const downloadTaxReport = () =>
+    saveDownload(
+      taxApi.capitalGainsTaxReportUrl(fy),
+      `capital-gains-tax-report-${fy}${reportSubject.filenameSuffix}.pdf`,
+    );
 
   return (
     <div>
@@ -365,7 +363,14 @@ export function TaxPage() {
       {tab === 'intraday' && (
         <GainsView data={intradayQ.data} loading={intradayQ.isLoading} kind="Intraday (Sec. 43(5) Speculative)" />
       )}
-      {tab === 'fno' && <Schedule43View data={fnoQ.data} loading={fnoQ.isLoading} />}
+      {tab === 'fno' &&
+        (fnoEntitlement.allowed ? (
+          <Schedule43View data={fnoQ.data} loading={fnoQ.isLoading} />
+        ) : (
+          <LockedFeature requiredTier={fnoEntitlement.requiredTier} featureName="F&O (Sec. 43(5))" compact>
+            {null}
+          </LockedFeature>
+        ))}
       {tab === 'income' && <IncomeView data={incomeQ.data} loading={incomeQ.isLoading} />}
       {tab === 'harvest' && <HarvestView data={harvestQ.data} loading={harvestQ.isLoading} />}
       {tab === 'grandfathering' && (
@@ -613,8 +618,9 @@ function SummaryView({
         <Info className="h-3 w-3 mt-0.5 shrink-0" />
         <span>
           Estimates use current statutory rates and exclude surcharge, cess, deductions
-          (Sec. 80C / Sec. 80D), set-off of brought-forward losses, and any FMV adjustment
-          for pre-31-Jan-2018 equity (grandfathering). Confirm with your CA before filing.
+          (Sec. 80C / Sec. 80D) and set-off of brought-forward losses. Sec. 112A gains on
+          pre-31-Jan-2018 equity already use the 31-Jan-2018 FMV where it is known
+          (grandfathering). Confirm with your CA before filing.
         </span>
       </div>
     </div>
@@ -1085,13 +1091,21 @@ function GrandfatheringView({
       queryClient.invalidateQueries({ queryKey: ['tax-summary'] });
       queryClient.invalidateQueries({ queryKey: ['tax-112a'] });
       setEditingIsin(null);
+    } catch (e) {
+      // Keep the editor open with the typed value so it can be corrected.
+      toast.error(apiErrorMessage(e, 'Could not save the FMV'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (isin: string) => {
-    await taxApi.deleteFmvOverride(isin);
+    try {
+      await taxApi.deleteFmvOverride(isin);
+    } catch (e) {
+      toast.error(apiErrorMessage(e, 'Could not revert the FMV'));
+      return;
+    }
     queryClient.invalidateQueries({ queryKey: ['tax-grandfathering'] });
     queryClient.invalidateQueries({ queryKey: ['tax-summary'] });
   };
