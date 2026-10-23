@@ -20,6 +20,7 @@ import {
   getPfAccountById,
   resolveEpfoAccountForExtension,
   forgetPfCredentials,
+  toPfAccountDTO,
 } from '../services/pf/pfAccounts.service.js';
 import {
   encryptCredentialBlob,
@@ -59,6 +60,7 @@ import {
   PairingError,
 } from '../services/account/extensionPairing.service.js';
 import { snoozeNudge } from '../services/pf/pfNudges.service.js';
+import { refreshPfAccountBalance } from '../services/pf/pfBalance.service.js';
 import { enterUserContext } from '../lib/requestContext.js';
 import type { CanonicalEventType } from '@prisma/client';
 import { Prisma } from '@prisma/client';
@@ -122,7 +124,7 @@ const SnoozeNudgeSchema = z.object({
 export async function listAccountsHandler(req: Request, res: Response) {
   const userId = req.user!.id;
   const accounts = await listPfAccounts(userId);
-  ok(res, accounts);
+  ok(res, accounts.map(toPfAccountDTO));
 }
 
 export async function createAccountHandler(req: Request, res: Response) {
@@ -132,7 +134,7 @@ export async function createAccountHandler(req: Request, res: Response) {
     return error(res, 400, parsed.error.issues.map((i) => i.message).join('; '), 'VALIDATION_ERROR');
   }
   const account = await createPfAccount({ userId, ...parsed.data });
-  created(res, account);
+  created(res, toPfAccountDTO(account));
 }
 
 export async function startSessionHandler(req: Request, res: Response) {
@@ -187,8 +189,18 @@ const UanLookupSchema = z.object({
   memberId: z.string().optional(),
   name: z.string().min(1),
   dob: z.string().min(1),
-  source: z.enum(['EXTENSION', 'SERVER_HEADLESS']).default('EXTENSION'),
+  source: z.enum(['EXTENSION', 'SERVER_HEADLESS']).default('SERVER_HEADLESS'),
 });
+
+/**
+ * The browser extension has no consumer for lookup or reset sessions: it only
+ * pairs, reads passbooks and posts them to /extension/raw-payload. A session
+ * started with source EXTENSION was therefore created and never picked up, and
+ * the member waited on a spinner forever. Until the extension grows that job,
+ * EXTENSION is refused up front with a reason instead of being accepted.
+ */
+const EXTENSION_FLOW_UNAVAILABLE =
+  'The browser extension cannot run this yet. Start it from the app instead.';
 
 /**
  * Start a "Know your UAN" lookup.
@@ -197,11 +209,9 @@ const UanLookupSchema = z.object({
  * back over the same SSE stream a passbook fetch uses, and are answered through
  * the existing /sessions/:id/captcha and /sessions/:id/otp endpoints.
  *
- * EXTENSION is the default source deliberately. The lookup runs in the member's
- * own browser from their own IP, which is both what EPFO sees from a normal
- * visitor and what keeps a datacentre IP from being rate-limited into
- * uselessness. SERVER_HEADLESS exists for people who will not install the
- * extension, and should be expected to be the flakier path.
+ * SERVER_HEADLESS is the default: it is the only source with a worker behind
+ * it (see EXTENSION_FLOW_UNAVAILABLE). It runs from a datacentre IP, so expect
+ * it to be flakier than a member's own browser would be.
  */
 export async function startUanLookupHandler(req: Request, res: Response) {
   const userId = req.user!.id;
@@ -210,14 +220,14 @@ export async function startUanLookupHandler(req: Request, res: Response) {
     return error(res, 400, parsed.error.issues.map((i) => i.message).join('; '), 'VALIDATION_ERROR');
   }
   const { source, ...input } = parsed.data;
+  if (source === 'EXTENSION') {
+    return error(res, 422, EXTENSION_FLOW_UNAVAILABLE, 'EXTENSION_FLOW_UNAVAILABLE');
+  }
 
   const { sessionId } = await startUanLookup(userId, input, source);
 
-  if (source === 'SERVER_HEADLESS') {
-    const queued = await pfFetchQueue.add('uan-lookup', { kind: 'UAN_LOOKUP', sessionId, userId, input });
-    if (!queued) return rejectUnqueued(res, sessionId);
-  }
-  // For EXTENSION the paired extension picks the job up; nothing to enqueue.
+  const queued = await pfFetchQueue.add('uan-lookup', { kind: 'UAN_LOOKUP', sessionId, userId, input });
+  if (!queued) return rejectUnqueued(res, sessionId);
 
   ok(res, { sessionId });
 }
@@ -226,7 +236,7 @@ const PasswordResetSchema = z.object({
   uan: z.string().min(1),
   mobile: z.string().min(1),
   newPassword: z.string().min(1),
-  source: z.enum(['EXTENSION', 'SERVER_HEADLESS']).default('EXTENSION'),
+  source: z.enum(['EXTENSION', 'SERVER_HEADLESS']).default('SERVER_HEADLESS'),
 });
 
 /**
@@ -248,18 +258,19 @@ export async function startPasswordResetHandler(req: Request, res: Response) {
     return error(res, 400, parsed.error.issues.map((i) => i.message).join('; '), 'VALIDATION_ERROR');
   }
   const { source, ...input } = parsed.data;
+  if (source === 'EXTENSION') {
+    return error(res, 422, EXTENSION_FLOW_UNAVAILABLE, 'EXTENSION_FLOW_UNAVAILABLE');
+  }
 
   const { sessionId } = await startPasswordReset(userId, input, source);
 
-  if (source === 'SERVER_HEADLESS') {
-    const queued = await pfFetchQueue.add('password-reset', {
-      kind: 'PASSWORD_RESET',
-      sessionId,
-      userId,
-      input,
-    });
-    if (!queued) return rejectUnqueued(res, sessionId);
-  }
+  const queued = await pfFetchQueue.add('password-reset', {
+    kind: 'PASSWORD_RESET',
+    sessionId,
+    userId,
+    input,
+  });
+  if (!queued) return rejectUnqueued(res, sessionId);
 
   ok(res, { sessionId });
 }
@@ -467,7 +478,9 @@ export async function uploadManualPassbookHandler(req: Request, res: Response) {
             status: 'CONFIRMED',
             metadata: e.metadata as Prisma.InputJsonValue,
           },
-          update: {},
+          // Refresh metadata on a re-import so passbooks imported before running
+          // balances were captured gain them (it is derived only from the same row).
+          update: { metadata: e.metadata as Prisma.InputJsonValue },
         });
         inserted++;
       } catch (err) {
@@ -496,6 +509,7 @@ export async function uploadManualPassbookHandler(req: Request, res: Response) {
     where: { id: account.id },
     data: { lastRefreshedAt: new Date(), lastFetchSource: 'MANUAL_PDF' },
   });
+  await refreshPfAccountBalance(userId, account.id);
 
   ok(res, { inserted });
 }
@@ -735,7 +749,9 @@ export async function extensionRawPayloadHandler(req: Request, res: Response): P
             status: 'CONFIRMED',
             metadata: e.metadata as Prisma.InputJsonValue,
           },
-          update: {},
+          // Refresh metadata on a re-import so passbooks imported before running
+          // balances were captured gain them (it is derived only from the same row).
+          update: { metadata: e.metadata as Prisma.InputJsonValue },
         });
         eventsCreated++;
       } catch (err) {
@@ -763,6 +779,7 @@ export async function extensionRawPayloadHandler(req: Request, res: Response): P
     where: { id: account.id },
     data: { lastRefreshedAt: new Date(), lastFetchSource: 'EXTENSION' },
   });
+  await refreshPfAccountBalance(userId, account.id);
 
   // Mark session complete
   await prisma.pfFetchSession.update({

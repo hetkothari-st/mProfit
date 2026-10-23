@@ -20,7 +20,7 @@
 
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import type { PfInstitution, PfType, ProvidentFundAccount } from '@prisma/client';
+import type { EpfMemberId, PfInstitution, PfType, ProvidentFundAccount } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { encryptIdentifier, last4 } from './pfCredentials.service.js';
@@ -59,6 +59,56 @@ export function computePfAssetKey(opts: ComputePfAssetKeyOpts): string {
   const instLower = institution.toLowerCase();
   return `pf:${typeLower}:${instLower}:${hash}`;
 }
+
+// ---------------------------------------------------------------------------
+// Client-facing shape
+// ---------------------------------------------------------------------------
+
+type PfAccountRow = ProvidentFundAccount & {
+  memberIds?: Array<{
+    id: string;
+    memberIdLast4: string;
+    establishmentName: string | null;
+    currentBalance: Prisma.Decimal | null;
+  }>;
+};
+
+/**
+ * What an API response may carry about a PF account. Built field by field —
+ * never a spread — so the encrypted UAN / account number, the encrypted
+ * credential blob and its key id cannot reach the client. Those used to go
+ * out verbatim from GET/POST /epfppf/accounts. The identifier is shown as its
+ * last four digits only, like bank accounts and loans elsewhere in the app.
+ */
+export function toPfAccountDTO(a: PfAccountRow) {
+  return {
+    id: a.id,
+    portfolioId: a.portfolioId,
+    type: a.type,
+    institution: a.institution,
+    identifierLast4: a.identifierLast4,
+    holderName: a.holderName,
+    branchCode: a.branchCode,
+    // Whether a saved login exists is useful to the UI; the blob itself is not.
+    hasStoredCredentials: a.storedCredentials != null,
+    status: a.status,
+    lastRefreshedAt: a.lastRefreshedAt,
+    lastFetchSource: a.lastFetchSource,
+    lastNudgedAt: a.lastNudgedAt,
+    nudgeSnoozedUntil: a.nudgeSnoozedUntil,
+    currentBalance: a.currentBalance === null ? null : a.currentBalance.toString(),
+    createdAt: a.createdAt,
+    updatedAt: a.updatedAt,
+    memberIds: (a.memberIds ?? []).map((m) => ({
+      id: m.id,
+      memberIdLast4: m.memberIdLast4,
+      establishmentName: m.establishmentName,
+      currentBalance: m.currentBalance === null ? null : m.currentBalance.toString(),
+    })),
+  };
+}
+
+export type PfAccountDTO = ReturnType<typeof toPfAccountDTO>;
 
 // ---------------------------------------------------------------------------
 // CRUD
@@ -117,7 +167,7 @@ export async function createPfAccount(
  */
 export async function listPfAccounts(
   userId: string,
-): Promise<ProvidentFundAccount[]> {
+): Promise<Array<ProvidentFundAccount & { memberIds: EpfMemberId[] }>> {
   return prisma.providentFundAccount.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },

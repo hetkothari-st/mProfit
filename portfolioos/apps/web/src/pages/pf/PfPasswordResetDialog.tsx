@@ -78,6 +78,10 @@ export function PfPasswordResetDialog({ onClose, initialUan }: Props) {
         uan: uanDigits,
         mobile: mobileDigits,
         newPassword,
+        // Explicit: the server runs the reset headless. Without a source the
+        // server used to assume the browser extension, which never picks these
+        // up, so the dialog sat on "Contacting EPFO…" forever.
+        source: 'SERVER_HEADLESS',
       });
       sessionRef.current = sessionId;
 
