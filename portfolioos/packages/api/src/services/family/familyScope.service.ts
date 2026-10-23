@@ -26,7 +26,8 @@ import { runAsUser, runAsSystem } from '../../lib/requestContext.js';
  *       - OWNER      → sees the whole union; no visibility filter.
  *       - CONTRIBUTOR → sees the whole union filtered by their
  *                       `visibleAssetClasses` / `visibleCategories`
- *                       (empty = no restriction = allow all). Restricted
+ *                       (an EMPTY list is deny-all for that dimension —
+ *                       only an OWNER is unrestricted). Restricted
  *                       classes render blank on the member's screens.
  *                       Can add own transactions; can write to family
  *                       portfolios; cannot mutate peer personal data.

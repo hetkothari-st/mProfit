@@ -54,6 +54,10 @@ const ACCOUNT_ROUTE_PREFIXES = [
   '/api/managed-profiles',
   '/api/gmail',
   '/api/mailboxes',
+  // Succession (Legacy Transfer) is the owner's own will-like setting; the
+  // server refuses it while acting. Not '/api/legacy-view' / '-public': those
+  // are separate prefixes, and the match below needs a '/' or '?' after it.
+  '/api/legacy',
 ];
 
 export function isAccountRoute(url: string): boolean {

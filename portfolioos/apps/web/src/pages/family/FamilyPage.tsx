@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -21,7 +22,6 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { FAMILY_RELATIONS, formatDateIST } from '@everypaisa/shared';
 import {
   familiesApi,
-  NON_AC_CATEGORIES,
   type BulkManagedRow,
   type FamilyMemberRow,
   type FamilyRole,
@@ -39,13 +39,11 @@ import { apiErrorMessage } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { useFamilyScopeStore } from '@/stores/familyScope.store';
 import { FamilyTreeBoard } from '@/components/family/FamilyTreeBoard';
+import { PermissionsMatrix } from '@/components/family/PermissionsMatrix';
+import { allVisibility, seesNoOtherMembersData } from '@/lib/familyVisibility';
+import { FAMILY_QUERY_PARAM, pickFamilyId } from '@/lib/familySelection';
 import { LockedFeature } from '@/components/common/LockedFeature';
 import { openRazorpayCheckout } from '@/lib/razorpay';
-import {
-  ALL_ASSET_CLASSES,
-  ASSET_CLASS_LABEL,
-  NON_AC_CATEGORY_LABEL,
-} from '@/lib/assetClasses';
 import { familyDashboardApi, familyDashboardKeys } from '@/api/family/familyDashboard.api';
 import { FamilyWealthCard } from './widgets/FamilyWealthCard';
 import { FamilyGoalsCard } from './widgets/FamilyGoalsCard';
@@ -84,15 +82,16 @@ export function FamilyPage() {
   });
   const families = familiesQuery.data ?? [];
 
-  const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
-
-  // Auto-select the first family so the user isn't stuck on an empty
-  // page after they create/accept one.
-  useEffect(() => {
-    if (!selectedFamilyId && families.length > 0) {
-      setSelectedFamilyId(families[0]!.id);
-    }
-  }, [families, selectedFamilyId]);
+  // The selected family lives in the URL (`?family=<id>`) so each sidebar row
+  // opens its own family; bare /family falls back to the first one, so the
+  // user isn't stuck on an empty page after they create/accept one.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedFamilyId = pickFamilyId(families, searchParams.get(FAMILY_QUERY_PARAM));
+  const setSelectedFamilyId = (id: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set(FAMILY_QUERY_PARAM, id);
+    setSearchParams(next);
+  };
 
   const selected = families.find((f) => f.id === selectedFamilyId) ?? null;
 
@@ -123,7 +122,7 @@ export function FamilyPage() {
       <PageHeader
         eyebrow="Family"
         title="The household, whole"
-        description="One picture of the family's wealth, shared goals, protection and open items — with the per-member breakdown behind it. Owners see everything; contributors and viewers see own personal + family-shared, filtered per their role, and anything withheld is labelled as withheld."
+        description="One picture of the family's wealth, shared goals, protection and open items — with the per-member breakdown behind it. Owners see everything; contributors and viewers see every member's data filtered by what the owner lets them see, and anything withheld is labelled as withheld."
         actions={
           <Button size="sm" onClick={() => setCreatingFamily(true)}>
             <Plus className="h-4 w-4" strokeWidth={2} />
@@ -305,6 +304,9 @@ function FamilyWorkspace({
 
   const members = membersQuery.data ?? [];
   const activeMembers = members.filter((m) => m.status === 'ACTIVE');
+  // Members whose visibility lists are both empty — deny-all on the server.
+  // Their rows are left as they are (no silent migration); the owner is told.
+  const blindMembers = members.filter(seesNoOtherMembersData);
   const familyPortfolios = portfoliosQuery.data ?? [];
 
   return (
@@ -382,6 +384,37 @@ function FamilyWorkspace({
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mx-auto" />
                 </div>
               ) : (
+                <>
+                {isOwner && blindMembers.length > 0 && (
+                  <div
+                    role="note"
+                    className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50/60 px-3 py-2 text-sm dark:border-amber-900/60 dark:bg-amber-950/30"
+                  >
+                    <Info className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div className="text-xs text-amber-800 dark:text-amber-300">
+                      <p className="font-medium">
+                        {blindMembers.length === 1
+                          ? '1 member sees none of the other members’ data'
+                          : `${blindMembers.length} members see none of the other members’ data`}
+                      </p>
+                      <p className="mt-0.5">
+                        Nothing is ticked in their visibility settings — choose what they can see:{' '}
+                        {blindMembers.map((m, i) => (
+                          <span key={m.userId}>
+                            {i > 0 && ', '}
+                            <button
+                              type="button"
+                              className="underline hover:no-underline"
+                              onClick={() => setEditingMember(m)}
+                            >
+                              {m.name}
+                            </button>
+                          </span>
+                        ))}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <FamilyTreeBoard
                   familyId={family.id}
                   members={members}
@@ -397,6 +430,7 @@ function FamilyWorkspace({
                     if (confirm(message)) revokeMutation.mutate(m.userId);
                   }}
                 />
+                </>
               )}
             </CardContent>
           </Card>
@@ -448,10 +482,10 @@ function FamilyWorkspace({
                       No shared portfolios yet
                     </p>
                     <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-0.5">
-                      Contributors and viewers can only see own personal +
-                      family-shared data (rule A). Until a shared portfolio exists
-                      with transactions, the family dashboard shows zeros for
-                      non-owners.
+                      Members&apos; own portfolios already count in the family
+                      view — owners see all of them, contributors and viewers
+                      see them filtered by their visibility settings. A shared
+                      portfolio is for holdings the family keeps together.
                     </p>
                   </div>
                 </div>
@@ -1407,10 +1441,15 @@ function InviteForm({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<FamilyRole>('CONTRIBUTOR');
-  // Default to full access — restriction is opt-in (empty = allow all
-  // per the getEffectiveScope semantics).
-  const [visibleAssetClasses, setVisibleAssetClasses] = useState<string[]>([]);
-  const [visibleCategories, setVisibleCategories] = useState<NonAcCategory[]>([]);
+  // Default to full visibility by ticking everything. The server treats an
+  // EMPTY list as deny-all (only owners are unrestricted), so starting empty
+  // — as this form used to — quietly invited people who could see nothing.
+  const [visibleAssetClasses, setVisibleAssetClasses] = useState<string[]>(
+    () => allVisibility().visibleAssetClasses,
+  );
+  const [visibleCategories, setVisibleCategories] = useState<NonAcCategory[]>(
+    () => allVisibility().visibleCategories,
+  );
   const [invitationId, setInvitationId] = useState<string | null>(null);
 
   const inviteMutation = useMutation({
@@ -1513,7 +1552,6 @@ function InviteForm({
           visibleCategories={visibleCategories}
           setVisibleCategories={setVisibleCategories}
           disabled={role === 'OWNER'}
-          note="Owners see everything. Leave both lists empty to give a contributor or viewer full visibility."
         />
       </div>
       <ModalFooter>
@@ -1805,7 +1843,6 @@ function EditMemberDialog({
           visibleCategories={visibleCategories}
           setVisibleCategories={setVisibleCategories}
           disabled={role === 'OWNER'}
-          note="Owners see everything. Empty lists mean no restriction."
         />
       </div>
       <ModalFooter>
@@ -1818,135 +1855,6 @@ function EditMemberDialog({
         </Button>
       </ModalFooter>
     </ModalShell>
-  );
-}
-
-// ─── Permissions matrix (shared between invite + edit) ───────────────
-
-function PermissionsMatrix({
-  visibleAssetClasses,
-  setVisibleAssetClasses,
-  visibleCategories,
-  setVisibleCategories,
-  disabled,
-  note,
-}: {
-  visibleAssetClasses: string[];
-  setVisibleAssetClasses: (v: string[]) => void;
-  visibleCategories: NonAcCategory[];
-  setVisibleCategories: (v: NonAcCategory[]) => void;
-  disabled: boolean;
-  note?: string;
-}) {
-  const acAllOn = visibleAssetClasses.length === ALL_ASSET_CLASSES.length;
-  const acAllOff = visibleAssetClasses.length === 0;
-  const catAllOn = visibleCategories.length === NON_AC_CATEGORIES.length;
-  const catAllOff = visibleCategories.length === 0;
-
-  const sortedClasses = useMemo(() => [...ALL_ASSET_CLASSES].sort(), []);
-
-  return (
-    <div className={disabled ? 'opacity-50 pointer-events-none' : ''}>
-      {note && (
-        <p className="text-[11px] text-muted-foreground mb-3 flex items-start gap-1.5">
-          <Info className="h-3 w-3 mt-0.5 flex-shrink-0" strokeWidth={2} />
-          {note}
-        </p>
-      )}
-
-      {/* Asset classes */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-1.5">
-          <Label>
-            Asset classes ({visibleAssetClasses.length}/{ALL_ASSET_CLASSES.length})
-          </Label>
-          <div className="flex gap-2 text-[11px]">
-            <button
-              type="button"
-              onClick={() =>
-                setVisibleAssetClasses(acAllOn ? [] : [...ALL_ASSET_CLASSES])
-              }
-              className="text-accent hover:underline"
-            >
-              {acAllOn ? 'None' : 'All'}
-            </button>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1 max-h-56 overflow-y-auto border border-border rounded p-2">
-          {sortedClasses.map((ac) => (
-            <label
-              key={ac}
-              className="flex items-center gap-1.5 text-xs cursor-pointer hover:text-foreground"
-            >
-              <input
-                type="checkbox"
-                checked={visibleAssetClasses.includes(ac)}
-                onChange={(e) =>
-                  setVisibleAssetClasses(
-                    e.target.checked
-                      ? [...visibleAssetClasses, ac]
-                      : visibleAssetClasses.filter((x) => x !== ac),
-                  )
-                }
-              />
-              <span className="truncate">{ASSET_CLASS_LABEL[ac] ?? ac}</span>
-            </label>
-          ))}
-        </div>
-        <p className="text-[10px] text-muted-foreground mt-1">
-          Empty = no restriction. Check specific classes to whitelist them.
-        </p>
-      </div>
-
-      {/* Categories */}
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <Label>
-            Non-portfolio categories ({visibleCategories.length}/
-            {NON_AC_CATEGORIES.length})
-          </Label>
-          <div className="flex gap-2 text-[11px]">
-            <button
-              type="button"
-              onClick={() =>
-                setVisibleCategories(
-                  catAllOn ? [] : ([...NON_AC_CATEGORIES] as NonAcCategory[]),
-                )
-              }
-              className="text-accent hover:underline"
-            >
-              {catAllOn ? 'None' : 'All'}
-            </button>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1 border border-border rounded p-2">
-          {NON_AC_CATEGORIES.map((c) => (
-            <label
-              key={c}
-              className="flex items-center gap-1.5 text-xs cursor-pointer hover:text-foreground"
-            >
-              <input
-                type="checkbox"
-                checked={visibleCategories.includes(c)}
-                onChange={(e) =>
-                  setVisibleCategories(
-                    e.target.checked
-                      ? [...visibleCategories, c]
-                      : visibleCategories.filter((x) => x !== c),
-                  )
-                }
-              />
-              <span className="truncate">{NON_AC_CATEGORY_LABEL[c] ?? c}</span>
-            </label>
-          ))}
-        </div>
-        {catAllOff && (
-          <p className="text-[10px] text-muted-foreground mt-1">
-            Empty = no restriction (member sees vehicles, insurance, loans, etc.).
-          </p>
-        )}
-      </div>
-    </div>
   );
 }
 

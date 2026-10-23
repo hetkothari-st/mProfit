@@ -1,17 +1,19 @@
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { ChevronRight, Home, Loader2, User } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/cn';
 import { familiesApi, type MyFamily } from '@/api/family/families.api';
 import { useAuthStore } from '@/stores/auth.store';
+import { FAMILY_QUERY_PARAM, familyHref, pickFamilyId } from '@/lib/familySelection';
 
 /**
  * The household, at the top of the rail.
  *
  * A family is not a feature you visit — it is a set of people whose pages you
  * move between, so it belongs in the navigation as a shape (name → members)
- * rather than as one more flat link. The family row goes to /family; each
+ * rather than as one more flat link. The family row goes to /family?family=<id>
+ * (its own family, not whichever is first); each
  * member row goes to that member's page.
  *
  * MOST USERS HAVE NO FAMILY. For them this renders literally nothing — no
@@ -37,6 +39,18 @@ function readPref(): string | null {
   return localStorage.getItem(EXPANDED_KEY);
 }
 
+/**
+ * The family the Family page is showing, or null off that page. NavLink can't
+ * answer this: it matches the pathname only, and every family row now shares
+ * `/family` with a different `?family=` — so each would light up at once.
+ */
+function useOpenFamilyId(families: ReadonlyArray<{ id: string }>): string | null {
+  const location = useLocation();
+  if (location.pathname !== '/family') return null;
+  const requested = new URLSearchParams(location.search).get(FAMILY_QUERY_PARAM);
+  return pickFamilyId(families, requested);
+}
+
 export function FamilyNavTree({ collapsed }: { collapsed: boolean }) {
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
   const [pref, setPref] = useState<string | null>(readPref);
@@ -50,6 +64,7 @@ export function FamilyNavTree({ collapsed }: { collapsed: boolean }) {
   });
 
   const families = familiesQuery.data ?? [];
+  const openFamilyId = useOpenFamilyId(families);
 
   // Nothing to show, and nothing to say about it.
   if (families.length === 0) return null;
@@ -76,21 +91,19 @@ export function FamilyNavTree({ collapsed }: { collapsed: boolean }) {
         <ul className="flex flex-col items-center gap-1">
           {families.map((family) => (
             <li key={family.id}>
-              <NavLink
-                to="/family"
-                end
+              <Link
+                to={familyHref(family.id)}
                 title={family.name}
-                className={({ isActive }) =>
-                  cn(
-                    'grid h-10 w-10 place-items-center rounded-lg font-display text-[15px] transition-all',
-                    isActive
-                      ? 'bg-accent/15 text-accent-ink ring-1 ring-accent/40'
-                      : 'text-sidebar-foreground/75 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
-                  )
-                }
+                aria-current={openFamilyId === family.id ? 'page' : undefined}
+                className={cn(
+                  'grid h-10 w-10 place-items-center rounded-lg font-display text-[15px] transition-all',
+                  openFamilyId === family.id
+                    ? 'bg-accent/15 text-accent-ink ring-1 ring-accent/40'
+                    : 'text-sidebar-foreground/75 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+                )}
               >
                 {monogram(family.name)}
-              </NavLink>
+              </Link>
             </li>
           ))}
         </ul>
@@ -107,6 +120,7 @@ export function FamilyNavTree({ collapsed }: { collapsed: boolean }) {
             key={family.id}
             family={family}
             expanded={isExpanded(family.id)}
+            isOpen={openFamilyId === family.id}
             onToggle={() => toggle(family.id)}
             currentUserId={currentUserId}
           />
@@ -128,11 +142,14 @@ export function FamilyNavTree({ collapsed }: { collapsed: boolean }) {
 function FamilyNode({
   family,
   expanded,
+  isOpen,
   onToggle,
   currentUserId,
 }: {
   family: MyFamily;
   expanded: boolean;
+  /** The Family page is showing this family. */
+  isOpen: boolean;
   onToggle: () => void;
   currentUserId: string | null;
 }) {
@@ -176,41 +193,35 @@ function FamilyNode({
             strokeWidth={2}
           />
         </button>
-        <NavLink
-          to="/family"
-          end
+        <Link
+          to={familyHref(family.id)}
           title={family.name}
-          className={({ isActive }) =>
-            cn(
-              'relative flex min-w-0 flex-1 items-center gap-2.5 rounded-md py-2 pr-2 text-[14px] focus-ring',
-              isActive && 'font-medium text-sidebar-accent-foreground',
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              {isActive && (
-                <span
-                  aria-hidden="true"
-                  className="absolute -left-7 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-accent"
-                />
-              )}
-              {/* A house, not the `Users` glyph the Overview "Family" link
-                  already uses — two identical icons pointing at the same
-                  route would read as a duplicate rather than a hierarchy. */}
-              <Home
-                className={cn(
-                  'h-[17px] w-[17px] shrink-0 transition-colors',
-                  isActive
-                    ? 'text-accent-ink'
-                    : 'text-sidebar-foreground/60 group-hover/fam:text-sidebar-accent-foreground',
-                )}
-                strokeWidth={1.7}
-              />
-              <span className="truncate">{family.name}</span>
-            </>
+          aria-current={isOpen ? 'page' : undefined}
+          className={cn(
+            'relative flex min-w-0 flex-1 items-center gap-2.5 rounded-md py-2 pr-2 text-[14px] focus-ring',
+            isOpen && 'font-medium text-sidebar-accent-foreground',
           )}
-        </NavLink>
+        >
+          {isOpen && (
+            <span
+              aria-hidden="true"
+              className="absolute -left-7 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-accent"
+            />
+          )}
+          {/* A house, not the `Users` glyph the Overview "Family" link
+              already uses — two identical icons pointing at the same
+              route would read as a duplicate rather than a hierarchy. */}
+          <Home
+            className={cn(
+              'h-[17px] w-[17px] shrink-0 transition-colors',
+              isOpen
+                ? 'text-accent-ink'
+                : 'text-sidebar-foreground/60 group-hover/fam:text-sidebar-accent-foreground',
+            )}
+            strokeWidth={1.7}
+          />
+          <span className="truncate">{family.name}</span>
+        </Link>
       </div>
 
       {expanded && (
