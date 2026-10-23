@@ -106,7 +106,7 @@ export function MFCasMailbackDialog({
 
   const updatePanMutation = useMutation({
     mutationFn: (newPan: string) => authApi.updateProfile({ pan: newPan }),
-    onSuccess: (u) => {
+    onSuccess: () => {
       toast.success('PAN saved to profile');
       queryClient.invalidateQueries({ queryKey: ['auth-me'] });
       queryClient.invalidateQueries({ queryKey: ['mfcas-mailback-pan'] });

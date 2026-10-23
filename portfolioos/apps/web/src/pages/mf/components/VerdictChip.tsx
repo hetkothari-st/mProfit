@@ -2,7 +2,7 @@ import type { MfFundVerdictDto, MfVerdictKind } from '@everypaisa/shared';
 import { cn } from '@/lib/cn';
 import { MetricStat } from './MetricValue';
 import { MoneyCell, RatioCell } from './MetricCells';
-import { known, resolveNullable } from '../mfFormat';
+import { known } from '../mfFormat';
 
 /**
  * The verdict chip, and the one place `06-QUALITY-COMPLIANCE.md §6`'s
@@ -142,10 +142,12 @@ export function VerdictBlock({ verdict }: { verdict: MfFundVerdictDto }) {
         // fund you already own is a fact about your own tax lots and this
         // scheme's exit load — research, not advice — and withholding it would
         // leave a reader unable to price a decision they are entitled to make.
-        // `breakEvenMonths` is null when the expected edge of a replacement
-        // cannot be estimated (`REPLACEMENT_EXPECTED_EDGE` is unset until the
-        // backtest lands), and it renders as an explicit unavailability rather
-        // than as an encouraging zero.
+        // `breakEvenMonths` is null while `REPLACEMENT_EXPECTED_EDGE` is
+        // deliberately unset (`constants.ts`: it needs the backtest regression
+        // coefficient, and inventing it would invent the number that decides
+        // whether to sell). Today that is every fund, so a "Break-even: Not
+        // available" cell read as a broken metric. It now says, in words, that
+        // break-even is not calculated yet and why — never an encouraging zero.
         <div
           data-testid="mf-switch-cost"
           className="grid grid-cols-1 gap-3 rounded-md border border-border/60 bg-muted/30 px-3 py-2.5 sm:grid-cols-3"
@@ -156,18 +158,22 @@ export function VerdictBlock({ verdict }: { verdict: MfFundVerdictDto }) {
           <MetricStat label="Tax if sold today">
             <MoneyCell resolved={known(verdict.switchCost.taxInr)} />
           </MetricStat>
-          <MetricStat
-            label="Break-even"
-            hint="Months for the expected cost edge to repay the exit load and tax"
-          >
-            <RatioCell
-              resolved={resolveNullable(
-                verdict.switchCost.breakEvenMonths,
-                'we cannot yet estimate the cost edge of a replacement',
-              )}
-              fractionDigits={1}
-            />
-          </MetricStat>
+          {verdict.switchCost.breakEvenMonths === null ? (
+            <MetricStat label="Break-even">
+              <span data-testid="mf-break-even-uncalibrated">Not calculated yet</span>
+              <p className="mt-0.5 text-[11px] font-normal text-muted-foreground">
+                We have not yet measured how much better a replacement fund tends to do, so we
+                can't say how long a switch would take to earn back the exit load and tax.
+              </p>
+            </MetricStat>
+          ) : (
+            <MetricStat
+              label="Break-even"
+              hint="Months for the expected cost edge to repay the exit load and tax"
+            >
+              <RatioCell resolved={known(verdict.switchCost.breakEvenMonths)} fractionDigits={1} />
+            </MetricStat>
+          )}
         </div>
       )}
 
