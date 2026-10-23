@@ -18,6 +18,7 @@ import { apiErrorMessage } from '@/api/client';
 import { LEGACY_KEYS, legacyApi, type NomineeInput } from '@/api/legacy/legacy.api';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { useAuthStore } from '@/stores/auth.store';
+import { useActingAsStore } from '@/stores/actingAs.store';
 import { StepUpDialog } from './StepUpDialog';
 import { NomineeDialog } from './NomineeDialog';
 
@@ -34,7 +35,33 @@ const STATUS_TEXT: Record<LegacyStatusValue, string> = {
 const COUNTING: ReadonlySet<LegacyStatusValue> = new Set(['ARMED', 'WARNING_1', 'WARNING_2', 'FINAL_WARNING', 'GRACE']);
 const EDITABLE: ReadonlySet<LegacyStatusValue> = new Set(['DRAFT', 'ARMED', 'PAUSED']);
 
+/**
+ * Succession is the signed-in person's own setting — their nominees, their
+ * letter, their trigger — so it never runs for a relative being managed. The
+ * server refuses /api/legacy while acting (managedProfile.service
+ * ACCOUNT_ROUTE_PREFIXES); without this guard the page fired its requests
+ * anyway and showed the raw refusal. Mirrors Will Maker's WillGate: the
+ * content never mounts, so it never asks.
+ */
 export function LegacyPage() {
+  const acting = useActingAsStore((s) => s.profile);
+  if (acting) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Succession" />
+        <Card>
+          <CardContent className="p-5 text-sm text-foreground">
+            Succession works on your own account only. Switch back to your own account to set
+            up or change your succession plan.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+  return <LegacyPageContent />;
+}
+
+function LegacyPageContent() {
   const qc = useQueryClient();
   const ent = useEntitlement('LEGACY_TRANSFER');
   const q = useQuery({ queryKey: LEGACY_KEYS.overview, queryFn: legacyApi.overview });
