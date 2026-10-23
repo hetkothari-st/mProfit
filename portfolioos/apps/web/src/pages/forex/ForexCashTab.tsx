@@ -88,7 +88,9 @@ export function ForexCashTab() {
         currency: v.currency.toUpperCase(),
         balance: v.balance,
         accountLabel: v.accountLabel || null,
-        accountNumber: v.accountNumber || null,
+        // Blank = keep the saved number (the field says so). Omit it rather
+        // than send null, which clears it.
+        accountNumber: v.accountNumber || undefined,
         bankName: v.bankName || null,
         country: v.country || null,
         notes: v.notes || null,
