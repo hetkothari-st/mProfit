@@ -34,6 +34,7 @@ import {
   resolveRentReceiptReminders,
   resolveRentalPortfolioId,
   getTenancyOwned,
+  deleteRentalOwnedCashFlows,
   OVERDUE_GRACE_DAYS,
 } from './rentalLedger.service.js';
 import { revealTenancy, tenantContactColumns } from '../security/piiAtRest.service.js';
@@ -321,10 +322,38 @@ export async function updateProperty(
   return prisma.rentalProperty.update({ where: { id }, data });
 }
 
+/**
+ * CashFlow ids referenced by a set of tenancies' ledger entries and receipts.
+ * `cashFlowId` is a plain column, not a relation, so the schema cascade that
+ * removes those rows never reaches the CashFlows — they have to be collected
+ * before the delete and removed in the same transaction.
+ */
+async function tenancyCashFlowIds(
+  tx: ExtendedTx,
+  where: Prisma.TenancyWhereInput,
+): Promise<string[]> {
+  const entries = await tx.rentLedgerEntry.findMany({
+    where: { tenancy: where, cashFlowId: { not: null } },
+    select: { cashFlowId: true },
+  });
+  const receipts = await tx.rentReceipt.findMany({
+    where: { tenancy: where, cashFlowId: { not: null } },
+    select: { cashFlowId: true },
+  });
+  return [...entries, ...receipts]
+    .map((r) => r.cashFlowId)
+    .filter((v): v is string => !!v);
+}
+
 export async function deleteProperty(userId: string, id: string) {
   await getProperty(userId, id);
-  // Schema cascades through Tenancy → RentReceipt and PropertyExpense.
-  await prisma.rentalProperty.delete({ where: { id } });
+  await runInTransaction(async (tx) => {
+    // Rent / deposit CashFlows go with the property; imported bank credits
+    // that were matched to its rent stay (they are the bank statement's).
+    await deleteRentalOwnedCashFlows(tx, await tenancyCashFlowIds(tx, { propertyId: id }));
+    // Schema cascades through Tenancy → RentReceipt and PropertyExpense.
+    await tx.rentalProperty.delete({ where: { id } });
+  });
 }
 
 // ── Tenancy CRUD + receipt generation ────────────────────────────────
@@ -633,7 +662,10 @@ export async function updateTenancy(
 
 export async function deleteTenancy(userId: string, id: string) {
   await getTenancyOwned(userId, id);
-  await prisma.tenancy.delete({ where: { id } });
+  await runInTransaction(async (tx) => {
+    await deleteRentalOwnedCashFlows(tx, await tenancyCashFlowIds(tx, { id }));
+    await tx.tenancy.delete({ where: { id } });
+  });
 }
 
 // ── Receipts ─────────────────────────────────────────────────────────
@@ -834,10 +866,9 @@ export async function unmarkReceived(userId: string, receiptId: string) {
     );
   }
   return runInTransaction(async (tx) => {
-    const cashFlowIds = pinned.map((e) => e.cashFlowId).filter((v): v is string => !!v);
-    if (cashFlowIds.length > 0) {
-      await tx.cashFlow.deleteMany({ where: { id: { in: cashFlowIds } } });
-    }
+    // An auto-matched payment's CashFlow is the bank credit's own row — it
+    // survives; only CashFlows this module created are removed.
+    await deleteRentalOwnedCashFlows(tx, pinned.map((e) => e.cashFlowId));
     await tx.rentLedgerEntry.deleteMany({ where: { id: { in: pinned.map((e) => e.id) } } });
     await recomputeTenancyLedger(tx, existing.tenancyId);
     return tx.rentReceipt.findUniqueOrThrow({ where: { id: receiptId } });
@@ -1176,8 +1207,8 @@ export async function hookAutoMatchRentalCredit(
 
 /**
  * Undo a prior auto-match by deleting the ledger `PAYMENT` entries this
- * month carries a `canonicalEventId` on (and the CashFlow rows they
- * created), then recomputing. With no matched entry left, the event won't
+ * month carries a `canonicalEventId` on (keeping the bank credit's own
+ * CashFlow), then recomputing. With no matched entry left, the event won't
  * re-match automatically — the user explicitly rejected this pairing — and
  * the receipt's derived status falls back to whatever the remaining ledger
  * entries produce (EXPECTED/OVERDUE if none, PARTIAL if a manual payment
@@ -1196,10 +1227,12 @@ export async function undoAutoMatch(userId: string, receiptId: string) {
     throw new BadRequestError('Receipt was not auto-matched');
   }
   return runInTransaction(async (tx) => {
-    const cashFlowIds = matched.map((e) => e.cashFlowId).filter((v): v is string => !!v);
-    if (cashFlowIds.length > 0) {
-      await tx.cashFlow.deleteMany({ where: { id: { in: cashFlowIds } } });
-    }
+    // The matched entry points at the CashFlow the projection wrote for the
+    // bank credit. Undo unlinks the match only: the credit is real money and
+    // stays in Cash Activity, and its event stays PROJECTED with a
+    // `projectedCashFlowId` that still resolves. A CashFlow applyAutoMatch
+    // created itself (called outside the projection pipeline) is removed.
+    await deleteRentalOwnedCashFlows(tx, matched.map((e) => e.cashFlowId));
     await tx.rentLedgerEntry.deleteMany({ where: { id: { in: matched.map((e) => e.id) } } });
     await recomputeTenancyLedger(tx, existing.tenancyId);
     return tx.rentReceipt.findUniqueOrThrow({ where: { id: receiptId } });

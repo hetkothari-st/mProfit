@@ -53,6 +53,38 @@ const DISPLAY_CHARGE_TYPES = new Set<LedgerEntryType>([
 
 export const OVERDUE_GRACE_DAYS = 7;
 
+/**
+ * Delete the CashFlow rows the rental code created for some ledger entries /
+ * receipts, leaving alone any that belong to an imported bank credit.
+ *
+ * An auto-matched payment points at the CashFlow the canonical-event
+ * projection already wrote for that bank credit (one credit, one CashFlow —
+ * the rent match must not double-count it). That row is the bank
+ * statement's, not the rent ledger's: deleting it when the match is undone,
+ * or the tenancy/property is removed, made the credit vanish from Cash
+ * Activity while the event stayed PROJECTED pointing at a row that no longer
+ * existed. Ownership is decided by the event's own `projectedCashFlowId`, so
+ * it holds whether or not the ledger entry carries `canonicalEventId`.
+ * Detaching those rows needs no write: the caller deletes or unlinks the
+ * ledger entry / receipt that referenced them.
+ */
+export async function deleteRentalOwnedCashFlows(
+  tx: Prisma.TransactionClient,
+  cashFlowIds: ReadonlyArray<string | null | undefined>,
+): Promise<void> {
+  const ids = [...new Set(cashFlowIds.filter((v): v is string => !!v))];
+  if (ids.length === 0) return;
+  const bankOwned = await tx.canonicalEvent.findMany({
+    where: { projectedCashFlowId: { in: ids } },
+    select: { projectedCashFlowId: true },
+  });
+  const keep = new Set(bankOwned.map((e) => e.projectedCashFlowId));
+  const toDelete = ids.filter((id) => !keep.has(id));
+  if (toDelete.length > 0) {
+    await tx.cashFlow.deleteMany({ where: { id: { in: toDelete } } });
+  }
+}
+
 const ZERO = new Prisma.Decimal(0);
 
 export interface LedgerSummary {
@@ -448,10 +480,9 @@ export async function updateLedgerEntry(
         data.cashFlowId = cf.id;
       }
     } else if (previousDirection && !nextDirection) {
-      // Was money-moving, now is not: delete the CashFlow and unlink it.
-      if (existing.cashFlowId) {
-        await tx.cashFlow.deleteMany({ where: { id: existing.cashFlowId } });
-      }
+      // Was money-moving, now is not: delete the CashFlow (unless it is an
+      // imported bank credit's) and unlink it.
+      await deleteRentalOwnedCashFlows(tx, [existing.cashFlowId]);
       data.cashFlowId = null;
     } else if (previousDirection && nextDirection && existing.cashFlowId) {
       // Still money-moving on both sides: keep the same row, but its
@@ -481,9 +512,7 @@ export async function updateLedgerEntry(
 export async function deleteLedgerEntry(userId: string, entryId: string): Promise<void> {
   const existing = await getEntryOwned(userId, entryId);
   await runInTransaction(async (tx) => {
-    if (existing.cashFlowId) {
-      await tx.cashFlow.deleteMany({ where: { id: existing.cashFlowId } });
-    }
+    await deleteRentalOwnedCashFlows(tx, [existing.cashFlowId]);
     await tx.rentLedgerEntry.delete({ where: { id: entryId } });
     await recomputeTenancyLedger(tx, existing.tenancyId);
   });
