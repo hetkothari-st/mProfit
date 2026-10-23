@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { AssetClass, FamilyRole } from '@prisma/client';
 import { authenticate } from '../middleware/authenticate.js';
-import { requireFeature } from '../middleware/requirePlan.js';
+import { requireFamilyFeature, requireFeature } from '../middleware/requirePlan.js';
 import {
   getWealth,
   getGoals,
@@ -449,8 +449,9 @@ familiesRouter.put(
 
 // ─── Family dashboard ────────────────────────────────────────────
 //
-// Read-only household views. Gated on FAMILY_SHARING like the rest of the
-// family feature; membership itself is checked inside getEffectiveScope,
+// Read-only household views. Gated on the family's FAMILY_SHARING plan (the
+// caller's own, or the family creator's), so invited members on a lower plan
+// see what their family pays for; membership itself is checked inside getEffectiveScope,
 // which throws ForbiddenError for a non-member or a revoked member, so
 // there is no separate membership guard here.
 //
@@ -460,30 +461,30 @@ familiesRouter.put(
 // totals rather than the route deciding who may call it.
 familiesRouter.get(
   '/:familyId/dashboard/wealth',
-  requireFeature('FAMILY_SHARING'),
+  requireFamilyFeature('FAMILY_SHARING'),
   asyncHandler(getWealth),
 );
 
 familiesRouter.get(
   '/:familyId/dashboard/goals',
-  requireFeature('FAMILY_SHARING'),
+  requireFamilyFeature('FAMILY_SHARING'),
   asyncHandler(getGoals),
 );
 
 familiesRouter.get(
   '/:familyId/dashboard/protection',
-  requireFeature('FAMILY_SHARING'),
+  requireFamilyFeature('FAMILY_SHARING'),
   asyncHandler(getProtection),
 );
 
 familiesRouter.get(
   '/:familyId/dashboard/attention',
-  requireFeature('FAMILY_SHARING'),
+  requireFamilyFeature('FAMILY_SHARING'),
   asyncHandler(getAttention),
 );
 
 familiesRouter.get(
   '/:familyId/members/:userId/detail',
-  requireFeature('FAMILY_SHARING'),
+  requireFamilyFeature('FAMILY_SHARING'),
   asyncHandler(getMemberDetail),
 );

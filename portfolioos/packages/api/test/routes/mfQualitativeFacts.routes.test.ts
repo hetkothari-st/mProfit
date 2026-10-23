@@ -100,6 +100,8 @@ async function createUser(role: 'ADMIN' | 'INVESTOR'): Promise<string> {
         passwordHash: 'test-not-a-real-hash',
         name: `MFQF62 ${role}`,
         role,
+        // Admin tools need two-factor sign-in switched on for the account.
+        ...(role === 'ADMIN' ? { twoFactorEnabledAt: new Date(), twoFactorSecretEnc: 'test-not-a-real-secret' } : {}),
       },
       select: { id: true, email: true },
     });
@@ -109,7 +111,7 @@ async function createUser(role: 'ADMIN' | 'INVESTOR'): Promise<string> {
   return id;
 }
 
-function tokenFor(userId: string, role: 'ADMIN' | 'INVESTOR'): string {
+function tokenFor(userId: string, role: 'ADMIN' | 'INVESTOR', mfa = role === 'ADMIN'): string {
   return signAccessToken({
     sub: userId,
     email: `mfqf62-${role.toLowerCase()}@test.local`,
@@ -117,6 +119,8 @@ function tokenFor(userId: string, role: 'ADMIN' | 'INVESTOR'): string {
     // PLUS deliberately, on both callers. The point of the ADMIN gate is that
     // it is orthogonal to the plan: a paying PLUS user must still be refused.
     plan: 'PLUS',
+    // ...and used for this session.
+    ...(mfa ? { mfa: true } : {}),
   }).token;
 }
 
@@ -197,8 +201,15 @@ describe('access control', () => {
     expect((await call('GET', BASE)).status).toBe(401);
   });
 
+  it('refuses an admin whose session was not signed in with two-factor', async () => {
+    const res = await call('GET', BASE, { token: tokenFor(adminUserId, 'ADMIN', false) });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('TWO_FACTOR_REQUIRED');
+  });
+
   it('refuses a PLUS-entitled non-admin — role and plan are different axes', async () => {
-    expect((await call('GET', BASE, { token: investorToken })).status).toBe(401);
+    // Signed in but not allowed: 403, not 401.
+    expect((await call('GET', BASE, { token: investorToken })).status).toBe(403);
     expect(
       (
         await call('POST', BASE, {
@@ -212,7 +223,7 @@ describe('access control', () => {
           },
         })
       ).status,
-    ).toBe(401);
+    ).toBe(403);
   });
 });
 

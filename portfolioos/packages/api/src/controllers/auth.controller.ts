@@ -35,9 +35,10 @@ export const registerSchema = z.object({
   password: z.string().min(8).max(100),
   name: z.string().min(2).max(100),
   phone: z.string().optional(),
-  // ADMIN is never self-assignable at registration — it bypasses every
-  // plan-tier gate (see requireFeature), so granting it must stay an
-  // out-of-band operation, not something a public signup form can request.
+  // ADMIN is never self-assignable at registration — it opens the admin
+  // tools (it does not bypass plan gates; see requireFeature), so granting
+  // it must stay an out-of-band operation, not something a public signup
+  // form can request.
   // `plan` isn't accepted here at all: every new account starts FREE and
   // upgrades only through the billing flow, never by self-declaring a
   // paid tier at signup.

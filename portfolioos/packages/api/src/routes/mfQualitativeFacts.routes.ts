@@ -34,6 +34,7 @@
 import { Router } from 'express';
 import { authenticate, requireRole } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
+import { requireSecondFactor } from '../lib/professionalMfa.js';
 import {
   getQualitativeFactCatalog,
   listQualitativeFacts,
@@ -46,6 +47,8 @@ export const mfQualitativeFactsRouter = Router();
 
 mfQualitativeFactsRouter.use(authenticate);
 mfQualitativeFactsRouter.use(requireRole('ADMIN'));
+// Admin powers need two-factor sign-in, used for this session.
+mfQualitativeFactsRouter.use(requireSecondFactor('admin tools'));
 
 // What each `factType` does to a score. Declared before `/:id` would ever be
 // reachable so "catalog" can never be read as an id.

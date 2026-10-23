@@ -1,4 +1,5 @@
 import type { PlanTier } from '@prisma/client';
+import { hasFeature, type FeatureFlag, type PlanTierValue } from '@everypaisa/shared';
 
 /**
  * The plan a user is actually entitled to right now.
@@ -15,4 +16,13 @@ export function effectivePlan(
 ): PlanTier {
   if (user.plan !== 'FREE' && user.planExpiresAt && user.planExpiresAt <= now) return 'FREE';
   return user.plan;
+}
+
+/** Whether the user's plan, as it stands now (a lapsed paid plan is FREE), unlocks `feature`. */
+export function hasEffectiveFeature(
+  user: { plan: PlanTier; planExpiresAt: Date | null } | null,
+  feature: FeatureFlag,
+  now: Date = new Date(),
+): boolean {
+  return !!user && hasFeature(effectivePlan(user, now) as PlanTierValue, feature);
 }

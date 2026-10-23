@@ -92,7 +92,8 @@ export function requireRole(...roles: UserRole[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {
     if (!req.user) return next(new UnauthorizedError());
     if (!roles.includes(req.user.role)) {
-      return next(new UnauthorizedError('Insufficient role'));
+      // Signed in but not allowed: 403, so clients don't treat it as an expired session.
+      return next(new ForbiddenError('Insufficient role'));
     }
     next();
   };

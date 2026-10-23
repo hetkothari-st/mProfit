@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth.store';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -88,6 +89,8 @@ const BROKERS: BrokerMeta[] = [
 type SetupForm = Partial<Record<BrokerMeta['fields'][number]['key'], string>>;
 
 export function ConnectorsPage() {
+  // The Finvu card is an admin sandbox until AA consent is tied to the caller.
+  const isAdmin = useAuthStore((s) => s.user?.role === 'ADMIN');
   const qc = useQueryClient();
   const [setupOpen, setSetupOpen] = useState<Record<BrokerId, boolean>>({
     zerodha: false,
@@ -419,9 +422,11 @@ export function ConnectorsPage() {
         </div>
       )}
 
-      <div className="mt-8">
-        <FinvuConsentCard />
-      </div>
+      {isAdmin && (
+        <div className="mt-8">
+          <FinvuConsentCard />
+        </div>
+      )}
     </div>
   );
 }

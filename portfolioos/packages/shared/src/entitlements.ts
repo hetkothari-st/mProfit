@@ -67,7 +67,6 @@ export const FEATURE_MIN_TIER = {
   CA_WORKSPACE: 'PRO_ADVISOR',
   UNLIMITED_CLIENTS: 'PRO_ADVISOR',
   FNO_SCHEDULE_43: 'PRO_ADVISOR',
-  PRIORITY_AA_REFRESH: 'PRO_ADVISOR',
 } as const satisfies Record<string, PlanTierValue>;
 
 export type FeatureFlag = keyof typeof FEATURE_MIN_TIER;

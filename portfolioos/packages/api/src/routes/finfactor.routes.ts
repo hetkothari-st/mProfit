@@ -1,5 +1,6 @@
 import { Router, type Express } from 'express';
-import { authenticate } from '../middleware/authenticate.js';
+import { authenticate, requireRole } from '../middleware/authenticate.js';
+import { requireSecondFactor } from '../lib/professionalMfa.js';
 import { requireFeature } from '../middleware/requirePlan.js';
 import { asyncHandler } from '../middleware/validate.js';
 import {
@@ -40,6 +41,11 @@ finfactorRouter.get('/status', asyncHandler(getFinfactorStatus));
 // Everything below actually drives AA/Finvu-sourced auto-import (consent,
 // sync, statements, AA-derived insights) — Plus and above only.
 finfactorRouter.use(requireFeature('AA_FINVU_AUTOIMPORT'));
+
+// Sandbox only, for now: these calls take an arbitrary upstream identifier
+// that is not yet tied to the caller's own consent, and the MF import writes
+// shared scheme data. Until that is fixed they are admin tools.
+finfactorRouter.use(requireRole('ADMIN'), requireSecondFactor('Finvu sandbox tools'));
 
 // Mutual Fund insights group — mirrors /pfm/api/v2/mutual-fund/* upstream.
 finfactorRouter.post('/mf/insights', asyncHandler(postMfInsights));

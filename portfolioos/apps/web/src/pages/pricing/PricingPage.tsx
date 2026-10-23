@@ -71,7 +71,6 @@ const TIERS: TierDef[] = [
       'Full accounting module — Trial Balance, P&L, Balance Sheet',
       'Unlimited portfolios / clients',
       'F&O-heavy reports (Schedule 43)',
-      'Priority AA refresh frequency',
       'PDF/ITR exports',
     ],
   },

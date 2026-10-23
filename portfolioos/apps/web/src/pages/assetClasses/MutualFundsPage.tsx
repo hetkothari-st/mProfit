@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth.store';
 import { useState } from 'react';
 import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LineChart, RefreshCw, Plus, Loader2, Pencil, Upload, Download, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, Lock, Sparkles } from 'lucide-react';
@@ -36,6 +37,8 @@ const TXN_TYPE_LABELS: Record<string, string> = {
 };
 
 export function MutualFundsPage() {
+  // The Finvu card is an admin sandbox until AA consent is tied to the caller.
+  const isAdmin = useAuthStore((s) => s.user?.role === 'ADMIN');
   const [formOpen, setFormOpen] = useState(false);
   const [editTxn, setEditTxn] = useState<TransactionDTO | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -538,9 +541,11 @@ export function MutualFundsPage() {
         </div>
       )}
 
-      <div className="mt-6">
-        <FinvuSandboxCard />
-      </div>
+      {isAdmin && (
+        <div className="mt-6">
+          <FinvuSandboxCard />
+        </div>
+      )}
 
       <div className="mt-6">
         <MfOverlapCard />

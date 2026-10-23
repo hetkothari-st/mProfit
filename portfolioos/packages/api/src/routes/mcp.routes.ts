@@ -1,7 +1,8 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { hasFeature, type AiConnectorArea, type PlanTierValue } from '@everypaisa/shared';
+import type { AiConnectorArea } from '@everypaisa/shared';
 import { prisma } from '../lib/prisma.js';
+import { hasEffectiveFeature } from '../lib/effectivePlan.js';
 import { enterUserContext, runAsUser } from '../lib/requestContext.js';
 import { logger } from '../lib/logger.js';
 import { mcpDayLimiter, mcpMinuteLimiter } from '../middleware/rateLimit.js';
@@ -45,8 +46,9 @@ mcpRouter.post('/mcp', mcpBearer, mcpMinuteLimiter, mcpDayLimiter, async (req: R
   try {
     // Everything below runs in the connecting user's RLS context, like authenticate().
     enterUserContext(ctx.userId);
-    const user = await prisma.user.findUnique({ where: { id: ctx.userId }, select: { plan: true } });
-    const planOk = !!user && hasFeature(user.plan as PlanTierValue, 'AI_CONNECTOR');
+    // The plan as it stands now: a lapsed paid plan is FREE, so its connector stops reading data.
+    const user = await prisma.user.findUnique({ where: { id: ctx.userId }, select: { plan: true, planExpiresAt: true } });
+    const planOk = hasEffectiveFeature(user, 'AI_CONNECTOR');
     void runAsUser(ctx.userId, () => prisma.mcpGrant.update({ where: { id: ctx.grantId }, data: { lastUsedAt: new Date() } }))
       .catch((err) => logger.warn({ err }, 'mcp.last_used.failed'));
     const server = buildMcpServer({ userId: ctx.userId, grantId: ctx.grantId, areas: ctx.areas, memberUserIds: ctx.memberUserIds, planOk, now: new Date() });
