@@ -10,7 +10,14 @@ import {
   PiggyBank,
   Plus,
 } from 'lucide-react';
-import { Decimal, formatINR, formatDateIST } from '@everypaisa/shared';
+import {
+  Decimal,
+  formatINR,
+  formatDateIST,
+  fdMaturityValue,
+  rdMaturityValue,
+  depositCompoundingLabel,
+} from '@everypaisa/shared';
 import type { AssetClass, HoldingRow, TransactionDTO } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
@@ -64,55 +71,13 @@ function normalizeText(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function freqCompoundN(freq: string | null | undefined): number {
-  switch (freq) {
-    case 'MONTHLY': return 12;
-    case 'QUARTERLY': return 4;
-    case 'HALF_YEARLY': return 2;
-    case 'ANNUAL': return 1;
-    default: return 0;
-  }
-}
+// Maturity math is shared with the detail page and the server's accrual
+// (@everypaisa/shared finance/depositMath) so all three show the same number.
 
-function fdMaturityValue(
-  principal: string,
-  ratePct: string | null | undefined,
-  months: number | null,
-  freq: string | null | undefined,
-): Decimal | null {
-  if (!ratePct || !months || months <= 0) return null;
-  try {
-    const p = new Decimal(principal);
-    const r = new Decimal(ratePct).div(100);
-    const years = new Decimal(months).div(12);
-    const n = freqCompoundN(freq);
-    if (n === 0) {
-      return p.times(new Decimal(1).plus(r.times(years)));
-    }
-    const base = new Decimal(1).plus(r.div(n));
-    const exp = n * months / 12;
-    return p.times(base.pow(exp));
-  } catch {
-    return null;
-  }
-}
-
-function rdMaturityValue(
-  monthly: string | null | undefined,
-  ratePct: string | null | undefined,
-  months: number | null,
-): Decimal | null {
-  if (!monthly || !ratePct || !months || months <= 0) return null;
-  try {
-    const m = new Decimal(monthly);
-    const r = new Decimal(ratePct).div(100);
-    const i = r.div(12);
-    if (i.isZero()) return m.times(months);
-    const factor = new Decimal(1).plus(i).pow(months).minus(1).div(i);
-    return m.times(factor).times(new Decimal(1).plus(i));
-  } catch {
-    return null;
-  }
+/** One RD installment, as the detail page reads it (price × quantity). */
+function rdInstallment(txn: TransactionDTO | null | undefined): Decimal | null {
+  if (!txn?.price) return null;
+  return new Decimal(txn.price).times(txn.quantity ? new Decimal(txn.quantity) : 1);
 }
 
 function formatShortDate(iso: string | null | undefined): string {
@@ -338,7 +303,13 @@ function FDCard({
     : 0;
 
   const serial = holding.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
-  const matValue = fdMaturityValue(holding.totalCost, rate, tenureMonths, freq);
+  const matValue = fdMaturityValue({
+    principal: holding.totalCost,
+    ratePct: rate,
+    openDate,
+    maturityDate: maturity,
+    frequency: freq,
+  });
   const matured = maturity ? daysUntil(maturity) < 0 : false;
   const payout = matured ? null : nextPayoutDate(openDate, maturity, freq);
   const [reminder] = depositReminders({ kind: 'FD', openDate, maturity, installmentsPaid: 0, today: todayIso() });
@@ -420,7 +391,14 @@ function RDCard({
 
   const tenureMonths = openDate && maturity ? monthsBetween(openDate, maturity) : null;
   const installmentsDone = allDepositTxns.length;
-  const matValue = rdMaturityValue(monthlyRaw, rate, tenureMonths);
+  const matValue = rdMaturityValue({
+    installment: rdInstallment(primaryTxn),
+    ratePct: rate,
+    openDate,
+    maturityDate: maturity,
+    tenureMonths,
+    frequency: primaryTxn?.interestFrequency,
+  });
   const serial = holding.id.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase();
   const matured = maturity ? daysUntil(maturity) < 0 : false;
 
@@ -454,7 +432,7 @@ function RDCard({
         reference={`Recurring deposit no. ${serial}`}
         rate={rate}
         holder={holding.portfolioName || null}
-        terms="Interest compounded quarterly"
+        terms={`Interest compounded ${depositCompoundingLabel(primaryTxn?.interestFrequency)}`}
         stamp={matured ? 'Matured' : null}
         editLabel="Edit deposit"
         onEdit={onEdit}
@@ -643,8 +621,21 @@ export function FixedDepositsPage() {
       const tenure = openDate && maturity ? monthsBetween(openDate, maturity) : null;
       const maturityValue =
         kindLabel === 'FD'
-          ? fdMaturityValue(h.totalCost, primary?.interestRate, tenure, primary?.interestFrequency)
-          : rdMaturityValue(primary?.price, primary?.interestRate, tenure);
+          ? fdMaturityValue({
+              principal: h.totalCost,
+              ratePct: primary?.interestRate,
+              openDate,
+              maturityDate: maturity,
+              frequency: primary?.interestFrequency,
+            })
+          : rdMaturityValue({
+              installment: rdInstallment(primary),
+              ratePct: primary?.interestRate,
+              openDate,
+              maturityDate: maturity,
+              tenureMonths: tenure,
+              frequency: primary?.interestFrequency,
+            });
       return depositReminders({
         kind: kindLabel,
         openDate,

@@ -5,7 +5,7 @@
  * month arithmetic, and chart formatting identically. Money math uses
  * decimal.js throughout (project invariant §3.2) — never JS Number.
  */
-import { Decimal, formatDateIST } from '@everypaisa/shared';
+import { Decimal, compoundDeposit, formatDateIST } from '@everypaisa/shared';
 
 export const TOOLTIP_STYLE: React.CSSProperties = {
   background: 'hsl(var(--popover))',
@@ -58,7 +58,8 @@ export const INR_COMPACT = (v: number): string => {
 
 /**
  * Compound accrual at an arbitrary valuation date for a single deposit.
- * Matches the backend FD accrual formula in holdingsProjection.ts.
+ * Delegates to the shared deposit formula, which the backend FD accrual in
+ * holdingsProjection.ts also uses.
  */
 export function accruedValue(opts: {
   principal: Decimal;
@@ -67,11 +68,11 @@ export function accruedValue(opts: {
   valuationIso: string;
   periodsPerYear: number;
 }): Decimal {
-  const ms = new Date(`${opts.valuationIso}T00:00:00Z`).getTime() -
-             new Date(`${opts.startIso}T00:00:00Z`).getTime();
-  if (ms <= 0) return opts.principal;
-  const years = new Decimal(ms / (365.25 * 24 * 60 * 60 * 1000));
-  const periodRate = opts.rate.div(opts.periodsPerYear);
-  const periods = years.times(opts.periodsPerYear);
-  return opts.principal.times(new Decimal(1).plus(periodRate).pow(periods));
+  return compoundDeposit({
+    principal: opts.principal,
+    annualRate: opts.rate,
+    start: opts.startIso,
+    valuation: opts.valuationIso,
+    periodsPerYear: opts.periodsPerYear,
+  });
 }

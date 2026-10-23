@@ -3,7 +3,7 @@ import type { AssetClass, Prisma, Transaction, TransactionType } from '@prisma/c
 import { prisma } from '../../lib/prisma.js';
 import { routePriceQuote, type PriceQuote } from '../../priceFeeds/router.service.js';
 import { getLatestFxRate } from '../../priceFeeds/fx.service.js';
-import { istCalendarDate } from '@everypaisa/shared';
+import { compoundDeposit, depositPeriodsPerYear, istCalendarDate } from '@everypaisa/shared';
 import { assetKeyFromTransaction } from './assetKey.js';
 import { resolveMutualFundId, resolveStockMasterId } from './masterData.service.js';
 
@@ -48,13 +48,6 @@ const PO_PAYOUT_CLASSES: ReadonlySet<AssetClass> = new Set<AssetClass>([
 
 // Compounding periods per year keyed by Transaction.interestFrequency. AT_MATURITY
 // behaves like a single end-of-term compound for accrual-display purposes.
-const FREQ_PERIODS_PER_YEAR: Record<string, number> = {
-  MONTHLY: 12,
-  QUARTERLY: 4,
-  HALF_YEARLY: 2,
-  ANNUAL: 1,
-  AT_MATURITY: 1,
-};
 
 /**
  * Accrual runs to the start of today's Indian calendar date, not "now". With
@@ -100,20 +93,16 @@ export function computeFdAccruedValue(txs: Transaction[]): Decimal | null {
     const annualRate = new Decimal(dep.interestRate!.toString()).div(100);
     const valuationDate =
       dep.maturityDate && dep.maturityDate < today ? dep.maturityDate : today;
-    const yearsElapsed = new Decimal(
-      (valuationDate.getTime() - dep.tradeDate.getTime()) /
-        (365.25 * 24 * 60 * 60 * 1000),
-    ).toDP(6);
-    if (yearsElapsed.lte(0)) {
-      total = total.plus(principal);
-      continue;
-    }
-    const periodsPerYear =
-      FREQ_PERIODS_PER_YEAR[dep.interestFrequency ?? 'QUARTERLY'] ?? 4;
-    const periodRate = annualRate.div(periodsPerYear);
-    const periods = yearsElapsed.times(periodsPerYear);
-    const factor = new Decimal(1).plus(periodRate).pow(periods);
-    total = total.plus(principal.times(factor));
+    // Shared with the deposit card and detail page so the three agree.
+    total = total.plus(
+      compoundDeposit({
+        principal,
+        annualRate,
+        start: dep.tradeDate,
+        valuation: valuationDate,
+        periodsPerYear: depositPeriodsPerYear(dep.interestFrequency),
+      }),
+    );
   }
   return total.isZero() ? null : total.toDP(4);
 }
