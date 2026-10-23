@@ -7,6 +7,7 @@ import {
   loginUser,
   logoutAllSessions,
   logoutSession,
+  liveRefreshTokenOwner,
   refreshSession,
   requestPasswordReset,
   resendRegistrationCode,
@@ -24,6 +25,7 @@ import {
   sendDeletionCode,
 } from '../services/account/accountDeletion.service.js';
 import { UnauthorizedError } from '../lib/errors.js';
+import { verifyAccessToken } from '../services/auth/jwt.service.js';
 import { writeAuditLog } from '../lib/audit.js';
 import { readPan } from '../services/security/piiAtRest.service.js';
 import { notifyIfLoginBurst, notifyIfNewDevice } from '../services/security/securityAlerts.service.js';
@@ -154,23 +156,44 @@ export async function refresh(req: Request, res: Response) {
   ok(res, result);
 }
 
+/**
+ * Sign out. Deliberately not behind `authenticate`: a client whose access
+ * token has already expired must still be able to revoke its refresh token
+ * and leave cleanly. The caller is identified from the access token when it
+ * is still valid, otherwise from the live refresh token being revoked — so
+ * the sign-out is audited and "everywhere" knows whose sessions to end.
+ */
 export async function logout(req: Request, res: Response) {
   const { refreshToken, everywhere } = logoutSchema.parse(req.body ?? {});
-  if (everywhere && req.user) {
-    await logoutAllSessions(req.user.id);
-  } else if (refreshToken) {
-    await logoutSession(refreshToken);
-  }
-  if (req.user) {
+  // Look the owner up before revoking: a revoked token no longer identifies anyone.
+  const userId =
+    accessTokenUserId(req) ?? (refreshToken ? await liveRefreshTokenOwner(refreshToken) : null);
+  if (refreshToken) await logoutSession(refreshToken);
+  if (everywhere && userId) await logoutAllSessions(userId);
+  if (userId) {
     await writeAuditLog({
-      userId: req.user.id,
+      userId,
       action: 'logout',
-      resource: `User:${req.user.id}`,
+      resource: `User:${userId}`,
       metadata: { everywhere: Boolean(everywhere) },
       req,
     });
   }
   noContent(res);
+}
+
+/** The user a still-valid bearer access token names; null when absent, expired or forged. */
+function accessTokenUserId(req: Request): string | null {
+  const header = req.header('authorization');
+  if (!header?.startsWith('Bearer ')) return null;
+  try {
+    return verifyAccessToken(header.slice('Bearer '.length).trim()).sub;
+  } catch (err) {
+    // Expired or invalid is an expected state at logout, not an error: fall
+    // back to the refresh token. Anything else is a real fault.
+    if (err instanceof UnauthorizedError) return null;
+    throw err;
+  }
 }
 
 export async function forgotPassword(req: Request, res: Response) {

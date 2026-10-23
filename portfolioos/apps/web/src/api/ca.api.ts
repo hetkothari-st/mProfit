@@ -638,6 +638,31 @@ export const caInviteEmailApi = {
   },
 };
 
+/**
+ * The same email, sent by the account holder inviting their own professional.
+ * Its own endpoints because `/api/ca/...` sits behind the professional
+ * workspace's two-factor gate, which is about acting on other people's data —
+ * not something an account holder inviting their accountant needs.
+ */
+export const myInviteEmailApi = {
+  async preview(clientId: string, edits: InviteEmailEdits = {}): Promise<InviteEmailDraft> {
+    const { data } = await api.post<ApiResponse<InviteEmailDraft>>(
+      `/api/me/professional-access/${clientId}/invite-email/preview`,
+      edits,
+    );
+    return unwrap(data);
+  },
+
+  async send(
+    clientId: string,
+    edits: InviteEmailEdits,
+  ): Promise<{ sent: boolean; to: string; sendsRemaining: number; reason?: string }> {
+    const { data } = await api.post<
+      ApiResponse<{ sent: boolean; to: string; sendsRemaining: number; reason?: string }>
+    >(`/api/me/professional-access/${clientId}/invite-email/send`, edits);
+    return unwrap(data);
+  },
+};
 
 /** A row on the Account Access page: an open invitation, or a live grant. */
 export interface MyProfessionalGrant {

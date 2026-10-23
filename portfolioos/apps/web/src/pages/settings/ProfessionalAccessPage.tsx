@@ -31,6 +31,7 @@ import { useEntitlement } from '@/hooks/useEntitlement';
 import { CaActivityFeed } from '@/components/ca/CaActivityFeed';
 import { GrantScopePanel } from '@/components/ca/GrantScopePanel';
 import { InviteEmailComposer } from '@/components/ca/InviteEmailComposer';
+import { accountHolderInviteSource } from '@/components/ca/inviteEmailSources';
 import { Initials, AccessStrip, AccessCell } from '@/components/ca/AccessParts';
 import { fmtDate } from '@/components/ca/accessModel';
 
@@ -237,7 +238,10 @@ export function ProfessionalAccessPage() {
             </DialogDescription>
           </DialogHeader>
           {resending && (
-            <InviteEmailComposer clientId={resending} onDone={() => setResending(null)} />
+            <InviteEmailComposer
+              source={accountHolderInviteSource(resending)}
+              onDone={() => setResending(null)}
+            />
           )}
         </DialogContent>
       </Dialog>
@@ -600,7 +604,7 @@ function InviteProfessionalDialog({
         </DialogHeader>
 
         {createdClientId ? (
-          <InviteEmailComposer clientId={createdClientId} onDone={close} />
+          <InviteEmailComposer source={accountHolderInviteSource(createdClientId)} onDone={close} />
         ) : (
           <form
             onSubmit={(e) => {

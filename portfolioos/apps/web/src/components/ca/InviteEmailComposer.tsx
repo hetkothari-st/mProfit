@@ -40,7 +40,7 @@ export interface InviteEmailSource {
 }
 
 interface Props {
-  /** A professional invitation; or pass `source` for any other kind. */
+  /** An invitation a professional sends from the CA workspace; or pass `source` for any other kind. */
   clientId?: string;
   source?: InviteEmailSource;
   onDone: () => void;
@@ -101,6 +101,29 @@ export function InviteEmailComposer({ clientId, source: given, onDone }: Props) 
     },
     onError: (e) => toast.error(apiErrorMessage(e, 'Could not send the invitation')),
   });
+
+  // A failed preview used to fall through to the spinner below and spin for
+  // good. Say what went wrong; the invitation itself already exists.
+  if (draft.isError && !draft.data) {
+    return (
+      <div role="alert" className="space-y-3 py-4">
+        <p className="text-[13px] leading-relaxed text-negative">
+          {apiErrorMessage(draft.error, 'Could not prepare the invitation email.')}
+        </p>
+        <p className="text-[12px] leading-relaxed text-muted-foreground">
+          The invitation was still created. You can try again, or send it later from the list.
+        </p>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => void draft.refetch()}>
+            Try again
+          </Button>
+          <Button variant="ghost" onClick={onDone}>
+            Close
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (draft.isLoading || !draft.data) {
     return (

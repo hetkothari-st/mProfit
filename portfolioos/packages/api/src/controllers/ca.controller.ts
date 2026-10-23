@@ -178,6 +178,20 @@ export async function sendInviteEmailHandler(req: Request, res: Response) {
   ok(res, await sendInviteEmail(req.user!.id, req.params.clientId!, edits, req));
 }
 
+// The account holder's own invitation to their professional. Separate
+// handlers (not the /api/ca ones) because those sit behind the professional
+// workspace's two-factor gate, which protects other people's data — not what
+// is at stake when someone invites their own accountant.
+export async function previewMyInviteEmailHandler(req: Request, res: Response) {
+  const edits = inviteEmailSchema.parse(req.body ?? {});
+  ok(res, await buildInviteEmail(req.user!.id, req.params.clientId!, edits, 'ACCOUNT_HOLDER'));
+}
+
+export async function sendMyInviteEmailHandler(req: Request, res: Response) {
+  const edits = inviteEmailSchema.parse(req.body ?? {});
+  ok(res, await sendInviteEmail(req.user!.id, req.params.clientId!, edits, req, 'ACCOUNT_HOLDER'));
+}
+
 // ─── The ordinary direction: a client brings in their professional ───
 
 const inviteProfessionalSchema = z.object({

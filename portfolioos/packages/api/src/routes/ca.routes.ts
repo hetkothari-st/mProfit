@@ -21,6 +21,8 @@ import {
   reinstateGrantHandler,
   previewInviteEmailHandler,
   sendInviteEmailHandler,
+  previewMyInviteEmailHandler,
+  sendMyInviteEmailHandler,
   listCaActivityHandler,
 } from '../controllers/ca.controller.js';
 import {
@@ -187,6 +189,12 @@ professionalAccessRouter.get('/activity', asyncHandler(listCaActivityHandler));
 professionalAccessRouter.post('/invitations/:token/accept', asyncHandler(acceptInvitationHandler));
 professionalAccessRouter.get('/:clientId', asyncHandler(getMyGrantHandler));
 professionalAccessRouter.patch('/:clientId/scope', asyncHandler(updateMyGrantScopeHandler));
+// Emailing your own invitation to your professional. No professional 2FA
+// gate: that protects the professional's access to other people's books, and
+// here the sender is granting access to their own. These only ever serve the
+// account holder's side of the row (see InviteSender).
+professionalAccessRouter.post('/:clientId/invite-email/preview', asyncHandler(previewMyInviteEmailHandler));
+professionalAccessRouter.post('/:clientId/invite-email/send', asyncHandler(sendMyInviteEmailHandler));
 professionalAccessRouter.post('/:clientId/cancel', asyncHandler(cancelProfessionalInvitationHandler));
 professionalAccessRouter.post('/:clientId/revoke', asyncHandler(revokeGrantHandler));
 professionalAccessRouter.post('/:clientId/reinstate', asyncHandler(reinstateGrantHandler));

@@ -30,8 +30,8 @@ export function NotificationsSection() {
     mutationFn: () => gmailApi.authUrl(),
     onSuccess: ({ url }) => {
       // Open Google consent in same tab — the existing /gmail/callback
-      // route handles the redirect + token exchange and brings the user
-      // back to the dashboard.
+      // route handles the redirect + token exchange and then lands on
+      // /gmail/scan-setup (GmailCallbackPage), not back here.
       window.location.href = url;
     },
     onError: (err) =>
@@ -142,8 +142,9 @@ export function NotificationsSection() {
               Connect Gmail
             </Button>
             <p className="text-[11px] text-muted-foreground">
-              You'll be redirected to Google, then back here. We request only
-              the Gmail send + read scopes — nothing else.
+              You'll be redirected to Google, then on to the Gmail scan setup page
+              (you can skip it and come back to Settings to send a test). We
+              request only the Gmail send + read scopes — nothing else.
             </p>
           </div>
         )}
