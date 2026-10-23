@@ -40,9 +40,20 @@ export const PAYMENT_TYPES = [
 
 export const PREPAYMENT_OPTIONS = ['REDUCE_TENURE', 'REDUCE_EMI'] as const;
 
-export const LOAN_STATUSES = ['ACTIVE', 'CLOSED', 'FORECLOSED'] as const;
+export const LOAN_STATUSES = ['ACTIVE', 'CLOSED', 'FORECLOSED', 'DEFAULT'] as const;
 
-const ALERT_THRESHOLDS = [30, 15, 7, 1] as const;
+/** Days before an EMI on which a reminder is raised; 0 is the due date itself. */
+const ALERT_THRESHOLDS = [30, 15, 7, 1, 0] as const;
+
+/**
+ * A missed EMI is reported as overdue only while it is this recent. Loans are
+ * often added mid-tenure and their earlier EMIs never marked paid; alerting on
+ * those would flag history the user never meant to track.
+ */
+const OVERDUE_WINDOW_DAYS = 30;
+
+/** Both loan forms save "80C+24B"; "80C_24B" is the older code. */
+const HOME_LOAN_TAX_SECTIONS = new Set(['80C+24B', '80C_24B']);
 
 // ── Input types ──────────────────────────────────────────────────────────────
 
@@ -55,7 +66,6 @@ export interface CreateLoanInput {
   interestRate: string;
   tenureMonths: number;
   emiAmount: string;
-  emiDueDay?: number;
   disbursementDate: string;
   firstEmiDate: string;
   prepaymentOption?: (typeof PREPAYMENT_OPTIONS)[number];
@@ -281,10 +291,11 @@ export function buildAmortizationSchedule(
     if (p.paymentType === 'EMI') {
       const key = p.forMonth ?? dateToIso(p.paidOn).slice(0, 7);
       emiPaidMonths.set(key, p);
-    } else if (p.paymentType === 'PREPAYMENT') {
+    } else if (p.paymentType === 'PREPAYMENT' || p.paymentType === 'FORECLOSURE') {
+      // A foreclosure is a prepayment of the whole balance; one that clears it ends the schedule.
       prepayments.push(p);
     }
-    // FORECLOSURE / PROCESSING_FEE handled separately in summary
+    // PROCESSING_FEE does not touch the balance
   }
 
   // Sort prepayments ascending by date
@@ -496,7 +507,10 @@ export function computeLoanSummary(loan: StoredLoan, asOf: Date = new Date()): L
       );
       effectiveEndDate = unpaidRows[unpaidRows.length - 1]!.date;
     } else if (lastPaidRow) {
-      outstandingBalance = new Decimal(lastPaidRow.closingBalance);
+      outstandingBalance = Decimal.max(
+        ZERO,
+        new Decimal(lastPaidRow.closingBalance).minus(principalPaidAfter(loan, lastPaidRow.date)),
+      );
     }
   }
 
@@ -537,6 +551,17 @@ export function computeLoanSummary(loan: StoredLoan, asOf: Date = new Date()): L
 }
 
 /**
+ * Prepayments and foreclosures made after the schedule's last row. The schedule
+ * applies these before the next EMI, so once a foreclosure clears the balance
+ * there is no next row to show them on.
+ */
+function principalPaidAfter(loan: StoredLoan, rowDate: string): Decimal {
+  return loan.payments
+    .filter((p) => (p.paymentType === 'PREPAYMENT' || p.paymentType === 'FORECLOSURE') && dateToIso(p.paidOn) > rowDate)
+    .reduce((s, p) => s.plus(new Decimal(p.amount.toString())), new Decimal(0));
+}
+
+/**
  * Build schedule without any payments (original plan) — used for prepayment savings calc.
  */
 function buildAmortizationScheduleFromScratch(loan: StoredLoan): AmortizationRow[] {
@@ -574,7 +599,7 @@ function computeTaxBenefit(
   const annualPrincipal = fyRows.reduce((s, r) => s.plus(new Decimal(r.principalPart)), ZERO);
   const annualInterest = fyRows.reduce((s, r) => s.plus(new Decimal(r.interestPart)), ZERO);
 
-  if (section === '80C_24B') {
+  if (HOME_LOAN_TAX_SECTIONS.has(section)) {
     const principalCap = new Decimal('150000');
     const interestCap = new Decimal('200000');
     const principalDeduction = Decimal.min(annualPrincipal, principalCap);
@@ -709,7 +734,7 @@ export async function createLoan(userId: string, input: CreateLoanInput) {
       interestRate: new Prisma.Decimal(input.interestRate),
       tenureMonths: input.tenureMonths,
       emiAmount: new Prisma.Decimal(input.emiAmount),
-      emiDueDay: input.emiDueDay ?? 1,
+      emiDueDay: emiDueDayFrom(input.firstEmiDate),
       disbursementDate: toDate(input.disbursementDate),
       firstEmiDate: toDate(input.firstEmiDate),
       prepaymentOption: input.prepaymentOption ?? 'REDUCE_TENURE',
@@ -751,11 +776,13 @@ export async function updateLoan(
       }),
       ...(input.tenureMonths !== undefined && { tenureMonths: input.tenureMonths }),
       ...(input.emiAmount !== undefined && { emiAmount: new Prisma.Decimal(input.emiAmount) }),
-      ...(input.emiDueDay !== undefined && { emiDueDay: input.emiDueDay }),
       ...(input.disbursementDate !== undefined && {
         disbursementDate: toDate(input.disbursementDate),
       }),
-      ...(input.firstEmiDate !== undefined && { firstEmiDate: toDate(input.firstEmiDate) }),
+      ...(input.firstEmiDate !== undefined && {
+        firstEmiDate: toDate(input.firstEmiDate),
+        emiDueDay: emiDueDayFrom(input.firstEmiDate),
+      }),
       ...(input.prepaymentOption !== undefined && { prepaymentOption: input.prepaymentOption }),
       ...(input.vehicleId !== undefined && { vehicleId: input.vehicleId }),
       ...(input.rentalPropertyId !== undefined && { rentalPropertyId: input.rentalPropertyId }),
@@ -795,7 +822,7 @@ export async function addPayment(
   // principalPart / interestPart (dashboard, accounting, tax) sees real parts.
   let principalPart = input.principalPart ?? null;
   let interestPart = input.interestPart ?? null;
-  if (!principalPart && !interestPart && (input.paymentType === 'EMI' || input.paymentType === 'PREPAYMENT')) {
+  if (!principalPart && !interestPart && input.paymentType !== 'PROCESSING_FEE') {
     const split = splitLoanPayment(
       {
         paymentType: input.paymentType,
@@ -811,7 +838,7 @@ export async function addPayment(
     interestPart = split.interest.toFixed(2);
   }
 
-  return prisma.loanPayment.create({
+  const payment = await prisma.loanPayment.create({
     data: {
       loanId,
       paymentType: input.paymentType,
@@ -824,17 +851,35 @@ export async function addPayment(
       notes: input.notes ?? null,
     },
   });
+
+  // Recording a foreclosure on an active loan closes it on that date.
+  if (input.paymentType === 'FORECLOSURE' && loan.status === 'ACTIVE') {
+    await prisma.loan.update({
+      where: { id: loanId },
+      data: { status: 'FORECLOSED', closedDate: toDate(input.paidOn) },
+    });
+  }
+  return payment;
 }
 
 export async function deletePayment(userId: string, paymentId: string) {
   const payment = await prisma.loanPayment.findFirst({
     where: { id: paymentId },
-    include: { loan: { select: { userId: true } } },
+    include: { loan: { select: { userId: true, status: true, closedDate: true } } },
   });
   if (!payment || payment.loan.userId !== userId) {
     throw new NotFoundError(`LoanPayment ${paymentId} not found`);
   }
   await prisma.loanPayment.delete({ where: { id: paymentId } });
+
+  // Removing the foreclosure that closed the loan reopens it.
+  const closedByThis =
+    payment.paymentType === 'FORECLOSURE' &&
+    payment.loan.status === 'FORECLOSED' &&
+    payment.loan.closedDate?.getTime() === payment.paidOn.getTime();
+  if (closedByThis) {
+    await prisma.loan.update({ where: { id: payment.loanId }, data: { status: 'ACTIVE', closedDate: null } });
+  }
 }
 
 // ── Computed views ───────────────────────────────────────────────────────────
@@ -854,6 +899,43 @@ export async function getAmortization(
 
 // ── Alert scanner ────────────────────────────────────────────────────────────
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Which EMI, if any, deserves an alert today. A missed EMI comes first: the
+ * latest one that fell due after the loan was added to the app and is at most
+ * OVERDUE_WINDOW_DAYS late. Otherwise the next unpaid EMI, when today is one
+ * of the reminder thresholds before it.
+ */
+export function pickEmiAlert(
+  schedule: AmortizationRow[],
+  today: Date,
+  addedOn: Date,
+): { row: AmortizationRow; daysLeft: number; isOverdue: boolean } | null {
+  const day = new Date(today.getTime());
+  day.setUTCHours(0, 0, 0, 0);
+  const todayStr = dateToIso(day);
+  const addedStr = dateToIso(addedOn);
+  const daysUntil = (row: AmortizationRow) =>
+    Math.round((new Date(`${row.date}T00:00:00Z`).getTime() - day.getTime()) / DAY_MS);
+
+  const missed = schedule
+    .filter((r) => !r.isPaid && r.date < todayStr && r.date >= addedStr && -daysUntil(r) <= OVERDUE_WINDOW_DAYS)
+    .pop();
+  if (missed) return { row: missed, daysLeft: daysUntil(missed), isOverdue: true };
+
+  const next = schedule.find((r) => !r.isPaid && r.date >= todayStr);
+  if (!next) return null;
+  const daysLeft = daysUntil(next);
+  if (!(ALERT_THRESHOLDS as readonly number[]).includes(daysLeft)) return null;
+  return { row: next, daysLeft, isOverdue: false };
+}
+
+/** The EMI due day is the day of the month of the first EMI; the schedule falls on it. */
+export function emiDueDayFrom(firstEmiDate: string): number {
+  return Number.parseInt(firstEmiDate.slice(8, 10), 10);
+}
+
 /**
  * For every ACTIVE loan, compute the next EMI date and create Alert rows
  * for approaching EMIs. Follows the same pattern as generateRenewalAlerts()
@@ -862,7 +944,6 @@ export async function getAmortization(
 export async function generateLoanEmiAlerts(userId?: string): Promise<number> {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
-  const todayStr = dateToIso(today);
 
   const loans = await prisma.loan.findMany({
     where: {
@@ -888,20 +969,10 @@ export async function generateLoanEmiAlerts(userId?: string): Promise<number> {
       continue;
     }
 
-    // Find the first unpaid EMI on or after today
-    const nextUnpaid = schedule.find((r) => !r.isPaid && r.date >= todayStr);
-    if (!nextUnpaid) continue;
-
-    const emiDate = new Date(nextUnpaid.date + 'T00:00:00Z');
-    const daysLeft = Math.ceil(
-      (emiDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-    );
-
-    const isOverdue = daysLeft < 0;
-    const daysLabel = isOverdue ? Math.abs(daysLeft) : daysLeft;
-
-    // Only alert at exact threshold crossings (or overdue)
-    if (!isOverdue && !(ALERT_THRESHOLDS as readonly number[]).includes(daysLeft)) continue;
+    const pick = pickEmiAlert(schedule, today, loan.createdAt);
+    if (!pick) continue;
+    const { row: nextUnpaid, daysLeft, isOverdue } = pick;
+    const daysLabel = Math.abs(daysLeft);
 
     const metaKey = `loan_emi:${loan.id}:${nextUnpaid.date}:${isOverdue ? 'overdue' : `${daysLeft}d`}`;
 
@@ -916,7 +987,9 @@ export async function generateLoanEmiAlerts(userId?: string): Promise<number> {
 
     const title = isOverdue
       ? `${loan.lenderName} EMI overdue by ${daysLabel} day${daysLabel !== 1 ? 's' : ''}`
-      : `${loan.lenderName} EMI due in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
+      : daysLeft === 0
+        ? `${loan.lenderName} EMI due today`
+        : `${loan.lenderName} EMI due in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
 
     const emiDisplay = new Decimal(nextUnpaid.emiAmount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     const description = `EMI of ₹${emiDisplay} ${isOverdue ? 'was due on' : 'due on'} ${nextUnpaid.date}`;

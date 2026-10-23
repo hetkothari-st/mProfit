@@ -1,4 +1,4 @@
-import { getLoanSummary, listLoans } from '../../loans/loans.service.js';
+import { emiDueDayFrom, getLoanSummary, listLoans } from '../../loans/loans.service.js';
 import { listLoansGiven } from '../../loans/loansGiven.service.js';
 import { last4 } from '../mask.js';
 import type { ConnectorTool } from './types.js';
@@ -15,7 +15,7 @@ const listLoansTool: ConnectorTool<Record<string, never>> = {
       const acct = typeof r.accountNumber === 'string' ? r.accountNumber.replace(/\D/g, '') : '';
       loans.push({
         lender: r.lenderName, type: r.loanType, account: last4(acct), status: r.status,
-        principal: money(r.principalAmount), interestRatePct: money(r.interestRate), emi: money(r.emiAmount), emiDueDay: r.emiDueDay,
+        principal: money(r.principalAmount), interestRatePct: money(r.interestRate), emi: money(r.emiAmount), emiDueDay: emiDueDayFrom(r.firstEmiDate.toISOString()),
         outstanding: s.outstandingBalance, nextEmiDate: dmy(s.nextEmiDate), nextEmiAmount: s.nextEmiAmount,
         remainingEmis: s.remainingEmiCount, totalInterestPaid: s.totalInterestPaid,
         vehicle: r.vehicle?.registrationNo ? last4(r.vehicle.registrationNo) : null,

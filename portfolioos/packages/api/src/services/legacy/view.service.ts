@@ -8,6 +8,7 @@ import { decryptSecret } from '../../lib/secrets.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { readBuffer } from '../../lib/documentStorage.js';
 import { willDocumentTags } from '../documents/document.service.js';
+import { emiDueDayFrom } from '../loans/loans.service.js';
 
 /**
  * The nominee's read-only view. Owner data is read under runAsUser(owner) so
@@ -66,7 +67,7 @@ async function loadCategory(ownerId: string, c: LegacyCategory): Promise<RawItem
       const cards = await prisma.creditCard.findMany({ where: { userId: ownerId, status: 'ACTIVE' } });
       return [
         ...loans.map((l) => item(`${l.lenderName} ${l.loanType}`, {
-          sublabel: `EMI on day ${l.emiDueDay}`, identifierLast4: l.accountNumberLast4, amount: l.emiAmount,
+          sublabel: `EMI on day ${emiDueDayFrom(l.firstEmiDate.toISOString())}`, identifierLast4: l.accountNumberLast4, amount: l.emiAmount,
           notes: ['Action needed: inform the lender'],
         })),
         ...cards.map((k) => item(`${k.issuerBank} ${k.cardName}`, {

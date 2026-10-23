@@ -575,7 +575,6 @@ function LoanForm({ portfolioId, onSaved }: QuickFormProps) {
       interestRate: annualRate.toString(),
       tenureMonths: Math.min(Math.max(months, 1), 600),
       emiAmount: emiAmount.toString(),
-      emiDueDay: firstEmi.day,
       disbursementDate: todayIso(),
       firstEmiDate: firstEmi.iso,
       prepaymentOption: 'REDUCE_TENURE',

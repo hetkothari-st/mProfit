@@ -94,7 +94,6 @@ export interface CreateLoanInput {
   interestRate: string;
   tenureMonths: number;
   emiAmount: string;
-  emiDueDay: number;
   disbursementDate: string;
   firstEmiDate: string;
   prepaymentOption: string;
