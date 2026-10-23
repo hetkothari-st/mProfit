@@ -25,6 +25,7 @@ import { prisma } from '../lib/prisma.js';
 import {
   submitQuestionnaire,
   getCurrentRiskProfile,
+  getCurrentModelPortfolio,
   listAssessmentHistory,
 } from '../services/advisor/riskProfile.service.js';
 import {
@@ -179,15 +180,12 @@ export async function postRiskProfile(req: Request, res: Response): Promise<void
 
 // ─── Allocation (current + target + drift) ───────────────────────
 
-const storedTargetsSchema = z.array(
-  z.object({ bucket: bucketSchema, targetPct: z.coerce.number() }),
-);
-
 /**
  * The allocation page's single read.
  *
- * Composed here rather than delegated because it is a pure view: the active
- * model portfolio's newest version supplies the targets, HoldingProjection
+ * Composed here rather than delegated because it is a pure view: the model
+ * portfolio the user's risk assessment chose (at its newest version) supplies
+ * the targets, HoldingProjection
  * supplies the current values, and `computeDrift` — the same pure function the
  * rebalance rule uses — reconciles them. Sharing that function is the point:
  * the number the page shows as "18pp overweight" is produced by the identical
@@ -200,18 +198,12 @@ const storedTargetsSchema = z.array(
 export async function getAllocation(req: Request, res: Response): Promise<void> {
   const uid = userId(req);
 
-  const model = await prisma.modelPortfolio.findFirst({
-    where: { userId: uid, isActive: true },
-    orderBy: { createdAt: 'desc' },
-    include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
-  });
-
-  const latestVersion = model?.versions[0] ?? null;
-  const parsedTargets = latestVersion
-    ? storedTargetsSchema.safeParse(latestVersion.targetWeights)
-    : null;
-  const targets: AdvisorTargetFact[] =
-    parsedTargets && parsedTargets.success ? parsedTargets.data : [];
+  // The model portfolio the user's risk assessment chose — resolved by the
+  // same function the engine's facts builder relies on, so the card can never
+  // measure against one portfolio while the advice sizes trades against
+  // another.
+  const model = await getCurrentModelPortfolio(uid);
+  const targets: AdvisorTargetFact[] = model?.targets ?? [];
 
   const holdings = await prisma.holdingProjection.findMany({
     where: { portfolio: { userId: uid } },
@@ -264,8 +256,8 @@ export async function getAllocation(req: Request, res: Response): Promise<void> 
           id: model.id,
           name: model.name,
           riskCategory: model.riskCategory,
-          versionId: latestVersion?.id ?? null,
-          version: latestVersion?.version ?? null,
+          versionId: model.versionId,
+          version: model.version,
         }
       : null,
     // Explicitly flagged rather than left for the client to infer from an

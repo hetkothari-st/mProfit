@@ -233,6 +233,26 @@ export async function getCurrentRiskProfile(userId: string): Promise<RiskProfile
   };
 }
 
+/**
+ * The model portfolio the user is measured against: the one their newest risk
+ * assessment chose, at its newest version. Null before any assessment.
+ *
+ * The one resolution every reader shares — the engine (through
+ * getCurrentRiskProfile) and the allocation card both come here. "The most
+ * recently created active model portfolio" is NOT a substitute: once the four
+ * defaults are seeded that is always Aggressive, whatever the user scored.
+ */
+export async function getCurrentModelPortfolio(
+  userId: string,
+): Promise<RiskProfileModelPortfolioSummary | null> {
+  const assessment = await prisma.riskProfileAssessment.findFirst({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    select: { modelPortfolioId: true },
+  });
+  return summariseModelPortfolio(assessment?.modelPortfolioId ?? null);
+}
+
 export interface AssessmentHistoryRow {
   assessmentId: string;
   questionnaireVersion: number;

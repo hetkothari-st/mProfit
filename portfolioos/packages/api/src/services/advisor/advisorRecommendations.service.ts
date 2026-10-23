@@ -105,7 +105,16 @@ interface RawRecommendation {
   updatedAt: Date;
 }
 
-function toView(r: RawRecommendation): RecommendationView {
+/**
+ * A snooze is "not until then". Once the deadline has passed (or none was
+ * recorded) the recommendation is open again — the stored status is only
+ * flipped back when the user next acts on it, so every reader derives it here.
+ */
+function snoozeExpired(r: { status: string; snoozedUntil: Date | null }, now: Date): boolean {
+  return r.status === 'SNOOZED' && (r.snoozedUntil == null || r.snoozedUntil <= now);
+}
+
+function toView(r: RawRecommendation, now: Date = new Date()): RecommendationView {
   return {
     id: r.id,
     generationRunId: r.generationRunId,
@@ -128,7 +137,7 @@ function toView(r: RawRecommendation): RecommendationView {
     selectionEvidence: (r.selectionEvidence ?? null) as FundSelectionEvidence | null,
     dedupeKey: r.dedupeKey,
     supersededById: r.supersededById,
-    status: r.status as AdvisorRecommendationStatusValue,
+    status: (snoozeExpired(r, now) ? 'OPEN' : r.status) as AdvisorRecommendationStatusValue,
     statusNote: r.statusNote,
     snoozedUntil: r.snoozedUntil ? r.snoozedUntil.toISOString() : null,
     statusChangedAt: r.statusChangedAt ? r.statusChangedAt.toISOString() : null,
@@ -149,9 +158,27 @@ export async function listRecommendations(
   const statuses = asArray(filters.status);
   const categories = asArray(filters.category);
 
+  const now = new Date();
+  const and: Prisma.AdvisorRecommendationWhereInput[] = [];
+  if (statuses) {
+    // Filter on the effective status, not the stored one: an expired snooze
+    // belongs under OPEN and no longer under SNOOZED.
+    const expiredSnooze: Prisma.AdvisorRecommendationWhereInput = {
+      status: 'SNOOZED',
+      OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }],
+    };
+    const others = statuses.filter((s) => s !== 'OPEN' && s !== 'SNOOZED');
+    const anyOf: Prisma.AdvisorRecommendationWhereInput[] = [];
+    if (others.length > 0) {
+      anyOf.push({ status: { in: others as Prisma.EnumAdvisorRecommendationStatusFilter['in'] } });
+    }
+    if (statuses.includes('OPEN')) anyOf.push({ status: 'OPEN' }, expiredSnooze);
+    if (statuses.includes('SNOOZED')) anyOf.push({ status: 'SNOOZED', snoozedUntil: { gt: now } });
+    and.push({ OR: anyOf });
+  }
+
   const where: Prisma.AdvisorRecommendationWhereInput = {
     userId,
-    ...(statuses ? { status: { in: statuses as Prisma.EnumAdvisorRecommendationStatusFilter['in'] } } : {}),
     ...(categories
       ? { category: { in: categories as Prisma.EnumAdvisorRecommendationCategoryFilter['in'] } }
       : {}),
@@ -163,19 +190,22 @@ export async function listRecommendations(
   // A live snooze means "not now" — honour it unless the caller explicitly
   // wants to see what is parked.
   if (!filters.includeActiveSnoozes && !statuses) {
-    where.OR = [
-      { status: { not: 'SNOOZED' } },
-      { snoozedUntil: null },
-      { snoozedUntil: { lte: new Date() } },
-    ];
+    and.push({
+      OR: [
+        { status: { not: 'SNOOZED' } },
+        { snoozedUntil: null },
+        { snoozedUntil: { lte: now } },
+      ],
+    });
   }
+  if (and.length > 0) where.AND = and;
 
   const rows = await prisma.advisorRecommendation.findMany({
     where,
     orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
     ...(filters.limit ? { take: filters.limit } : {}),
   });
-  return rows.map(toView);
+  return rows.map((r) => toView(r, now));
 }
 
 export async function getRecommendation(userId: string, id: string): Promise<RecommendationView> {
