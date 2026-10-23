@@ -82,12 +82,21 @@ function prettyDate(d: Date): string {
  * several reasons applies — an advisor staring at a dead button deserves to
  * know whether it is the wrong client, an accepted invite or an expired one.
  */
-async function loadInvitation(callerId: string, clientId: string) {
+/**
+ * Which side of the relationship a route serves. The CA workspace routes
+ * (`/api/ca/...`, behind the professional two-factor gate) accept either side;
+ * the account holder's own routes (`/api/me/professional-access/...`, no
+ * professional gate) accept only the account holder's own invitation, so they
+ * can never be used to reach the advisor side without the second factor.
+ */
+export type InviteSender = 'EITHER' | 'ACCOUNT_HOLDER';
+
+async function loadInvitation(callerId: string, clientId: string, sender: InviteSender = 'EITHER') {
   const client = await prisma.client.findUnique({ where: { id: clientId } });
   // Either side may be the sender, depending on who opened the relationship:
   // an advisor onboarding a client, or — the ordinary case — an account holder
   // bringing in their accountant. Whoever it is must be ON this row.
-  const isAdvisorSide = !!client && client.advisorId === callerId;
+  const isAdvisorSide = sender === 'EITHER' && !!client && client.advisorId === callerId;
   const isClientSide = !!client && client.userId === callerId && client.initiatedBy === 'CLIENT';
   if (!client || (!isAdvisorSide && !isClientSide)) {
     throw new ForbiddenError('That client is not yours.');
@@ -181,8 +190,9 @@ export async function buildInviteEmail(
   callerId: string,
   clientId: string,
   edits: InviteEmailEdits = {},
+  sender: InviteSender = 'EITHER',
 ): Promise<InviteEmailDraft> {
-  const client = await loadInvitation(callerId, clientId);
+  const client = await loadInvitation(callerId, clientId, sender);
   const advisor = await loadAdvisor(callerId);
   const direction: InviteDirection =
     client.initiatedBy === 'CLIENT' ? 'CLIENT_TO_ADVISOR' : 'ADVISOR_TO_CLIENT';
@@ -254,8 +264,9 @@ export async function sendInviteEmail(
   clientId: string,
   edits: InviteEmailEdits,
   req?: Request,
+  sender: InviteSender = 'EITHER',
 ): Promise<SendInviteEmailResult> {
-  const draft = await buildInviteEmail(callerId, clientId, edits);
+  const draft = await buildInviteEmail(callerId, clientId, edits, sender);
   const counts = await sendCounts(callerId, clientId);
 
   if (counts.forInvite >= MAX_SENDS_PER_INVITE) {

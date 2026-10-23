@@ -136,7 +136,8 @@ export function FinvuConsentCard() {
       <CardContent className="space-y-4 text-sm">
         <p className="text-muted-foreground">
           Pull mutual funds, deposits and equities directly from the user's linked banks via the
-          RBI-regulated Account Aggregator framework. Once approved, holdings sync automatically.
+          RBI-regulated Account Aggregator framework. Automatic sync is not built yet: approving a
+          consent records it, but nothing is imported into the portfolio when Finvu sends data.
         </p>
 
         {demoMode && (

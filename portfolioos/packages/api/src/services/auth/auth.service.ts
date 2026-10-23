@@ -450,6 +450,24 @@ export async function logoutSession(refreshToken: string): Promise<void> {
   });
 }
 
+/**
+ * Whose session a refresh token belongs to, if it is still a live one.
+ *
+ * Logout uses this when the access token has already expired — the usual
+ * case after a tab sat idle — so the sign-out can still be attributed and
+ * "sign out everywhere" can still find the account. Only an unrevoked,
+ * unexpired token counts: an old rotated-out token someone kept must not be
+ * enough to sign the owner out of every device.
+ */
+export async function liveRefreshTokenOwner(refreshToken: string): Promise<string | null> {
+  const stored = await prisma.refreshToken.findUnique({
+    where: { tokenHash: digestToken(refreshToken) },
+    select: { userId: true, revokedAt: true, expiresAt: true },
+  });
+  if (!stored || stored.revokedAt || stored.expiresAt < new Date()) return null;
+  return stored.userId;
+}
+
 export async function logoutAllSessions(userId: string): Promise<void> {
   await prisma.refreshToken.updateMany({
     where: { userId, revokedAt: null },

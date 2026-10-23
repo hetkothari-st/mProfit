@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { NotFoundPage } from './pages/notFound/NotFoundPage';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
+import { RedirectIfSignedIn } from './components/auth/RedirectIfSignedIn';
 import { NotWhileManaging } from './components/family/NotWhileManaging';
 import { AppShell } from './components/layout/AppShell';
 import { LoginPage } from './pages/auth/LoginPage';
@@ -109,8 +110,13 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      {/* Signed-in users have no use for these (no in-app link reaches them
+          while signed in); they go where /login would send them. */}
+      <Route path="/register" element={<RedirectIfSignedIn><RegisterPage /></RedirectIfSignedIn>} />
+      <Route
+        path="/forgot-password"
+        element={<RedirectIfSignedIn><ForgotPasswordPage /></RedirectIfSignedIn>}
+      />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/legal/ai-use" element={<AiUsePage />} />
       <Route

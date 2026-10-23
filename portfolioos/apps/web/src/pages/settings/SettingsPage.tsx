@@ -1,5 +1,5 @@
 import { useForm } from 'react-hook-form';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
@@ -17,6 +17,7 @@ import { NotificationsSection } from './NotificationsSection';
 import { TwoFactorSection } from './TwoFactorSection';
 import { DesktopAppSection } from './DesktopAppSection';
 import { DeleteAccountSection } from './DeleteAccountSection';
+import { PLAN_LABEL, planActiveLine } from '@/lib/planStatus';
 
 const schema = z.object({
   name: z.string().min(2).max(100),
@@ -107,8 +108,17 @@ export function SettingsPage() {
                     maxLength={10}
                     {...register('pan')}
                   />
-                  {formState.errors.pan && (
+                  {formState.errors.pan ? (
                     <p className="text-xs text-negative mt-1">{formState.errors.pan.message}</p>
+                  ) : user?.hasPan || user?.panMasked ? (
+                    // The field starts blank so a save can't overwrite the
+                    // real PAN with the mask; this says one is on file.
+                    <p className="text-xs text-muted-foreground mt-1">
+                      PAN saved: <span className="font-mono">{user.panMasked ?? 'XXXXXXXXXX'}</span>. Leave
+                      blank to keep it.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">No PAN saved.</p>
                   )}
                 </div>
               </div>
@@ -137,7 +147,10 @@ export function SettingsPage() {
           <CardContent className="space-y-3 text-sm">
             <div>
               <div className="text-xs text-muted-foreground">Current plan</div>
-              <div className="text-lg font-semibold">{user?.plan}</div>
+              <div className="text-lg font-semibold">{user ? PLAN_LABEL[user.plan] : '—'}</div>
+              {planActiveLine(user) && (
+                <p className="mt-1 text-xs text-muted-foreground">{planActiveLine(user)}.</p>
+              )}
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Role</div>
@@ -156,6 +169,8 @@ export function SettingsPage() {
 
       <div className="mt-6">
         <TwoFactorSection />
+
+        <SignOutEverywhereCard />
 
         <NotificationsSection />
 
@@ -192,5 +207,38 @@ export function SettingsPage() {
         <DeleteAccountSection />
       </div>
     </div>
+  );
+}
+
+/**
+ * Ends every session this account has, on every device, then this one. For a
+ * lost phone or a shared computer someone forgot to sign out of.
+ */
+function SignOutEverywhereCard() {
+  const navigate = useNavigate();
+  const refreshToken = useAuthStore((st) => st.refreshToken);
+  const clearSession = useAuthStore((st) => st.clearSession);
+  const signOut = useMutation({
+    mutationFn: () => authApi.logout(refreshToken, { everywhere: true }),
+    onSuccess: () => {
+      clearSession();
+      toast.success('Signed out on every device');
+      navigate('/login', { replace: true });
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Could not sign out everywhere')),
+  });
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <CardTitle>Sessions</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span>Sign out of EveryPaisa on every device, including this one.</span>
+        <Button variant="outline" onClick={() => signOut.mutate()} disabled={signOut.isPending}>
+          {signOut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          Sign out everywhere
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

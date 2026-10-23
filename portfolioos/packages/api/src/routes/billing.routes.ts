@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { activatePaidPlan, isBillingCycle } from '../services/billing/planActivation.service.js';
+import { activatePaidPlan, assertPurchasable, isBillingCycle } from '../services/billing/planActivation.service.js';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { PLAN_TIER_ORDER, planPriceFor } from '@everypaisa/shared';
@@ -35,6 +35,14 @@ billingRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) throw new UnauthorizedError();
     const { tier, billingCycle } = checkoutIntentSchema.parse(req.body);
+
+    // Before anything else, including the payments-not-configured reply: a
+    // lower tier while a higher plan is running is never for sale.
+    const buyer = await prisma.user.findUniqueOrThrow({
+      where: { id: req.user.id },
+      select: { plan: true, planExpiresAt: true },
+    });
+    assertPurchasable(buyer, tier);
 
     if (!isRazorpayConfigured()) {
       ok(res, {

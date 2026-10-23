@@ -11,6 +11,7 @@ import { apiErrorMessage } from '@/api/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { openRazorpayCheckout } from '@/lib/razorpay';
 import { cn } from '@/lib/cn';
+import { PLAN_LABEL, planActiveLine, tierAction } from '@/lib/planStatus';
 
 interface TierDef {
   tier: PlanTierValue;
@@ -95,6 +96,7 @@ export function PricingPage() {
   const [pending, setPending] = useState<PlanTierValue | null>(null);
   const [cycle, setCycle] = useState<BillingCycle>('MONTHLY');
   const isAdmin = user?.role === 'ADMIN';
+  const activeLine = planActiveLine(user);
 
   const handleDevSetPlan = async (tier: PlanTierValue) => {
     setPending(tier);
@@ -139,7 +141,9 @@ export function PricingPage() {
         razorpaySignature: payment.razorpay_signature,
       });
       setSession(updatedUser, tokens);
-      toast.success(`Upgraded to ${tier === 'PRO_ADVISOR' ? 'Pro/Advisor' : tier}`);
+      toast.success(
+        tier === user?.plan ? `${PLAN_LABEL[tier]} renewed` : `Upgraded to ${PLAN_LABEL[tier]}`,
+      );
     } catch (err) {
       if (err instanceof Error && err.message === 'dismissed') {
         // User closed the checkout modal — no error toast needed.
@@ -177,9 +181,17 @@ export function PricingPage() {
         }
       />
 
+      {activeLine && (
+        <p className="mb-4 rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-[13px] text-foreground">
+          {activeLine}.
+          {user?.planExpiresAt && ' Renewing early adds to that date.'}
+        </p>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {TIERS.map((t) => {
-          const isCurrent = user?.plan === t.tier;
+          const action = tierAction(user?.plan ?? 'FREE', t.tier);
+          const isCurrent = action === 'current' || action === 'renew';
           const { price, note } = priceDisplay(t.tier, cycle);
           const priceUnavailable = t.tier !== 'FREE' && !planPriceFor(t.tier, cycle);
           return (
@@ -213,15 +225,25 @@ export function PricingPage() {
                 <Button
                   className="mt-5 w-full"
                   variant={isCurrent ? 'outline' : t.highlight ? 'default' : 'outline'}
-                  disabled={isCurrent || pending === t.tier || t.tier === 'FREE' || priceUnavailable}
+                  disabled={
+                    action === 'current' ||
+                    action === 'included' ||
+                    pending === t.tier ||
+                    t.tier === 'FREE' ||
+                    priceUnavailable
+                  }
                   onClick={() => handleUpgrade(t.tier)}
                 >
-                  {isCurrent
+                  {action === 'current'
                     ? 'Current plan'
+                    : action === 'included'
+                    ? 'Included in your plan'
                     : t.tier === 'FREE'
                     ? 'Included'
                     : pending === t.tier
                     ? 'Starting checkout…'
+                    : action === 'renew'
+                    ? `Renew ${t.name}`
                     : `Upgrade to ${t.name}`}
                 </Button>
                 {isAdmin && (

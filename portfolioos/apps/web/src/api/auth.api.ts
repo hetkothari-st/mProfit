@@ -114,8 +114,12 @@ export const authApi = {
     if (!data.success) throw new Error(data.error);
     return data.data;
   },
-  async logout(refreshToken: string | null): Promise<void> {
-    await api.post('/api/auth/logout', refreshToken ? { refreshToken } : {});
+  /** `everywhere` also ends every other session (all devices) for this account. */
+  async logout(refreshToken: string | null, opts: { everywhere?: boolean } = {}): Promise<void> {
+    await api.post('/api/auth/logout', {
+      ...(refreshToken ? { refreshToken } : {}),
+      ...(opts.everywhere ? { everywhere: true } : {}),
+    });
   },
   async forgotPassword(payload: ForgotPasswordRequest): Promise<{ message: string }> {
     const { data } = await api.post<ApiResponse<{ message: string }>>(
