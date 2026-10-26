@@ -65,7 +65,7 @@ const FREQ_OPTIONS = [
   { value: 'QUARTERLY',    label: 'Quarterly' },
   { value: 'HALF_YEARLY',  label: 'Half-yearly' },
   { value: 'ANNUAL',       label: 'Annual' },
-  { value: 'AT_MATURITY',  label: 'At maturity' },
+  { value: 'AT_MATURITY',  label: 'Paid at maturity (compounds quarterly)' },
 ];
 
 const TXN_LABELS: Record<string, string> = {
@@ -353,7 +353,7 @@ export function FDFormDialog({
                   <Input type="number" step="0.01" min="0" max="100" {...register('interestRate')} placeholder="7.25" />
                 </div>
                 <div className="space-y-1">
-                  <Label>{isRD ? 'Compounding' : 'Interest Payout'}</Label>
+                  <Label>Compounding</Label>
                   <Select {...register('interestFrequency')} className="w-full">
                     {FREQ_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </Select>
@@ -372,9 +372,14 @@ export function FDFormDialog({
                   <Input type="date" {...register('maturityDate')} />
                 </div>
               </div>
-              {isRD && (
+              {isRD ? (
                 <p className="text-[11px] text-muted-foreground leading-snug">
                   Bank RDs typically compound quarterly. Standard tenures are 6/12/24/36/60 months.
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  How often interest is added to the deposit. Values assume interest stays in the FD;
+                  if your bank pays it out instead, the value shown includes interest already paid to you.
                 </p>
               )}
             </div>
