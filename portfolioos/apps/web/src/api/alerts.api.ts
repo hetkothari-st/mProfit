@@ -9,7 +9,8 @@ function unwrap<T>(data: ApiResponse<T>): T {
 export type AlertType =
   | 'FD_MATURITY' | 'BOND_MATURITY' | 'MF_LOCK_IN_EXPIRY' | 'SIP_DUE'
   | 'INSURANCE_PREMIUM' | 'DIVIDEND_RECEIVED' | 'CORPORATE_ACTION'
-  | 'PRICE_TARGET' | 'LOAN_REFINANCE' | 'LOAN_BENCHMARK_CHANGE' | 'WILL_REVIEW_DUE' | 'CUSTOM';
+  | 'PRICE_TARGET' | 'LOAN_REFINANCE' | 'LOAN_BENCHMARK_CHANGE' | 'WILL_REVIEW_DUE'
+  | 'MF_RATING_CHANGE' | 'CUSTOM';
 
 export interface AlertDTO {
   id: string;

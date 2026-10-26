@@ -1649,6 +1649,8 @@ enum AlertType {
   LOAN_REFINANCE
   LOAN_BENCHMARK_CHANGE
   WILL_REVIEW_DUE
+  /// A held fund's rating moved to another form band (Leading/Steady/Lagging/Weak) on the monthly re-rate.
+  MF_RATING_CHANGE
   CUSTOM
 }
 

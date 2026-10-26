@@ -71,6 +71,8 @@ function alertHref(type: string): string {
       return '/loans?view=given';
     case 'WILL_REVIEW_DUE':
       return '/will';
+    case 'MF_RATING_CHANGE':
+      return '/mutual-funds/analysis';
     default:
       return '/alerts';
   }

@@ -15,6 +15,11 @@ describe('alertLink', () => {
     expect(alertLink('LOAN_REFINANCE', null)).toBe('/loans');
     expect(alertLink('LOAN_REFINANCE', { loanId: 42 })).toBe('/loans');
   });
+  it('a fund rating change opens the held fund, or the analysis page without a scheme code', () => {
+    expect(alertLink('MF_RATING_CHANGE', { key: 'k', schemeCode: '120503' })).toBe('/mutual-funds/120503');
+    expect(alertLink('MF_RATING_CHANGE', {})).toBe('/mutual-funds/analysis');
+    expect(isInformationalAlert('MF_RATING_CHANGE')).toBe(true);
+  });
   it('other alert types have no link and are not informational', () => {
     expect(alertLink('FD_MATURITY', { loanId: 'abc' })).toBeNull();
     expect(isInformationalAlert('CUSTOM')).toBe(false);

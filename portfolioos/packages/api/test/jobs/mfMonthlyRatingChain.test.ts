@@ -19,7 +19,11 @@ vi.mock('../../src/jobs/mfScoreJob.js', () => ({
   runMfScoreJob: vi.fn(async (asOf: Date) => { calls.push(['score', asOf.toISOString().slice(0, 10)]); }),
 }));
 
-const { previousMonthEnd, runMonthlyRatingChain } = await import('../../src/jobs/mfMonthlyRatingChain.js');
+vi.mock('../../src/services/mf/mfAnalytics/mfRatingAlerts.service.js', () => ({
+  runMfRatingChangeAlerts: vi.fn(async (asOf: Date) => { calls.push(['alerts', asOf.toISOString().slice(0, 10)]); }),
+}));
+
+const { previousMonthEnd, runMonthlyRatingChain, runRatingChainFor } = await import('../../src/jobs/mfMonthlyRatingChain.js');
 
 beforeEach(() => {
   calls.length = 0;
@@ -35,16 +39,22 @@ describe('previousMonthEnd', () => {
 });
 
 describe('runMonthlyRatingChain', () => {
-  it('runs metrics, then peer ranks, then scores, all for the month that ended', async () => {
+  it('runs metrics, then peer ranks, then scores, then holder alerts, all for the month that ended', async () => {
     await runMonthlyRatingChain(new Date('2026-10-15T02:00:00Z'));
     expect(calls).toEqual([
       ['metrics', '2026-09-30'],
       ['peerRank', '2026-09-30'],
       ['score', '2026-09-30'],
+      ['alerts', '2026-09-30'],
     ]);
   });
 
-  it('does not score when the peer-rank step was skipped (another run held its lock)', async () => {
+  it('the bootstrap path (runRatingChainFor) rates without alerting', async () => {
+    await runRatingChainFor(new Date('2026-06-30T00:00:00Z'));
+    expect(calls.map((c) => c[0])).toEqual(['metrics', 'peerRank', 'score']);
+  });
+
+  it('does not score or alert when the peer-rank step was skipped (another run held its lock)', async () => {
     peerRankResult = { universes: 0 };
     await runMonthlyRatingChain(new Date('2026-10-15T02:00:00Z'));
     expect(calls.map((c) => c[0])).toEqual(['metrics', 'peerRank']);
