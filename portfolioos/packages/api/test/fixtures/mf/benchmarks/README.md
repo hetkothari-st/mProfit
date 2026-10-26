@@ -119,6 +119,10 @@ Captured with a plain GET (`curl -A "Mozilla/5.0"`). Note: the shared
 `httpGetText` defaults (niftyindices XHR headers) are answered with HTTP 418
 by rbi.org.in.
 
+These tables are also the INPUT to the data migration
+`20261026140000_risk_free_rbi_tbill_history`: production never calls RBI.
+Regenerate it with `tsx scripts/generate-rbi-tbill-migration.ts <dir>`.
+
 ## Regenerating
 
 ```js

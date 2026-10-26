@@ -106,7 +106,8 @@ export const ACTIVE_RISK_FREE_SERIES: RiskFreeSeries = 'FBIL_TBILL_3M';
  * 10-year window today, a 3-year one at a 2018 month-end in the backtest —
  * would otherwise have no risk-free rate for those months, and the months
  * drop out of Sharpe, Sortino and alpha. RBI's 91-day primary-auction cut-off
- * (`rbiTbillHandbook.*`, from Jul 2012) fills that span ONLY: it is a few
+ * (Jul 2012 – Jul 2018, shipped as the data migration
+ * `20261026140000_risk_free_rbi_tbill_history`) fills that span ONLY: it is a few
  * basis points off FBIL's par yield, so the two are never mixed on a date
  * where FBIL has an answer.
  */

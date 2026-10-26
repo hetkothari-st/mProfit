@@ -81,11 +81,7 @@ async function defaultDeps(historyStart: Date): Promise<MfBootstrapDeps> {
     metadata: () => metadata.runMfMetadataJob(),
     // Ten-year horizon plus a year of slack before the oldest month rated.
     benchmarks: () => bench.runBenchmarkPrices({ from: historyStart, fullRange: true }),
-    riskFree: async () => {
-      await rfr.runRiskFreeRates({ from: historyStart, fullRange: true });
-      // FBIL starts Aug 2017; RBI's auction history covers the years before.
-      await rfr.ensureRbiTbillHistory();
-    },
+    riskFree: () => rfr.runRiskFreeRates({ from: historyStart, fullRange: true }),
     // Only schemes short of three years of NAVs; production already holds
     // most of the history. Bounded so a slow source cannot hold up ratings.
     navHistory: () =>

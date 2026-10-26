@@ -6,8 +6,14 @@
  * a year of weekly auctions (July to July). The six editions below cover
  * 04-Jul-2012 to 25-Jul-2018, overlapping FBIL's series (which starts
  * 2017-08-23) by a year. Every id was fetched and parsed on 2026-10-26; the
- * table is identical in shape across all six. The history is closed — those
- * auctions will not be restated — so this is a one-time fill, not a feed.
+ * table is identical in shape across all six.
+ *
+ * NOT A FEED. The history is closed — those auctions will never be restated —
+ * and rbi.org.in answers the shared transport's headers with HTTP 418, so
+ * production never calls RBI: the rows ship as the data migration
+ * `20261026140000_risk_free_rbi_tbill_history`, generated from the committed
+ * edition tables by `scripts/generate-rbi-tbill-migration.ts`. This module is
+ * that generator's parser-and-stitcher, and what the tests pin.
  */
 import { __sharedTransport, type HttpTextOutcome, type IndexFetchRange } from './nseIndices.v1.js';
 import type { RiskFreeFetchOutcome } from './fbilTbillCurve.v1.js';
