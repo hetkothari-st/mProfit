@@ -75,6 +75,8 @@ import {
   type RiskFreeFetchOutcome,
 } from '../priceFeeds/fbilTbillCurve.v1.js';
 import type { IndexFetchRange } from '../priceFeeds/nseIndices.v1.js';
+import { fetchRbiTbillHistory, RBI_TBILL_HISTORY_START } from '../priceFeeds/rbiTbillHandbook.v1.js';
+import { RBI_TBILL_SERIES } from '../priceFeeds/rbiTbillHandbook.parse.js';
 
 const TZ = 'Asia/Kolkata';
 
@@ -166,6 +168,7 @@ export async function runRiskFreeRateJob(): Promise<RiskFreeRateJobResult | null
   try {
     const result = await runRiskFreeRates();
     logger.info(result, '[cron] risk-free rates done');
+    await ensureRbiTbillHistory();
     return result;
   } catch (err) {
     logger.error({ err }, '[cron] risk-free rate job failed');
@@ -173,6 +176,31 @@ export async function runRiskFreeRateJob(): Promise<RiskFreeRateJobResult | null
   } finally {
     running = false;
   }
+}
+
+/**
+ * Fill the RBI 91-day auction history (`TBILL_91D`, Jul 2012 onward) once.
+ *
+ * FBIL's curve starts 2017-08-23; the metrics layer falls back to this series
+ * for dates before that (`mfMetrics.service.ts`), which is what lets a 3- or
+ * 10-year window reaching back past Aug 2017 have a risk-free rate at all. The
+ * history is closed, so after one successful fill this is a single count
+ * query. A failure is recorded by the job and retried on the next weekly run.
+ */
+export async function ensureRbiTbillHistory(
+  options: Pick<RiskFreeRateJobOptions, 'fetchSeries' | 'opsUserId'> = {},
+): Promise<RiskFreeRateJobResult | null> {
+  const stored = await runAsSystem(() => prisma.riskFreeRate.count({ where: { series: RBI_TBILL_SERIES } }));
+  if (stored > 0) return null;
+  const result = await runRiskFreeRates({
+    series: RBI_TBILL_SERIES,
+    from: new Date(`${RBI_TBILL_HISTORY_START}T00:00:00Z`),
+    to: new Date('2018-07-31T00:00:00Z'),
+    fetchSeries: options.fetchSeries ?? ((range) => fetchRbiTbillHistory(range)),
+    ...(options.opsUserId === undefined ? {} : { opsUserId: options.opsUserId }),
+  });
+  logger.info(result, '[cron] RBI 91-day T-bill history fill');
+  return result;
 }
 
 /**
@@ -213,9 +241,9 @@ function toStored(v: Decimal): string {
   return v.toFixed(6, Decimal.ROUND_HALF_EVEN);
 }
 
-function riskFreeSourceHash(series: string, date: Date, rateFixed: string): string {
+function riskFreeSourceHash(adapterId: string, series: string, date: Date, rateFixed: string): string {
   return createHash('sha256')
-    .update(`riskfree:${RISK_FREE_JOB_ADAPTER_ID}:${series}:${isoDay(date)}:${rateFixed}`)
+    .update(`riskfree:${adapterId}:${series}:${isoDay(date)}:${rateFixed}`)
     .digest('hex');
 }
 
@@ -280,7 +308,7 @@ async function runRiskFreeRatesInner(
 
       // ONLY the rows the parser observed and accepted. No fill, no
       // interpolation, no synthesised weeks. See the header.
-      const written = await persistRows(series, outcome.rows);
+      const written = await persistRows(series, outcome.rows, outcome.adapterId);
       result.rowsInserted = written.inserted;
       result.rowsUpdated = written.updated;
       result.rowsSkipped = written.skipped;
@@ -328,6 +356,7 @@ interface PersistResult {
 async function persistRows(
   series: string,
   rows: readonly RiskFreeRow[],
+  adapterId: string,
 ): Promise<PersistResult> {
   const out: PersistResult = { inserted: 0, updated: 0, skipped: 0 };
   if (rows.length === 0) return out;
@@ -354,7 +383,7 @@ async function persistRows(
         series,
         date: day,
         ratePct: stored,
-        sourceHash: riskFreeSourceHash(series, day, stored),
+        sourceHash: riskFreeSourceHash(adapterId, series, day, stored),
       });
       continue;
     }
@@ -365,7 +394,7 @@ async function persistRows(
     toUpdate.push({
       id: current.id,
       ratePct: stored,
-      sourceHash: riskFreeSourceHash(series, day, stored),
+      sourceHash: riskFreeSourceHash(adapterId, series, day, stored),
     });
   }
 

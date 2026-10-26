@@ -104,6 +104,21 @@ and FBIL sells this data commercially. Read their terms before shipping.
 
 ---
 
+## Risk-free rate — RBI Handbook, 91-day T-bill auctions
+
+`TBILL_91D`: the primary-auction cut-off yield, weekly, from the RBI Handbook
+of Statistics on the Indian Economy. Only used for dates before FBIL begins
+(2017-08-23). One page per annual edition, `PublicationsView.aspx?id=<id>`.
+
+| File | Capture date | What it is |
+|---|---|---|
+| `rbi-tbill-handbook-<id>.table.html` (15340, 16009, 16662, 17354, 17996, 18680) | 2026-10-26 | The verbatim `<table>` element of each edition (2013–2018), cut from the page. Together: 04-Jul-2012 .. 25-Jul-2018, 341 rows, 314 distinct auctions once the editions' July overlaps are removed. 17354 holds two auctions where RBI rejected every bid (27-Jan and 24-Feb-2016), printed as `-`. |
+| `rbi-tbill-handbook-15340.page.html` | 2026-10-26 | The whole 2013-edition page, navigation and all, to prove the parser finds the rows in what the fetch actually returns. |
+
+Captured with a plain GET (`curl -A "Mozilla/5.0"`). Note: the shared
+`httpGetText` defaults (niftyindices XHR headers) are answered with HTTP 418
+by rbi.org.in.
+
 ## Regenerating
 
 ```js

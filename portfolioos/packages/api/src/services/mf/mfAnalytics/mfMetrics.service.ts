@@ -69,7 +69,12 @@ import type {
   SeriesPoint,
   HoldingWeightRow,
 } from './mfMetricsMath.js';
-import { ACTIVE_RISK_FREE_SERIES, type RiskFreeSeries } from '../../../priceFeeds/riskFree.parse.js';
+import {
+  ACTIVE_RISK_FREE_SERIES,
+  ACTIVE_RISK_FREE_SERIES_START,
+  FALLBACK_RISK_FREE_SERIES,
+  type RiskFreeSeries,
+} from '../../../priceFeeds/riskFree.parse.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -94,6 +99,24 @@ export const HOLDINGS_STALE_AFTER_DAYS = 60;
 // 'TBILL_91D' here is exactly how the metrics layer ended up reading a series
 // nothing writes.
 export const RISK_FREE_SERIES: RiskFreeSeries = ACTIVE_RISK_FREE_SERIES;
+
+/**
+ * One risk-free series out of two: fallback rows strictly before
+ * `activeStart`, active rows from it on. Never both on one date — they are
+ * different curves a few basis points apart, and interleaving them would put
+ * a sawtooth into the forward-filled monthly rate.
+ */
+export function mergeRiskFreeRows<T extends { date: Date }>(
+  active: readonly T[],
+  fallback: readonly T[],
+  activeStart: Date,
+): T[] {
+  const t = activeStart.getTime();
+  return [
+    ...fallback.filter((r) => r.date.getTime() < t),
+    ...active.filter((r) => r.date.getTime() >= t),
+  ].sort((a, b) => a.date.getTime() - b.date.getTime());
+}
 
 /** `02 §2.2`: the rolling windows we report, subject to fitting in the horizon. */
 const ROLLING_WINDOWS = [1, 3, 5] as const;
@@ -398,11 +421,24 @@ async function loadSchemeInputs(schemeCode: string, asOf: Date): Promise<SchemeI
     benchmarkDaily = math.toDailySeries(rows.map((r) => ({ date: r.date, value: toDecimal(r.value) })));
   }
 
-  const rfRows = await prisma.riskFreeRate.findMany({
-    where: { series: RISK_FREE_SERIES, date: { gte: earliest, lte: asOf } },
-    select: { date: true, ratePct: true },
-    orderBy: { date: 'asc' },
-  });
+  // The active series, plus the fallback for the span before it begins (see
+  // `ACTIVE_RISK_FREE_SERIES_START`). The two never overlap in what is used.
+  const fallbackEnd = new Date(`${ACTIVE_RISK_FREE_SERIES_START}T00:00:00Z`);
+  const [activeRf, fallbackRf] = await Promise.all([
+    prisma.riskFreeRate.findMany({
+      where: { series: RISK_FREE_SERIES, date: { gte: earliest, lte: asOf } },
+      select: { date: true, ratePct: true },
+      orderBy: { date: 'asc' },
+    }),
+    earliest < fallbackEnd
+      ? prisma.riskFreeRate.findMany({
+          where: { series: FALLBACK_RISK_FREE_SERIES, date: { gte: earliest, lt: fallbackEnd, lte: asOf } },
+          select: { date: true, ratePct: true },
+          orderBy: { date: 'asc' },
+        })
+      : Promise.resolve([]),
+  ]);
+  const rfRows = mergeRiskFreeRows(activeRf, fallbackRf, fallbackEnd);
   // Percent -> fraction at the boundary. Every consumer downstream (including
   // `annualisedRiskFreeToMonthly`) assumes a fraction; converting here means the
   // /100 appears exactly once instead of at each metric.
