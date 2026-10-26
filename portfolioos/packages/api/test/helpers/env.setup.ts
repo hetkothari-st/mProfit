@@ -27,3 +27,7 @@ const DEFAULTS: Record<string, string> = {
 for (const [key, value] of Object.entries(DEFAULTS)) {
   if (!process.env[key]) process.env[key] = value;
 }
+
+// The server entry point installs zod-3-style default messages; tests build
+// the app without that entry point, so install them here too.
+import '../../src/lib/zodConfig.js';

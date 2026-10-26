@@ -77,7 +77,7 @@ export function VehicleFormDialog({ open, onOpenChange, initial }: Props) {
   const [mobileNo, setMobileNo] = useState('');
   const [otp, setOtp] = useState('');
 
-  const { register, handleSubmit, reset, formState, watch, setValue } = useForm<FormValues>({
+  const { register, handleSubmit, reset, formState, watch, setValue } = useForm<z.input<typeof schema>, unknown, FormValues>({
     resolver: zodResolver(schema),
   });
 

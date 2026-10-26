@@ -150,7 +150,7 @@ function toUtcMidnight(iso: string): Date {
  *  Requiring an object rather than allowing a bare string keeps it extensible
  *  without a migration, and keeps a JSON `null` — which Prisma treats as a
  *  distinct DbNull/JsonNull pair — out of the column entirely. */
-const factValue = z.record(z.unknown()).refine((v) => Object.keys(v).length > 0, {
+const factValue = z.record(z.string(), z.unknown()).refine((v) => Object.keys(v).length > 0, {
   message: 'value must describe the fact — an empty object records nothing',
 });
 

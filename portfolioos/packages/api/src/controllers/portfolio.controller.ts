@@ -19,6 +19,7 @@ import { UnauthorizedError } from '../lib/errors.js';
 import { parseFamilyId } from '../lib/familyHeader.js';
 import { assertPortfolioLimit } from '../lib/planLimits.js';
 import { prisma } from '../lib/prisma.js';
+import { patchOf } from '../lib/zodPatch.js';
 
 const createSchema = z.object({
   name: z.string().min(1).max(100),
@@ -30,7 +31,7 @@ const createSchema = z.object({
   onboarding: z.boolean().optional(),
 });
 
-const updateSchema = createSchema.partial();
+const updateSchema = patchOf(createSchema);
 
 function userId(req: Request): string {
   if (!req.user) throw new UnauthorizedError();

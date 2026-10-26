@@ -41,7 +41,7 @@ export function PortfolioFormDialog({ open, onOpenChange, initial }: Props) {
   const queryClient = useQueryClient();
   const isEdit = Boolean(initial);
 
-  const { register, handleSubmit, reset, formState } = useForm<FormValues>({
+  const { register, handleSubmit, reset, formState } = useForm<z.input<typeof schema>, unknown, FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: '',

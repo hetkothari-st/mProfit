@@ -6,6 +6,7 @@ import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { encryptSecret } from '../lib/secrets.js';
 import { testMailboxConnection, pollMailboxNow } from '../jobs/mailboxPoller.js';
 import { syncGmailAccount } from '../ingestion/gmail/gmail.connector.js';
+import { patchOf } from '../lib/zodPatch.js';
 
 const CreateSchema = z.object({
   label: z.string().optional(),
@@ -20,7 +21,7 @@ const CreateSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
-const UpdateSchema = CreateSchema.partial().extend({
+const UpdateSchema = patchOf(CreateSchema).extend({
   password: z.string().min(1).optional(),
 });
 

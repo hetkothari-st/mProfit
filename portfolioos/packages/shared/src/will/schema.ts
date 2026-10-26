@@ -71,7 +71,7 @@ export const willDetailsSchema = z.object({
   /** Optional "son of / wife of NAME" after the testator's name. Printed only when both are set. */
   parentage: z
     .object({ relation: z.enum(WILL_PARENTAGE_RELATIONS).nullable().default(null), name: text(120).default('') })
-    .default({}),
+    .prefault({}),
 });
 
 export const willPersonSchema = z.object({
@@ -135,17 +135,17 @@ export const willInstructionsSchema = z.object({ text: z.string().max(1000).defa
 
 export const willPeopleSectionSchema = z.object({
   people: z.array(willPersonSchema).max(60).default([]),
-  roles: willRolesSchema.default({}),
+  roles: willRolesSchema.prefault({}),
 });
 
 export const willPayloadSchema = z.object({
   schemaVer: z.literal(WILL_PAYLOAD_SCHEMA_VER).default(WILL_PAYLOAD_SCHEMA_VER),
-  details: willDetailsSchema.default({}),
+  details: willDetailsSchema.prefault({}),
   people: z.array(willPersonSchema).max(60).default([]),
-  roles: willRolesSchema.default({}),
-  estate: willEstateSchema.default({}),
-  allocation: willAllocationSchema.default({}),
-  instructions: willInstructionsSchema.default({}),
+  roles: willRolesSchema.prefault({}),
+  estate: willEstateSchema.prefault({}),
+  allocation: willAllocationSchema.prefault({}),
+  instructions: willInstructionsSchema.prefault({}),
 });
 
 export type WillPayload = z.output<typeof willPayloadSchema>;

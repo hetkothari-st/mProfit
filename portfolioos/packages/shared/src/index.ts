@@ -28,3 +28,4 @@ export * from './aiDisclosure.js';
 // Documents sorter (docs/superpowers/specs/2026-10-14-document-sorter-design.md).
 export * from './documentSorter.js';
 export * from './metalPurity.js';
+export * from './zodMessages.js';
