@@ -644,7 +644,7 @@ export async function extensionRawPayloadHandler(req: Request, res: Response): P
     // submission failed validation and auto-sync never worked.
     accountId: z.string().min(1).optional(),
     sessionId: z.string().optional(),
-    payload: z.record(z.unknown()),
+    payload: z.record(z.string(), z.unknown()),
   });
   const parsed = schema.safeParse(req.body ?? {});
   if (!parsed.success) {

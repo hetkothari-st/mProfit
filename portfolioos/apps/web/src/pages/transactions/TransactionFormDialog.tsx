@@ -52,17 +52,17 @@ const numPreprocess = (v: unknown) => (v === '' || v === null ? undefined : v);
 const moneyInRequired = z.preprocess(
   numPreprocess,
   z.coerce
-    .number({ invalid_type_error: 'Enter a price' })
+    .number({ error: 'Enter a price' })
     .refine((n) => !Number.isNaN(n), 'Enter a price')
     .refine((n) => n >= 0, "Price can't be negative"),
 );
 const moneyInOptional = z.preprocess(
   numPreprocess,
-  z.coerce.number({ invalid_type_error: 'Must be a number' }).nonnegative().optional(),
+  z.coerce.number({ error: 'Must be a number' }).nonnegative().optional(),
 );
 const qtyIn = z.preprocess(
   numPreprocess,
-  z.coerce.number({ invalid_type_error: 'Must be a number' }).positive('Must be > 0'),
+  z.coerce.number({ error: 'Must be a number' }).positive('Must be > 0'),
 );
 
 const schema = z.object({

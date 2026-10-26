@@ -63,7 +63,7 @@ export function RegisterPage() {
     handleSubmit,
     watch,
     formState: { errors },
-  } = useForm<FormValues>({
+  } = useForm<z.input<typeof schema>, unknown, FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { role: UserRole.INVESTOR },
   });

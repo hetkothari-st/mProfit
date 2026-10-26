@@ -116,7 +116,7 @@ const addClaimSchema = z.object({
   kind: z.enum(CLAIM_KINDS).nullable().optional(),
   documentsCompletedOn: isoDate.nullable().optional(),
   surveyorAllocatedOn: isoDate.nullable().optional(),
-  checklist: z.record(z.boolean()).nullable().optional(),
+  checklist: z.record(z.string(), z.boolean()).nullable().optional(),
   timeline: z
     .array(z.object({ on: z.string().max(10), note: z.string().max(500) }))
     .max(200)

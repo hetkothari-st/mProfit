@@ -11,6 +11,11 @@ import { bindSessionBoundary } from './lib/sessionBoundary';
 import { installNoAutoKeyboard } from './lib/noAutoKeyboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles/globals.css';
+import { installZodV3Messages } from '@everypaisa/shared';
+
+// zod 4 reworded its default validation messages; forms show them, so keep
+// zod 3's wording (see zodMessages.ts in @everypaisa/shared).
+installZodV3Messages();
 
 /**
  * The family scope is a real input to every request — `api/client.ts` attaches

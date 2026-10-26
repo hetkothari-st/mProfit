@@ -1,3 +1,4 @@
+import './lib/zodConfig.js';
 import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';

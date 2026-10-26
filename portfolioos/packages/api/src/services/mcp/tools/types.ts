@@ -37,7 +37,7 @@ export interface ConnectorTool<S extends z.ZodRawShape> {
   partialCaps?: boolean;
   /** The tool does not take a `member` argument (list_people). */
   noMember?: boolean;
-  run(ctx: ToolContext, args: z.objectOutputType<S, z.ZodTypeAny>): Promise<ToolResult>;
+  run(ctx: ToolContext, args: z.output<z.ZodObject<S>>): Promise<ToolResult>;
 }
 
 /** A message the chatbot may show the user as-is. */
