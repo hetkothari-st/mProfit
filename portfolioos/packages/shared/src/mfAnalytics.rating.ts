@@ -65,3 +65,56 @@ export function ratingHistoryFor(
     ratedFrom: ratedFrom.toISOString().slice(0, 10),
   };
 }
+
+/**
+ * The 1–5 rating read as one of four plain words — the label a reader can
+ * take in at a glance on a list of their funds, before any number.
+ *
+ * A presentation of the rating, not a second methodology: the band is a pure
+ * function of the star rating, so it moves only when the rating does and can
+ * never disagree with it. Stars 4 and 5 share a band because both sit in the
+ * top third of the category (10% + 22.5%), which is the distinction a holder
+ * acts on; the bottom two stay apart because "weaker than most" (2) and
+ * "bottom tenth of the category" (1) call for different degrees of attention.
+ */
+export type MfFormBand = 'LEADING' | 'STEADY' | 'LAGGING' | 'WEAK';
+
+export const MF_FORM_BAND_LABEL: Readonly<Record<MfFormBand, string>> = Object.freeze({
+  LEADING: 'Leading',
+  STEADY: 'Steady',
+  LAGGING: 'Lagging',
+  WEAK: 'Weak',
+});
+
+/** What each band means, for a tooltip or an alert body. */
+export const MF_FORM_BAND_MEANING: Readonly<Record<MfFormBand, string>> = Object.freeze({
+  LEADING: 'In the top third of its category (4–5 stars).',
+  STEADY: 'In the middle of its category (3 stars).',
+  LAGGING: 'Behind most funds in its category (2 stars).',
+  WEAK: 'In the bottom tenth of its category (1 star).',
+});
+
+/** Best first. A move to a later band is a downgrade. */
+export const MF_FORM_BAND_ORDER: readonly MfFormBand[] = Object.freeze([
+  'LEADING',
+  'STEADY',
+  'LAGGING',
+  'WEAK',
+]);
+
+/** `null` for an unrated fund (rating null, or outside 1–5). */
+export function mfFormBand(rating: number | null | undefined): MfFormBand | null {
+  switch (rating) {
+    case 5:
+    case 4:
+      return 'LEADING';
+    case 3:
+      return 'STEADY';
+    case 2:
+      return 'LAGGING';
+    case 1:
+      return 'WEAK';
+    default:
+      return null;
+  }
+}

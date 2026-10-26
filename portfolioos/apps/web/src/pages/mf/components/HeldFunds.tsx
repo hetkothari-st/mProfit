@@ -4,6 +4,7 @@ import { Star } from 'lucide-react';
 import type { MfHeldFundDto, MfSchemeScoreDto } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
+import { FormBadge } from './FormBadge';
 import { SectionUnavailable } from './MetricValue';
 import { Riskometer } from './Riskometer';
 import {
@@ -222,7 +223,8 @@ function ScoreChip({ score }: { score: MfSchemeScoreDto | null }) {
 
   if (score.ratingStatus === 'RATED' && score.composite !== null) {
     return (
-      <span className="inline-flex items-center gap-2" data-rating-status="RATED">
+      <span className="inline-flex flex-wrap items-center gap-2" data-rating-status="RATED">
+        <FormBadge rating={score.rating} />
         <span className="numeric tabular-nums text-[15px] font-medium text-foreground">
           {formatRatio(score.composite, 1)}
         </span>
