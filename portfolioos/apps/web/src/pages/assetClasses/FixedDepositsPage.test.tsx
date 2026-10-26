@@ -111,6 +111,28 @@ function figure(card: HTMLElement, label: string): string {
 }
 
 describe('FD card', () => {
+  // The frequency field sets how often interest compounds (depositMath), so
+  // the card must not say interest is paid out at that frequency.
+  it('names the compounding frequency, not a payout', async () => {
+    renderPage();
+    const card = await findFd();
+    expect(within(card).getByText('Interest compounded quarterly')).toBeTruthy();
+    expect(within(card).queryByText(/Interest paid/)).toBeNull();
+  });
+
+  it('a cumulative FD is paid at maturity but still compounds quarterly', async () => {
+    api.transactions.mockImplementation(async (params?: { assetClass?: string }) => {
+      const items = [{ ...FD_TXN, interestFrequency: 'AT_MATURITY' }, ...RD_TXNS].filter(
+        (t) => !params?.assetClass || t.assetClass === params.assetClass,
+      );
+      return { items, total: items.length, page: 1, pageSize: 500 };
+    });
+    renderPage();
+    const card = await findFd();
+    expect(within(card).getByText('Paid at maturity, compounded quarterly')).toBeTruthy();
+    expect(figure(card, 'Next compounding')).toMatch(/01\/11\/2026/);
+  });
+
   it("is printed in the issuing bank's brand with its logo", async () => {
     renderPage();
     const card = await findFd();
@@ -127,13 +149,13 @@ describe('FD card', () => {
     expect(within(card).getByText(/1,10,351\.8\d/)).toBeTruthy();
   });
 
-  it('shows principal, tenure, next payout and how far along it is', async () => {
+  it('shows principal, tenure, next compounding and how far along it is', async () => {
     renderPage();
     const card = await findFd();
     expect(figure(card, 'Principal')).toMatch(/1,00,000\.00/);
     expect(figure(card, 'Tenure')).toBe('18 months');
     // Quarterly from 1 May 2026: 1 Aug has passed, 1 Nov is next.
-    expect(figure(card, 'Next payout')).toMatch(/01\/11\/2026/);
+    expect(figure(card, 'Next compounding')).toMatch(/01\/11\/2026/);
     // 132 of 558 days elapsed.
     expect(figure(card, 'Completed')).toBe('24%');
   });

@@ -34,12 +34,13 @@ import { FDFormDialog } from './FDFormDialog';
 
 type FDHolding = HoldingRow & { portfolioName: string; portfolioId?: string };
 
+// The stored frequency is the compounding frequency (see depositMath).
 const FREQ_LABELS: Record<string, string> = {
-  MONTHLY: 'Monthly',
-  QUARTERLY: 'Quarterly',
-  HALF_YEARLY: 'Half-yearly',
-  ANNUAL: 'Annual',
-  AT_MATURITY: 'At maturity',
+  MONTHLY: 'Compounds monthly',
+  QUARTERLY: 'Compounds quarterly',
+  HALF_YEARLY: 'Compounds half-yearly',
+  ANNUAL: 'Compounds yearly',
+  AT_MATURITY: 'Paid at maturity, compounds quarterly',
 };
 
 

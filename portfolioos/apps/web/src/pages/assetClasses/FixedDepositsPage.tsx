@@ -99,28 +99,32 @@ function formatShortDate(iso: string | null | undefined): string {
 const FD_FALLBACK = '#15803d'; // green, for issuers outside the bank list
 const RD_FALLBACK = '#4f46e5'; // indigo
 
-const PAYOUT_TEXT: Record<string, string> = {
-  MONTHLY: 'Interest paid monthly',
-  QUARTERLY: 'Interest paid quarterly',
-  HALF_YEARLY: 'Interest paid half-yearly',
-  ANNUAL: 'Interest paid yearly',
-  AT_MATURITY: 'Interest paid at maturity',
+// The stored frequency is how often interest compounds (see depositMath), not
+// how often it is paid out. A cumulative FD pays at maturity but compounds
+// quarterly.
+const COMPOUNDING_TEXT: Record<string, string> = {
+  MONTHLY: 'Interest compounded monthly',
+  QUARTERLY: 'Interest compounded quarterly',
+  HALF_YEARLY: 'Interest compounded half-yearly',
+  ANNUAL: 'Interest compounded yearly',
+  AT_MATURITY: 'Paid at maturity, compounded quarterly',
 };
 
-const PAYOUT_STEP_MONTHS: Record<string, number> = {
+const COMPOUNDING_STEP_MONTHS: Record<string, number> = {
   MONTHLY: 1,
   QUARTERLY: 3,
   HALF_YEARLY: 6,
   ANNUAL: 12,
+  AT_MATURITY: 3,
 };
 
 /**
- * The next periodic interest credit on or after today, counted from the
- * opening date in payout-frequency steps and capped at maturity. Null when
- * interest is only paid at maturity (or the dates aren't known).
+ * The next date interest compounds on or after today, counted from the
+ * opening date in compounding steps and capped at maturity. Null when the
+ * dates or frequency aren't known.
  */
-function nextPayoutDate(openDate: string | null, maturity: string | null, freq: string | null): string | null {
-  const step = freq ? PAYOUT_STEP_MONTHS[freq] : undefined;
+function nextCompoundingDate(openDate: string | null, maturity: string | null, freq: string | null): string | null {
+  const step = freq ? COMPOUNDING_STEP_MONTHS[freq] : undefined;
   if (!openDate || !maturity || !step) return null;
   const today = todayIso();
   for (let n = 1; n <= 1200; n++) {
@@ -311,7 +315,7 @@ function FDCard({
     frequency: freq,
   });
   const matured = maturity ? daysUntil(maturity) < 0 : false;
-  const payout = matured ? null : nextPayoutDate(openDate, maturity, freq);
+  const nextCompounding = matured ? null : nextCompoundingDate(openDate, maturity, freq);
   const [reminder] = depositReminders({ kind: 'FD', openDate, maturity, installmentsPaid: 0, today: todayIso() });
 
   return (
@@ -323,7 +327,7 @@ function FDCard({
         reference={`Fixed deposit no. ${serial}`}
         rate={rate}
         holder={holding.portfolioName || null}
-        terms={(freq && PAYOUT_TEXT[freq]) || 'Payout not set'}
+        terms={(freq && COMPOUNDING_TEXT[freq]) || 'Compounding not set'}
         stamp={matured ? 'Matured' : null}
         editLabel="Edit deposit"
         onEdit={onEdit}
@@ -345,14 +349,12 @@ function FDCard({
             <span className="money-digits">{formatINR(holding.totalCost)}</span>
           </Figure>
           <Figure label="Tenure">{tenureMonths ? `${tenureMonths} months` : '—'}</Figure>
-          <Figure label="Next payout">
+          <Figure label="Next compounding">
             {matured
-              ? 'Paid out'
-              : payout
-                ? formatShortDate(payout)
-                : freq === 'AT_MATURITY' && maturity
-                  ? 'At maturity'
-                  : '—'}
+              ? 'Matured'
+              : nextCompounding
+                ? formatShortDate(nextCompounding)
+                : '—'}
           </Figure>
           <Figure label="Completed">{tenureMonths != null ? `${Math.round(elapsedPct)}%` : '—'}</Figure>
           <Figure label="Worth today">
