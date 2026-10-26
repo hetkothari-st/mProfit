@@ -81,7 +81,7 @@ describe('will drafts', () => {
       .catch((e: unknown) => e as { statusCode: number; details: { issues: Array<{ path: string; code: string }> } });
     expect(err.statusCode).toBe(422);
     expect(err.details.issues).toEqual(
-      expect.arrayContaining([{ path: 'legalName', code: 'too_big' }, { path: 'dob', code: 'invalid_string' }]),
+      expect.arrayContaining([{ path: 'legalName', code: 'too_big' }, { path: 'dob', code: 'invalid_format' }]),
     );
     expect(JSON.stringify(err.details)).not.toContain('not-a-date');
   });

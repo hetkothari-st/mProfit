@@ -44,17 +44,17 @@ export const WILL_DEFAULT_SURVIVAL_DAYS = 30;
 export const WILL_SECTIONS = ['details', 'people', 'estate', 'allocation', 'instructions'] as const;
 export type WillSection = (typeof WILL_SECTIONS)[number];
 
-// zod 3.25 still runs refine() after a failed regex(); isRealIsoDate re-checks the shape and never throws.
+// abort: a failed regex() stops here, so a bad date reports one issue; isRealIsoDate still re-checks the shape and never throws.
 const isoDate = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .regex(/^\d{4}-\d{2}-\d{2}$/, { abort: true })
   .refine((v) => isRealIsoDate(v), { message: 'not a real date' });
 const amount = z.string().regex(/^\d{1,13}(\.\d{1,2})?$/);
 const PERCENT_RE = /^\d{1,3}(\.\d{1,2})?$/;
-// zod 3.25 still runs refine() after a failed regex(), so the refine re-checks the shape before parsing.
+// abort stops the refine after a failed regex(); the refine still re-checks the shape before parsing.
 const percent = z
   .string()
-  .regex(PERCENT_RE)
+  .regex(PERCENT_RE, { abort: true })
   .refine((v) => PERCENT_RE.test(v) && new Decimal(v).lte(100), { message: 'at most 100' });
 const ref = z.string().min(1).max(64);
 const text = (max: number) => z.string().trim().max(max);
