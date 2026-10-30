@@ -1,7 +1,7 @@
 import { useAuthStore } from '@/stores/auth.store';
 import { useState } from 'react';
 import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { LineChart, RefreshCw, Plus, Loader2, Pencil, Upload, Download, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, Lock, Sparkles } from 'lucide-react';
+import { LineChart, Plus, Loader2, Pencil, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, Lock, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ImportJobDTO, ImportStatus } from '@everypaisa/shared';
 import { IMPORT_STATUS_LABELS, formatDateOnly } from '@everypaisa/shared';
@@ -14,16 +14,12 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { PriceAsOf } from '@/components/common/PriceAsOf';
 import { portfoliosApi } from '@/api/portfolios.api';
-import { assetsApi } from '@/api/assets.api';
 import { transactionsApi } from '@/api/transactions.api';
 import { listAllTransactions } from '@/api/listAllTransactions';
 import { apiErrorMessage } from '@/api/client';
 import { importsApi } from '@/api/imports/imports.api';
-import { useScan } from '@/context/ScanContext';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
 import { ImportDropzone } from '@/pages/imports/ImportDropzone';
-import { MFCasparserDialog } from '@/pages/mutualFunds/MFCasparserDialog';
-import { MFCasMailbackDialog } from '@/pages/mutualFunds/MFCasMailbackDialog';
 import { MfOverlapCard } from '@/pages/mutualFunds/MfOverlapCard';
 import { FinvuSandboxCard } from '@/pages/mutualFunds/FinvuSandboxCard';
 import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
@@ -43,8 +39,6 @@ export function MutualFundsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editTxn, setEditTxn] = useState<TransactionDTO | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
-  const [mailbackOpen, setMailbackOpen] = useState(false);
   const [viewError, setViewError] = useState<ImportJobDTO | null>(null);
   const [confirmDeleteImportId, setConfirmDeleteImportId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -74,18 +68,6 @@ export function MutualFundsPage() {
   const txnQuery = useQuery({
     queryKey: ['transactions', 'MUTUAL_FUND'],
     queryFn: () => listAllTransactions({ assetClass: 'MUTUAL_FUND' }),
-  });
-
-  const syncMutation = useMutation({
-    // Re-prices the user's own funds at the latest NAVs the daily AMFI job
-    // loaded. The full AMFI sync is a market-wide admin tool now.
-    mutationFn: () => assetsApi.refreshAll(),
-    onSuccess: (r) => {
-      toast.success(`Re-priced ${r.holdings.updated} holding${r.holdings.updated !== 1 ? 's' : ''} at the latest NAVs`);
-      queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
-      queryClient.invalidateQueries({ queryKey: ['portfolio-summary'] });
-    },
-    onError: (err) => toast.error(apiErrorMessage(err, 'AMFI sync failed')),
   });
 
   const deleteMutation = useMutation({
@@ -120,8 +102,6 @@ export function MutualFundsPage() {
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Upload failed')),
   });
-
-  const { scanning, triggerScan } = useScan();
 
   const importsQuery = useQuery({
     queryKey: ['imports'],
@@ -191,9 +171,6 @@ export function MutualFundsPage() {
 
   function openEdit(txn: TransactionDTO) { setEditTxn(txn); setFormOpen(true); }
   function openAdd() { setEditTxn(null); setFormOpen(true); }
-  function scrollToUpload() {
-    document.getElementById('automated-cas-import')?.scrollIntoView({ behavior: 'smooth' });
-  }
 
   return (
     <div>
@@ -211,26 +188,6 @@ export function MutualFundsPage() {
               </Link>
             </Button>
             <DownloadReportButton type="holdings" assetClasses={['MUTUAL_FUND']} />
-            <Button onClick={() => setSyncDialogOpen(true)}>
-              <Download className="h-4 w-4" /> Sync MF via CASParser
-            </Button>
-            <Button variant="outline" onClick={() => setMailbackOpen(true)}>
-              <RefreshCw className="h-4 w-4" /> Sync via CAMS / KFintech
-            </Button>
-            <Button
-              variant="outline"
-              onClick={triggerScan}
-              disabled={scanning}
-              title="Check Gmail for new CAS emails now"
-            >
-              {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Scan inbox
-            </Button>
-            <Button variant="outline" onClick={scrollToUpload}><Upload className="h-4 w-4" /> Import CAS PDF</Button>
-            <Button variant="outline" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
-              {syncMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Refresh NAVs
-            </Button>
             <Button variant="outline" onClick={openAdd}><Plus className="h-4 w-4" /> Add transaction</Button>
           </div>
         }
@@ -388,7 +345,7 @@ export function MutualFundsPage() {
         <EmptyState
           icon={LineChart}
           title="No mutual fund holdings"
-          description="Sync AMFI NAV first, then add a BUY or SIP transaction on a scheme."
+          description="Import a CAS or add a BUY or SIP transaction on a scheme."
           action={<Button onClick={openAdd}><Plus className="h-4 w-4" /> Add transaction</Button>}
         />
       ) : (
@@ -558,36 +515,6 @@ export function MutualFundsPage() {
         open={formOpen}
         onOpenChange={(open) => { setFormOpen(open); if (!open) setEditTxn(null); }}
         initial={editTxn}
-      />
-
-      {/* Old Playwright-driven CAMS + KFin dialog — kept as fallback when
-          casparser credits are exhausted. To re-enable, swap the dialog
-          below with MFCasMailbackDialog and uncomment the import above.
-      <MFCasMailbackDialog
-        open={syncDialogOpen}
-        onOpenChange={setSyncDialogOpen}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
-          queryClient.invalidateQueries({ queryKey: ['transactions', 'MUTUAL_FUND'] });
-        }}
-      /> */}
-
-      <MFCasparserDialog
-        open={syncDialogOpen}
-        onOpenChange={setSyncDialogOpen}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
-          queryClient.invalidateQueries({ queryKey: ['transactions', 'MUTUAL_FUND'] });
-        }}
-      />
-
-      <MFCasMailbackDialog
-        open={mailbackOpen}
-        onOpenChange={setMailbackOpen}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
-          queryClient.invalidateQueries({ queryKey: ['transactions', 'MUTUAL_FUND'] });
-        }}
       />
 
       <ImportErrorDialog job={viewError} onClose={() => setViewError(null)} />
