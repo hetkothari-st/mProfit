@@ -37,7 +37,9 @@ export function GmailCallbackPage() {
       let success = false;
       try {
         const r = await gmailApi.callback(code, state);
-        toast.success(`Connected ${r.email}`);
+        // The server has started fetching every financial document in the
+        // inbox; the next page shows it coming in.
+        toast.success(`Connected ${r.email} — fetching your financial documents`);
         setMsg(`Connected ${r.email}…`);
         await qc.invalidateQueries({ queryKey: ['mailboxes'] });
         success = true;
@@ -52,7 +54,7 @@ export function GmailCallbackPage() {
           setTimeout(() => window.close(), 400);
         } else {
           setTimeout(
-            () => nav(success ? '/gmail/scan-setup' : '/mailboxes', { replace: true }),
+            () => nav(success ? '/reports?tab=inbox-imports' : '/mailboxes', { replace: true }),
             500,
           );
         }
