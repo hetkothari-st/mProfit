@@ -45,6 +45,7 @@ import {
 } from '@/api/rental/rental.api';
 import { invalidateRentalCaches } from '@/api/rental/rentalCache';
 import { RentalRemindersPanel } from './RentalRemindersPanel';
+import { buildLast12, getPropertySummary, totalOverdue as countOverdue, type ReceiptStatus } from './rentalListSummary';
 import { propertyPhotosApi, type PhotoCover } from '@/api/realEstate/propertyMedia.api';
 import { PropertySlideshow } from '@/components/property/PropertySlideshow';
 import { PropertiesMap } from '@/components/property/PropertiesMap';
@@ -108,39 +109,10 @@ function overdueDays(isoDate: string): number {
   return Math.floor((Date.now() - due) / (1000 * 60 * 60 * 24));
 }
 
-function getPropertySummary(property: RentalPropertyDTO) {
-  const activeTenancy = property.tenancies?.find((t) => t.isActive);
-  const allReceipts = property.tenancies?.flatMap((t) => t.rentReceipts ?? []) ?? [];
-  const overdueCount = allReceipts.filter((r) => r.status === 'OVERDUE').length;
-  const expectedCount = allReceipts.filter((r) => r.status === 'EXPECTED').length;
-  const nextDue = allReceipts
-    .filter((r) => r.status === 'EXPECTED')
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
-
-  return { activeTenancy, overdueCount, expectedCount, nextDue, allReceipts };
-}
-
 // ── 12-month receipt ledger strip ─────────────────────────────────────
 // Renders the trailing 12 months as small cells, color-coded by status.
 
-type ReceiptStatus = 'RECEIVED' | 'EXPECTED' | 'PARTIAL' | 'OVERDUE' | 'SKIPPED';
-interface MiniReceipt { forMonth: string; status: ReceiptStatus }
-
-function buildLast12(receipts: MiniReceipt[]) {
-  const map = new Map(receipts.map((r) => [r.forMonth, r.status]));
-  const cells: Array<{ month: string; label: string; status: ReceiptStatus | null }> = [];
-  const now = new Date();
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    cells.push({
-      month: key,
-      label: d.toLocaleString('en-IN', { month: 'short' }).slice(0, 1),
-      status: map.get(key) ?? null,
-    });
-  }
-  return cells;
-}
+interface MiniReceipt { forMonth: string; status: string }
 
 function ReceiptLedger({ receipts }: { receipts: MiniReceipt[] }) {
   const cells = buildLast12(receipts);
@@ -340,7 +312,7 @@ function PropertyCard({
   onDelete: () => void;
   isDeleting: boolean;
 }) {
-  const { activeTenancy, overdueCount, nextDue, allReceipts } = getPropertySummary(property);
+  const { activeTenancy, overdueCount, nextDue, stripReceipts } = getPropertySummary(property);
   const monthlyRent = activeTenancy ? new Decimal(activeTenancy.monthlyRent) : null;
   const typeStyle = getPropertyStyle(property.propertyType);
 
@@ -503,7 +475,7 @@ function PropertyCard({
                 <Calendar className="h-3 w-3" />
               </div>
             </div>
-            <ReceiptLedger receipts={allReceipts as MiniReceipt[]} />
+            <ReceiptLedger receipts={stripReceipts as MiniReceipt[]} />
           </div>
 
           <ArrowUpRight className="absolute bottom-4 right-5 h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-accent transition-colors" />
@@ -519,10 +491,8 @@ function SummaryStrip({ properties }: { properties: RentalPropertyDTO[] }) {
   const active = properties.filter((p) =>
     p.tenancies?.some((t) => t.isActive),
   ).length;
-  const totalOverdue = properties.reduce((sum, p) => {
-    const receipts = p.tenancies?.flatMap((t) => t.rentReceipts ?? []) ?? [];
-    return sum + receipts.filter((r) => r.status === 'OVERDUE').length;
-  }, 0);
+  // Current tenancies only, like each card (rentalListSummary.ts).
+  const totalOverdue = countOverdue(properties);
   const monthlyIncome = properties.reduce((sum, p) => {
     const activeTenancy = p.tenancies?.find((t) => t.isActive);
     if (!activeTenancy) return sum;
