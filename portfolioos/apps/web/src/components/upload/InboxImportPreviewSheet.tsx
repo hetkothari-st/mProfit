@@ -71,6 +71,15 @@ export function InboxImportPreviewSheet({ docId, onClose }: Props) {
             <p className="text-sm text-destructive px-4">{blobError}</p>
           ) : !blobUrl ? (
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          ) : mode === 'image' ? (
+            <div className="w-full h-full overflow-auto flex items-center justify-center bg-muted/40 p-4">
+              <img
+                src={blobUrl}
+                alt={fileName}
+                className="max-w-full max-h-full object-contain"
+                onError={() => setBlobError('This image could not be shown. Download it to see its contents.')}
+              />
+            </div>
           ) : (
             <iframe
               key={blobUrl}
