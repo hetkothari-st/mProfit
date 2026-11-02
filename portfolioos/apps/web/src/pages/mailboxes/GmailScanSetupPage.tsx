@@ -23,6 +23,8 @@ const PRESETS = [
   { label: 'Last 30 days', from: dateMinus(0, 30) },
   { label: 'Last 1 year', from: dateMinus(1) },
   { label: 'Last 5 years', from: dateMinus(5) },
+  // Gmail opened in April 2004: nothing in a mailbox is older.
+  { label: 'Whole inbox', from: '2004-04-01' },
 ];
 
 export function GmailScanSetupPage() {

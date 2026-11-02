@@ -22,6 +22,8 @@ const DEFAULTS: Record<string, string> = {
   ENABLE_LOAN_RATES_CRON: 'false',
   // Nor the Legacy Transfer daily tick / outbox retry.
   ENABLE_LEGACY_CRON: 'false',
+  // Nor the nightly Gmail scans.
+  ENABLE_GMAIL_SCAN_CRONS: 'false',
 };
 
 for (const [key, value] of Object.entries(DEFAULTS)) {

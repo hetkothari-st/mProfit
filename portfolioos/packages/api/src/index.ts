@@ -20,6 +20,7 @@ import { startVehicleJobs } from './jobs/vehicleJobs.js';
 import { startCatalogJobs } from './jobs/catalogJobs.js';
 import { startRentalJobs } from './jobs/rentalJobs.js';
 import { startInsuranceJobs } from './jobs/insuranceJobs.js';
+import { startGmailScanJobs } from './jobs/gmailScanJobs.js';
 import { startAccountDeletionJob } from './jobs/accountDeletionJob.js';
 import { startPiiAtRestJobs } from './jobs/piiAtRestJobs.js';
 import { startKeyRotationJobs } from './jobs/keyRotationJobs.js';
@@ -229,6 +230,7 @@ const server = app.listen(env.PORT, '::', () => {
   startCatalogJobs();
   startRentalJobs();
   startInsuranceJobs();
+  startGmailScanJobs();
   startAccountDeletionJob();
   startKeyRotationJobs();
   startSecurityAlertJobs();

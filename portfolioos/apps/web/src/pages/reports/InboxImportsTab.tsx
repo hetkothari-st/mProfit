@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
@@ -135,6 +136,15 @@ export function InboxImportsTab() {
           {progressLine}
         </div>
       )}
+
+      {/* Connecting Gmail fetches the whole inbox, and new mail is fetched
+          nightly; a specific period can still be scanned again by hand. */}
+      <p className="text-xs text-muted-foreground">
+        Every financial document in your Gmail is fetched when you connect it, and new ones each night.{' '}
+        <Link to="/gmail/scan-setup" className="underline underline-offset-2 hover:text-foreground">
+          Scan a specific period again
+        </Link>
+      </p>
 
       {/* Status tabs */}
       <div className="flex flex-wrap gap-1.5">

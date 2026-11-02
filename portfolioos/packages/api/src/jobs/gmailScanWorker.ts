@@ -13,6 +13,7 @@ import {
   downloadAttachmentBytes,
 } from '../ingestion/gmail/gmailMessageLister.js';
 import { classifyAttachmentWithLlm } from '../ingestion/gmail/gmailClassifier.js';
+import { scoreText } from '../ingestion/gmail/keywords.js';
 import { decryptIfNeeded } from '../lib/decryptIfNeeded.js';
 import { getGmailScanQueue } from '../lib/queue.js';
 import { sweepAutoApprovals } from '../services/gmail/gmailDocApproval.service.js';
@@ -200,9 +201,60 @@ async function processMessages(scanJobId: string, messageIds: string[]): Promise
   }
 }
 
+/**
+ * An attachment with not one financial term in its file name, subject,
+ * sender or first page (keywords.ts: transaction words, institutions, …) is
+ * not a statement. Sorting those without the model keeps a whole-inbox scan
+ * — thousands of attachments over twenty years — inside the monthly AI
+ * budget; anything with even one term still goes to the model.
+ */
+export function obviouslyNotFinancial(
+  doc: { fileName: string; subject: string; fromAddress: string },
+  firstText: string,
+): boolean {
+  const text = `${doc.fileName.replace(/[_.-]+/g, ' ')} ${doc.subject} ${doc.fromAddress} ${firstText}`;
+  return scoreText(text) === 0 && !ALSO_FINANCIAL.test(text);
+}
+
+/**
+ * Terms the discovery scorer does not weigh but that name a document this app
+ * imports — payslips, insurance, demat and fund statements, tax forms,
+ * retirement accounts — and the banks, insurers and fund houses that send
+ * them. Deliberately broad: a false "maybe" costs one model call, a false
+ * "no" loses a statement.
+ */
+const ALSO_FINANCIAL = new RegExp(
+  '\\b(' +
+    [
+      'pay ?slips?', 'salary', 'wages?', 'ctc', 'form ?16', 'form ?26as', '26as', 'ais', 'itr', 'tax', 'gst',
+      'bank', 'banking', 'account', 'a/c', 'passbook', 'cheque', 'deposits?', 'savings', 'overdraft',
+      'insurance', 'insurer', 'insured', 'claim', 'renewal', 'health', 'life', 'motor', 'mediclaim', 'cover',
+      'cas', 'consolidated', 'portfolio', 'holdings?', 'demat', 'nsdl', 'cdsl', 'depository', 'mutual funds?',
+      'units?', 'sip', 'redemption', 'allotment', 'amc', 'brokerage', 'ledger', 'margin', 'equity', 'shares?',
+      'bonds?', 'debentures?', 'sgb', 'gold', 'nps', 'pran', 'epf', 'uan', 'ppf', 'provident', 'pension',
+      'receipt', 'certificate', 'invoice', 'bill', 'payment', 'refund', 'emi', 'mortgage', 'home loan',
+      'credit card', 'card statement', 'rent', 'lease', 'property tax',
+      'yes bank', 'baroda', 'canara', 'union bank', 'federal', 'idbi', 'bandhan', 'equitas', 'ujjivan', 'au small',
+      'bajaj', 'tata', 'star health', 'niva', 'care health', 'aditya birla', 'max life', 'reliance', 'hdfc life',
+      'nippon', 'mirae', 'parag parikh', 'quant', 'uti', 'dsp', 'edelweiss', 'motilal', 'sharekhan', 'icicidirect',
+    ].join('|') +
+    ')\\b',
+  'i',
+);
+
 async function classifyPending(scanJobId: string): Promise<void> {
+  const job = await prisma.gmailScanJob.findUniqueOrThrow({ where: { id: scanJobId }, select: { userId: true } });
+  // This scan's documents, and any an earlier scan left unsorted (when the
+  // month's AI budget ran out) — but never those of a scan still running,
+  // which is sorting its own.
   const docs = await prisma.gmailDiscoveredDoc.findMany({
-    where: { scanJobId, status: 'CLASSIFYING' },
+    where: {
+      status: 'CLASSIFYING',
+      OR: [
+        { scanJobId },
+        { userId: job.userId, scanJob: { status: { in: ['COMPLETED', 'FAILED', 'CANCELLED'] } } },
+      ],
+    },
   });
   if (docs.length === 0) return;
 
@@ -227,6 +279,22 @@ async function classifyPending(scanJobId: string): Promise<void> {
       await dropLocalFile(doc.blobKey, localPath);
 
       const first4kb = decrypted.ok && decrypted.text ? decrypted.text.slice(0, 4096) : '';
+
+      if (obviouslyNotFinancial(doc, first4kb)) {
+        await prisma.gmailDiscoveredDoc.update({
+          where: { id: doc.id },
+          data: {
+            isFinancial: false,
+            status: 'NOT_FINANCIAL',
+            classifierNotes: 'No financial terms in the file name, subject, sender or first page.',
+          },
+        });
+        await prisma.gmailScanJob.update({
+          where: { id: scanJobId },
+          data: { attachmentsClassified: { increment: 1 } },
+        });
+        continue;
+      }
 
       const cls = await classifyAttachmentWithLlm({
         userId: doc.userId,

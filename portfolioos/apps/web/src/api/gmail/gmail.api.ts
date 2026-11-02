@@ -17,8 +17,9 @@ export const gmailApi = {
     const { data } = await api.get<ApiResponse<{ url: string }>>('/api/gmail/auth-url');
     return unwrap(data);
   },
-  async callback(code: string, state: string): Promise<{ id: string; email: string }> {
-    const { data } = await api.post<ApiResponse<{ id: string; email: string }>>(
+  /** `scanJobId`: the whole-inbox fetch the server started on connect (null if one was already running or done). */
+  async callback(code: string, state: string): Promise<{ id: string; email: string; scanJobId: string | null }> {
+    const { data } = await api.post<ApiResponse<{ id: string; email: string; scanJobId: string | null }>>(
       '/api/gmail/callback',
       { code, state },
     );

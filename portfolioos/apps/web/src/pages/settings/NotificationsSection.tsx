@@ -31,7 +31,7 @@ export function NotificationsSection() {
     onSuccess: ({ url }) => {
       // Open Google consent in same tab — the existing /gmail/callback
       // route handles the redirect + token exchange and then lands on
-      // /gmail/scan-setup (GmailCallbackPage), not back here.
+      // the inbox-imports view (GmailCallbackPage), not back here.
       window.location.href = url;
     },
     onError: (err) =>

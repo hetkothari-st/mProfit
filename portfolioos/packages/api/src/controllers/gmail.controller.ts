@@ -13,6 +13,8 @@ import {
 } from '../ingestion/gmail/gmail.connector.js';
 import { discoverFinancialSenders } from '../ingestion/gmail/discovery.js';
 import { consumeOAuthState } from '../lib/oauthState.js';
+import { logger } from '../lib/logger.js';
+import { startInboxBackfill } from '../services/gmail/gmailScanJobs.service.js';
 
 export async function getGmailConfig(_req: Request, res: Response) {
   // pollIntervalMin lets the UI say how often monitored senders are checked
@@ -48,7 +50,17 @@ export async function postGmailCallback(req: Request, res: Response) {
   }
 
   const r = await exchangeGmailCode(userId, code);
-  ok(res, r);
+  // Connecting means: fetch every financial document already in the inbox.
+  // Started here, not by the page that follows, so every way of connecting
+  // (the pop-up flows included) gets it. A failure to start is logged and
+  // the nightly run starts it instead; the connection itself succeeded.
+  let scanJobId: string | null = null;
+  try {
+    scanJobId = (await startInboxBackfill(userId, r.id)).jobId;
+  } catch (err) {
+    logger.error({ err, mailboxId: r.id }, '[gmail] could not start the whole-inbox fetch');
+  }
+  ok(res, { ...r, scanJobId });
 }
 
 export async function postGmailSync(req: Request, res: Response) {
