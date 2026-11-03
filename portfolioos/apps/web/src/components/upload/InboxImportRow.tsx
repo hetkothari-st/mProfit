@@ -27,7 +27,7 @@ interface Props {
   selected: boolean;
   onToggleSelect: () => void;
   onPreview: () => void;
-  onApprove: (createRule: boolean) => void;
+  onApprove: () => void;
   onReject: () => void;
   isPending: boolean;
 }
@@ -85,20 +85,10 @@ export function InboxImportRow({
               <Button
                 size="sm"
                 className="h-7 px-2 text-xs"
-                onClick={() => onApprove(false)}
+                onClick={onApprove}
                 disabled={isPending}
               >
                 Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-xs"
-                onClick={() => onApprove(true)}
-                disabled={isPending}
-                title="Approve + auto-approve future docs from this sender"
-              >
-                + Always
               </Button>
               <Button
                 size="sm"

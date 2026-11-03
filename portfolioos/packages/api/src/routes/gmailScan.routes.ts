@@ -16,6 +16,8 @@ import {
   postRejectDoc,
   postBulkApprove,
   postBulkReject,
+  postApproveAllFromSender,
+  postRejectAllFromSender,
   listAutoApproveRules,
   postAutoApproveRule,
   deleteAutoApproveRule,
@@ -35,6 +37,8 @@ gmailScanRouter.get('/discovered-docs', asyncHandler(listDocs));
 gmailScanRouter.get('/discovered-docs/senders', asyncHandler(listSenders));
 gmailScanRouter.post('/discovered-docs/bulk-approve', asyncHandler(postBulkApprove));
 gmailScanRouter.post('/discovered-docs/bulk-reject', asyncHandler(postBulkReject));
+gmailScanRouter.post('/discovered-docs/senders/approve-all', asyncHandler(postApproveAllFromSender));
+gmailScanRouter.post('/discovered-docs/senders/reject-all', asyncHandler(postRejectAllFromSender));
 gmailScanRouter.get('/discovered-docs/:id', asyncHandler(getDoc));
 gmailScanRouter.get('/discovered-docs/:id/preview-url', asyncHandler(getDocPreviewUrl));
 gmailScanRouter.get('/discovered-docs/:id/raw', asyncHandler(getDocRaw));
