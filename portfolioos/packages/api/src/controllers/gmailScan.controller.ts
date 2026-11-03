@@ -17,7 +17,12 @@ import {
   getDiscoveredDoc,
   listDistinctSenders,
 } from '../services/gmail/gmailDiscoveredDocs.service.js';
-import { approveDoc, rejectDoc } from '../services/gmail/gmailDocApproval.service.js';
+import {
+  approveDoc,
+  rejectDoc,
+  approveAllFromSender,
+  rejectAllFromSender,
+} from '../services/gmail/gmailDocApproval.service.js';
 import {
   listRules,
   upsertRule,
@@ -147,6 +152,20 @@ export async function postRejectDoc(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const body = RejectBody.parse(req.body ?? {});
   ok(res, await rejectDoc(req.user.id, req.params.id!, body));
+}
+
+// Sender addresses are stored as parsed from the From header; RFC 5321
+// caps a path at 256 octets, the display form can be a little longer.
+const SenderDecisionBody = z.object({ fromAddress: z.string().trim().min(1).max(320) });
+export async function postApproveAllFromSender(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const { fromAddress } = SenderDecisionBody.parse(req.body);
+  ok(res, await approveAllFromSender(req.user.id, fromAddress));
+}
+export async function postRejectAllFromSender(req: Request, res: Response) {
+  if (!req.user) throw new UnauthorizedError();
+  const { fromAddress } = SenderDecisionBody.parse(req.body);
+  ok(res, await rejectAllFromSender(req.user.id, fromAddress));
 }
 
 const BulkApproveSchema = z.object({

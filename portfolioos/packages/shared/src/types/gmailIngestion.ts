@@ -96,6 +96,8 @@ export interface GmailAutoApproveRuleDTO {
   fromAddress: string;
   docType: string | null;
   enabled: boolean;
+  /** Documents from this sender are rejected as they arrive. */
+  autoReject: boolean;
   approvedCount: number;
   lastUsedAt: string | null;
   createdAt: string;
@@ -104,6 +106,18 @@ export interface GmailAutoApproveRuleDTO {
 export interface CreateScanJobInput {
   lookbackFrom: string;
   lookbackTo: string;
+}
+
+/** Approve or reject every pending document from one sender, now and as more arrive. */
+export interface SenderDecisionInput {
+  fromAddress: string;
+}
+
+export interface SenderDecisionResult {
+  /** Documents whose status changed. */
+  ids: string[];
+  /** Documents that could not be approved (e.g. their file is missing). */
+  failed: number;
 }
 
 export interface BulkApproveInput {

@@ -1599,6 +1599,8 @@ model GmailAutoApproveRule {
   fromAddress   String
   docType       String?
   enabled       Boolean   @default(true)
+  /// Reject this sender's documents as they arrive (set by "Reject all from sender").
+  autoReject    Boolean   @default(false)
   approvedCount Int       @default(0)
   lastUsedAt    DateTime? @db.Timestamptz(3)
   createdAt     DateTime  @default(now()) @db.Timestamptz(3)

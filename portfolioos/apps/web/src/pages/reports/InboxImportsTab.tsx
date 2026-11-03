@@ -10,7 +10,9 @@ import { gmailScanApi } from '@/api/gmail/gmailScan.api';
 import { apiErrorMessage } from '@/api/client';
 import { InboxImportRow } from '@/components/upload/InboxImportRow';
 import { InboxImportPreviewSheet } from '@/components/upload/InboxImportPreviewSheet';
-import type { GmailDocStatus } from '@everypaisa/shared';
+import { SenderDecisionDialog } from '@/components/upload/SenderDecisionDialog';
+import { applyInboxDecision, otherPendingFromSender, type InboxDecision } from './inboxDecision';
+import type { GmailDiscoveredDocDTO, GmailDocStatus } from '@everypaisa/shared';
 import { GmailDocStatus as STATUS, INBOX_DOC_TYPES } from '@everypaisa/shared';
 
 const STATUS_OPTIONS: Array<{ value: GmailDocStatus | 'ALL'; label: string }> = [
@@ -31,6 +33,8 @@ export function InboxImportsTab() {
   const [docTypeFilter, setDocTypeFilter] = useState<string>('');
   const [preview, setPreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // The document whose Approve/Reject is waiting on "everything from this sender?".
+  const [asking, setAsking] = useState<{ doc: GmailDiscoveredDocDTO; decision: InboxDecision } | null>(null);
 
   // Define scansQ first so runningScan drives docsQ's refetchInterval
   const scansQ = useQuery({
@@ -66,17 +70,54 @@ export function InboxImportsTab() {
     queryFn: () => gmailScanApi.listSenders(),
   });
 
-  const approve = useMutation({
-    mutationFn: (input: { id: string; createRule: boolean }) =>
-      gmailScanApi.approveDoc(input.id, input.createRule),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['gmail-discovered-docs'] }),
-    onError: (err) => toast.error(apiErrorMessage(err, 'Approve failed')),
+  /**
+   * Show a decision in every cached inbox list straight away; hands back
+   * an undo for when the server refuses it.
+   */
+  async function showDecision(matches: (d: GmailDiscoveredDocDTO) => boolean, decision: InboxDecision) {
+    await qc.cancelQueries({ queryKey: ['gmail-discovered-docs'] });
+    const before = qc.getQueriesData<GmailDiscoveredDocDTO[]>({ queryKey: ['gmail-discovered-docs'] });
+    for (const [key, list] of before) {
+      if (!list) continue;
+      // Key: ['gmail-discovered-docs', statusFilter, senderFilter, docTypeFilter]
+      const status = key[1] === 'ALL' ? undefined : (key[1] as GmailDocStatus);
+      qc.setQueryData(key, applyInboxDecision(list, matches, decision, status));
+    }
+    return () => before.forEach(([key, list]) => qc.setQueryData(key, list));
+  }
+  const settle = () => qc.invalidateQueries({ queryKey: ['gmail-discovered-docs'] });
+
+  const decideOne = useMutation({
+    mutationFn: ({ doc, decision }: { doc: GmailDiscoveredDocDTO; decision: InboxDecision }) =>
+      decision === 'APPROVE' ? gmailScanApi.approveDoc(doc.id) : gmailScanApi.rejectDoc(doc.id),
+    onMutate: ({ doc, decision }) => showDecision((d) => d.id === doc.id, decision),
+    onError: (err, { decision }, undo) => {
+      undo?.();
+      toast.error(apiErrorMessage(err, decision === 'APPROVE' ? 'Approve failed' : 'Reject failed'));
+    },
+    onSettled: settle,
   });
-  const reject = useMutation({
-    mutationFn: (input: { id: string; blocklist: boolean }) =>
-      gmailScanApi.rejectDoc(input.id, { blocklist: input.blocklist }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['gmail-discovered-docs'] }),
-    onError: (err) => toast.error(apiErrorMessage(err, 'Reject failed')),
+  const decideSender = useMutation({
+    mutationFn: ({ doc, decision }: { doc: GmailDiscoveredDocDTO; decision: InboxDecision }) =>
+      decision === 'APPROVE'
+        ? gmailScanApi.approveAllFromSender(doc.fromAddress)
+        : gmailScanApi.rejectAllFromSender(doc.fromAddress),
+    onMutate: ({ doc, decision }) => showDecision((d) => d.fromAddress === doc.fromAddress, decision),
+    onSuccess: (result, { doc, decision }) => {
+      const n = result.ids.length;
+      const docs = `${n} document${n === 1 ? '' : 's'}`;
+      toast.success(
+        decision === 'APPROVE'
+          ? `Approved ${docs} from ${doc.fromAddress}. New ones will be approved too.`
+          : `Rejected ${docs} from ${doc.fromAddress}. New ones will be rejected too.`,
+      );
+      if (result.failed > 0) toast.error(`${result.failed} could not be approved. They are still waiting for review.`);
+    },
+    onError: (err, { decision }, undo) => {
+      undo?.();
+      toast.error(apiErrorMessage(err, decision === 'APPROVE' ? 'Approve all failed' : 'Reject all failed'));
+    },
+    onSettled: settle,
   });
   const bulkApprove = useMutation({
     mutationFn: () =>
@@ -231,9 +272,9 @@ export function InboxImportsTab() {
                   selected={selected.has(d.id)}
                   onToggleSelect={() => toggleSelect(d.id)}
                   onPreview={() => setPreview(d.id)}
-                  onApprove={(createRule) => approve.mutate({ id: d.id, createRule })}
-                  onReject={() => reject.mutate({ id: d.id, blocklist: false })}
-                  isPending={approve.isPending || reject.isPending}
+                  onApprove={() => setAsking({ doc: d, decision: 'APPROVE' })}
+                  onReject={() => setAsking({ doc: d, decision: 'REJECT' })}
+                  isPending={decideSender.isPending}
                 />
               ))}
             </tbody>
@@ -242,6 +283,21 @@ export function InboxImportsTab() {
       </Card>
 
       <InboxImportPreviewSheet docId={preview} onClose={() => setPreview(null)} />
+
+      <SenderDecisionDialog
+        doc={asking?.doc ?? null}
+        decision={asking?.decision ?? 'APPROVE'}
+        otherPending={asking ? otherPendingFromSender(docs, asking.doc) : 0}
+        onAllFromSender={() => {
+          if (asking) decideSender.mutate(asking);
+          setAsking(null);
+        }}
+        onJustThisOne={() => {
+          if (asking) decideOne.mutate(asking);
+          setAsking(null);
+        }}
+        onCancel={() => setAsking(null)}
+      />
     </div>
   );
 }

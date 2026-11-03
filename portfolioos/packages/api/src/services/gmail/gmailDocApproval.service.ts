@@ -2,7 +2,7 @@ import type { ImportType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { createImportJob } from '../imports/import.service.js';
-import { findMatchingRule, upsertRule } from './gmailAutoApproveRules.service.js';
+import { findMatchingRule, setSenderRule, upsertRule } from './gmailAutoApproveRules.service.js';
 import { NotFoundError, BadRequestError } from '../../lib/errors.js';
 import { ensureLocalFile } from '../../lib/fileStore.js';
 
@@ -116,9 +116,60 @@ export async function rejectDoc(
   return updated;
 }
 
+/** Pending statement documents from one sender (insurance finds are filed elsewhere). */
+function pendingFromSender(userId: string, fromAddress: string) {
+  return prisma.gmailDiscoveredDoc.findMany({
+    where: { userId, fromAddress, status: 'PENDING_APPROVAL', scanJob: { kind: { not: 'INSURANCE' } } },
+    select: { id: true },
+    orderBy: { receivedAt: 'asc' },
+  });
+}
+
+/**
+ * "Approve everything from this sender": every pending document from it is
+ * approved and queued for import, and its future documents are approved as
+ * they arrive. One document failing does not stop the rest.
+ */
+export async function approveAllFromSender(userId: string, fromAddress: string) {
+  const docs = await pendingFromSender(userId, fromAddress);
+  const ids: string[] = [];
+  let failed = 0;
+  for (const { id } of docs) {
+    try {
+      await approveDoc(userId, id);
+      ids.push(id);
+    } catch (err) {
+      failed++;
+      logger.warn({ docId: id, err: (err as Error).message }, '[gmailApproval] approve-all: doc skipped');
+    }
+  }
+  // After the loop, so a scan's sweep cannot approve the same doc twice meanwhile.
+  await setSenderRule(userId, fromAddress, 'APPROVE');
+  return { ids, failed };
+}
+
+/**
+ * "Reject everything from this sender": every pending document from it is
+ * rejected, and its future documents are rejected as they arrive.
+ */
+export async function rejectAllFromSender(userId: string, fromAddress: string) {
+  const docs = await pendingFromSender(userId, fromAddress);
+  const ids = docs.map((d) => d.id);
+  if (ids.length > 0) {
+    await prisma.gmailDiscoveredDoc.updateMany({
+      // Status re-checked: a doc approved since the read is left alone.
+      where: { userId, id: { in: ids }, status: 'PENDING_APPROVAL' },
+      data: { status: 'REJECTED', rejectedAt: new Date(), rejectedReason: 'Sender rejected' },
+    });
+  }
+  await setSenderRule(userId, fromAddress, 'REJECT');
+  return { ids, failed: 0 };
+}
+
 /**
  * Used by the worker's PHASE-4 sweep. Walks PENDING_APPROVAL docs for
- * the scan and auto-approves any that match an enabled rule.
+ * the scan: approves those matching an enabled rule, rejects those from a
+ * sender the user rejected outright.
  */
 export async function sweepAutoApprovals(userId: string, scanJobId: string) {
   const candidates = await prisma.gmailDiscoveredDoc.findMany({
@@ -127,6 +178,10 @@ export async function sweepAutoApprovals(userId: string, scanJobId: string) {
   let approved = 0;
   for (const doc of candidates) {
     const rule = await findMatchingRule(userId, doc.fromAddress, doc.classifiedDocType);
+    if (rule?.autoReject) {
+      await rejectDoc(userId, doc.id, { reason: 'Sender rejected' });
+      continue;
+    }
     if (!rule || !rule.enabled) continue;
     await approveDoc(userId, doc.id, { createAutoApproveRule: false });
     await prisma.gmailAutoApproveRule.update({

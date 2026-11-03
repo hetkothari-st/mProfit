@@ -8,6 +8,7 @@ import type {
   BulkApproveInput,
   BulkRejectInput,
   GmailDocStatus,
+  SenderDecisionResult,
 } from '@everypaisa/shared';
 
 function unwrap<T>(r: ApiResponse<T>): T {
@@ -94,6 +95,23 @@ export const gmailScanApi = {
   },
   bulkReject: async (input: BulkRejectInput) => {
     const { data } = await api.post<ApiResponse<unknown>>('/api/gmail/discovered-docs/bulk-reject', input);
+    return unwrap(data);
+  },
+
+  /** Approve every pending document from the sender, and its future ones. */
+  approveAllFromSender: async (fromAddress: string): Promise<SenderDecisionResult> => {
+    const { data } = await api.post<ApiResponse<SenderDecisionResult>>(
+      '/api/gmail/discovered-docs/senders/approve-all',
+      { fromAddress },
+    );
+    return unwrap(data);
+  },
+  /** Reject every pending document from the sender, and its future ones. */
+  rejectAllFromSender: async (fromAddress: string): Promise<SenderDecisionResult> => {
+    const { data } = await api.post<ApiResponse<SenderDecisionResult>>(
+      '/api/gmail/discovered-docs/senders/reject-all',
+      { fromAddress },
+    );
     return unwrap(data);
   },
 

@@ -13,6 +13,7 @@ export async function upsertRule(input: {
   fromAddress: string;
   docType?: string | null;
   enabled: boolean;
+  autoReject?: boolean;
 }) {
   // Prisma's compound unique where clauses don't accept null — use findFirst
   // for the lookup (treating null docType as "any" rule for this sender)
@@ -28,7 +29,7 @@ export async function upsertRule(input: {
   if (existing) {
     return prisma.gmailAutoApproveRule.update({
       where: { id: existing.id },
-      data: { enabled: input.enabled },
+      data: { enabled: input.enabled, autoReject: input.autoReject ?? false },
     });
   }
   return prisma.gmailAutoApproveRule.create({
@@ -37,7 +38,26 @@ export async function upsertRule(input: {
       fromAddress: input.fromAddress,
       docType,
       enabled: input.enabled,
+      autoReject: input.autoReject ?? false,
     },
+  });
+}
+
+/**
+ * One rule for everything from this sender. Per-type rules for the sender
+ * are dropped: findMatchingRule prefers them, so a leftover "always approve
+ * CAS" would otherwise outlive a later "reject everything from this sender".
+ */
+export async function setSenderRule(userId: string, fromAddress: string, decision: 'APPROVE' | 'REJECT') {
+  await prisma.gmailAutoApproveRule.deleteMany({
+    where: { userId, fromAddress, docType: { not: null } },
+  });
+  return upsertRule({
+    userId,
+    fromAddress,
+    docType: null,
+    enabled: decision === 'APPROVE',
+    autoReject: decision === 'REJECT',
   });
 }
 
