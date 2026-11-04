@@ -6,3 +6,4 @@ export * from './capitalGainsTaxRules.js';
 export * from './realEstateMath.js';
 export * from './valuationMethod.js';
 export * from './depositMath.js';
+export * from './cpi.js';

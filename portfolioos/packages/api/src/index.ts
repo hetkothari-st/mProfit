@@ -50,6 +50,7 @@ import { startMfProseJob } from './jobs/mfProseJob.js';
 import { startMfOpsAlertsJob } from './jobs/mfOpsAlertsJob.js';
 import { startMfScoreJob } from './jobs/mfScoreJob.js';
 import { startLoanRatesJob } from './jobs/loanRatesJob.js';
+import { startCpiJob } from './jobs/cpiJob.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
 import { makeOriginCheck } from './lib/corsOrigins.js';
@@ -322,6 +323,8 @@ const server = app.listen(env.PORT, '::', () => {
   startMfScoreJob();
   // Daily 07:30 IST live loan rates (EMI calculator, spec s5.4). ENABLE_LOAN_RATES_CRON=false disables it.
   startLoanRatesJob();
+  // Daily 07:00 IST MoSPI CPI for Personal Inflation. ENABLE_PRICE_CRONS=false disables it.
+  startCpiJob();
   // These five used to start at the end of runStartupSync, so a DB error early
   // in the sync (or ENABLE_STARTUP_SYNC=false) meant they never ran at all —
   // Succession included. They do not depend on the sync's data.

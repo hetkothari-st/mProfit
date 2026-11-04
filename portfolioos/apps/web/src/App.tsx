@@ -66,6 +66,7 @@ import { ExpenseDetailPage } from './pages/split/ExpenseDetailPage';
 import { FriendPage } from './pages/split/FriendPage';
 import { SplitSettingsPage } from './pages/split/SplitSettingsPage';
 import { EmiCalculatorPage } from './pages/emi/EmiCalculatorPage';
+import { PersonalInflationPage } from './pages/personalInflation/PersonalInflationPage';
 import { DocumentSorterPage } from './pages/documentSorter/DocumentSorterPage';
 import { LegacyPage } from './pages/legacy/LegacyPage';
 import { LegacyLinkPage } from './pages/legacy/LegacyLinkPage';
@@ -242,6 +243,7 @@ export function App() {
         <Route path="/loans/:id" element={<LoanDetailPage />} />
         <Route path="/split" element={<SplitHomePage />} />
         <Route path="/emi" element={<EmiCalculatorPage />} />
+        <Route path="/personal-inflation" element={<PersonalInflationPage />} />
         <Route path="/documents" element={<DocumentSorterPage />} />
         <Route path="/legacy" element={<LegacyPage />} />
         <Route path="/split/settings" element={<SplitSettingsPage />} />

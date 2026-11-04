@@ -242,6 +242,12 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'McpGrant',
   'McpAuthCode',
   'McpToken',
+  // Personal inflation (20261103120000_personal_inflation). Owner-only policies;
+  // InflationPricePoint carries a denormalised userId for a direct compare.
+  // CpiObservation is shared MoSPI reference data and stays OUT of this Set.
+  'InflationProfile',
+  'InflationBasketItem',
+  'InflationPricePoint',
 ]);
 
 /**

@@ -41,6 +41,7 @@ import {
   ShieldCheck,
   Compass,
   Percent,
+  Gauge,
   FolderTree,
   ScrollText,
   HeartHandshake,
@@ -116,6 +117,7 @@ export const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Accounting', to: '/accounting', icon: BookOpenCheck },
       { label: 'Split Expenses', to: '/split', icon: UsersRound },
       { label: 'EMI Calculator', to: '/emi', icon: Percent },
+      { label: 'Personal Inflation', to: '/personal-inflation', icon: Gauge },
       { label: 'Documents', to: '/documents', icon: FolderTree },
       { label: 'Alerts', to: '/alerts', icon: BellRing },
       // Hidden for now — page still reachable at /import/failures.
