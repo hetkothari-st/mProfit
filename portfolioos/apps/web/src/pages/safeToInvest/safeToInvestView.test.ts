@@ -9,6 +9,7 @@ function summary(safe: string | null, sip: string | null, missed = 0): SafeToInv
     fixed: { total: '71000.0000', items: [] }, buffer: { monthly: '25000.0000', source: 'DEBITS' },
     currentSip: { monthly: sip, source: sip ? 'PLANS' : 'NONE', missedMonths: missed },
     thisMonth: { month: '2026-11', inflowSoFar: '0.0000', surplus: '0.0000', topUp: '0.0000' },
+    dataStatus: { gmailConnected: true, monitoredSenders: 1, awaitingReview: 0, overBudget: 0 },
     plan: { topUpShare: '0.5000', bufferOverride: null, savedAmount: null, savedAt: null },
   };
 }

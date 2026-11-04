@@ -163,8 +163,15 @@ describe('safe to invest (DB)', () => {
     expect(s.months[11]!.inflow).toBe('138000.0000');
   });
 
-  it('falls back to trimmed declared income when bank history is thin', async () => {
+  it('falls back to trimmed declared income when bank history is thin, and says why', async () => {
+    // A credit still waiting for review is reported, not counted.
+    await runAsUser(b.userId, async () => {
+      const e = await event(b.userId, 'NEFT_CREDIT', '2026-10-05', '90000', 'Consulting client');
+      await prisma.canonicalEvent.update({ where: { id: e.id }, data: { status: 'PENDING_REVIEW' } });
+    });
     const s = await runAsUser(b.userId, () => getSummary(b.userId, NOW));
+    expect(s.dataStatus).toEqual({ gmailConnected: false, monitoredSenders: 0, awaitingReview: 1, overBudget: 0 });
+    expect(s.monthsUsed).toBe(0);
     expect(s.basis).toBe('DECLARED');
     expect(s.leanInflow).toBe('80000.0000'); // freelance: 80% of 1,00,000
     expect(s.stabilityScore).toBeNull();

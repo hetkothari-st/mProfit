@@ -52,6 +52,18 @@ export interface SafeToInvestSummary {
   currentSip: { monthly: string | null; source: 'PLANS' | 'TRANSACTIONS' | 'NONE'; missedMonths: number };
   /** The month in progress: income so far and the suggested top-up. */
   thisMonth: { month: string; inflowSoFar: string; surplus: string; topUp: string };
+  /**
+   * Why bank data may be missing, so the page can say what to do next:
+   * connect Gmail, add bank senders, approve waiting alerts.
+   */
+  dataStatus: {
+    gmailConnected: boolean;
+    monitoredSenders: number;
+    /** Bank credits/debits from the window still waiting for the user's approval. */
+    awaitingReview: number;
+    /** Bank alerts set aside unread because the monthly AI budget ran out. */
+    overBudget: number;
+  };
   plan: {
     /** Fraction string, e.g. '0.5000'. */
     topUpShare: string;
