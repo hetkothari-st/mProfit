@@ -548,3 +548,74 @@ describe('pollMonitoredSendersForAccount', () => {
     expect(q).not.toContain('from:old@defunct.example');
   });
 });
+
+describe('pollMonitoredSendersForAccount — backfill larger than one tick', () => {
+  let scope: TestScope;
+
+  beforeEach(async () => {
+    scope = await createTestScope('poller-backfill');
+  });
+  afterEach(async () => {
+    await scope.cleanup();
+  });
+
+  // Gmail lists newest first: m0000 is the newest, m1199 the oldest.
+  const MESSAGES: FakeMessage[] = Array.from({ length: 1200 }, (_, i) => ({
+    id: `m${String(i).padStart(4, '0')}`,
+    from: 'HDFC Bank <alerts@hdfcbank.net>',
+  }));
+
+  it('works through the whole window oldest first across ticks, then advances the pointer', async () => {
+    const acc = await createMailbox(scope.userId);
+    await addMonitoredSender(scope.userId, 'alerts@hdfcbank.net');
+    const gmail = makeFakeGmail(MESSAGES);
+    const seen: string[] = [];
+    const fakeProcess = vi.fn(async (input: ProcessEmailInput): Promise<ProcessEmailOutcome> => {
+      seen.push(input.messageId);
+      return { kind: 'created', eventIds: [] }; // e.g. marketing: no event, no CanonicalEvent row
+    });
+    const now = new Date('2026-11-04T10:00:00Z');
+    const tick = () =>
+      scope.runAs(() => pollMonitoredSendersForAccount(acc.id, { gmailClient: gmail, processEmail: fakeProcess, now: () => now }));
+    const pointer = () =>
+      runAsSystem(() => prisma.monitoredSender.findFirst({ where: { userId: scope.userId }, select: { lastFetchedAt: true } }));
+
+    expect((await tick()).processed).toBe(500);
+    // The oldest 500 first, and the pointer stays put while mail is left.
+    expect(seen[0]).toBe('m1199');
+    expect(seen[499]).toBe('m0700');
+    expect((await pointer())!.lastFetchedAt).toBeNull();
+
+    expect((await tick()).processed).toBe(500);
+    expect((await tick()).processed).toBe(200);
+    expect(new Set(seen).size).toBe(1200);
+    expect((await pointer())!.lastFetchedAt).toEqual(now);
+
+    // Nothing is parsed twice.
+    expect((await tick()).processed).toBe(0);
+    expect(fakeProcess).toHaveBeenCalledTimes(1200);
+  });
+
+  it('retries mail the LLM gate blocked, and only that mail', async () => {
+    const acc = await createMailbox(scope.userId);
+    await addMonitoredSender(scope.userId, 'alerts@hdfcbank.net');
+    const gmail = makeFakeGmail(MESSAGES.slice(0, 3));
+    let gateOpen = false;
+    const fakeProcess = vi.fn(async (input: ProcessEmailInput): Promise<ProcessEmailOutcome> =>
+      input.messageId === 'm0001' && !gateOpen
+        ? { kind: 'gate_closed', reason: 'over_budget' } as unknown as ProcessEmailOutcome
+        : { kind: 'created', eventIds: [] });
+    const tick = () => scope.runAs(() => pollMonitoredSendersForAccount(acc.id, { gmailClient: gmail, processEmail: fakeProcess }));
+
+    const first = await tick();
+    expect(first.processed).toBe(3);
+    expect(first.gateClosed).toBe(1);
+    const sender = await runAsSystem(() => prisma.monitoredSender.findFirst({ where: { userId: scope.userId } }));
+    expect(sender!.lastFetchedAt).toBeNull();
+
+    gateOpen = true;
+    const second = await tick();
+    expect(second.processed).toBe(1);
+    expect(fakeProcess.mock.calls.at(-1)![0].messageId).toBe('m0001');
+  });
+});

@@ -4,12 +4,15 @@
  * Runs periodically per Gmail account. For a given account it:
  *   1. Looks up the user's active `MonitoredSender` rows.
  *   2. Builds a single Gmail query `(from:a OR from:b ...) after:<floor>`.
- *   3. Paginates message ids, capped to keep one tick bounded.
+ *   3. Lists the window's message ids and drops ones already handled
+ *      (GmailProcessedMessage ledger); works through the rest oldest
+ *      first, at most MAX_MESSAGES_PER_TICK per tick.
  *   4. For each id, fetches `format:'full'`, matches the From header
  *      back to one of the monitored senders, and dispatches through
  *      `processEmail` — which owns idempotency, the LLM gate, budget
  *      archival, and DLQ routing (§3.3, §3.5, §6.11).
- *   5. Advances each sender's `lastFetchedAt` to the scan start time.
+ *   5. Advances each sender's `lastFetchedAt` to the scan start time once
+ *      nothing in the window is left, so a long backfill spans ticks.
  *
  * The poller itself is intentionally free of LLM / Prisma / decryption
  * business logic — those concerns live in `pipeline.ts` and the LLM
@@ -28,6 +31,7 @@ import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { getAuthorizedClientFor } from './gmail.connector.js';
 import { matchMonitoredSender, parseFromHeader, senderHasEarnedAutoCommit } from './headers.js';
+import { gmailSourceHash } from '../hash.js';
 import {
   processEmail,
   type ProcessEmailDeps,
@@ -40,6 +44,14 @@ import {
  */
 const MAX_MESSAGES_PER_TICK = 500;
 const MESSAGES_PER_PAGE = 100;
+/**
+ * Ids listed per tick. Listing is cheap (ids only, 100 a page), and the
+ * whole backfill window has to be listed to work through it oldest first.
+ * 20,000 covers two years of a busy bank's alerts.
+ */
+const MAX_LIST_IDS = 20_000;
+/** Ids per ledger lookup query. */
+const LOOKUP_CHUNK = 1_000;
 
 /**
  * Fallback backfill window when a sender has never been fetched before.
@@ -243,7 +255,17 @@ export async function pollMonitoredSendersForAccount(
       auth: await getAuthorizedClientFor(accountId),
     });
 
-  const ids = await listMessageIds(gmail, query, MAX_MESSAGES_PER_TICK);
+  // List the whole window (ids only, cheap), drop what earlier ticks already
+  // handled, and work through the rest OLDEST first, at most
+  // MAX_MESSAGES_PER_TICK per tick. Gmail lists newest first, so taking the
+  // first N ids and then advancing the pointer — as this used to — silently
+  // lost everything older than the newest N on a first backfill.
+  const listed = await listMessageIds(gmail, query, MAX_LIST_IDS);
+  const listTruncated = listed.length >= MAX_LIST_IDS;
+  const handled = await alreadyHandled(acc.userId, listed);
+  const pending = listed.filter((id) => !handled.has(id)).reverse();
+  const ids = pending.slice(0, MAX_MESSAGES_PER_TICK);
+  let leftForLater = pending.length - ids.length;
   const result = zeroResult();
 
   const processOne = deps.processEmail ?? processEmail;
@@ -260,6 +282,7 @@ export async function pollMonitoredSendersForAccount(
       // gone. DLQ-worthy failures happen further in, inside the
       // pipeline.
       result.fetchErrors++;
+      leftForLater++;
       logger.warn(
         { err, accountId, messageId: id },
         'gmail.poller.message_fetch_failed',
@@ -275,6 +298,7 @@ export async function pollMonitoredSendersForAccount(
       // line up. Counting these separately gives us signal if the
       // discovery step ever starts leaking addresses.
       result.unmatched++;
+      await markHandled(acc.userId, id);
       continue;
     }
 
@@ -290,21 +314,65 @@ export async function pollMonitoredSendersForAccount(
       deps.processEmailDeps ?? {},
     );
     tallyOutcome(result, outcome);
+    // A closed LLM gate is the one outcome worth retrying: leave it unrecorded.
+    if (outcome.kind === 'gate_closed') leftForLater++;
+    else await markHandled(acc.userId, id);
   }
 
-  // Advance every active sender to the tick start. Doing this even when
-  // the tick was a no-op means we don't re-scan the same empty window
-  // forever if a sender goes quiet. The start-of-tick timestamp (not
-  // end) protects us from losing messages that landed *during* the
-  // scan: next tick re-includes them and idempotency dedupes.
-  await prisma.monitoredSender.updateMany({
-    where: { userId: acc.userId, isActive: true },
-    data: { lastFetchedAt: now },
-  });
+  // Advance every active sender to the tick start only once the window is
+  // fully worked through; until then the next tick re-lists the same window
+  // and carries on. Doing this even when the tick was a no-op means we don't
+  // re-scan the same empty window forever if a sender goes quiet. The
+  // start-of-tick timestamp (not end) protects us from losing messages that
+  // landed *during* the scan: next tick re-includes them and the ledger
+  // skips them.
+  if (leftForLater === 0) {
+    if (listTruncated) {
+      logger.warn({ accountId, userId: acc.userId, listed: listed.length }, 'gmail.poller.window_truncated');
+    }
+    await prisma.monitoredSender.updateMany({
+      where: { userId: acc.userId, isActive: true },
+      data: { lastFetchedAt: now },
+    });
+  }
 
   logger.info(
-    { accountId, userId: acc.userId, query, ...result },
+    { accountId, userId: acc.userId, query, ...result, leftForLater },
     'gmail.poller.tick_complete',
   );
   return result;
+}
+
+/**
+ * Messages an earlier tick already handled: in the ledger, or (for mail
+ * processed before the ledger existed) already turned into an event.
+ */
+async function alreadyHandled(userId: string, ids: readonly string[]): Promise<Set<string>> {
+  const done = new Set<string>();
+  for (let i = 0; i < ids.length; i += LOOKUP_CHUNK) {
+    const chunk = ids.slice(i, i + LOOKUP_CHUNK);
+    const [ledger, events] = await Promise.all([
+      prisma.gmailProcessedMessage.findMany({
+        where: { userId, messageId: { in: chunk } },
+        select: { messageId: true },
+      }),
+      prisma.canonicalEvent.findMany({
+        where: { userId, sourceHash: { in: chunk.map(gmailSourceHash) } },
+        select: { sourceHash: true },
+      }),
+    ]);
+    for (const l of ledger) done.add(l.messageId);
+    if (events.length > 0) {
+      const byHash = new Map(chunk.map((id) => [gmailSourceHash(id), id]));
+      for (const e of events) {
+        const id = byHash.get(e.sourceHash);
+        if (id) done.add(id);
+      }
+    }
+  }
+  return done;
+}
+
+async function markHandled(userId: string, messageId: string): Promise<void> {
+  await prisma.gmailProcessedMessage.createMany({ data: [{ userId, messageId }], skipDuplicates: true });
 }
