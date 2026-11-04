@@ -166,6 +166,9 @@ model User {
   inflationProfile     InflationProfile?
   inflationItems       InflationBasketItem[]
   inflationPricePoints InflationPricePoint[]
+  safeToInvestPlan      SafeToInvestPlan?
+  safeToInvestMonths    SafeToInvestMonth[]
+  safeToInvestDecisions SafeToInvestCreditDecision[]
 
   // Recurring income entries (salary, business, trading, freelance, etc.)
   // — the preferred income source for Health Score and any future module
@@ -5890,6 +5893,9 @@ model InflationBasketItem {
   /// Where the item came from when added from the user's own data
   /// ('loan:<id>', 'insurance:<id>', 'property:<id>'); null when typed in.
   sourceRef    String?
+  /// A cost that must be paid every month whatever the income (rent, school
+  /// fees). Safe-to-Invest subtracts it before sizing the SIP.
+  isFixed      Boolean                  @default(false)
   createdAt    DateTime                 @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime                 @updatedAt @db.Timestamptz(3)
   pricePoints  InflationPricePoint[]
@@ -5910,4 +5916,54 @@ model InflationPricePoint {
 
   @@unique([itemId, asOf])
   @@index([userId])
+}
+
+// ─── SAFE-TO-INVEST ───────────────────────────────────────────────
+// A monthly SIP sized on the user's lean-month income. The amount is computed
+// on every read from bank-alert events (CanonicalEvent); these tables hold
+// only the user's own corrections and saved plan. All three are user-scoped
+// with RLS owner policies.
+
+/// The user's saved plan and settings. One row per user.
+model SafeToInvestPlan {
+  userId         String   @id
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Share of a good month's surplus (inflow above the lean month) to top up
+  /// with. Fraction: 0.5 = 50%.
+  topUpShare     Decimal  @default(0.5) @db.Decimal(5, 4)
+  /// Monthly everyday-spend buffer the user typed; null = work it out from debits.
+  bufferOverride Decimal? @db.Decimal(14, 2)
+  /// The SIP amount the user committed to, and when.
+  savedAmount    Decimal? @db.Decimal(14, 2)
+  savedAt        DateTime? @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+}
+
+/// A month's income total typed by the user, replacing what bank alerts show.
+model SafeToInvestMonth {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 'YYYY-MM' (IST calendar month).
+  month     String
+  inflow    Decimal  @db.Decimal(14, 2)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, month])
+}
+
+/// The user's call on one bank credit: count it as income or not, overriding
+/// the automatic classification.
+model SafeToInvestCreditDecision {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  canonicalEventId String
+  include          Boolean
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, canonicalEventId])
 }

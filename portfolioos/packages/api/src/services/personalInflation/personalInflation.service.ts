@@ -161,6 +161,7 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
       notes: it.notes,
       pricePoints: it.pricePoints.map((p) => ({ asOf: isoDay(p.asOf), amount: serializeMoney(dec(p.amount)) })),
       sourceRef: it.sourceRef,
+      isFixed: it.isFixed,
       resolvedRate: resolved.rate ? rate6(resolved.rate) : null,
       rateSource: resolved.source,
       rateNote: resolved.note,
@@ -250,6 +251,7 @@ export async function createItem(userId: string, input: InflationItemInput): Pro
         rateMode: input.rateMode ?? 'OFFICIAL',
         customRate: input.customRate ?? null,
         notes: input.notes ?? null,
+        isFixed: input.isFixed ?? false,
       },
     });
     if (points.length > 0) {
@@ -279,6 +281,7 @@ export async function updateItem(userId: string, id: string, input: Partial<Infl
         ...(input.rateMode !== undefined && { rateMode: input.rateMode }),
         ...(input.customRate !== undefined && { customRate: input.customRate }),
         ...(input.notes !== undefined && { notes: input.notes }),
+        ...(input.isFixed !== undefined && { isFixed: input.isFixed }),
       },
     });
     // Price history is replaced wholesale — the client edits it as one list.
