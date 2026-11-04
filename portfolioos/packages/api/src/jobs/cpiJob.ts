@@ -116,7 +116,14 @@ export function startCpiJob(): void {
   }
   cron.schedule('0 7 * * *', () => void runCpiJob().catch(() => undefined), { timezone: TZ });
   logger.info('[cron] scheduled: CPI (MoSPI) @07:00 IST daily');
+  // Catch up once per boot: a fresh deploy (empty table) loads straight away
+  // instead of waiting for tomorrow's 07:00, and a restart that slept through
+  // the cron fills the gap. When nothing is new this costs one MoSPI request.
+  setTimeout(() => void runCpiJob().catch(() => undefined), BOOT_DELAY_MS).unref();
 }
+
+/** Let the server finish booting and take traffic before the catch-up run. */
+const BOOT_DELAY_MS = 30_000;
 
 // ---------------------------------------------------------------------------
 
