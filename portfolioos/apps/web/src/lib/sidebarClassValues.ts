@@ -88,13 +88,15 @@ export function computeSidebarValues(src: SidebarValueSources): Map<string, Deci
     values.set(key, (values.get(key) ?? new Decimal(0)).plus(amount.abs()));
 
   for (const slice of src.netWorth?.allocationBreakdown ?? []) {
-    const key =
-      slice.category === 'VEHICLE'
-        ? '/vehicles'
-        : slice.category === 'REAL_ESTATE'
-          ? '/rental'
-          : sidebarKeyForAssetClass(slice.key);
-    add(key, dec(slice.value));
+    // Bank balances and owned property arrive below from their own sources.
+    if (slice.key === 'BANK_ACCOUNT') continue;
+    if (slice.category === 'REAL_ESTATE') {
+      // The slice is owned property plus unlinked rentals; the sidebar's
+      // /rental entry is the rentals alone.
+      add('/rental', dec(src.netWorth?.realEstate?.rentalValue ?? slice.value));
+      continue;
+    }
+    add(slice.category === 'VEHICLE' ? '/vehicles' : sidebarKeyForAssetClass(slice.key), dec(slice.value));
   }
   if (src.netWorth) {
     add('/loans', dec(src.netWorth.liabilities.totalOutstanding));

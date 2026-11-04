@@ -9,6 +9,15 @@ import { computeCardSummary } from '../banking/creditCards.service.js';
 import { getEffectiveScope, type EffectiveScope } from '../family/familyScope.service.js';
 import { runAsUser } from '../../lib/requestContext.js';
 import { plateOf } from '../security/piiAtRest.service.js';
+import {
+  bankAccountShareValue,
+  bankBalanceValue,
+  countedBankAccountsWhere,
+  countedOwnedPropertyWhere,
+  countedRentalPropertyWhere,
+  ownedPropertyShareValue,
+  rentalPropertyValue,
+} from './netWorthRules.js';
 
 // Human-readable labels for the AssetClass enum — used in dashboard breakdown.
 // Mirrors the per-class labels in apps/web/src/pages/assetClasses/SimpleAssetPage.tsx
@@ -117,12 +126,6 @@ export async function getDashboardNetWorth(
     ? portfolioPnL.dividedBy(portfolioInvested).times(100).toNumber()
     : 0;
 
-  // Asset class breakdown from HoldingProjection
-  const byClass: Record<string, Decimal> = {};
-  for (const h of holdings) {
-    byClass[h.assetClass] = (byClass[h.assetClass] ?? ZERO).plus(effectiveVal(h));
-  }
-
   // ── 2. Vehicles ──────────────────────────────────────────────────────
   const vehicles = await prisma.vehicle.findMany({
     where: { userId, ...(canSee('VEHICLE') ? {} : { id: { in: [] } }) },
@@ -173,7 +176,67 @@ export async function getDashboardNetWorth(
     },
   });
 
-  const rentalValue = properties.reduce((s, p) => s.plus(d(p.currentValue)), ZERO);
+  // ── 3b. Real estate, bank balances, and holdings counted elsewhere ──
+  // Net worth follows the same rules as the Will Maker's estate (see
+  // netWorthRules.ts). Owned property and bank balances count; a rental that
+  // an owned property links to is the same flat and counts once; inactive
+  // rentals don't count. `properties` above still feeds rent and overdue
+  // figures, which are about tenancies, not value.
+  const [countedRentals, ownedProperties, bankAccounts] = await Promise.all([
+    canSee('RENTAL')
+      ? countedRentalPropertyWhere(userId).then((where) =>
+          prisma.rentalProperty.findMany({ where, select: { currentValue: true, purchasePrice: true } }),
+        )
+      : Promise.resolve([]),
+    canSee('OWNED_PROPERTY')
+      ? prisma.ownedProperty.findMany({
+          where: countedOwnedPropertyWhere(userId),
+          select: { ownershipType: true, ownershipPercent: true, currentValue: true, purchasePrice: true },
+        })
+      : Promise.resolve([]),
+    canSee('BANK_ACCOUNT')
+      ? prisma.bankAccount.findMany({
+          where: countedBankAccountsWhere(userId),
+          select: { currentBalance: true, jointHolders: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const rentalValue = countedRentals.reduce((s, r) => s.plus(rentalPropertyValue(r)), ZERO);
+  const ownedPropertyTotal = ownedProperties.reduce((s, p) => s.plus(ownedPropertyShareValue(p)), ZERO);
+  const realEstateValue = ownedPropertyTotal.plus(rentalValue);
+  const realEstateCount = countedRentals.length + ownedProperties.filter((p) => p.ownershipType !== 'COMPANY').length;
+  const bankValue = bankAccounts.reduce((s, b) => s.plus(bankAccountShareValue(b)), ZERO);
+  const hasFundedBank = bankAccounts.some((b) => bankBalanceValue(b).greaterThan(0));
+
+  // Holdings as net worth counts them. A statement import mirrors each bank
+  // account as a CASH holding, so with a funded bank account on file those
+  // are already in `bankValue`. A PF-backed holding is valued from its PF
+  // account's balance, which is the authoritative figure. "Investments"
+  // (portfolio.currentValue) stays the plain sum of holdings, as on Analytics.
+  const pfAccounts = await prisma.providentFundAccount.findMany({
+    where: { userId },
+    select: { type: true, currentBalance: true, assetKey: true },
+  });
+  const pfKeys = new Set(pfAccounts.map((p) => p.assetKey));
+  const pfHoldingValue = new Map<string, Decimal>();
+  const netWorthByClass: Record<string, Decimal> = {};
+  for (const h of holdings) {
+    if (pfKeys.has(h.assetKey)) {
+      pfHoldingValue.set(h.assetKey, (pfHoldingValue.get(h.assetKey) ?? ZERO).plus(effectiveVal(h)));
+      continue;
+    }
+    if (h.assetClass === 'CASH' && hasFundedBank) continue;
+    netWorthByClass[h.assetClass] = (netWorthByClass[h.assetClass] ?? ZERO).plus(effectiveVal(h));
+  }
+  for (const pf of pfAccounts) {
+    if (!allows(caps.assetClasses, pf.type)) continue;
+    const fromHoldings = pfHoldingValue.get(pf.assetKey);
+    // In a single-portfolio view, a PF account counts only if that portfolio holds it.
+    if (portfolioId && !fromHoldings) continue;
+    const value = pf.currentBalance !== null ? d(pf.currentBalance) : fromHoldings ?? ZERO;
+    netWorthByClass[pf.type] = (netWorthByClass[pf.type] ?? ZERO).plus(value);
+  }
+  const holdingsInNetWorth = Object.values(netWorthByClass).reduce((s, v) => s.plus(v), ZERO);
 
   // Money lent to others and still owed back — an asset, not a liability.
   // Shares the LOAN visibility grant with loans taken.
@@ -329,7 +392,11 @@ export async function getDashboardNetWorth(
   }
 
   // ── 6. Expanded allocation (all tangible assets) ─────────────────────
-  const totalTangible = portfolioValue.plus(vehicleValue).plus(rentalValue).plus(loansGivenValue);
+  const totalTangible = holdingsInNetWorth
+    .plus(vehicleValue)
+    .plus(realEstateValue)
+    .plus(bankValue)
+    .plus(loansGivenValue);
   const allocationBreakdown: Array<{
     key: string;
     label: string;
@@ -340,7 +407,7 @@ export async function getDashboardNetWorth(
   }> = [];
 
   // Financial holdings grouped by class
-  for (const [cls, val] of Object.entries(byClass).sort((a, b) =>
+  for (const [cls, val] of Object.entries(netWorthByClass).sort((a, b) =>
     b[1].comparedTo(a[1]),
   )) {
     allocationBreakdown.push({
@@ -364,14 +431,25 @@ export async function getDashboardNetWorth(
     });
   }
 
-  if (rentalValue.greaterThan(0)) {
+  if (realEstateValue.greaterThan(0)) {
     allocationBreakdown.push({
       key: 'REAL_ESTATE',
       label: 'Real Estate',
-      value: serializeMoney(rentalValue),
-      numericValue: rentalValue.toNumber(),
-      percent: totalTangible.greaterThan(0) ? rentalValue.dividedBy(totalTangible).times(100).toNumber() : 0,
+      value: serializeMoney(realEstateValue),
+      numericValue: realEstateValue.toNumber(),
+      percent: totalTangible.greaterThan(0) ? realEstateValue.dividedBy(totalTangible).times(100).toNumber() : 0,
       category: 'REAL_ESTATE',
+    });
+  }
+
+  if (bankValue.greaterThan(0)) {
+    allocationBreakdown.push({
+      key: 'BANK_ACCOUNT',
+      label: 'Bank balances',
+      value: serializeMoney(bankValue),
+      numericValue: bankValue.toNumber(),
+      percent: totalTangible.greaterThan(0) ? bankValue.dividedBy(totalTangible).times(100).toNumber() : 0,
+      category: 'FINANCIAL',
     });
   }
 
@@ -470,7 +548,7 @@ export async function getDashboardNetWorth(
   // ── 7. Net worth totals ──────────────────────────────────────────────
   // totalNetWorth = gross assets (unchanged for backward compat)
   // netWorthAfterLiabilities = assets − all outstanding loans & CC balances
-  const totalNetWorth = portfolioValue.plus(vehicleValue).plus(rentalValue).plus(loansGivenValue);
+  const totalNetWorth = totalTangible;
   const netWorthAfterLiabilities = totalNetWorth.minus(totalLiabilities);
 
   return {
@@ -483,11 +561,20 @@ export async function getDashboardNetWorth(
       totalInvested: serializeMoney(portfolioInvested),
       unrealisedPnL: serializeMoney(portfolioPnL),
       unrealisedPnLPct: portfolioPnLPct,
+      /** Holdings as net worth counts them: no CASH already in bank balances, PF at its account balance. */
+      countedInNetWorth: serializeMoney(holdingsInNetWorth),
+    },
+
+    bankAccounts: {
+      count: bankAccounts.length,
+      totalValue: serializeMoney(bankValue),
     },
 
     realEstate: {
-      count: properties.length,
-      totalValue: serializeMoney(rentalValue),
+      count: realEstateCount,
+      totalValue: serializeMoney(realEstateValue),
+      ownedValue: serializeMoney(ownedPropertyTotal),
+      rentalValue: serializeMoney(rentalValue),
       monthlyRent: serializeMoney(monthlyRent),
       incomeYTD: serializeMoney(rentalIncomeYTD),
       expenseYTD: serializeMoney(rentalExpenseYTD),
@@ -613,11 +700,19 @@ function mergeNetWorthResults(results: DashboardNetWorth[]): DashboardNetWorth {
         );
         return invested.gt(0) ? pnl.dividedBy(invested).times(100).toNumber() : 0;
       })(),
+      countedInNetWorth: sumMoney(results.map((r) => r.portfolio.countedInNetWorth)),
+    },
+
+    bankAccounts: {
+      count: sumInt(results.map((r) => r.bankAccounts.count)),
+      totalValue: sumMoney(results.map((r) => r.bankAccounts.totalValue)),
     },
 
     realEstate: {
       count: sumInt(results.map((r) => r.realEstate.count)),
       totalValue: sumMoney(results.map((r) => r.realEstate.totalValue)),
+      ownedValue: sumMoney(results.map((r) => r.realEstate.ownedValue)),
+      rentalValue: sumMoney(results.map((r) => r.realEstate.rentalValue)),
       monthlyRent: sumMoney(results.map((r) => r.realEstate.monthlyRent)),
       incomeYTD: sumMoney(results.map((r) => r.realEstate.incomeYTD)),
       expenseYTD: sumMoney(results.map((r) => r.realEstate.expenseYTD)),

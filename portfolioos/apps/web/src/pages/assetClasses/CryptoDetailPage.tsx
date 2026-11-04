@@ -11,7 +11,7 @@ import { listAllTransactions } from '@/api/listAllTransactions';
 import { assetsApi, type LiveCryptoCoin } from '@/api/assets.api';
 import { CryptoFormDialog } from './CryptoFormDialog';
 import { CoinAvatar } from './CryptoPage';
-import { formatUSD, parseCryptoNarration } from './cryptoUtils';
+import { cryptoHoldingValue, cryptoInrToUsd, formatUSD, parseCryptoNarration } from './cryptoUtils';
 
 const TXN_LABEL: Record<string, string> = {
   BUY: 'Buy',
@@ -78,11 +78,9 @@ export function CryptoDetailPage() {
   const qty = new Decimal(holding.quantity);
   const invested = new Decimal(holding.totalCost);
   const livePriceInr = liveCoin?.priceInr ? new Decimal(liveCoin.priceInr) : null;
-  const livePriceUsd = liveCoin?.priceUsd ? new Decimal(liveCoin.priceUsd) : null;
-  const currentInr = livePriceInr
-    ? qty.times(livePriceInr)
-    : (holding.currentValue ? new Decimal(holding.currentValue) : null);
-  const currentUsd = livePriceUsd ? qty.times(livePriceUsd) : null;
+  // Valued like every other page: the stored price, not the live quote.
+  const currentInr = cryptoHoldingValue(holding);
+  const currentUsd = cryptoInrToUsd(currentInr, liveCoin);
   const pnl = currentInr ? currentInr.minus(invested) : null;
   const pnlPct = pnl && !invested.isZero() ? pnl.div(invested).times(100).toNumber() : null;
   const isGain = pnl ? pnl.gte(0) : null;

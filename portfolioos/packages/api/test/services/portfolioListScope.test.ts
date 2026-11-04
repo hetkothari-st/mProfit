@@ -83,4 +83,27 @@ describe('family portfolio list', () => {
     expect(rows.filter((p) => p.id === sharedId)).toHaveLength(1);
     expect(new Set(rows.map((p) => p.id)).size).toBe(rows.length);
   });
+  it('personal view lists your own portfolio even when it is shared into a family', async () => {
+    const owner = await member('plist-personal-owner', 'Owner Portfolio');
+    const other = await member('plist-personal-other', 'My Portfolio');
+    const familyId = await household(owner, [other]);
+
+    const sharedId = await runAsSystem(async () => {
+      const shared = await prisma.portfolio.create({
+        data: { userId: owner.userId, name: 'Shared Savings', currency: 'INR', type: 'INVESTMENT', familyId },
+      });
+      return shared.id;
+    });
+    cleanups.push(async () => {
+      await runAsSystem(() => prisma.portfolio.deleteMany({ where: { id: sharedId } }));
+    });
+
+    // Sharing lets the family see it; it is still the creator's money.
+    const mine = await runAsSystem(() => listPortfoliosForScope(owner.userId));
+    expect(mine.map((p) => p.id)).toEqual(expect.arrayContaining([owner.portfolioId, sharedId]));
+
+    // Another member's personal view is their own portfolios only.
+    const theirs = await runAsSystem(() => listPortfoliosForScope(other.userId));
+    expect(theirs.map((p) => p.id)).not.toContain(sharedId);
+  });
 });

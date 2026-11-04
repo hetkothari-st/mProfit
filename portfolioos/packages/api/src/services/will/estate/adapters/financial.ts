@@ -2,6 +2,7 @@ import { Decimal, istCalendarDate, toAmount2 } from '@everypaisa/shared';
 import { prisma } from '../../../../lib/prisma.js';
 import { ASSET_CLASS_LABELS } from '../../../analytics/dashboard.service.js';
 import { clip, SOLE, type EstateAdapter, type EstateCandidate } from '../types.js';
+import { bankBalanceValue, bankSharePct, countedBankAccountsWhere, fundedBankAccountWhere } from '../../../analytics/netWorthRules.js';
 
 const ZERO = new Decimal(0);
 
@@ -18,7 +19,7 @@ export const holdingsAdapter: EstateAdapter = {
     // so with a funded bank account on file (the same accounts bankAccountsAdapter lists)
     // the CASH groups are offered but left out by default.
     const fundedBank = await prisma.bankAccount.findFirst({
-      where: { userId, status: { not: 'CLOSED' }, accountType: { not: 'OD' }, currentBalance: { gt: 0 } },
+      where: fundedBankAccountWhere(userId),
       select: { id: true },
     });
     const pfKeys = new Set(pf.map((p) => p.assetKey));
@@ -66,7 +67,7 @@ export const bankAccountsAdapter: EstateAdapter = {
   version: '1',
   async collect({ userId }) {
     const rows = await prisma.bankAccount.findMany({
-      where: { userId, status: { not: 'CLOSED' }, accountType: { not: 'OD' } },
+      where: countedBankAccountsWhere(userId),
       orderBy: [{ bankName: 'asc' }, { last4: 'asc' }],
       select: { id: true, bankName: true, accountType: true, last4: true, currentBalance: true, balanceAsOf: true, jointHolders: true, nomineeName: true },
     });
@@ -77,10 +78,10 @@ export const bankAccountsAdapter: EstateAdapter = {
         sourceKey: `bank:${b.id}`, side: 'ASSET', kind: 'BANK_ACCOUNT',
         label: clip(`${b.bankName} ${b.accountType.toLowerCase()} account`, 160),
         ref: `XXXX${b.last4}`,
-        value: toAmount2(balance && balance.greaterThan(0) ? balance : ZERO),
+        value: toAmount2(bankBalanceValue(b)),
         valueAsOf: b.balanceAsOf ? istCalendarDate(b.balanceAsOf) : null,
         ownership: joint
-          ? { type: 'JOINT', sharePct: new Decimal(100).dividedBy(b.jointHolders.length + 1).toFixed(2, Decimal.ROUND_DOWN) }
+          ? { type: 'JOINT', sharePct: bankSharePct(b.jointHolders) }
           : SOLE,
         review: joint || !balance ? 'NEEDS_REVIEW' : 'CONFIRMED',
         note: b.nomineeName ? 'A nominee is registered for this account.' : null,

@@ -241,6 +241,12 @@ export function portfolioReadableWhere(scope: EffectiveScope) {
   return {
     OR: [
       { userId: { in: scope.readableUserIds }, familyId: null },
+      // Personal view: every portfolio you created is yours, including one
+      // you have shared into a family — sharing lets the family see it, it
+      // does not move the money. Excluding it made the Portfolios list, the
+      // asset pages and Transactions disagree with dashboard net worth,
+      // Analytics and the Will Maker, which have always counted it.
+      ...(scope.familyId === null ? [{ userId: scope.callerId }] : []),
       ...(scope.readableFamilyIds.length > 0
         ? [{ familyId: { in: scope.readableFamilyIds } }]
         : []),

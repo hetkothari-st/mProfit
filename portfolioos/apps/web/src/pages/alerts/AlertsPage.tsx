@@ -17,7 +17,7 @@ import { alertsApi, totalNewAlerts, type AlertType, type AlertDTO } from '@/api/
 import { cn } from '@/lib/cn';
 import { alertLink, isInformationalAlert } from './alertLinks';
 
-import { formatDateIST } from '@everypaisa/shared';
+import { alertBandOf, formatDateIST, type AlertLens } from '@everypaisa/shared';
 /**
  * Alerts, set as a ledger grouped by when they land.
  *
@@ -97,12 +97,9 @@ const BANDS: { key: BandKey; label: string; caption: string }[] = [
   { key: 'later',   label: 'Later',      caption: 'beyond 30 days' },
 ];
 
+/** One rule with the server's lens counts: see alertBandOf in @everypaisa/shared. */
 function bandOf(days: number, informational = false): BandKey {
-  // Informational alerts (loan checks) are dated when they were raised: past means recent, never overdue.
-  if (days < 0) return informational ? 'week' : 'overdue';
-  if (days <= 7) return 'week';
-  if (days <= 30) return 'month';
-  return 'later';
+  return alertBandOf(days, informational);
 }
 
 // ─── Row ─────────────────────────────────────────────────────────────
@@ -315,7 +312,7 @@ function CreateAlertDialog({ open, onOpenChange }: { open: boolean; onOpenChange
 
 // ─── Page ────────────────────────────────────────────────────────────
 
-type Lens = 'all' | 'overdue' | 'soon' | 'unread';
+type Lens = AlertLens;
 
 export function AlertsPage() {
   const qc = useQueryClient();
@@ -325,8 +322,10 @@ export function AlertsPage() {
   const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['alerts', filterType, page],
-    queryFn: () => alertsApi.list({ type: filterType || undefined, page, limit: PAGE_SIZE }),
+    queryKey: ['alerts', filterType, lens, page],
+    // The server filters by lens and counts every lens across the whole inbox,
+    // so a chip's number is what the chip lists and "Unread" equals the bell.
+    queryFn: () => alertsApi.list({ type: filterType || undefined, lens, page, limit: PAGE_SIZE }),
   });
 
   const invalidate = () => {
@@ -365,29 +364,9 @@ export function AlertsPage() {
   const unreadCount = data?.unreadCount ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  /**
-   * Lens counts describe the LOADED page, not the whole ledger — the API
-   * paginates, and only `total` / `unreadCount` are ledger-wide. The footer
-   * states the scope so the two kinds of number are never read as one.
-   */
-  const counts = useMemo(() => {
-    let overdue = 0, soon = 0, unread = 0;
-    for (const a of alerts) {
-      const band = bandOf(daysUntil(a.triggerDate), isInformationalAlert(a.type));
-      if (band === 'overdue') overdue += 1;
-      else if (band === 'week') soon += 1;
-      if (!a.isRead) unread += 1;
-    }
-    return { all: alerts.length, overdue, soon, unread };
-  }, [alerts]);
-
-  const visible = useMemo(() => alerts.filter((a) => {
-    const band = bandOf(daysUntil(a.triggerDate), isInformationalAlert(a.type));
-    if (lens === 'overdue') return band === 'overdue';
-    if (lens === 'soon') return band === 'week';
-    if (lens === 'unread') return !a.isRead;
-    return true;
-  }), [alerts, lens]);
+  const counts = data?.counts ?? { all: 0, overdue: 0, soon: 0, unread: 0 };
+  const visible = alerts;
+  const chooseLens = (l: Lens) => { setLens(l); setPage(1); };
 
   /** Bucket into time bands, each internally sorted soonest-first. */
   const banded = useMemo(() => {
@@ -399,8 +378,8 @@ export function AlertsPage() {
     return map;
   }, [visible]);
 
-  const nothingLoaded = !isLoading && alerts.length === 0;
-  const filteredToNothing = !isLoading && alerts.length > 0 && visible.length === 0;
+  const nothingLoaded = !isLoading && counts.all === 0;
+  const filteredToNothing = !isLoading && counts.all > 0 && visible.length === 0;
 
   return (
     <div>
@@ -424,10 +403,10 @@ export function AlertsPage() {
       {/* One control row: counts live on the filters that act on them. */}
       <div className="reveal mb-4 flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <FilterChip label="All"      count={counts.all}     active={lens === 'all'}     onClick={() => setLens('all')} />
-          <FilterChip label="Overdue"  count={counts.overdue} active={lens === 'overdue'} onClick={() => setLens('overdue')} tone="negative" />
-          <FilterChip label="Due ≤ 7d" count={counts.soon}    active={lens === 'soon'}    onClick={() => setLens('soon')} />
-          <FilterChip label="Unread"   count={counts.unread}  active={lens === 'unread'}  onClick={() => setLens('unread')} />
+          <FilterChip label="All"      count={counts.all}     active={lens === 'all'}     onClick={() => chooseLens('all')} />
+          <FilterChip label="Overdue"  count={counts.overdue} active={lens === 'overdue'} onClick={() => chooseLens('overdue')} tone="negative" />
+          <FilterChip label="Due ≤ 7d" count={counts.soon}    active={lens === 'soon'}    onClick={() => chooseLens('soon')} />
+          <FilterChip label="Unread"   count={counts.unread}  active={lens === 'unread'}  onClick={() => chooseLens('unread')} />
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -479,9 +458,9 @@ export function AlertsPage() {
             <AlertTriangle className="h-5 w-5 text-muted-foreground/60" strokeWidth={1.6} />
             <p className="text-[13.5px] text-foreground">Nothing in this view</p>
             <p className="max-w-sm text-[12.5px] leading-relaxed text-muted-foreground">
-              {counts.all} alert{counts.all === 1 ? '' : 's'} loaded, but none match this filter.
+              {counts.all} alert{counts.all === 1 ? '' : 's'} in your inbox, but none match this filter.
             </p>
-            <Button variant="outline" size="sm" onClick={() => setLens('all')}>Show all</Button>
+            <Button variant="outline" size="sm" onClick={() => chooseLens('all')}>Show all</Button>
           </CardContent>
         </Card>
       ) : (
@@ -513,7 +492,7 @@ export function AlertsPage() {
         </Card>
       )}
 
-      {/* Scope line — separates page-local chip counts from ledger-wide totals. */}
+      {/* Scope line and paging for the current filter. */}
       {!isLoading && total > 0 && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-[11.5px] text-muted-foreground">
           <p className="numeric tabular-nums">

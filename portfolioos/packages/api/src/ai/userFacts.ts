@@ -295,7 +295,8 @@ async function balanceSheetFacts(userId: string, familyId: string | null): Promi
     bankAccounts: accounts.length,
     byAssetClass: nw.allocationBreakdown.map((c) => ({ label: c.label, value: c.value, pct: c.percent })),
     ownedPropertyValue: owned && owned.activeProperties > 0 ? owned.totalCurrentValue : null,
-    rentalValue: nw.realEstate.count > 0 ? nw.realEstate.totalValue : null,
+    // realEstate.totalValue now includes owned property, listed separately above.
+    rentalValue: new Decimal(nw.realEstate.rentalValue).greaterThan(0) ? nw.realEstate.rentalValue : null,
     monthlyRent: nw.realEstate.count > 0 ? nw.realEstate.monthlyRent : null,
     rentOverdue: nw.realEstate.overdueCount,
     vehicleValue: nw.vehicles.count > 0 ? nw.vehicles.totalValue : null,

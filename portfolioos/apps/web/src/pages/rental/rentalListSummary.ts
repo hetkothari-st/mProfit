@@ -1,3 +1,4 @@
+import { Decimal } from '@everypaisa/shared';
 import type { RentalPropertyDTO } from '@/api/rental/rental.api';
 
 /**
@@ -71,4 +72,17 @@ export function buildLast12(receipts: Array<{ forMonth: string; status: string }
     });
   }
   return cells;
+}
+
+/**
+ * Rent running now: every active tenancy, not one per property. A flat let to
+ * two tenants pays both rents; taking the first dropped the second.
+ */
+export function activeRentSummary(properties: RentalPropertyDTO[]) {
+  const activeTenancies = properties.flatMap((p) => (p.tenancies ?? []).filter((t) => t.isActive));
+  return {
+    tenancies: activeTenancies.length,
+    letProperties: properties.filter((p) => p.tenancies?.some((t) => t.isActive)).length,
+    monthlyRent: activeTenancies.reduce((sum, t) => sum.plus(new Decimal(t.monthlyRent)), new Decimal(0)),
+  };
 }

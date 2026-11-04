@@ -1,12 +1,7 @@
-/**
- * Loan-check alerts (EMI calculator spec s6.3) are news, not deadlines: their trigger date is the day the
- * check ran, so they are never "overdue". They link to the loan they are about (metadata.loanId).
- */
-export const INFORMATIONAL_ALERT_TYPES: ReadonlySet<string> = new Set(['LOAN_REFINANCE', 'LOAN_BENCHMARK_CHANGE']);
+import { isInformationalAlert } from '@everypaisa/shared';
 
-export function isInformationalAlert(type: string): boolean {
-  return INFORMATIONAL_ALERT_TYPES.has(type);
-}
+// Loan-check alerts are news, not deadlines (rule shared with the API).
+export { INFORMATIONAL_ALERT_TYPES, isInformationalAlert } from '@everypaisa/shared';
 
 /**
  * Where an alert opens: `/loans/<loanId>` for a loan-check alert (`/loans` when the id is missing), `/will`

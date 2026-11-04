@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { RentalPropertyDTO } from '@/api/rental/rental.api';
-import { buildLast12, getPropertySummary, totalOverdue } from './rentalListSummary';
+import { activeRentSummary, buildLast12, getPropertySummary, totalOverdue } from './rentalListSummary';
 
 // A property card on the Rental list reports on the CURRENT tenancy. Mixing
 // in an ended tenancy kept cards red after the current month was marked
@@ -75,5 +75,23 @@ describe('Rental list cards', () => {
     const { stripReceipts, overdueCount } = getPropertySummary(vacant);
     expect(buildLast12(stripReceipts, NOW).find((c) => c.month === '2026-05')?.status).toBe('RECEIVED');
     expect(overdueCount).toBe(0);
+  });
+});
+
+describe('Rental list summary strip', () => {
+  // A flat let to two tenants used to count once, so the strip read less
+  // than the dashboard's rent total.
+  it('adds every active tenancy, including two on one flat', () => {
+    const rent = (r: string, isActive = true) => ({ isActive, monthlyRent: r, rentReceipts: [] });
+    const props = [
+      { id: 'a', name: 'Flat A', tenancies: [rent('15000')] },
+      { id: 'b', name: 'Flat B', tenancies: [] },
+      { id: 'c', name: 'Flat C', tenancies: [rent('30000'), rent('9999', false)] },
+      { id: 'd', name: 'Flat D', tenancies: [rent('25000'), rent('22000')] },
+    ] as unknown as RentalPropertyDTO[];
+    const s = activeRentSummary(props);
+    expect(s.monthlyRent.toString()).toBe('92000');
+    expect(s.tenancies).toBe(4);
+    expect(s.letProperties).toBe(3);
   });
 });
