@@ -161,3 +161,34 @@ export const LEGACY_SUBGROUPS_BY_DIVISION: Readonly<Record<string, readonly stri
 
 /** Years of same-month YoY readings compounded into the long-run rate. */
 export const CPI_LONG_RUN_YEARS = 5;
+
+/**
+ * CPI division whose rate fits a goal category, or null when the personal
+ * basket rate (then headline CPI) is the better guess. Shared by the goal
+ * impact card and the Goal dialog hint so both suggest the same rate.
+ */
+export function goalRateDivision(category: string): string | null {
+  if (category === 'CHILD_EDUCATION') return '10';
+  if (category === 'VEHICLE_PURCHASE') return '07';
+  return null;
+}
+
+/** One-tap starting points for the "add expense" picker; the user fills the amount. */
+export const COMMON_EXPENSE_PRESETS: readonly {
+  name: string;
+  divisionCode: string;
+  frequency: 'MONTHLY' | 'YEARLY';
+}[] = [
+  { name: 'Rent', divisionCode: '04', frequency: 'MONTHLY' },
+  { name: 'Groceries', divisionCode: '01', frequency: 'MONTHLY' },
+  { name: 'School fees', divisionCode: '10', frequency: 'YEARLY' },
+  { name: 'Healthcare & medicines', divisionCode: '06', frequency: 'MONTHLY' },
+  { name: 'Electricity & gas', divisionCode: '04', frequency: 'MONTHLY' },
+  { name: 'Fuel & commute', divisionCode: '07', frequency: 'MONTHLY' },
+  { name: 'Phone & internet', divisionCode: '08', frequency: 'MONTHLY' },
+  { name: 'Domestic help', divisionCode: '05', frequency: 'MONTHLY' },
+  { name: 'Eating out', divisionCode: '11', frequency: 'MONTHLY' },
+  { name: 'Clothing', divisionCode: '03', frequency: 'YEARLY' },
+  { name: 'Holidays & leisure', divisionCode: '09', frequency: 'YEARLY' },
+  { name: 'Personal care', divisionCode: '13', frequency: 'MONTHLY' },
+];

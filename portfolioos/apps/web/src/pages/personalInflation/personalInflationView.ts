@@ -1,4 +1,4 @@
-import { Decimal } from '@everypaisa/shared';
+import { Decimal, goalRateDivision } from '@everypaisa/shared';
 import type { PersonalInflationSummary } from '@everypaisa/shared';
 
 /** "0.150000" → "15.0%". Null-safe. */
@@ -28,7 +28,7 @@ export interface RateSuggestion {
  */
 export function suggestGoalRate(summary: PersonalInflationSummary | undefined, category: string): RateSuggestion | null {
   if (!summary) return null;
-  const division = category === 'CHILD_EDUCATION' ? '10' : category === 'VEHICLE_PURCHASE' ? '07' : null;
+  const division = goalRateDivision(category);
   const pick = (rate: string | null | undefined, label: string): RateSuggestion | null =>
     rate == null ? null : { rate: new Decimal(rate).toFixed(4), label };
 

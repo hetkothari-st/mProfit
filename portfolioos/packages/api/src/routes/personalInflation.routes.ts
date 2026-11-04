@@ -5,7 +5,11 @@ import { requireSecondFactor } from '../lib/professionalMfa.js';
 import { cpiRunLimiter } from '../middleware/rateLimit.js';
 import {
   adminRefreshHandler,
+  applyGoalsHandler,
   createItemHandler,
+  goalsHandler,
+  importSourcesHandler,
+  sourcesHandler,
   deleteItemHandler,
   profileHandler,
   summaryHandler,
@@ -19,6 +23,10 @@ personalInflationRouter.use(authenticate);
 personalInflationRouter.get('/', asyncHandler(summaryHandler));
 personalInflationRouter.put('/profile', asyncHandler(profileHandler));
 personalInflationRouter.post('/items', asyncHandler(createItemHandler));
+personalInflationRouter.get('/sources', asyncHandler(sourcesHandler));
+personalInflationRouter.post('/items/import', asyncHandler(importSourcesHandler));
+personalInflationRouter.get('/goals', asyncHandler(goalsHandler));
+personalInflationRouter.post('/goals/apply', asyncHandler(applyGoalsHandler));
 personalInflationRouter.patch('/items/:id', asyncHandler(updateItemHandler));
 personalInflationRouter.delete('/items/:id', asyncHandler(deleteItemHandler));
 

@@ -131,7 +131,7 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
   ]);
 
   const views: InflationItemView[] = [];
-  const rated: { divisionCode: string; annualAmount: Decimal; rate: Decimal | null }[] = [];
+  const rated: { divisionCode: string; annualAmount: Decimal; rate: Decimal | null; fixed: boolean }[] = [];
   for (const it of items) {
     const amount = dec(it.amount);
     const annualAmount = annualise(amount, it.frequency);
@@ -144,7 +144,11 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
       },
       official.longRun,
     );
-    rated.push({ divisionCode: it.divisionCode, annualAmount, rate: resolved.rate });
+    // A payment the user pinned at 0% (an EMI, a level life premium) is not a
+    // price: blending it into its category would make housing or education
+    // look flat. It still counts in the personal rate, at 0%.
+    const fixed = resolved.source === 'CUSTOM' && resolved.rate !== null && resolved.rate.isZero();
+    rated.push({ divisionCode: it.divisionCode, annualAmount, rate: resolved.rate, fixed });
     views.push({
       id: it.id,
       name: it.name,
@@ -156,6 +160,7 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
       customRate: it.customRate ? rate6(dec(it.customRate)) : null,
       notes: it.notes,
       pricePoints: it.pricePoints.map((p) => ({ asOf: isoDay(p.asOf), amount: serializeMoney(dec(p.amount)) })),
+      sourceRef: it.sourceRef,
       resolvedRate: resolved.rate ? rate6(resolved.rate) : null,
       rateSource: resolved.source,
       rateNote: resolved.note,
@@ -173,9 +178,10 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
     serializeMoney(rated.reduce((s, r) => s.plus(r.rate ? projectAmount(r.annualAmount, r.rate, h) : r.annualAmount), new Decimal(0))),
   );
 
-  const divisionCodes = [...new Set(rated.map((r) => r.divisionCode))];
+  const priced = rated.filter((r) => !r.fixed);
+  const divisionCodes = [...new Set(priced.map((r) => r.divisionCode))];
   const byDivision = divisionCodes.map((code) => {
-    const group = rated.filter((r) => r.divisionCode === code);
+    const group = priced.filter((r) => r.divisionCode === code);
     const amt = group.reduce((s, r) => s.plus(r.annualAmount), new Decimal(0));
     const wr = weightedRate(group);
     return {
@@ -185,6 +191,11 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
       rate: wr ? rate6(wr) : null,
     };
   });
+
+  const fixedAmount = rated.filter((r) => r.fixed).reduce((s, r) => s.plus(r.annualAmount), new Decimal(0));
+  const fixedPayments = fixedAmount.isZero()
+    ? null
+    : { annualAmount: serializeMoney(fixedAmount), share: totalAnnual.isZero() ? '0.000000' : rate6(fixedAmount.dividedBy(totalAnnual)) };
 
   const personal = weightedRate(rated);
   return {
@@ -196,6 +207,7 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
     horizons: [...PROJECTION_HORIZONS],
     totals: { annualAmount: serializeMoney(totalAnnual), projections: totalProjections },
     byDivision,
+    fixedPayments,
   };
 }
 
