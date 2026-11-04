@@ -24,6 +24,7 @@ import {
 } from '@/api/goals.api';
 import { apiErrorMessage } from '@/api/client';
 import { toDecimal } from '@everypaisa/shared';
+import { InflationRateHint } from './InflationRateHint';
 
 interface PortfolioOption {
   id: string;
@@ -280,6 +281,7 @@ export function GoalDialog({ open, existing, portfolios, onClose, onSaved }: Pro
                 className="mt-1"
               />
               <p className="text-[10px] text-muted-foreground mt-0.5">e.g. 0.06 = 6%</p>
+              <InflationRateHint category={category} current={inflationRate} onApply={setInflationRate} />
             </div>
             <div>
               <Label htmlFor="expected">Expected return (decimal)</Label>
