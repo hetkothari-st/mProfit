@@ -53,6 +53,7 @@ import { userPreferencesRouter } from './userPreferences.routes.js';
 import { notificationsRouter } from './notifications.routes.js';
 import { corporateActionsRouter } from './corporateActions.routes.js';
 import { goalsRouter } from './goals.routes.js';
+import { personalInflationRouter, adminCpiRouter } from './personalInflation.routes.js';
 import { advisorRouter } from './advisor.routes.js';
 import { incomeRouter } from './income.routes.js';
 import { intelligenceRouter } from './intelligence.routes.js';
@@ -132,6 +133,8 @@ export function registerRoutes(app: Express): void {
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/corporate-actions', corporateActionsRouter);
   app.use('/api/goals', goalsRouter);
+  app.use('/api/personal-inflation', personalInflationRouter);
+  app.use('/api/admin/cpi', adminCpiRouter);
   app.use('/api/advisor', advisorRouter);
   app.use('/api/income', incomeRouter);
   app.use('/api/intelligence', intelligenceRouter);

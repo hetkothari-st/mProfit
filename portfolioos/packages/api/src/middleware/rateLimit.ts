@@ -239,6 +239,18 @@ export const loanRatesRunLimiter = rateLimit({
   message: { success: false, error: 'Too many runs - please wait a minute', code: 'RATE_LIMITED' },
 });
 
+/** POST /api/admin/cpi/refresh — kicks off a background MoSPI refresh. */
+export const cpiRunLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  passOnStoreError: true,
+  keyGenerator: (req) => req.user?.id ?? 'anonymous',
+  store: makeStore('cpi-run'),
+  message: { success: false, error: 'Too many runs - please wait a minute', code: 'RATE_LIMITED' },
+});
+
 /** A user's "Refresh prices" button: re-prices their holdings. 5 a minute per user. */
 export const priceRefreshLimiter = rateLimit({
   windowMs: 60 * 1000,

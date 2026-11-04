@@ -11,3 +11,4 @@ export * from './realEstate.js';
 export * from './gmailIngestion.js';
 export * from './preferences.js';
 export * from './familyDashboard.js';
+export * from './personalInflation.js';
