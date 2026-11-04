@@ -248,6 +248,10 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'InflationProfile',
   'InflationBasketItem',
   'InflationPricePoint',
+  // Safe-to-Invest (20261104160000): saved plan + the user's corrections.
+  'SafeToInvestPlan',
+  'SafeToInvestMonth',
+  'SafeToInvestCreditDecision',
 ]);
 
 /**

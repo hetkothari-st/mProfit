@@ -40,6 +40,8 @@ export interface InflationItemView {
   pricePoints: InflationPricePointView[];
   /** Set when the item was added from the user's own data, e.g. 'loan:<id>'. */
   sourceRef: string | null;
+  /** Counted as a fixed monthly cost by Safe-to-Invest (rent, school fees). */
+  isFixed: boolean;
   resolvedRate: string | null;
   rateSource: InflationRateSource;
   rateNote: InflationRateNote;
@@ -74,6 +76,7 @@ export interface InflationItemInput {
   rateMode?: InflationRateMode;
   customRate?: string | null;
   notes?: string | null;
+  isFixed?: boolean;
   pricePoints?: InflationPricePointView[];
 }
 

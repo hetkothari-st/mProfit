@@ -34,6 +34,7 @@ const itemSchema = z.object({
   // Decimal(6,4) fraction: −99.99% .. +99.99% a year.
   customRate: decimalInput(1).transform(String).nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
+  isFixed: z.boolean().optional(),
   pricePoints: z.array(pricePoint).max(30).optional(),
 });
 

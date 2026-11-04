@@ -178,10 +178,12 @@ export const COMMON_EXPENSE_PRESETS: readonly {
   name: string;
   divisionCode: string;
   frequency: 'MONTHLY' | 'YEARLY';
+  /** Paid every month whatever the income: Safe-to-Invest subtracts it. */
+  isFixed?: boolean;
 }[] = [
-  { name: 'Rent', divisionCode: '04', frequency: 'MONTHLY' },
+  { name: 'Rent', divisionCode: '04', frequency: 'MONTHLY', isFixed: true },
   { name: 'Groceries', divisionCode: '01', frequency: 'MONTHLY' },
-  { name: 'School fees', divisionCode: '10', frequency: 'YEARLY' },
+  { name: 'School fees', divisionCode: '10', frequency: 'YEARLY', isFixed: true },
   { name: 'Healthcare & medicines', divisionCode: '06', frequency: 'MONTHLY' },
   { name: 'Electricity & gas', divisionCode: '04', frequency: 'MONTHLY' },
   { name: 'Fuel & commute', divisionCode: '07', frequency: 'MONTHLY' },

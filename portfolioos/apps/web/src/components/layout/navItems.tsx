@@ -95,6 +95,7 @@ export const OVERVIEW_ITEMS: NavItem[] = [
 export const PLANNING_ITEMS: NavItem[] = [
   { label: 'Goals', to: '/goals', icon: Target },
   { label: 'Personal Inflation', to: '/personal-inflation', icon: Gauge },
+  { label: 'Safe to Invest', to: '/safe-to-invest', icon: ShieldCheck },
   { label: 'Will Maker', to: '/will', icon: ScrollText },
   { label: 'Succession', to: '/legacy', icon: HeartHandshake },
   { label: 'Tax Planning', to: '/tax', icon: Calculator },

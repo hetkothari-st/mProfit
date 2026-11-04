@@ -53,6 +53,7 @@ export function BasketItemDialog({ open, onOpenChange, existing, preset = null, 
   const [rateMode, setRateMode] = useState<InflationRateMode>('OFFICIAL');
   const [customPct, setCustomPct] = useState('');
   const [points, setPoints] = useState<PointRow[]>([]);
+  const [isFixed, setIsFixed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,6 +63,7 @@ export function BasketItemDialog({ open, onOpenChange, existing, preset = null, 
     setDivisionCode(existing?.divisionCode ?? preset?.divisionCode ?? '01');
     setAmount(existing ? new Decimal(existing.amount).toFixed(2) : '');
     setFrequency(existing?.frequency ?? preset?.frequency ?? 'YEARLY');
+    setIsFixed(existing?.isFixed ?? preset?.isFixed ?? false);
     setRateMode(existing?.rateMode ?? 'OFFICIAL');
     setCustomPct(existing?.customRate ? new Decimal(existing.customRate).times(100).toDecimalPlaces(2).toString() : '');
     setPoints(existing?.pricePoints.map((p) => ({ asOf: p.asOf, amount: new Decimal(p.amount).toFixed(2) })) ?? []);
@@ -95,6 +97,7 @@ export function BasketItemDialog({ open, onOpenChange, existing, preset = null, 
       rateMode,
       customRate,
       pricePoints: cleanPoints,
+      isFixed,
     });
   }
 
@@ -145,6 +148,16 @@ export function BasketItemDialog({ open, onOpenChange, existing, preset = null, 
               </Select>
             </div>
           </div>
+
+          <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+            <input type="checkbox" className="mt-0.5 h-4 w-4" checked={isFixed} onChange={(e) => setIsFixed(e.target.checked)} />
+            <span>
+              A fixed monthly cost
+              <span className="block text-xs text-muted-foreground">
+                Paid every month whatever you earn, like rent or school fees. Safe to Invest takes it out before sizing your SIP.
+              </span>
+            </span>
+          </label>
 
           <div>
             <Label htmlFor="pi-mode">How fast does it rise?</Label>
