@@ -18,7 +18,8 @@ interface Props {
   onProfile: (p: { stateCode: number; sector: CpiSector }) => void;
 }
 
-const inr = (v: Decimal | string) => formatINR(v.toString(), { fractionDigits: 0 });
+/** Lakh/crore shorthand (₹17 L, ₹1.2 Cr): easier to read in a sentence than full rupees. */
+const lakh = (v: Decimal | string) => formatINR(v.toString(), { compact: true });
 
 /** Round a scale's top up to a tidy step so tick labels read cleanly. */
 function scaleTop(maxPct: number): { top: number; step: number } {
@@ -51,24 +52,31 @@ export function InflationHero({ data, saving, onProfile }: Props) {
   const atCpi = cpi && !today.isZero() ? today.times(cpi.plus(1).pow(horizon)) : null;
   const extra = atMine && atCpi ? atMine.minus(atCpi) : null;
 
-  const ratio = mine && cpi && cpi.greaterThan(0) ? mine.dividedBy(cpi) : null;
 
   return (
     <section className="rounded-xl border bg-card p-5 sm:p-7 reveal" aria-label="Your inflation compared with official CPI">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px]">
         <div className="min-w-0">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Your personal inflation</h2>
           {mine ? (
-            <h2 className="font-display text-[clamp(26px,6vw,40px)] leading-[1.05] tracking-[-0.01em] text-balance">
-              Your costs rise <span className={cn('numeric', above ? 'text-warning' : 'text-positive')}>{formatRatePct(data.personalRate)}</span> a year.
-            </h2>
+            <p className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+              <span className={cn('font-display numeric text-[clamp(56px,14vw,88px)] leading-none tracking-[-0.02em]', above ? 'text-warning' : 'text-positive')}>
+                {formatRatePct(data.personalRate)}
+              </span>
+              {cpi && (
+                <span className="text-lg text-muted-foreground">
+                  vs CPI <span className="numeric font-semibold text-foreground">{formatRatePct(headline?.longRunRate)}</span>
+                </span>
+              )}
+            </p>
           ) : (
-            <h2 className="font-display text-[clamp(24px,5vw,34px)] leading-[1.1] tracking-[-0.01em] text-balance">
-              Add your expenses to find your own inflation rate.
-            </h2>
+            <p className="mt-2 font-display text-[clamp(22px,5vw,30px)] leading-[1.15] text-balance">
+              Add your expenses to see your own rate{cpi && <> against CPI of <span className="numeric">{formatRatePct(headline?.longRunRate)}</span></>}.
+            </p>
           )}
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-2 text-xs text-muted-foreground">
             {cpi
-              ? <>Official CPI for {place}{data.profile.sector !== 'COMBINED' && `, ${CPI_SECTOR_LABELS[data.profile.sector].toLowerCase()}`}: <span className="numeric text-foreground">{formatRatePct(headline?.longRunRate)}</span> a year on average{ratio && mine && above && ratio.greaterThanOrEqualTo('1.2') && <>, so your costs climb about {ratio.toFixed(1)}× as fast</>}.</>
+              ? <>CPI: {place}{data.profile.sector !== 'COMBINED' && `, ${CPI_SECTOR_LABELS[data.profile.sector].toLowerCase()}`}, 5-year average</>
               : <>Official figures haven&apos;t loaded yet. They usually appear within a few minutes of the app starting.</>}
           </p>
 
@@ -114,18 +122,17 @@ export function InflationHero({ data, saving, onProfile }: Props) {
           )}
 
           {atMine && !today.isZero() && (
-            <p className="mt-6 max-w-xl text-[15px] leading-relaxed text-pretty">
-              The <span className="numeric font-medium">{inr(today)}</span> you spend a year today becomes{' '}
-              <span className="numeric font-semibold">{inr(atMine)}</span> in {horizon} years
-              {extra && !extra.abs().lessThan(1) && (
-                <>
-                  , <span className={cn('numeric font-medium', extra.greaterThan(0) ? 'text-warning' : 'text-positive')}>
-                    {inr(extra.abs())} {extra.greaterThan(0) ? 'more' : 'less'}
+            <p className="mt-6 text-[15px] leading-relaxed">
+              <span className="numeric font-medium">{lakh(today)}</span> a year today costs{' '}
+              <span className="numeric font-semibold">{lakh(atMine)}</span> in {horizon} years.
+              {extra && extra.abs().greaterThanOrEqualTo(1000) && (
+                <span className="block text-sm text-muted-foreground">
+                  That&apos;s <span className={cn('numeric font-medium', extra.greaterThan(0) ? 'text-warning' : 'text-positive')}>
+                    {lakh(extra.abs())} {extra.greaterThan(0) ? 'more' : 'less'}
                   </span>{' '}
-                  than official CPI would suggest
-                </>
+                  than at CPI.
+                </span>
               )}
-              .
             </p>
           )}
         </div>
