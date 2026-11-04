@@ -30,6 +30,7 @@ import type { HoldingRow, Money, Quantity, TransactionDTO } from '@everypaisa/sh
 import { summariseHoldings, unpricedHint } from '@/lib/holdingsSummary';
 
 import { signOf } from '@/lib/signTone';
+import { invalidatePriceViews } from '@/lib/priceQueries';
 const TXN_TYPE_LABELS: Record<string, string> = {
   BUY: 'Buy',
   SELL: 'Sell',
@@ -92,8 +93,7 @@ export function StocksPage() {
     mutationFn: () => assetsApi.refreshAll(),
     onSuccess: (r) => {
       toast.success(`Re-priced ${r.holdings.updated} holding${r.holdings.updated !== 1 ? 's' : ''} at the latest prices`);
-      queryClient.invalidateQueries({ queryKey: ['portfolio-holdings'] });
-      queryClient.invalidateQueries({ queryKey: ['portfolio-summary'] });
+      void invalidatePriceViews(queryClient);
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Refresh failed')),
   });

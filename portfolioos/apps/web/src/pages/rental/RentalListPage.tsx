@@ -45,7 +45,7 @@ import {
 } from '@/api/rental/rental.api';
 import { invalidateRentalCaches } from '@/api/rental/rentalCache';
 import { RentalRemindersPanel } from './RentalRemindersPanel';
-import { buildLast12, getPropertySummary, totalOverdue as countOverdue, type ReceiptStatus } from './rentalListSummary';
+import { activeRentSummary, buildLast12, getPropertySummary, totalOverdue as countOverdue, type ReceiptStatus } from './rentalListSummary';
 import { propertyPhotosApi, type PhotoCover } from '@/api/realEstate/propertyMedia.api';
 import { PropertySlideshow } from '@/components/property/PropertySlideshow';
 import { PropertiesMap } from '@/components/property/PropertiesMap';
@@ -313,7 +313,11 @@ function PropertyCard({
   isDeleting: boolean;
 }) {
   const { activeTenancy, overdueCount, nextDue, stripReceipts } = getPropertySummary(property);
-  const monthlyRent = activeTenancy ? new Decimal(activeTenancy.monthlyRent) : null;
+  // A flat let to several tenants shows them all and their combined rent.
+  const activeTenancies = (property.tenancies ?? []).filter((t) => t.isActive);
+  const monthlyRent = activeTenancies.length
+    ? activeTenancies.reduce((s, t) => s.plus(new Decimal(t.monthlyRent)), new Decimal(0))
+    : null;
   const typeStyle = getPropertyStyle(property.propertyType);
 
   const occupancyState: 'occupied' | 'vacant' | 'overdue' =
@@ -431,10 +435,10 @@ function PropertyCard({
             <div className="grid grid-cols-[1fr_auto] gap-4 items-end">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
-                  Tenant
+                  {activeTenancies.length > 1 ? 'Tenants' : 'Tenant'}
                 </p>
                 <p className="font-display-italic text-base text-foreground mt-0.5 truncate">
-                  {activeTenancy.tenantName}
+                  {activeTenancies.map((t) => t.tenantName).join(', ')}
                 </p>
                 {monthlyRent && (
                   <div className="mt-2">
@@ -488,24 +492,20 @@ function PropertyCard({
 // ── Summary strip ─────────────────────────────────────────────────────
 
 function SummaryStrip({ properties }: { properties: RentalPropertyDTO[] }) {
-  const active = properties.filter((p) =>
-    p.tenancies?.some((t) => t.isActive),
-  ).length;
+  // Every active tenancy, not one per property: a flat let to two tenants
+  // pays both rents. Taking only the first dropped the second tenant's rent,
+  // so this read less than the dashboard's rent total.
+  const { tenancies: activeTenancyCount, letProperties, monthlyRent: monthlyIncome } = activeRentSummary(properties);
   // Current tenancies only, like each card (rentalListSummary.ts).
   const totalOverdue = countOverdue(properties);
-  const monthlyIncome = properties.reduce((sum, p) => {
-    const activeTenancy = p.tenancies?.find((t) => t.isActive);
-    if (!activeTenancy) return sum;
-    return sum.plus(new Decimal(activeTenancy.monthlyRent));
-  }, new Decimal(0));
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
       {[
         {
           label: 'Active tenancies',
-          value: String(active),
-          sub: `of ${properties.length} properties`,
+          value: String(activeTenancyCount),
+          sub: `across ${letProperties} of ${properties.length} properties`,
         },
         {
           label: 'Monthly income',

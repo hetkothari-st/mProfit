@@ -49,3 +49,24 @@ export function formatUSD(amount: string | Decimal): string {
 export function formatMoneyInr(value: string | Decimal): string {
   return formatINR(typeof value === 'string' ? value : value.toString());
 }
+
+/**
+ * A crypto holding's value as every page shows it: the server's stored price
+ * (re-priced every 30 minutes). The live quote this page polls is market
+ * information only. Valuing at it here put a different number on the Crypto
+ * page than on the dashboard, Analytics and the Will Maker for the same coins.
+ */
+export function cryptoHoldingValue(h: { currentValue?: string | null }): Decimal | null {
+  return h.currentValue ? new Decimal(h.currentValue) : null;
+}
+
+/** The INR value in USD at the coin's live INR/USD ratio, so the two figures agree. */
+export function cryptoInrToUsd(
+  inr: Decimal | null,
+  coin?: { priceInr?: string | number | null; priceUsd?: string | number | null } | null,
+): Decimal | null {
+  if (!inr || !coin?.priceInr || !coin?.priceUsd) return null;
+  const priceInr = new Decimal(coin.priceInr);
+  if (priceInr.isZero()) return null;
+  return inr.times(new Decimal(coin.priceUsd)).dividedBy(priceInr);
+}

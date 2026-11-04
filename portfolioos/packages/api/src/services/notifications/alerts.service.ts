@@ -1,7 +1,13 @@
 import { prisma } from '../../lib/prisma.js';
-import { formatDateOnly } from '@everypaisa/shared';
+import {
+  formatDateOnly,
+  istCalendarDate,
+  ALERT_SOON_DAYS,
+  INFORMATIONAL_ALERT_TYPES,
+  type AlertLens,
+} from '@everypaisa/shared';
 import { NotFoundError } from '../../lib/errors.js';
-import type { AlertType, AssetClass } from '@prisma/client';
+import type { AlertType, AssetClass, Prisma } from '@prisma/client';
 import { generateLoanEmiAlerts } from '../loans/loans.service.js';
 import { generateLoanGivenAlerts } from '../loans/loansGiven.service.js';
 import { generateCreditCardAlerts } from '../banking/creditCards.service.js';
@@ -14,22 +20,55 @@ const EXPIRY_THRESHOLDS = [30, 15, 7, 1] as const;
 
 // ─── Read / CRUD ──────────────────────────────────────────────────────────────
 
+/**
+ * The where-fragment for one of the Alerts page's lenses, by the same rule the
+ * page bands rows with (alertBandOf in @everypaisa/shared). Days are IST
+ * calendar days; a trigger date is a calendar date stored at UTC midnight.
+ */
+function lensWhere(lens: AlertLens, now: Date): Prisma.AlertWhereInput {
+  const today = new Date(`${istCalendarDate(now)}T00:00:00Z`);
+  const afterSoon = new Date(today.getTime() + (ALERT_SOON_DAYS + 1) * 86_400_000);
+  const informational = [...INFORMATIONAL_ALERT_TYPES] as AlertType[];
+  switch (lens) {
+    case 'unread':
+      return { isRead: false };
+    case 'overdue':
+      return { triggerDate: { lt: today }, type: { notIn: informational } };
+    case 'soon':
+      return {
+        OR: [
+          { triggerDate: { gte: today, lt: afterSoon } },
+          // News raised in the past files under "this week", never "overdue".
+          { triggerDate: { lt: today }, type: { in: informational } },
+        ],
+      };
+    default:
+      return {};
+  }
+}
+
 export async function listAlerts(
   userId: string,
-  params?: { unreadOnly?: boolean; type?: AlertType; limit?: number; page?: number },
+  params?: { unreadOnly?: boolean; type?: AlertType; lens?: AlertLens; limit?: number; page?: number },
+  now: Date = new Date(),
 ) {
   const page = params?.page ?? 1;
   const limit = Math.min(params?.limit ?? 50, 200);
   const skip = (page - 1) * limit;
 
-  const where = {
+  const base: Prisma.AlertWhereInput = {
     userId,
     isActive: true,
-    ...(params?.unreadOnly ? { isRead: false } : {}),
     ...(params?.type ? { type: params.type } : {}),
   };
+  const lens: AlertLens = params?.unreadOnly ? 'unread' : (params?.lens ?? 'all');
+  const where: Prisma.AlertWhereInput = { AND: [base, lensWhere(lens, now)] };
 
-  const [alerts, total, unreadCount] = await Promise.all([
+  // Every lens is counted across the whole inbox, not the loaded page, so a
+  // chip's number always matches what the chip lists — and "Unread" with no
+  // type filter equals the bell (getUnreadCount).
+  const countLens = (l: AlertLens) => prisma.alert.count({ where: { AND: [base, lensWhere(l, now)] } });
+  const [alerts, total, unreadCount, all, overdue, soon, unread] = await Promise.all([
     prisma.alert.findMany({
       where,
       orderBy: [{ isRead: 'asc' }, { triggerDate: 'desc' }],
@@ -38,12 +77,17 @@ export async function listAlerts(
     }),
     prisma.alert.count({ where }),
     prisma.alert.count({ where: { userId, isActive: true, isRead: false } }),
+    countLens('all'),
+    countLens('overdue'),
+    countLens('soon'),
+    countLens('unread'),
   ]);
 
   return {
     alerts: alerts.map(formatAlert),
     total,
     unreadCount,
+    counts: { all, overdue, soon, unread },
     page,
     limit,
   };

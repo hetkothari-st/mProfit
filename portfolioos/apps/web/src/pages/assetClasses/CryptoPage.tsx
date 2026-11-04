@@ -17,7 +17,8 @@ import { listAllTransactions } from '@/api/listAllTransactions';
 import { assetsApi, type LiveCryptoCoin } from '@/api/assets.api';
 import { apiErrorMessage } from '@/api/client';
 import { CryptoFormDialog } from './CryptoFormDialog';
-import { formatUSD } from './cryptoUtils';
+import { cryptoHoldingValue, cryptoInrToUsd, formatUSD } from './cryptoUtils';
+import { PriceAsOf } from '@/components/common/PriceAsOf';
 import { useScrollFade } from '@/hooks/useScrollFade';
 
 // ── Coin avatar (colored gradient w/ symbol) ─────────────────────
@@ -100,12 +101,8 @@ function CoinHoldingCard({
 }) {
   const qty = new Decimal(holding.quantity);
   const invested = new Decimal(holding.totalCost);
-  const livePriceInr = holding.live?.priceInr ? new Decimal(holding.live.priceInr) : null;
-  const livePriceUsd = holding.live?.priceUsd ? new Decimal(holding.live.priceUsd) : null;
-  const currentInr = livePriceInr
-    ? qty.times(livePriceInr)
-    : (holding.currentValue ? new Decimal(holding.currentValue) : null);
-  const currentUsd = livePriceUsd ? qty.times(livePriceUsd) : null;
+  const currentInr = cryptoHoldingValue(holding);
+  const currentUsd = cryptoInrToUsd(currentInr, holding.live);
   const pnl = currentInr ? currentInr.minus(invested) : null;
   const pnlPct = pnl && !invested.isZero() ? pnl.div(invested).times(100).toNumber() : null;
   const isGain = pnl ? pnl.gte(0) : null;
@@ -141,6 +138,12 @@ function CoinHoldingCard({
         {currentUsd && (
           <p className="text-xs text-muted-foreground tabular-nums">
             {formatUSD(currentUsd)}
+          </p>
+        )}
+        <PriceAsOf asOf={holding.priceAsOf} stale={holding.stale} />
+        {holding.live?.priceInr && (
+          <p className="text-[11px] text-muted-foreground tabular-nums">
+            Live {formatINR(String(holding.live.priceInr))} per coin
           </p>
         )}
       </div>
@@ -240,9 +243,7 @@ export function CryptoPage() {
 
   // Sort by current value desc
   function holdingValue(h: EnrichedHolding): Decimal {
-    if (h.live?.priceInr) return new Decimal(h.live.priceInr).times(new Decimal(h.quantity));
-    if (h.currentValue) return new Decimal(h.currentValue);
-    return new Decimal(0);
+    return cryptoHoldingValue(h) ?? new Decimal(0);
   }
   holdings.sort((a, b) => holdingValue(b).comparedTo(holdingValue(a)));
 
@@ -252,16 +253,11 @@ export function CryptoPage() {
 
   // Summary
   const totalInvested = holdings.reduce((s, h) => s.plus(new Decimal(h.totalCost)), new Decimal(0));
-  const totalValue = holdings.reduce((s, h) => {
-    const live = h.live?.priceInr
-      ? new Decimal(h.live.priceInr).times(new Decimal(h.quantity))
-      : (h.currentValue ? new Decimal(h.currentValue) : null);
-    return live ? s.plus(live) : s;
-  }, new Decimal(0));
-  const totalUsd = holdings.reduce((s, h) => {
-    if (!h.live?.priceUsd) return s;
-    return s.plus(new Decimal(h.live.priceUsd).times(new Decimal(h.quantity)));
-  }, new Decimal(0));
+  const totalValue = holdings.reduce((s, h) => s.plus(holdingValue(h)), new Decimal(0));
+  const totalUsd = holdings.reduce(
+    (s, h) => s.plus(cryptoInrToUsd(cryptoHoldingValue(h), h.live) ?? new Decimal(0)),
+    new Decimal(0),
+  );
   const totalPnL = totalValue.minus(totalInvested);
   const pnlPct = totalInvested.isZero() ? null : totalPnL.div(totalInvested).times(100).toNumber();
 

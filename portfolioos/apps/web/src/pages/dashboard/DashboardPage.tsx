@@ -44,6 +44,7 @@ import { useThemeStore } from '@/stores/theme.store';
 import { useAssetSectionsStore } from '@/stores/assetSections.store';
 import { assetClassSidebarKey, allocationSliceSidebarKey, topHoldingsViewAllHref } from './dashboardLinks';
 import { formatINR, formatPercent, ASSET_CLASS_LABELS, Decimal, toDecimal, valuationMethodFor, formatDateIST, formatDateOnly } from '@everypaisa/shared';
+import { invalidatePriceViews } from '@/lib/priceQueries';
 
 const PERIOD_OPTIONS = [
   { label: '1M', days: 30 },
@@ -380,7 +381,17 @@ export function DashboardPage() {
     queryKey: ['dashboard', 'holdings', selectedId, portfolios.map((p) => p.id).join(',')],
     queryFn: async () => {
       const ids = selectedId === 'ALL' ? portfolios.map((p) => p.id) : [selectedId];
-      const all = await Promise.all(ids.map((id) => portfoliosApi.holdings(id)));
+      // Through the shared per-portfolio cache that Stocks, Mutual Funds and
+      // Portfolio detail read, so every page shows the same price snapshot
+      // instead of the dashboard holding an older copy of its own.
+      const all = await Promise.all(
+        ids.map((id) =>
+          queryClient.fetchQuery({
+            queryKey: ['portfolio-holdings', id],
+            queryFn: () => portfoliosApi.holdings(id),
+          }),
+        ),
+      );
       // Sort by effective value: live price if available, otherwise cost basis
       return all.flat().sort((a, b) => {
         const av = toDecimal(a.currentValue ?? a.totalCost);
@@ -400,11 +411,7 @@ export function DashboardPage() {
           ? `Re-priced ${n} holding${n !== 1 ? 's' : ''} at the latest prices`
           : 'Data refreshed — no new prices available',
       );
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-        queryClient.invalidateQueries({ queryKey: ['portfolios'] }),
-        queryClient.invalidateQueries({ queryKey: ['holdings'] }),
-      ]);
+      await invalidatePriceViews(queryClient);
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Refresh failed')),
   });
@@ -565,9 +572,10 @@ export function DashboardPage() {
             <div className="my-6 rule-ornament"><span /></div>
 
             {/* Breakdown row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-5 md:gap-x-0">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-x-5 gap-y-5 md:gap-x-0">
               {[
                 { label: 'Investments', value: nw.portfolio.currentValue, color: 'hsl(70 95% 65%)', show: true },
+                { label: 'Bank balances', value: nw.bankAccounts.totalValue, color: 'hsl(190 70% 60%)', show: toDecimal(nw.bankAccounts.totalValue).greaterThan(0) },
                 { label: 'Real Estate', value: nw.realEstate.totalValue, color: 'hsl(25 80% 60%)', show: toDecimal(nw.realEstate.totalValue).greaterThan(0) },
                 { label: 'Vehicles', value: nw.vehicles.totalValue, color: 'hsl(40 90% 62%)', show: toDecimal(nw.vehicles.totalValue).greaterThan(0) },
                 { label: 'Sum Assured', value: nw.insurance.totalSumAssured, color: 'hsl(330 70% 68%)', show: nw.insurance.activePoliciesCount > 0 },

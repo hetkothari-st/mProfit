@@ -72,10 +72,19 @@ export interface NetWorthResponse {
     totalInvested: string;
     unrealisedPnL: string;
     unrealisedPnLPct: number;
+    /** Holdings as net worth counts them (CASH already in bank balances left out, PF at account balance). */
+    countedInNetWorth: string;
+  };
+  bankAccounts: {
+    count: number;
+    totalValue: string;
   };
   realEstate: {
     count: number;
+    /** Owned property plus rentals not linked to an owned property. */
     totalValue: string;
+    ownedValue: string;
+    rentalValue: string;
     monthlyRent: string;
     incomeYTD: string;
     expenseYTD: string;

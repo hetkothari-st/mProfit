@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ApiResponse } from '@everypaisa/shared';
+import type { AlertLens, ApiResponse } from '@everypaisa/shared';
 
 function unwrap<T>(data: ApiResponse<T>): T {
   if (!data.success) throw new Error(data.error);
@@ -26,12 +26,14 @@ export interface AlertsResult {
   alerts: AlertDTO[];
   total: number;
   unreadCount: number;
+  /** Each lens counted across the whole inbox (respecting the type filter). */
+  counts: { all: number; overdue: number; soon: number; unread: number };
   page: number;
   limit: number;
 }
 
 export const alertsApi = {
-  async list(params?: { unreadOnly?: boolean; type?: AlertType; page?: number; limit?: number }): Promise<AlertsResult> {
+  async list(params?: { unreadOnly?: boolean; type?: AlertType; lens?: AlertLens; page?: number; limit?: number }): Promise<AlertsResult> {
     const { data } = await api.get<ApiResponse<AlertsResult>>('/api/alerts', { params });
     return unwrap(data);
   },

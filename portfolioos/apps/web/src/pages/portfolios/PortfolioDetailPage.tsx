@@ -20,6 +20,7 @@ import {
   ASSET_CLASS_LABELS,
   toDecimal,
 } from '@everypaisa/shared';
+import { invalidatePriceViews } from '@/lib/priceQueries';
 
 // Money arrives as a branded string (§3.2); `> 0` / `< 0` would lex-compare.
 // Route through Decimal so the sign is evaluated on the actual number.
@@ -92,8 +93,7 @@ export function PortfolioDetailPage() {
     mutationFn: () => assetsApi.refreshPortfolio(id!),
     onSuccess: (r) => {
       toast.success(`${r.updated} holdings refreshed`);
-      queryClient.invalidateQueries({ queryKey: ['portfolio', id] });
-      queryClient.invalidateQueries({ queryKey: ['portfolio-holdings', id] });
+      void invalidatePriceViews(queryClient);
     },
     onError: (err) => toast.error(apiErrorMessage(err, 'Refresh failed')),
   });

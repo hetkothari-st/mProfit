@@ -12,6 +12,7 @@ import {
 import { ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import type { AlertType } from '@prisma/client';
+import { ALERT_LENSES, type AlertLens } from '@everypaisa/shared';
 
 const ALERT_TYPES = [
   'FD_MATURITY', 'BOND_MATURITY', 'MF_LOCK_IN_EXPIRY', 'SIP_DUE',
@@ -27,10 +28,11 @@ const createCustomSchema = z.object({
 
 export async function listAlertsHandler(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
-  const { unreadOnly, type, page, limit } = req.query as Record<string, string>;
+  const { unreadOnly, type, lens, page, limit } = req.query as Record<string, string>;
   const result = await listAlerts(req.user.id, {
     unreadOnly: unreadOnly === 'true',
     type: type as AlertType | undefined,
+    lens: ALERT_LENSES.includes(lens as AlertLens) ? (lens as AlertLens) : undefined,
     page: page ? parseInt(page, 10) : undefined,
     limit: limit ? parseInt(limit, 10) : undefined,
   });

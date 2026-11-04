@@ -399,33 +399,30 @@ export function GoldAssetDetailPage() {
     (t.photos ?? []).map((p) => ({ id: p.id, txnId: t.id, fileName: p.fileName })),
   );
 
-  // Live value computation per asset class
+  // Live per-unit rate per asset class (market information; the value is the stored price)
   const GOLD_ETF_PATTERN = /\b(GOLDBEES|GOLDIETF|AXISGOLD|HDFCGOLD|KOTAKGOLD|SETFGOLD|LICMFGOLD|QGOLDHALF)\b/;
-  let liveValue: Decimal | null = null;
   let livePricePerUnit: Decimal | null = null;
   if (holding.assetClass === 'PHYSICAL_GOLD' && live?.GOLD) {
     const carat = detectCarat(assetName);
     livePricePerUnit = new Decimal(live.GOLD).times(carat).div(24);
-    liveValue = livePricePerUnit.times(new Decimal(holding.quantity));
   } else if (holding.assetClass === 'GOLD_BOND' && live?.GOLD) {
     livePricePerUnit = new Decimal(live.GOLD);
-    liveValue = livePricePerUnit.times(new Decimal(holding.quantity));
   } else if (holding.assetClass === 'GOLD_ETF') {
     const ticker = (assetName.toUpperCase().match(GOLD_ETF_PATTERN) ?? [])[1]
       ?? (holding.symbol?.toUpperCase().match(GOLD_ETF_PATTERN) ?? [])[1];
     const nav = ticker ? live?.etfNavs?.[ticker] : null;
     if (nav) {
       livePricePerUnit = new Decimal(nav);
-      liveValue = livePricePerUnit.times(new Decimal(holding.quantity));
     }
   } else if (holding.assetClass === 'PHYSICAL_SILVER' && live?.SILVER) {
     const mult = detectSilverPurityMultiplier(assetName);
     livePricePerUnit = new Decimal(live.SILVER).times(mult);
-    liveValue = livePricePerUnit.times(new Decimal(holding.quantity));
   }
 
   const invested = new Decimal(holding.totalCost);
-  const currentVal = liveValue ?? (holding.currentValue ? new Decimal(holding.currentValue) : null);
+  // Valued like every other page: the stored price. The live rate above is
+  // market information (and drives the premium figure), not the value.
+  const currentVal = holding.currentValue ? new Decimal(holding.currentValue) : null;
   const pnl = currentVal ? currentVal.minus(invested) : null;
   const pnlPct = pnl && !invested.isZero() ? pnl.div(invested).times(100).toNumber() : null;
   const isGain = pnl ? pnl.gte(0) : null;

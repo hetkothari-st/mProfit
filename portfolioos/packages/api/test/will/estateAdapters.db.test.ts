@@ -4,6 +4,8 @@ import { createTestScope, type TestScope } from '../helpers/db.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { runAsSystem } from '../../src/lib/requestContext.js';
 import { getDashboardNetWorth } from '../../src/services/analytics/dashboard.service.js';
+import { willEstateTotals } from '@everypaisa/shared';
+import { candidatesToItems } from '../../src/services/will/estate/reconcile.js';
 import { collectEstate, MAX_ESTATE_CANDIDATES } from '../../src/services/will/estate/registry.js';
 import { CASH_MAY_DUPLICATE_NOTE } from '../../src/services/will/estate/adapters/financial.js';
 import { loanCandidate, LOAN_SCHEDULE_FAILED_NOTE } from '../../src/services/will/estate/adapters/credit.js';
@@ -48,7 +50,7 @@ afterAll(async () => {
   await other.cleanup();
 });
 
-/** This user's closed, sold, inactive, overdraft and paid-off rows. Not in beforeAll: the dashboard counts inactive rentals. */
+/** This user's closed, sold, inactive, overdraft and paid-off rows. Neither the dashboard nor the will counts them. */
 async function seedHiddenRows(u: string): Promise<string[]> {
   return runAsSystem(async () => {
     const created = await Promise.all([
@@ -95,11 +97,32 @@ describe('collectEstate', () => {
     const d2 = (v: string) => new Decimal(v).toFixed(2);
     expect(sum(candidates, 'HOLDING')).toBe(d2(net.portfolio.currentValue));
     expect(sum(candidates, 'VEHICLE')).toBe(d2(net.vehicles.totalValue));
-    expect(sum(candidates, 'RENTAL_PROPERTY')).toBe(d2(net.realEstate.totalValue));
+    expect(sum(candidates, 'RENTAL_PROPERTY')).toBe(d2(net.realEstate.rentalValue));
     expect(sum(candidates, 'LOAN')).toBe(d2(net.liabilities.totalOutstanding));
     expect(sum(candidates, 'CREDIT_CARD')).toBe(d2(net.liabilities.totalCreditCardOutstanding));
     const lent = net.allocationBreakdown.find((x) => x.key === 'LOAN_GIVEN');
     expect(sum(candidates, 'LOAN_GIVEN')).toBe(d2(lent!.value));
+  });
+
+  // The dashboard used to leave bank balances and owned property out and count
+  // a rental twice when an owned property linked it: the same account showed
+  // a much lower net worth on the dashboard than in the Will Maker.
+  it('has the same net worth as the will estate', async () => {
+    const expectSame = async () => {
+      const { candidates } = await collect();
+      const will = willEstateTotals(candidatesToItems(candidates));
+      const net = await scope.runAs(() => getDashboardNetWorth(scope.userId));
+      expect(new Decimal(net.totalNetWorth).toFixed(2)).toBe(will.assets.toFixed(2));
+      expect(new Decimal(net.totalLiabilities).toFixed(2)).toBe(will.liabilities.toFixed(2));
+      expect(new Decimal(net.netWorthAfterLiabilities).toFixed(2)).toBe(will.net.toFixed(2));
+    };
+    await expectSame();
+    const hidden = await seedHiddenRows(scope.userId);
+    try {
+      await expectSame();
+    } finally {
+      await deleteHiddenRows(hidden);
+    }
   });
 
   it('maps ownership, identifiers and review states', async () => {
