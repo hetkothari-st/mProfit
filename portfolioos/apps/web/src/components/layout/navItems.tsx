@@ -94,6 +94,7 @@ export const OVERVIEW_ITEMS: NavItem[] = [
  */
 export const PLANNING_ITEMS: NavItem[] = [
   { label: 'Goals', to: '/goals', icon: Target },
+  { label: 'Personal Inflation', to: '/personal-inflation', icon: Gauge },
   { label: 'Will Maker', to: '/will', icon: ScrollText },
   { label: 'Succession', to: '/legacy', icon: HeartHandshake },
   { label: 'Tax Planning', to: '/tax', icon: Calculator },
@@ -117,7 +118,6 @@ export const NAV_SECTIONS: Array<{ heading?: string; items: NavItem[] }> = [
       { label: 'Accounting', to: '/accounting', icon: BookOpenCheck },
       { label: 'Split Expenses', to: '/split', icon: UsersRound },
       { label: 'EMI Calculator', to: '/emi', icon: Percent },
-      { label: 'Personal Inflation', to: '/personal-inflation', icon: Gauge },
       { label: 'Documents', to: '/documents', icon: FolderTree },
       { label: 'Alerts', to: '/alerts', icon: BellRing },
       // Hidden for now — page still reachable at /import/failures.
