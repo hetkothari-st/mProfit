@@ -65,15 +65,21 @@ async function fake2012(args: { stateCode: number; legacyStateCode: number; year
 describe('personal inflation (DB)', () => {
   let a: TestScope;
   let b: TestScope;
+  // CpiObservation is global reference data. The job under test needs these
+  // states empty, so park any real rows (a dev DB with live CPI) and put
+  // them back afterwards rather than wiping them.
+  let parked: Awaited<ReturnType<typeof prisma.cpiObservation.findMany>> = [];
 
   beforeAll(async () => {
     a = await createTestScope('pinfl-a');
     b = await createTestScope('pinfl-b');
+    parked = await runAsSystem(() => prisma.cpiObservation.findMany({ where: { stateCode: { in: STATES } } }));
     await runAsSystem(() => prisma.cpiObservation.deleteMany({ where: { stateCode: { in: STATES } } }));
   });
 
   afterAll(async () => {
     await runAsSystem(() => prisma.cpiObservation.deleteMany({ where: { stateCode: { in: STATES } } }));
+    if (parked.length > 0) await runAsSystem(() => prisma.cpiObservation.createMany({ data: parked }));
     await a.cleanup();
     await b.cleanup();
   });
@@ -154,6 +160,18 @@ describe('personal inflation (DB)', () => {
     );
     const s = await runAsUser(a.userId, () => getSummary(a.userId));
     expect(s.official.find((o) => o.divisionCode === '06')!.source).toBe('ALL_INDIA');
+  });
+
+  it('a state with under 3 years of history uses All India (the Ladakh case)', async () => {
+    await runAsSystem(() =>
+      prisma.cpiObservation.deleteMany({ where: { stateCode: 20, divisionCode: '09', baseYear: 2012 } }),
+    );
+    const s = await runAsUser(a.userId, () => getSummary(a.userId));
+    const rec = s.official.find((o) => o.divisionCode === '09')!;
+    expect(rec.source).toBe('ALL_INDIA');
+    expect(rec.yearsUsed).toBe(5);
+    // Divisions with full history stay on the state's own figures.
+    expect(s.official.find((o) => o.divisionCode === '10')!.source).toBe('STATE');
   });
 
   it("user B cannot see user A's basket", async () => {

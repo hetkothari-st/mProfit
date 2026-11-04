@@ -120,6 +120,12 @@ export function BasketItemDialog({ open, onOpenChange, existing, saving, onSave 
                 <option key={d.code} value={d.code}>{d.shortLabel}</option>
               ))}
             </Select>
+            {divisionCode === '13' && (
+              <p className="text-xs text-muted-foreground mt-1">
+                The official rate here includes gold and silver jewellery, so it runs high. For toiletries
+                or salon visits, a rate of your own may fit better.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
