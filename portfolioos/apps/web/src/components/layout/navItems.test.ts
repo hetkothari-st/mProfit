@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { NAV_SECTIONS, OVERVIEW_ITEMS, PLANNING_ITEMS } from './navItems';
 
 describe('nav items', () => {
-  it('Planning holds Goals, Will Maker, Succession, Tax Planning and AI connectors, in that order', () => {
+  it('Planning holds Goals, Personal Inflation, Will Maker, Succession, Tax Planning and AI connectors, in that order', () => {
     expect(PLANNING_ITEMS.map((i) => [i.label, i.to])).toEqual([
       ['Goals', '/goals'],
+      ['Personal Inflation', '/personal-inflation'],
       ['Will Maker', '/will'],
       ['Succession', '/legacy'],
       ['Tax Planning', '/tax'],
