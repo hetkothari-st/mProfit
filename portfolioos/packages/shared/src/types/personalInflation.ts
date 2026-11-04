@@ -38,6 +38,8 @@ export interface InflationItemView {
   customRate: string | null;
   notes: string | null;
   pricePoints: InflationPricePointView[];
+  /** Set when the item was added from the user's own data, e.g. 'loan:<id>'. */
+  sourceRef: string | null;
   resolvedRate: string | null;
   rateSource: InflationRateSource;
   rateNote: InflationRateNote;
@@ -58,7 +60,10 @@ export interface PersonalInflationSummary {
   personalRate: string | null;
   horizons: number[];
   totals: { annualAmount: string; projections: string[] };
+  /** Priced spend by category; fixed payments are left out (see fixedPayments). Shares are of all spend. */
   byDivision: { divisionCode: string; annualAmount: string; share: string; rate: string | null }[];
+  /** Payments pinned at 0% (EMIs, level life premiums), or null when there are none. */
+  fixedPayments: { annualAmount: string; share: string } | null;
 }
 
 export interface InflationItemInput {
@@ -70,4 +75,51 @@ export interface InflationItemInput {
   customRate?: string | null;
   notes?: string | null;
   pricePoints?: InflationPricePointView[];
+}
+
+/** Something the user already tracks elsewhere in the app that could join the basket. */
+export interface InflationSourceCandidate {
+  /** 'loan:<id>' | 'insurance:<id>' | 'property:<id>' — stable, so re-imports are skipped. */
+  sourceRef: string;
+  kind: 'LOAN' | 'INSURANCE' | 'PROPERTY';
+  name: string;
+  /** Short context line, e.g. "HDFC Bank · home loan". */
+  detail: string;
+  divisionCode: string;
+  amount: string;
+  frequency: InflationAmountFrequency;
+  rateMode: InflationRateMode;
+  customRate: string | null;
+  /** Why the rate is what it is (e.g. EMIs are fixed), or null. */
+  note: string | null;
+  alreadyAdded: boolean;
+}
+
+export interface InflationGoalImpact {
+  goalId: string;
+  name: string;
+  category: string;
+  targetDate: string;
+  yearsRemaining: number;
+  /** The goal's target in today's rupees. */
+  targetToday: string;
+  /** Rate the goal uses now (fraction, 4 dp), or null when none is set. */
+  currentRate: string | null;
+  /** Rate this page suggests (fraction, 4 dp), or null without CPI data. */
+  suggestedRate: string | null;
+  suggestedLabel: string | null;
+  officialRate: string | null;
+  neededAtSuggested: string | null;
+  neededAtOfficial: string | null;
+  /** neededAtSuggested − neededAtOfficial; negative when the user's rate is lower. */
+  gap: string | null;
+  /** Extra monthly SIP to cover a positive gap at the goal's expected return. */
+  extraMonthlySip: string | null;
+  rateInUse: boolean;
+}
+
+export interface InflationGoalsView {
+  /** False when the user's plan does not include goals. */
+  available: boolean;
+  goals: InflationGoalImpact[];
 }

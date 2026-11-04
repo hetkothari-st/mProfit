@@ -5887,10 +5887,14 @@ model InflationBasketItem {
   /// Fraction (0.15 = 15%). Used when rateMode = CUSTOM.
   customRate   Decimal?                 @db.Decimal(6, 4)
   notes        String?
+  /// Where the item came from when added from the user's own data
+  /// ('loan:<id>', 'insurance:<id>', 'property:<id>'); null when typed in.
+  sourceRef    String?
   createdAt    DateTime                 @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime                 @updatedAt @db.Timestamptz(3)
   pricePoints  InflationPricePoint[]
 
+  @@unique([userId, sourceRef])
   @@index([userId])
 }
 

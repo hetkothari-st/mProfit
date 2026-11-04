@@ -2,13 +2,11 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Loader2, Pencil, Plus, Trash2, TrendingUp, Info } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   CPI_DIVISIONS,
   CPI_SECTORS,
   CPI_SECTOR_LABELS,
   CPI_STATES,
-  Decimal,
   cpiDivisionLabel,
   cpiStateName,
   formatINR,
@@ -25,8 +23,15 @@ import { Select } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { EmptyState } from '@/components/common/EmptyState';
 import { apiErrorMessage } from '@/api/client';
-import { personalInflationApi, PERSONAL_INFLATION_QUERY_KEY } from '@/api/personalInflation.api';
+import {
+  personalInflationApi,
+  PERSONAL_INFLATION_QUERY_KEY,
+  PERSONAL_INFLATION_SOURCES_KEY,
+} from '@/api/personalInflation.api';
 import { BasketItemDialog } from './BasketItemDialog';
+import { AddExpensePicker } from './AddExpensePicker';
+import { DrivingCard } from './DrivingCard';
+import { GoalImpactCard } from './GoalImpactCard';
 import { formatCpiMonth, formatRatePct } from './personalInflationView';
 
 const SOURCE_LABEL: Record<InflationItemView['rateSource'], string> = {
@@ -46,13 +51,19 @@ export function PersonalInflationPage() {
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<InflationItemView | null>(null);
+  const [preset, setPreset] = useState<Partial<InflationItemInput> | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: PERSONAL_INFLATION_QUERY_KEY,
     queryFn: () => personalInflationApi.summary(),
   });
 
-  const onFresh = (s: PersonalInflationSummary) => qc.setQueryData(PERSONAL_INFLATION_QUERY_KEY, s);
+  const onFresh = (s: PersonalInflationSummary) => {
+    qc.setQueryData(PERSONAL_INFLATION_QUERY_KEY, s);
+    // Adding or removing an item changes which loans/policies show as already added.
+    void qc.invalidateQueries({ queryKey: PERSONAL_INFLATION_SOURCES_KEY });
+  };
 
   const profileMut = useMutation({
     mutationFn: personalInflationApi.setProfile,
@@ -78,8 +89,11 @@ export function PersonalInflationPage() {
     onError: (e) => toast.error(apiErrorMessage(e)),
   });
 
-  const openNew = () => {
+  const openNew = () => setPickerOpen(true);
+  const compose = (p: Partial<InflationItemInput> | null) => {
+    setPickerOpen(false);
     setEditing(null);
+    setPreset(p);
     setDialogOpen(true);
   };
 
@@ -93,6 +107,9 @@ export function PersonalInflationPage() {
 
   const headline = data.official.find((o) => o.divisionCode === '00');
   const asOf = formatCpiMonth(data.asOf);
+  // Goal suggestions move with the basket and the state; refetch them when either changes.
+  const basketVersion = [data.asOf, data.personalRate, data.profile.stateCode, data.profile.sector,
+    ...data.byDivision.map((d) => `${d.divisionCode}:${d.rate}`)].join('|');
 
   return (
     <div className="space-y-6">
@@ -182,6 +199,7 @@ export function PersonalInflationPage() {
                       <td className="py-2 px-2">
                         <div className="font-medium">{it.name}</div>
                         <div className="text-xs text-muted-foreground">{cpiDivisionLabel(it.divisionCode)}</div>
+                        {it.notes && <div className="text-[11px] text-muted-foreground mt-0.5 max-w-[260px]">{it.notes}</div>}
                       </td>
                       <td className="py-2 px-2 text-right numeric">{inr(it.annualAmount)}</td>
                       <td className="py-2 px-2 text-right">
@@ -199,7 +217,7 @@ export function PersonalInflationPage() {
                       ))}
                       <td className="py-2 px-2 text-right whitespace-nowrap">
                         <Button variant="ghost" size="icon" aria-label={`Edit ${it.name}`}
-                          onClick={() => { setEditing(it); setDialogOpen(true); }}>
+                          onClick={() => { setEditing(it); setPreset(null); setDialogOpen(true); }}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="icon" aria-label={`Remove ${it.name}`} disabled={deleteMut.isPending}
@@ -225,14 +243,20 @@ export function PersonalInflationPage() {
         </CardContent>
       </Card>
 
-      {data.byDivision.length > 0 && data.asOf && <CompareChart data={data} />}
+      <div className="grid gap-4 lg:grid-cols-2 items-start">
+        {data.asOf && data.byDivision.length > 0 && <DrivingCard data={data} />}
+        <GoalImpactCard basketVersion={basketVersion} />
+      </div>
 
       <OfficialRatesCard data={data} />
+
+      <AddExpensePicker open={pickerOpen} onOpenChange={setPickerOpen} onImported={onFresh} onCompose={compose} />
 
       <BasketItemDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         existing={editing}
+        preset={preset}
         saving={saveMut.isPending}
         onSave={(input) => saveMut.mutate(input)}
       />
@@ -252,37 +276,6 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint: 
   );
 }
 
-function CompareChart({ data }: { data: PersonalInflationSummary }) {
-  const pct = (v: string | null | undefined) => (v == null ? null : new Decimal(v).times(100).toDecimalPlaces(2).toNumber());
-  const rows = data.byDivision.map((d) => ({
-    name: cpiDivisionLabel(d.divisionCode),
-    yours: pct(d.rate),
-    official: pct(data.official.find((o) => o.divisionCode === d.divisionCode)?.longRunRate),
-  }));
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Your rate vs official, by category</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={Math.max(160, rows.length * 56)}>
-          <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 16 }}>
-            <CartesianGrid strokeDasharray="2 4" stroke="hsl(var(--border))" horizontal={false} />
-            <XAxis type="number" unit="%" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-            <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-            <Tooltip
-              formatter={(v: number) => `${v}%`}
-              contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', fontSize: 12 }}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="yours" name="Yours" fill="hsl(var(--foreground))" radius={[0, 3, 3, 0]} />
-            <Bar dataKey="official" name="Official (yearly avg)" fill="hsl(var(--muted-foreground))" fillOpacity={0.45} radius={[0, 3, 3, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
-  );
-}
 
 function OfficialRatesCard({ data }: { data: PersonalInflationSummary }) {
   return (

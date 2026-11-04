@@ -1,8 +1,8 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { CPI_SECTORS, isCpiStateCode } from '@everypaisa/shared';
+import { CPI_SECTORS, hasFeature, isCpiStateCode, type PlanTierValue } from '@everypaisa/shared';
 import { ok } from '../lib/response.js';
-import { UnauthorizedError } from '../lib/errors.js';
+import { ForbiddenError, UnauthorizedError } from '../lib/errors.js';
 import { decimalInput, isoDate, positiveMoneyString } from '../lib/zodMoney.js';
 import { patchOf } from '../lib/zodPatch.js';
 import { writeAuditLog } from '../lib/audit.js';
@@ -15,6 +15,8 @@ import {
   updateItem,
   updateProfile,
 } from '../services/personalInflation/personalInflation.service.js';
+import { importSourceCandidates, listSourceCandidates } from '../services/personalInflation/inflationSources.js';
+import { applySuggestedGoalRates, listGoalImpacts } from '../services/personalInflation/inflationGoals.js';
 
 const profileSchema = z.object({
   stateCode: z.number().int().refine(isCpiStateCode, 'Unknown state'),
@@ -66,6 +68,41 @@ export async function deleteItemHandler(req: Request, res: Response) {
   const uid = userId(req);
   await deleteItem(uid, req.params['id']!);
   return ok(res, await getSummary(uid));
+}
+
+const importSchema = z.object({
+  sourceRefs: z.array(z.string().regex(/^(loan|insurance|property):[\w-]{1,64}$/)).min(1).max(50),
+});
+const applyGoalsSchema = z.object({ goalIds: z.array(z.string().min(1).max(64)).min(1).max(50) });
+
+/** Goals are a paid feature; this page reads and re-plans them only for plans that include it. */
+function canUseGoals(req: Request): boolean {
+  return !!req.user && hasFeature(req.user.plan as PlanTierValue, 'GOAL_PROJECTIONS');
+}
+
+export async function sourcesHandler(req: Request, res: Response) {
+  return ok(res, await listSourceCandidates(userId(req)));
+}
+
+export async function importSourcesHandler(req: Request, res: Response) {
+  const uid = userId(req);
+  await importSourceCandidates(uid, importSchema.parse(req.body).sourceRefs);
+  return ok(res, await getSummary(uid));
+}
+
+export async function goalsHandler(req: Request, res: Response) {
+  const uid = userId(req);
+  if (!canUseGoals(req)) return ok(res, { available: false, goals: [] });
+  return ok(res, { available: true, goals: await listGoalImpacts(uid, await getSummary(uid)) });
+}
+
+export async function applyGoalsHandler(req: Request, res: Response) {
+  const uid = userId(req);
+  if (!canUseGoals(req)) throw new ForbiddenError('Goals are not included in your plan');
+  const { goalIds } = applyGoalsSchema.parse(req.body);
+  const summary = await getSummary(uid);
+  await applySuggestedGoalRates(uid, summary, goalIds);
+  return ok(res, { available: true, goals: await listGoalImpacts(uid, summary) });
 }
 
 /**

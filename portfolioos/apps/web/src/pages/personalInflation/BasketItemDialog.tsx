@@ -25,6 +25,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existing: InflationItemView | null;
+  /** Starting values for a new expense (from the common-expense picker). */
+  preset?: Partial<InflationItemInput> | null;
   saving: boolean;
   onSave: (input: InflationItemInput) => void;
 }
@@ -43,7 +45,7 @@ const MODE_HELP: Record<InflationRateMode, string> = {
   HISTORY: 'Enter what you paid in past years; we work out the yearly increase.',
 };
 
-export function BasketItemDialog({ open, onOpenChange, existing, saving, onSave }: Props) {
+export function BasketItemDialog({ open, onOpenChange, existing, preset = null, saving, onSave }: Props) {
   const [name, setName] = useState('');
   const [divisionCode, setDivisionCode] = useState('01');
   const [amount, setAmount] = useState('');
@@ -56,14 +58,14 @@ export function BasketItemDialog({ open, onOpenChange, existing, saving, onSave 
   useEffect(() => {
     if (!open) return;
     setError(null);
-    setName(existing?.name ?? '');
-    setDivisionCode(existing?.divisionCode ?? '01');
+    setName(existing?.name ?? preset?.name ?? '');
+    setDivisionCode(existing?.divisionCode ?? preset?.divisionCode ?? '01');
     setAmount(existing ? new Decimal(existing.amount).toFixed(2) : '');
-    setFrequency(existing?.frequency ?? 'YEARLY');
+    setFrequency(existing?.frequency ?? preset?.frequency ?? 'YEARLY');
     setRateMode(existing?.rateMode ?? 'OFFICIAL');
     setCustomPct(existing?.customRate ? new Decimal(existing.customRate).times(100).toDecimalPlaces(2).toString() : '');
     setPoints(existing?.pricePoints.map((p) => ({ asOf: p.asOf, amount: new Decimal(p.amount).toFixed(2) })) ?? []);
-  }, [open, existing]);
+  }, [open, existing, preset]);
 
   function submit() {
     if (!name.trim()) return setError('Give it a name.');

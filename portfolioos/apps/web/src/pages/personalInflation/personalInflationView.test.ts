@@ -14,6 +14,7 @@ const base: PersonalInflationSummary = {
   horizons: [1, 3, 5, 10],
   totals: { annualAmount: '0.0000', projections: [] },
   byDivision: [],
+  fixedPayments: null,
 };
 
 describe('personalInflationView', () => {
