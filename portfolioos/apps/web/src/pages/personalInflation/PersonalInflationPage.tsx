@@ -134,10 +134,12 @@ export function PersonalInflationPage() {
         <StatCard
           label="Your inflation rate"
           value={formatRatePct(data.personalRate)}
-          hint={data.items.length ? 'Weighted by what you spend in each category' : 'Add expenses to see your own rate'}
+          hint={data.items.length
+            ? 'On the expenses you’ve added, weighted by what you spend on each'
+            : 'Add expenses to see your own rate'}
         />
         <StatCard
-          label={`Official CPI, ${cpiStateName(data.profile.stateCode)}`}
+          label={`Official CPI, ${cpiStateName(headline?.source === 'STATE' ? data.profile.stateCode : 1)}`}
           value={formatRatePct(headline?.longRunRate)}
           hint={headline?.longRunRate ? `Yearly average over ${headline.yearsUsed} yr · latest ${formatRatePct(headline.latestYoy)}` : '—'}
         />

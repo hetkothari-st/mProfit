@@ -50,7 +50,7 @@ export const CPI_DIVISIONS: readonly CpiDivision[] = [
   { code: '09', label: 'Recreation, sport and culture', shortLabel: 'Recreation' },
   { code: '10', label: 'Education services', shortLabel: 'Education' },
   { code: '11', label: 'Restaurants and accommodation services', shortLabel: 'Eating out & stays' },
-  { code: '13', label: 'Personal care, social protection and miscellaneous goods and services', shortLabel: 'Personal care & misc.' },
+  { code: '13', label: 'Personal care, social protection and miscellaneous goods and services', shortLabel: 'Personal care, jewellery & misc.' },
 ];
 
 /** Divisions a basket item may be filed under (everything except the headline). */

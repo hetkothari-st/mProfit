@@ -25,6 +25,9 @@ import {
 
 export const PROJECTION_HORIZONS = [1, 3, 5, 10] as const;
 
+/** Fewest yearly readings a state needs before its own long-run rate is used. */
+const MIN_STATE_YEARS = 3;
+
 const rate6 = (d: Decimal) => d.toFixed(6, Decimal.ROUND_HALF_EVEN);
 const dec = (v: { toString(): string }) => new Decimal(v.toString());
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
@@ -86,8 +89,14 @@ export async function getOfficialRates(stateCode: number, sector: CpiSector): Pr
   const longRun = new Map<string, Decimal>();
   const divisions: OfficialDivisionRate[] = CPI_DIVISIONS.map((d) => {
     const stateHasAnchor = lookup.has(`${stateCode}|${d.code}|${anchor.year}|2024`);
-    const sc = stateHasAnchor ? stateCode : CPI_ALL_INDIA_STATE_CODE;
-    const points = seriesFor(sc, d.code);
+    // A state with too short a history (Ladakh has no old-series years) would
+    // turn one noisy reading into a 10-year projection; All India is steadier.
+    const statePoints = stateHasAnchor ? seriesFor(stateCode, d.code) : [];
+    const indiaPoints = seriesFor(CPI_ALL_INDIA_STATE_CODE, d.code);
+    const useState =
+      stateHasAnchor && (statePoints.length >= MIN_STATE_YEARS || statePoints.length >= indiaPoints.length);
+    const sc = useState ? stateCode : CPI_ALL_INDIA_STATE_CODE;
+    const points = useState ? statePoints : indiaPoints;
     const latest = lookup.get(`${sc}|${d.code}|${anchor.year}|2024`) ?? null;
     const lr = longRunRate(points);
     if (lr) longRun.set(d.code, lr);
@@ -96,7 +105,7 @@ export async function getOfficialRates(stateCode: number, sector: CpiSector): Pr
       latestYoy: latest ? rate6(latest.dividedBy(100)) : null,
       longRunRate: lr ? rate6(lr) : null,
       yearsUsed: points.length,
-      source: stateHasAnchor && stateCode !== CPI_ALL_INDIA_STATE_CODE ? 'STATE' : 'ALL_INDIA',
+      source: useState && stateCode !== CPI_ALL_INDIA_STATE_CODE ? 'STATE' : 'ALL_INDIA',
     };
   });
 
