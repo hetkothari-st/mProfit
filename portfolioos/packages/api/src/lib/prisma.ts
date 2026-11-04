@@ -35,6 +35,7 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'VoucherEntry',
   'CanonicalEvent',
   'MonitoredSender',
+  'GmailProcessedMessage', // poller backfill ledger (20261104180000)
   'LearnedTemplate',
   'IngestionFailure',
   'Vehicle',

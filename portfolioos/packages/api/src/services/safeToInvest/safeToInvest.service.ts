@@ -177,6 +177,23 @@ async function currentSips(userId: string, months: readonly string[]): Promise<S
 }
 
 // ---------------------------------------------------------------------------
+// Why bank data may be missing
+// ---------------------------------------------------------------------------
+
+async function bankDataStatus(userId: string, from: Date): Promise<SafeToInvestSummary['dataStatus']> {
+  const bankTypes = [...CREDIT_TYPES, ...DEBIT_TYPES] as never;
+  const [gmail, senders, awaitingReview, overBudget] = await Promise.all([
+    prisma.mailboxAccount.count({ where: { userId, provider: 'GMAIL_OAUTH', isActive: true } }),
+    prisma.monitoredSender.count({ where: { userId, isActive: true } }),
+    prisma.canonicalEvent.count({
+      where: { userId, eventType: { in: bankTypes }, status: { in: ['PARSED', 'PENDING_REVIEW'] }, eventDate: { gte: from } },
+    }),
+    prisma.canonicalEvent.count({ where: { userId, status: 'ARCHIVED', eventDate: { gte: from } } }),
+  ]);
+  return { gmailConnected: gmail > 0, monitoredSenders: senders, awaitingReview, overBudget };
+}
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
@@ -185,7 +202,7 @@ export async function getSummary(userId: string, now: Date = new Date()): Promis
   const current = istMonth(now);
   const from = monthStart(months[0]!);
 
-  const [credits, debits, decisions, overrides, plan, incomes, tokens, fixed, sips] = await Promise.all([
+  const [credits, debits, decisions, overrides, plan, incomes, tokens, fixed, sips, dataStatus] = await Promise.all([
     loadEvents(userId, from, CREDIT_TYPES),
     loadEvents(userId, from, DEBIT_TYPES),
     prisma.safeToInvestCreditDecision.findMany({ where: { userId }, select: { canonicalEventId: true, include: true } }),
@@ -195,6 +212,7 @@ export async function getSummary(userId: string, now: Date = new Date()): Promis
     userNameTokens(userId),
     fixedCosts(userId),
     currentSips(userId, lastTwelveMonths(now)),
+    bankDataStatus(userId, from),
   ]);
 
   const decided = new Map(decisions.map((d) => [d.canonicalEventId, d.include]));
@@ -293,6 +311,7 @@ export async function getSummary(userId: string, now: Date = new Date()): Promis
     buffer,
     currentSip: sips,
     thisMonth: { month: current, inflowSoFar: money(soFar), surplus: money(up.surplus), topUp: money(up.topUp) },
+    dataStatus,
     plan: {
       topUpShare: share.toFixed(4),
       bufferOverride: plan?.bufferOverride ? money(dec(plan.bufferOverride)) : null,

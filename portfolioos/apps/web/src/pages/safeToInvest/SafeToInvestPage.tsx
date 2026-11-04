@@ -71,10 +71,17 @@ export function SafeToInvestPage() {
             </div>
             <StabilityMeter data={data} />
           </div>
-          <div className="mt-4">
-            <InflowChart data={data} onPickMonth={setPickedMonth} />
-          </div>
-          <Legend data={data} />
+          <DataNotice data={data} />
+          {data.monthsUsed === 0 ? (
+            <NoBankData data={data} onPickMonth={setPickedMonth} />
+          ) : (
+            <>
+              <div className="mt-4">
+                <InflowChart data={data} onPickMonth={setPickedMonth} />
+              </div>
+              <Legend data={data} />
+            </>
+          )}
         </section>
 
         <div className="space-y-6">
@@ -97,9 +104,11 @@ function Hero({ data, saving, onSave }: { data: SafeToInvestSummary; saving: boo
   const basisText =
     data.basis === 'BANK'
       ? `Based on ${data.monthsUsed} months of your bank credits.`
-      : data.basis === 'DECLARED'
-        ? `Based on the income you declared, trimmed for safety, because there are only ${data.monthsUsed} months of bank data. Connect Gmail or type past months for a real number.`
-        : '';
+      : data.basis !== 'DECLARED'
+        ? ''
+        : data.monthsUsed === 0
+          ? 'Based on the income you declared, trimmed for safety. There is no bank data yet, so this is an estimate; see below for how to add it.'
+          : `Based on the income you declared, trimmed for safety: ${data.monthsUsed} ${data.monthsUsed === 1 ? 'month' : 'months'} of bank data is not enough yet (6 needed).`;
 
   return (
     <section className="rounded-xl border bg-card p-5 sm:p-7 reveal" aria-label="Your safe-to-invest amount">
@@ -145,11 +154,105 @@ function Hero({ data, saving, onSave }: { data: SafeToInvestSummary; saving: boo
           <p className="font-display text-[clamp(22px,5vw,30px)] leading-[1.15]">We need your income to size a safe SIP.</p>
           <p className="mt-2 text-sm text-muted-foreground">
             Add your income on the <Link to="/income" className="underline">Income page</Link>, connect Gmail so bank alerts come in,
-            or click months in the chart below and type what you earned.
+            or type what you earned for past months below.
           </p>
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * No bank data at all: say exactly which step is missing instead of drawing
+ * twelve empty months. Months can still be typed in by hand.
+ */
+function NoBankData({ data, onPickMonth }: { data: SafeToInvestSummary; onPickMonth: (m: string) => void }) {
+  const s = data.dataStatus;
+  const steps = [
+    {
+      done: s.gmailConnected,
+      title: s.gmailConnected ? 'Gmail is connected' : 'Connect Gmail',
+      body: 'Your bank emails a short alert for every credit and debit. We read those.',
+      link: s.gmailConnected ? null : { to: '/ingestion', label: 'Connect Gmail' },
+    },
+    {
+      done: s.monitoredSenders > 0,
+      title: s.monitoredSenders > 0
+        ? `${s.monitoredSenders} ${s.monitoredSenders === 1 ? 'sender is' : 'senders are'} being watched`
+        : "Add your bank's alert address",
+      body: s.monitoredSenders > 0
+        ? 'Make sure your bank is one of them, e.g. alerts@hdfcbank.net. Up to 2 years of its alerts are fetched in the background.'
+        : 'Nothing is fetched until you pick senders. Scan your inbox and choose your bank, e.g. alerts@hdfcbank.net. Up to 2 years of its alerts are then fetched.',
+      link: { to: '/ingestion', label: s.monitoredSenders > 0 ? 'Check senders' : 'Add senders' },
+    },
+    {
+      done: s.monitoredSenders > 0 && s.awaitingReview === 0,
+      title: s.awaitingReview > 0 ? `Approve ${s.awaitingReview} bank alerts` : 'Approve the alerts',
+      body: 'Alerts from a new sender wait for your approval before they count. You can approve all from one sender at once.',
+      link: { to: '/ingestion/review', label: 'Open review' },
+    },
+  ];
+  // Months a user may type: the twelve on the chart, newest first.
+  const months = [...data.months].reverse();
+
+  return (
+    <div className="mt-5 space-y-5">
+      <ol className="space-y-3">
+        {steps.map((st, i) => (
+          <li key={st.title} className="flex gap-3">
+            <span
+              className={cn(
+                'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+                st.done ? 'bg-positive/20 text-positive' : 'bg-muted text-foreground',
+              )}
+            >
+              {st.done ? <Check className="h-3.5 w-3.5" /> : i + 1}
+            </span>
+            <div className="min-w-0 text-sm">
+              <div className="font-medium">{st.title}</div>
+              <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{st.body}</div>
+              {st.link && !st.done && (
+                <Link to={st.link.to} className="mt-1 inline-block text-xs font-medium text-accent-ink underline">
+                  {st.link.label}
+                </Link>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+      <div className="border-t pt-4">
+        <p className="text-xs text-muted-foreground">Or type what you earned, month by month:</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {months.map((m) => (
+            <Button key={m.month} type="button" variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => onPickMonth(m.month)}>
+              {monthLabel(m.month, true)}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Bank data exists but some of it is not counted yet. */
+function DataNotice({ data }: { data: SafeToInvestSummary }) {
+  const { awaitingReview, overBudget } = data.dataStatus;
+  if (data.monthsUsed === 0 || (awaitingReview === 0 && overBudget === 0)) return null;
+  return (
+    <div className="mt-4 space-y-1 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs leading-relaxed">
+      {awaitingReview > 0 && (
+        <p>
+          {awaitingReview} bank {awaitingReview === 1 ? 'alert is' : 'alerts are'} waiting for your approval and not counted yet.{' '}
+          <Link to="/ingestion/review" className="underline font-medium">Review them</Link>
+        </p>
+      )}
+      {overBudget > 0 && (
+        <p>
+          {overBudget} {overBudget === 1 ? 'email was' : 'emails were'} set aside unread because this month&apos;s reading budget ran out.
+          They are read when it resets.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -280,6 +383,19 @@ function Working({ data, saving, onBuffer }: { data: SafeToInvestSummary; saving
               )}
             </dd>
           </div>
+          {data.buffer.source === 'ESTIMATE' && !editing && (
+            <div className="mt-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs leading-relaxed">
+              This is a guess: 30% of your lean month, because there is no spending data yet. Your real monthly spend on
+              groceries, shopping and eating out makes the amount far more accurate.{' '}
+              <button
+                type="button"
+                className="font-medium underline"
+                onClick={() => { setDraft(''); setEditing(true); }}
+              >
+                Type your monthly spend
+              </button>
+            </div>
+          )}
           {editing && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Input

@@ -94,6 +94,7 @@ model User {
   // Phase 4.5 hardening — ingestion + real-asset modules (§4.1–§4.9)
   canonicalEvents           CanonicalEvent[]
   monitoredSenders          MonitoredSender[]
+  gmailProcessedMessages    GmailProcessedMessage[]
   learnedTemplates          LearnedTemplate[]
   ingestionFailures         IngestionFailure[]
   vehicles                  Vehicle[]
@@ -1767,6 +1768,19 @@ enum CanonicalEventStatus {
 // is the regex/xpath recipe promoted from LLM-parsed samples once the
 // (sender, bodyStructureHash) has enough agreeing extractions to be cheap to
 // re-run without the LLM (§6.4).
+
+/// Gmail messages the monitored-sender poller has already handled, whatever
+/// the outcome (events, marketing with no events, duplicate, failure). Lets a
+/// long backfill resume across poll ticks without re-parsing anything.
+/// Messages blocked by the LLM gate are NOT recorded, so they retry.
+model GmailProcessedMessage {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageId String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@id([userId, messageId])
+}
 
 model MonitoredSender {
   id                  String           @id @default(cuid())
