@@ -247,7 +247,8 @@ export async function runAdvisorEngine(
         orderBy: { createdAt: 'desc' },
       });
 
-      if (!existing) {
+      // Withdrawn advice stopped being true; if it is true again, it is new advice.
+      if (!existing || existing.status === 'WITHDRAWN') {
         await prisma.advisorRecommendation.create({
           data: draftToCreateData(userId, run.id, facts, draft),
         });
@@ -257,6 +258,14 @@ export async function runAdvisorEngine(
 
       const changed = isMateriallyChanged(existing, draft);
       const isLive = (LIVE_STATUSES as readonly string[]).includes(existing.status);
+
+      // Accepted advice is waiting to be seen in the user's data and measured
+      // against what it promised. A re-run never replaces it, whatever the
+      // numbers do now (Act on it §6.1).
+      if (existing.status === 'ACCEPTED') {
+        suppressed += 1;
+        continue;
+      }
 
       if (!isLive) {
         // ACCEPTED / DISMISSED / DONE. The user has already ruled on this
@@ -314,6 +323,23 @@ export async function runAdvisorEngine(
       },
     });
     throw err;
+  }
+
+  // Advice that is no longer true (cash spent, FD already renewed) is
+  // withdrawn rather than left open or counted as skipped. Only for rules that
+  // ran cleanly this time: a rule that threw has said nothing either way.
+  const emitted = new Set(drafts.map((d) => `${d.ruleId}|${d.dedupeKey}`));
+  const cleanRules = ADVISOR_RULES.map((r) => r.id).filter((id) => !(id in ruleErrors));
+  const stillLive = await prisma.advisorRecommendation.findMany({
+    where: { userId, status: { in: [...LIVE_STATUSES] }, supersededById: null, ruleId: { in: cleanRules } },
+    select: { id: true, ruleId: true, dedupeKey: true },
+  });
+  const gone = stillLive.filter((r) => !emitted.has(`${r.ruleId}|${r.dedupeKey}`)).map((r) => r.id);
+  if (gone.length > 0) {
+    await prisma.advisorRecommendation.updateMany({
+      where: { id: { in: gone } },
+      data: { status: 'WITHDRAWN', statusNote: 'No longer applies', statusChangedAt: new Date() },
+    });
   }
 
   const recommendationCount = created + refreshed;
