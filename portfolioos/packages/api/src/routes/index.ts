@@ -55,6 +55,7 @@ import { corporateActionsRouter } from './corporateActions.routes.js';
 import { goalsRouter } from './goals.routes.js';
 import { personalInflationRouter, adminCpiRouter } from './personalInflation.routes.js';
 import { safeToInvestRouter } from './safeToInvest.routes.js';
+import { spendingRouter } from './spending.routes.js';
 import { advisorRouter } from './advisor.routes.js';
 import { incomeRouter } from './income.routes.js';
 import { intelligenceRouter } from './intelligence.routes.js';
@@ -136,6 +137,7 @@ export function registerRoutes(app: Express): void {
   app.use('/api/goals', goalsRouter);
   app.use('/api/personal-inflation', personalInflationRouter);
   app.use('/api/safe-to-invest', safeToInvestRouter);
+  app.use('/api/spending', spendingRouter);
   app.use('/api/admin/cpi', adminCpiRouter);
   app.use('/api/advisor', advisorRouter);
   app.use('/api/income', incomeRouter);

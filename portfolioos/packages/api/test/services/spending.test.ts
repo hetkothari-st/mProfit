@@ -10,8 +10,18 @@ import { createHash } from 'node:crypto';
 import { Decimal } from 'decimal.js';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
 import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
-import { listSpending, syncSpending, SPEND_SOURCES } from '../../src/services/spending/spendingSync.js';
+import { listSpending, syncSpending as syncWithAi, SPEND_SOURCES } from '../../src/services/spending/spendingSync.js';
+import { listUncategorisedPayees, setPayeeCategory } from '../../src/services/spending/spendCategorisation.js';
+import type { PayeeTagger } from '../../src/services/spending/aiPayeeTagger.js';
 import type { NormalisedTxn, SpendSource } from '../../src/services/spending/spendTypes.js';
+
+// No real AI calls in tests: a fake tagger that knows one payee and records what it was asked.
+const asked: string[][] = [];
+const fakeTagger: PayeeTagger = async (_userId, payees) => {
+  asked.push(payees.map((p) => p.key));
+  return new Map(payees.filter((p) => p.key === 'sharma general store').map((p) => [p.key, 'groceries' as const]));
+};
+const syncSpending = (userId: string, sources = SPEND_SOURCES) => syncWithAi(userId, sources, { tagger: fakeTagger });
 
 let seq = 0;
 async function event(userId: string, eventType: string, date: string, amount: string, counterparty: string, opts: { status?: string; notes?: string; last4?: string } = {}) {
@@ -76,11 +86,16 @@ describe('spending store (DB)', () => {
     expect(by.get(ids['card']!)).toMatchObject({ mode: 'CARD', accountKey: '9876' });
     // A payment to the user's own name is a transfer, not spending.
     expect(by.get(ids['self']!)!.excludeReason).toBe('self_transfer');
+    // Categories: merchant list, rule (credit = income), self transfer, marketplace.
+    expect(by.get(ids['grocery']!)).toMatchObject({ category: 'groceries', categorySrc: 'dictionary', eventType: 'UPI_DEBIT' });
+    expect(by.get(ids['salary']!)).toMatchObject({ category: 'income', categorySrc: 'rule' });
+    expect(by.get(ids['self']!)).toMatchObject({ category: 'self_transfer', categorySrc: 'rule' });
+    expect(by.get(ids['card']!)).toMatchObject({ category: 'other_consumption', categorySrc: 'dictionary' });
   });
 
   it('a re-run with nothing new writes nothing', async () => {
     const r = await runAsUser(a.userId, () => syncSpending(a.userId));
-    expect(r).toEqual({ created: 0, updated: 0, removed: 0, duplicates: 0 });
+    expect(r).toEqual({ created: 0, updated: 0, removed: 0, duplicates: 0, categorised: 0 });
   });
 
   it('follows approvals, edits and rejections in review', async () => {
@@ -126,5 +141,49 @@ describe('spending store (DB)', () => {
     expect(seenByB.map((x) => x.counterparty)).toEqual(['ZOMATO']);
     const seenByA = await runAsUser(a.userId, () => prisma.spendTxn.findMany({}));
     expect(seenByA.some((x) => x.userId === b.userId)).toBe(false);
+  });
+
+  it('asks the AI about unknown payees once, biggest spend first, and the user can re-tag', async () => {
+    await runAsUser(a.userId, async () => {
+      await event(a.userId, 'UPI_DEBIT', '2026-10-10', '900', 'SHARMA GENERAL STORE');
+      await event(a.userId, 'UPI_DEBIT', '2026-10-11', '4000', 'RAMESH KUMAR');
+      await event(a.userId, 'UPI_DEBIT', '2026-10-12', '1500', 'RAMESH KUMAR');
+    });
+    asked.length = 0;
+    await runAsUser(a.userId, () => syncSpending(a.userId));
+    expect(asked).toEqual([['ramesh kumar', 'sharma general store']]);
+
+    let rows = await runAsUser(a.userId, () => prisma.spendTxn.findMany({ where: { userId: a.userId } }));
+    expect(rows.find((x) => x.counterparty === 'SHARMA GENERAL STORE')).toMatchObject({ category: 'groceries', categorySrc: 'model' });
+    expect(rows.filter((x) => x.counterparty === 'RAMESH KUMAR').every((x) => x.category === 'uncategorised')).toBe(true);
+
+    // The AI is not asked again about a payee it already answered.
+    asked.length = 0;
+    await runAsUser(a.userId, () => syncSpending(a.userId));
+    expect(asked).toEqual([['ramesh kumar']]);
+
+    // The top unsorted payees, then the user's tag sorts every payment to them.
+    const top = await runAsUser(a.userId, () => listUncategorisedPayees(a.userId, 5, new Date('2026-11-05')));
+    expect(top[0]).toEqual({ payeeKey: 'ramesh kumar', label: 'RAMESH KUMAR', count: 2, total: '5500.00' });
+    expect(await runAsUser(a.userId, () => setPayeeCategory(a.userId, 'ramesh kumar', 'domestic_help'))).toBe(2);
+    expect(await runAsUser(a.userId, () => setPayeeCategory(a.userId, 'sharma general store', 'household'))).toBe(1);
+    rows = await runAsUser(a.userId, () => prisma.spendTxn.findMany({ where: { userId: a.userId } }));
+    expect(rows.find((x) => x.counterparty === 'SHARMA GENERAL STORE')).toMatchObject({ category: 'household', categorySrc: 'user' });
+
+    // A later sync keeps the user's tags.
+    await runAsUser(a.userId, () => syncSpending(a.userId));
+    rows = await runAsUser(a.userId, () => prisma.spendTxn.findMany({ where: { userId: a.userId, counterparty: 'RAMESH KUMAR' } }));
+    expect(rows.every((x) => x.category === 'domestic_help' && x.categorySrc === 'user')).toBe(true);
+
+    // Clearing the tag sends the payee back to the unsorted list.
+    await runAsUser(a.userId, () => setPayeeCategory(a.userId, 'ramesh kumar', null));
+    const again = await runAsUser(a.userId, () => listUncategorisedPayees(a.userId, 5, new Date('2026-11-05')));
+    expect(again.map((p) => p.payeeKey)).toContain('ramesh kumar');
+    await expect(runAsUser(a.userId, () => setPayeeCategory(a.userId, 'x', 'not_a_category'))).rejects.toThrow(/Unknown category/);
+  });
+
+  it("one user's payee tags never touch another's", async () => {
+    const tagsSeenByB = await runAsUser(b.userId, () => prisma.spendPayeeTag.findMany({}));
+    expect(tagsSeenByB).toEqual([]);
   });
 });

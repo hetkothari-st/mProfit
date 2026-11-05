@@ -255,6 +255,7 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'SafeToInvestCreditDecision',
   // Spending store (20261105120000): normalised bank/card movements.
   'SpendTxn',
+  'SpendPayeeTag', // 20261105140000: per-payee category tags
 ]);
 
 /**

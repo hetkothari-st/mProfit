@@ -171,6 +171,7 @@ model User {
   safeToInvestMonths    SafeToInvestMonth[]
   safeToInvestDecisions SafeToInvestCreditDecision[]
   spendTxns             SpendTxn[]
+  spendPayeeTags        SpendPayeeTag[]
 
   // Recurring income entries (salary, business, trading, freelance, etc.)
   // — the preferred income source for Health Score and any future module
@@ -6015,9 +6016,32 @@ model SpendTxn {
   duplicateOfId String?
   /// Why the row is not spending or income, e.g. self_transfer. Null = counts.
   excludeReason String?
+  /// The CanonicalEvent type the row came from (EMI_DEBIT, CARD_PURCHASE...), when it did.
+  eventType     String?
+  /// Spending category (see @everypaisa/shared spendCategories); null until categorised.
+  category      String?
+  /// user | rule | dictionary | model | none
+  categorySrc   String?
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
   @@unique([userId, source, sourceRef])
   @@index([userId, txnDate])
+  @@index([userId, category])
+}
+
+/// A category tag for one payee, by the user (always wins) or the AI fallback.
+/// Keyed by the normalised payee (services/spending/categorise.ts payeeKey).
+model SpendPayeeTag {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payeeKey  String
+  category  String
+  /// user | model
+  source    String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, payeeKey])
 }
