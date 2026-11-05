@@ -44,7 +44,7 @@ const TIERS: TierDef[] = [
     features: [
       'Everything in Free',
       'Full 30+ tax/CA report catalog',
-      'AA/Finvu auto-import — bank, MF, stocks',
+      // Finvu hidden (UI audit C2): 'AA/Finvu auto-import — bank, MF, stocks',
       'Multiple portfolios',
       'AI insights (rule-based + LLM)',
       'AI Assistant — ask it your XIRR, tax exposure, or "am I overweight in IT?" in plain English',

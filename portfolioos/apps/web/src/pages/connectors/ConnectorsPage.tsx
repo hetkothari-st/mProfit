@@ -1,4 +1,5 @@
-import { useAuthStore } from '@/stores/auth.store';
+// Finvu (Account Aggregator) hidden until the integration leaves demo mode; see UI audit C2.
+// import { useAuthStore } from '@/stores/auth.store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -12,7 +13,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { FinvuConsentCard } from './FinvuConsentCard';
+// import { FinvuConsentCard } from './FinvuConsentCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -91,7 +92,7 @@ type SetupForm = Partial<Record<BrokerMeta['fields'][number]['key'], string>>;
 
 export function ConnectorsPage() {
   // The Finvu card is an admin sandbox until AA consent is tied to the caller.
-  const isAdmin = useAuthStore((s) => s.user?.role === 'ADMIN');
+  // const isAdmin = useAuthStore((s) => s.user?.role === 'ADMIN');
   const qc = useQueryClient();
   const [setupOpen, setSetupOpen] = useState<Record<BrokerId, boolean>>({
     zerodha: false,
@@ -429,11 +430,13 @@ export function ConnectorsPage() {
         </div>
       )}
 
+      {/* Finvu hidden (UI audit C2):
       {isAdmin && (
         <div className="mt-8">
           <FinvuConsentCard />
         </div>
       )}
+      */}
     </div>
   );
 }

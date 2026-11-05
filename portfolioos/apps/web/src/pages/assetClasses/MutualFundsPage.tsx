@@ -1,4 +1,5 @@
-import { useAuthStore } from '@/stores/auth.store';
+// Finvu (Account Aggregator) hidden until the integration leaves demo mode; see UI audit C2.
+// import { useAuthStore } from '@/stores/auth.store';
 import { useState } from 'react';
 import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LineChart, Plus, Loader2, Pencil, CheckCircle2, XCircle, AlertTriangle, FileText, Trash2, Lock, Sparkles } from 'lucide-react';
@@ -21,7 +22,7 @@ import { importsApi } from '@/api/imports/imports.api';
 import { TransactionFormDialog } from '@/pages/transactions/TransactionFormDialog';
 import { ImportDropzone } from '@/pages/imports/ImportDropzone';
 import { MfOverlapCard } from '@/pages/mutualFunds/MfOverlapCard';
-import { FinvuSandboxCard } from '@/pages/mutualFunds/FinvuSandboxCard';
+// import { FinvuSandboxCard } from '@/pages/mutualFunds/FinvuSandboxCard';
 import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
 import { useUploadWithPasswordRetry } from '@/hooks/useUploadWithPasswordRetry';
 import { formatINR, formatPercent, Decimal, toDecimal } from '@everypaisa/shared';
@@ -35,7 +36,7 @@ const TXN_TYPE_LABELS: Record<string, string> = {
 
 export function MutualFundsPage() {
   // The Finvu card is an admin sandbox until AA consent is tied to the caller.
-  const isAdmin = useAuthStore((s) => s.user?.role === 'ADMIN');
+  // const isAdmin = useAuthStore((s) => s.user?.role === 'ADMIN');
   const [formOpen, setFormOpen] = useState(false);
   const [editTxn, setEditTxn] = useState<TransactionDTO | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -501,11 +502,13 @@ export function MutualFundsPage() {
         </div>
       )}
 
+      {/* Finvu hidden (UI audit C2):
       {isAdmin && (
         <div className="mt-6">
           <FinvuSandboxCard />
         </div>
       )}
+      */}
 
       <div className="mt-6">
         <MfOverlapCard />
