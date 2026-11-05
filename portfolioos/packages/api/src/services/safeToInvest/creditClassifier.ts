@@ -7,7 +7,10 @@
  * overrule, credit by credit.
  */
 
-export type CreditExclusion = 'own_transfer' | 'refund' | 'loan' | 'investment' | 'foreign_currency';
+export type CreditExclusion =
+  | 'own_transfer' | 'refund' | 'loan' | 'investment' | 'foreign_currency'
+  // From the spending store only:
+  | 'duplicate' | 'not_income';
 
 export const CREDIT_EXCLUSION_LABEL: Record<CreditExclusion, string> = {
   own_transfer: 'Looks like a transfer from your own account',
@@ -15,6 +18,8 @@ export const CREDIT_EXCLUSION_LABEL: Record<CreditExclusion, string> = {
   loan: 'Looks like a loan payout',
   investment: 'Looks like investment money (redemption, dividend, interest)',
   foreign_currency: 'Not in rupees',
+  duplicate: 'The same payment is already counted from another source',
+  not_income: 'You sorted this payee as something other than income',
 };
 
 export interface MoneyEventText {
