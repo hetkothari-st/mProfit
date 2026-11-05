@@ -29,6 +29,7 @@ const CATEGORY_LABEL: Record<GoalCategory, string> = {
   EMERGENCY_FUND: 'Emergency fund',
   FIRE_CORPUS: 'FIRE corpus',
   VEHICLE_PURCHASE: 'Vehicle',
+  HEALTHCARE: 'Healthcare',
   TRAVEL: 'Travel',
   WEALTH_BUILDING: 'Wealth building',
   CUSTOM: 'Custom',

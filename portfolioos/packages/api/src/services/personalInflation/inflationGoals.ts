@@ -7,17 +7,18 @@ import {
   type PersonalInflationSummary,
 } from '@everypaisa/shared';
 import { prisma } from '../../lib/prisma.js';
-import { requiredMonthlySip } from '../goals/goalMath.js';
+import { DEFAULT_GOAL_RETURN, monthlySipFor } from './personalInflationMath.js';
 
 /**
  * What the user's own inflation does to their goals: each active goal's
  * target (stored in today's rupees) grown at the suggested rate versus at
  * official headline CPI, the difference, and the extra monthly SIP that
- * covers it. "Re-plan" writes the suggested rate onto the chosen goals.
+ * covers it (paid at the start of each month, at the goal's expected return or
+ * 12%). "Re-plan" writes the suggested rate onto the chosen goals.
  */
 
 const YEAR_MS = 365.25 * 24 * 60 * 60 * 1000;
-const DIVISION_WORD: Record<string, string> = { '10': 'education', '07': 'transport' };
+const DIVISION_WORD: Record<string, string> = { '10': 'education', '07': 'transport', '06': 'health' };
 
 interface Suggestion {
   rate: Decimal;
@@ -69,8 +70,9 @@ export async function listGoalImpacts(
     const atSuggested = suggestion ? grow(suggestion.rate) : null;
     const atOfficial = official ? grow(official) : null;
     const gap = atSuggested && atOfficial ? atSuggested.minus(atOfficial) : null;
-    const returnPct = g.expectedReturn ? new Decimal(g.expectedReturn.toString()).times(100).toNumber() : null;
-    const sip = gap && gap.greaterThan(0) ? requiredMonthlySip(gap, years, returnPct) : null;
+    const ownReturn = g.expectedReturn ? new Decimal(g.expectedReturn.toString()) : null;
+    const assumed = ownReturn ?? DEFAULT_GOAL_RETURN;
+    const sip = gap && gap.greaterThan(0) ? monthlySipFor(gap, years, assumed) : null;
 
     return {
       goalId: g.id,
@@ -87,6 +89,8 @@ export async function listGoalImpacts(
       neededAtOfficial: atOfficial ? serializeMoney(atOfficial) : null,
       gap: gap ? serializeMoney(gap) : null,
       extraMonthlySip: sip ? serializeMoney(sip) : null,
+      assumedReturn: assumed.toFixed(4),
+      returnIsDefault: ownReturn === null,
       rateInUse: !!(current && suggestion && current.equals(suggestion.rate)),
     };
   });

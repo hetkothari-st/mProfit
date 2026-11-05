@@ -108,3 +108,33 @@ export function projectAmount(amount: Decimal, rate: Decimal, years: number): De
 export function annualise(amount: Decimal, frequency: 'MONTHLY' | 'YEARLY'): Decimal {
   return frequency === 'MONTHLY' ? amount.times(12) : amount;
 }
+
+/**
+ * Loan EMIs and life-cover premiums are not prices that rise: they repay the
+ * same loan or buy the same cover every month. They stay on the page but are
+ * left out of the basket, so they neither weigh down the personal rate nor
+ * skew the totals. Health and motor premiums do rise, so they stay in.
+ */
+export function isOutsideBasket(item: { sourceRef: string | null; rateMode: RateMode; customRate: Decimal | null }): boolean {
+  if (!item.sourceRef) return false;
+  if (item.sourceRef.startsWith('loan:')) return true;
+  return item.sourceRef.startsWith('insurance:') && item.rateMode === 'CUSTOM' && !!item.customRate?.isZero();
+}
+
+/** Return assumed for a goal's extra SIP when the goal has none of its own. */
+export const DEFAULT_GOAL_RETURN = new Decimal('0.12');
+
+/**
+ * Monthly SIP, paid at the start of each month, that grows to `amount` in
+ * `years` at `annualReturn` (fraction): the annual rate converted to its
+ * equivalent monthly rate, (1 + r)^(1/12) − 1, then an annuity-due factor.
+ */
+export function monthlySipFor(amount: Decimal, years: number, annualReturn: Decimal): Decimal | null {
+  if (amount.lessThanOrEqualTo(0) || !Number.isFinite(years) || years <= 0) return null;
+  const months = Math.round(years * 12);
+  if (months <= 0) return null;
+  if (annualReturn.isZero()) return amount.dividedBy(months);
+  const rm = ONE.plus(annualReturn).pow(ONE.dividedBy(12)).minus(1);
+  const factor = ONE.plus(rm).pow(months).minus(1).dividedBy(rm).times(ONE.plus(rm));
+  return amount.dividedBy(factor);
+}

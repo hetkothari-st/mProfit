@@ -192,6 +192,7 @@ export function GoalDialog({ open, existing, portfolios, onClose, onSaved }: Pro
                 <option value="EMERGENCY_FUND">Emergency fund</option>
                 <option value="FIRE_CORPUS">FIRE corpus</option>
                 <option value="VEHICLE_PURCHASE">Vehicle</option>
+                <option value="HEALTHCARE">Healthcare</option>
                 <option value="TRAVEL">Travel</option>
                 <option value="WEALTH_BUILDING">Wealth building</option>
                 <option value="CUSTOM">Custom</option>

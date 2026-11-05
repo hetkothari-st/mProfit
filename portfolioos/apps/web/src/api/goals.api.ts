@@ -13,6 +13,7 @@ export type GoalCategory =
   | 'EMERGENCY_FUND'
   | 'FIRE_CORPUS'
   | 'VEHICLE_PURCHASE'
+  | 'HEALTHCARE'
   | 'TRAVEL'
   | 'WEALTH_BUILDING'
   | 'CUSTOM';

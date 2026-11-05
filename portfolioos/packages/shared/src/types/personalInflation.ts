@@ -42,6 +42,8 @@ export interface InflationItemView {
   sourceRef: string | null;
   /** Counted as a fixed monthly cost by Safe-to-Invest (rent, school fees). */
   isFixed: boolean;
+  /** False for loan EMIs and life-cover premiums: listed, but left out of the rate and totals. */
+  inBasket: boolean;
   resolvedRate: string | null;
   rateSource: InflationRateSource;
   rateNote: InflationRateNote;
@@ -58,14 +60,14 @@ export interface PersonalInflationSummary {
   asOf: string | null;
   official: OfficialDivisionRate[];
   items: InflationItemView[];
-  /** Spend-weighted rate across the basket (fraction), or null if empty/unrated. */
+  /** Spend-weighted rate across the basket (fraction), or null if empty/unrated. Basket = items with inBasket. */
   personalRate: string | null;
   horizons: number[];
   totals: { annualAmount: string; projections: string[] };
-  /** Priced spend by category; fixed payments are left out (see fixedPayments). Shares are of all spend. */
+  /** Basket spend by category; shares are of basket spend. */
   byDivision: { divisionCode: string; annualAmount: string; share: string; rate: string | null }[];
-  /** Payments pinned at 0% (EMIs, level life premiums), or null when there are none. */
-  fixedPayments: { annualAmount: string; share: string } | null;
+  /** EMIs and life-cover premiums left out of the basket, or null when there are none. */
+  fixedPayments: { annualAmount: string; count: number } | null;
 }
 
 export interface InflationItemInput {
@@ -116,8 +118,12 @@ export interface InflationGoalImpact {
   neededAtOfficial: string | null;
   /** neededAtSuggested − neededAtOfficial; negative when the user's rate is lower. */
   gap: string | null;
-  /** Extra monthly SIP to cover a positive gap at the goal's expected return. */
+  /** Extra monthly SIP (paid at the start of each month) to cover a positive gap at assumedReturn. */
   extraMonthlySip: string | null;
+  /** Yearly return the SIP assumes (fraction): the goal's own, else 12%. */
+  assumedReturn: string;
+  /** True when assumedReturn is the 12% default because the goal has none. */
+  returnIsDefault: boolean;
   rateInUse: boolean;
 }
 
