@@ -19,6 +19,7 @@ import { Decimal } from 'decimal.js';
 import { formatINR } from '@everypaisa/shared';
 import { CATEGORY_BASE_PRIORITY, RISK_PROFILE_REVIEW_MONTHS } from '../constants.js';
 import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js';
+import { notMeasured, promise } from '../actOnItDraft.js';
 
 const ZERO = new Decimal(0);
 const BASE_PRIORITY = CATEGORY_BASE_PRIORITY.RISK_PROFILE_REVIEW;
@@ -106,6 +107,11 @@ export const riskProfileReviewRule: AdvisorRule = {
         // Advisory only — nothing is bought, so nothing is attributed.
         provenance: { kind: 'NONE' },
         dedupeKey: `RISK_PROFILE_REVIEW:${profile.assessmentId ?? 'NONE'}`,
+        headline: neverAssessed ? 'Tell us how much risk suits you' : 'Your risk profile is due for a review',
+        promise: promise({ riskBand: 'LOW' }),
+        measurement: notMeasured(),
+        expiresAt: null,
+        urgentUntil: null,
       },
     ];
   },

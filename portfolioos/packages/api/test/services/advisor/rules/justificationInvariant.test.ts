@@ -19,6 +19,7 @@ import { describe, it, expect } from 'vitest';
 import { ADVISOR_RULES } from '../../../../src/services/advisor/rules/index.js';
 import {
   ADVISOR_RECOMMENDATION_CATEGORIES,
+  MEASURE_METHODS,
   type AdvisorFacts,
   type RecommendationDraft,
   type TradeAction,
@@ -298,6 +299,24 @@ describe('justification invariant across every registered rule', () => {
             for (const draft of drafts) {
               expect(draft.rationale.trim().length).toBeGreaterThan(0);
               expect(draft.rationale).toMatch(/\d/);
+            }
+          });
+
+          it('(e) gives every draft a headline, a promise and a measurement (Act on it)', () => {
+            for (const draft of drafts) {
+              expect(draft.headline.trim().length, `${rule.id}: headline`).toBeGreaterThan(0);
+              expect(['LOW', 'MEDIUM', 'HIGH']).toContain(draft.promise.riskBand);
+              expect(['HIGH', 'MEDIUM']).toContain(draft.promise.confidence);
+              expect(MEASURE_METHODS).toContain(draft.measurement.method);
+              expect(draft.measurement.horizonDays).toBeGreaterThanOrEqual(0);
+              // A promised gain is a figure the user is shown: it must be in the reasons too.
+              if (draft.promise.gainInr !== null) {
+                expect(draft.promise.gainInr).toMatch(/^\d+\.\d{2}$/);
+                expect(
+                  normalise(draft.rationale).includes(draft.promise.gainInr),
+                  `${rule.id} / ${scenario.name}: promised gain ${draft.promise.gainInr} missing from "${draft.rationale}"`,
+                ).toBe(true);
+              }
             }
           });
 

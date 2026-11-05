@@ -159,6 +159,12 @@ function draftToCreateData(
         : Prisma.JsonNull,
     dedupeKey: draft.dedupeKey,
     status: 'OPEN',
+    headline: draft.headline,
+    promise: draft.promise as unknown as Prisma.InputJsonValue,
+    measurement: draft.measurement as unknown as Prisma.InputJsonValue,
+    expiresAt: draft.expiresAt,
+    urgentUntil: draft.urgentUntil,
+    outcomeStatus: draft.measurement.method === 'NOT_MEASURED' ? 'NOT_MEASURED' : 'PENDING',
   };
 }
 

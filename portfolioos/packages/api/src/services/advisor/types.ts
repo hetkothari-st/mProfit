@@ -248,6 +248,41 @@ export interface DraftProvenance {
   selectionEvidence?: Record<string, unknown>;
 }
 
+// ─── Act on it: promise and measurement ─────────────────────────
+
+/** How a recommendation's result is measured against doing nothing. */
+export const MEASURE_METHODS = [
+  'NAV_VS_CASH',
+  'DIRECT_VS_REGULAR',
+  'TAX_SAVED',
+  'SIP_UNITS',
+  'RATE_DIFF',
+  'PORTFOLIO_VS_HELD',
+  'FUND_VS_ALT',
+  'NOT_MEASURED',
+] as const;
+export type MeasureMethod = (typeof MEASURE_METHODS)[number];
+
+/** What the card promises. Frozen at creation and checked against the result. */
+export interface DraftPromise {
+  /** Expected gain over the horizon, rupees with 2 dp ("6300.00"); null when not a money figure. */
+  gainInr: string | null;
+  riskBand: 'LOW' | 'MEDIUM' | 'HIGH';
+  /** What acting costs (commission, fees, exit load), "0.00" when nothing; null when unknown. */
+  costInr: string | null;
+  /** How fast the money can come back, in words ("1 working day"); null when not applicable. */
+  liquidity: string | null;
+  confidence: 'HIGH' | 'MEDIUM';
+}
+
+export interface DraftMeasurement {
+  method: MeasureMethod;
+  /** Days after creation at which the result is final; 0 for NOT_MEASURED. */
+  horizonDays: number;
+  /** The do-nothing path's inputs, frozen (amounts, rates, scheme codes). */
+  baseline: Record<string, unknown>;
+}
+
 export interface RecommendationDraft {
   ruleId: string;
   ruleVersion: number;
@@ -264,6 +299,14 @@ export interface RecommendationDraft {
   /** Stable identity for this issue within this rule, so a re-run supersedes
    *  rather than duplicates. */
   dedupeKey: string;
+  /** One plain sentence for the card. Code-written, may carry figures from the rationale. */
+  headline: string;
+  promise: DraftPromise;
+  measurement: DraftMeasurement;
+  /** Undecided after this: EXPIRED (skipped). Null = no expiry. */
+  expiresAt: Date | null;
+  /** A hard deadline close enough to bypass the weekly prompt cap. Null = not urgent. */
+  urgentUntil: Date | null;
 }
 
 /**
