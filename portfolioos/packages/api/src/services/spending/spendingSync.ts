@@ -2,6 +2,8 @@ import { Decimal } from 'decimal.js';
 import { prisma } from '../../lib/prisma.js';
 import { isOwnTransfer, nameTokens } from '../safeToInvest/creditClassifier.js';
 import { findDuplicates } from './dedupe.js';
+import { categoriseSpending } from './spendCategorisation.js';
+import { aiPayeeTagger, type PayeeTagger } from './aiPayeeTagger.js';
 import { canonicalEventSource } from './sources/canonicalEventSource.js';
 import type { NormalisedTxn, SpendExcludeReason, SpendSource } from './spendTypes.js';
 
@@ -13,6 +15,9 @@ import type { NormalisedTxn, SpendExcludeReason, SpendSource } from './spendType
  * longer returns are removed. Cross-source duplicates are marked (not
  * deleted) so the choice is visible and reversible. Must run inside the
  * user's request context (runAsUser) or as system.
+ *
+ * Ends by categorising every row (rules, merchant list, the user's tags, then
+ * the AI fallback for payees still unknown).
  */
 
 /** Sources the store is built from. Statements, manual and Finvu join here later. */
@@ -23,6 +28,13 @@ export interface SyncResult {
   updated: number;
   removed: number;
   duplicates: number;
+  /** Rows whose category changed. */
+  categorised: number;
+}
+
+export interface SyncOptions {
+  /** AI fallback for unknown payees; null skips it (tests, or a user's manual re-tag). */
+  tagger?: PayeeTagger | null;
 }
 
 const amount2 = (d: Decimal | { toString(): string }) => new Decimal(d.toString()).toFixed(2);
@@ -34,10 +46,14 @@ function excludeReason(t: NormalisedTxn, tokens: readonly string[]): SpendExclud
     : null;
 }
 
-export async function syncSpending(userId: string, sources: readonly SpendSource[] = SPEND_SOURCES): Promise<SyncResult> {
+export async function syncSpending(
+  userId: string,
+  sources: readonly SpendSource[] = SPEND_SOURCES,
+  opts: SyncOptions = {},
+): Promise<SyncResult> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
   const tokens = nameTokens(user?.name);
-  const result: SyncResult = { created: 0, updated: 0, removed: 0, duplicates: 0 };
+  const result: SyncResult = { created: 0, updated: 0, removed: 0, duplicates: 0, categorised: 0 };
 
   for (const source of sources) {
     const incoming = await source.fetch(userId);
@@ -58,6 +74,7 @@ export async function syncSpending(userId: string, sources: readonly SpendSource
         narration: t.narration,
         counterparty: t.counterparty,
         currency: t.currency,
+        eventType: t.eventType,
         excludeReason: excludeReason(t, tokens),
       };
       const row = byRef.get(t.sourceRef);
@@ -75,6 +92,7 @@ export async function syncSpending(userId: string, sources: readonly SpendSource
         row.narration !== data.narration ||
         row.counterparty !== data.counterparty ||
         row.currency !== data.currency ||
+        row.eventType !== data.eventType ||
         row.excludeReason !== data.excludeReason;
       if (changed) {
         await prisma.spendTxn.update({ where: { id: row.id }, data });
@@ -109,6 +127,7 @@ export async function syncSpending(userId: string, sources: readonly SpendSource
     }
   }
   result.duplicates = dupes.size;
+  result.categorised = await categoriseSpending(userId, opts.tagger === undefined ? aiPayeeTagger : opts.tagger);
   return result;
 }
 
@@ -122,6 +141,7 @@ export interface SpendRow {
   counterparty: string | null;
   narration: string | null;
   excludeReason: string | null;
+  category: string | null;
 }
 
 /** The user's movements in [from, to): duplicates left out, exclusions kept and labelled. */
@@ -130,7 +150,7 @@ export async function listSpending(userId: string, from: Date, to: Date): Promis
     where: { userId, duplicateOfId: null, txnDate: { gte: from, lt: to } },
     select: {
       id: true, source: true, txnDate: true, amount: true, direction: true, mode: true,
-      counterparty: true, narration: true, excludeReason: true,
+      counterparty: true, narration: true, excludeReason: true, category: true,
     },
     orderBy: [{ txnDate: 'asc' }, { id: 'asc' }],
   });

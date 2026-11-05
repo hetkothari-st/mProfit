@@ -62,6 +62,7 @@ export const canonicalEventSource: SpendSource = {
         narration,
         counterparty: e.counterparty?.trim() || null,
         currency: e.currency,
+        eventType: e.eventType,
       };
     });
   },

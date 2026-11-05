@@ -27,6 +27,8 @@ export interface NormalisedTxn {
   narration: string | null;
   counterparty: string | null;
   currency: string;
+  /** The CanonicalEvent type the row came from (EMI_DEBIT, CARD_PURCHASE...), or null. */
+  eventType: string | null;
 }
 
 /**

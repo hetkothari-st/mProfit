@@ -18,7 +18,8 @@ import { CANONICAL_SPEND_TYPES } from '../services/spending/sources/canonicalEve
 
 const TZ = 'Asia/Kolkata';
 const BOOT_DELAY_MS = 60_000;
-export const SPENDING_BACKFILL_KEY = 'spending.backfill.v1';
+// v2: categories added (20261105140000); re-run once so existing rows get them.
+export const SPENDING_BACKFILL_KEY = 'spending.backfill.v2';
 
 let running = false;
 
