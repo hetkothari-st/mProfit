@@ -253,6 +253,8 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'SafeToInvestPlan',
   'SafeToInvestMonth',
   'SafeToInvestCreditDecision',
+  // Spending store (20261105120000): normalised bank/card movements.
+  'SpendTxn',
 ]);
 
 /**

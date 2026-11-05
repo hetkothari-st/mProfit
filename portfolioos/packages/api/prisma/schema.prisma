@@ -170,6 +170,7 @@ model User {
   safeToInvestPlan      SafeToInvestPlan?
   safeToInvestMonths    SafeToInvestMonth[]
   safeToInvestDecisions SafeToInvestCreditDecision[]
+  spendTxns             SpendTxn[]
 
   // Recurring income entries (salary, business, trading, freelance, etc.)
   // — the preferred income source for Health Score and any future module
@@ -5981,4 +5982,42 @@ model SafeToInvestCreditDecision {
   updatedAt        DateTime @updatedAt @db.Timestamptz(3)
 
   @@unique([userId, canonicalEventId])
+}
+
+// ─── SPENDING STORE ────────────────────────────────────────────────
+//
+// One normalised row per bank or card movement, whatever the source
+// (bank-alert events today; statements, manual and Finvu later). Derived:
+// rebuilt from its sources by services/spending/spendingSync.ts, never edited
+// by hand. Personal Inflation and Safe-to-Invest will read from here.
+
+model SpendTxn {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Source kind: canonical_event | statement | manual | finvu.
+  source        String
+  sourceAdapter String
+  /// Row id within the source (the CanonicalEvent id for canonical_event).
+  sourceRef     String
+  /// Last 4 digits of the bank account or card, when known.
+  accountKey    String?
+  txnDate       DateTime @db.Date
+  amount        Decimal  @db.Decimal(14, 2)
+  /// DEBIT | CREDIT
+  direction     String
+  /// UPI | CARD | NEFT | IMPS | ATM | ECS | CHEQUE | OTHER
+  mode          String
+  narration     String?
+  counterparty  String?
+  currency      String   @default("INR")
+  /// Set when the same payment came in from a better source (a statement beats an alert).
+  duplicateOfId String?
+  /// Why the row is not spending or income, e.g. self_transfer. Null = counts.
+  excludeReason String?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, source, sourceRef])
+  @@index([userId, txnDate])
 }
