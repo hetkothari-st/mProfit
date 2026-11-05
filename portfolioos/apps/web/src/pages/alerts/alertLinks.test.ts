@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { alertLink, isInformationalAlert } from './alertLinks';
 
 describe('alertLink', () => {
+  it('advice alerts open Act on it', () => {
+    expect(alertLink('ADVICE', { recommendationId: 'r1', kind: 'NEW' })).toBe('/act-on-it');
+  });
+
   it('a will review reminder opens Will Maker and is a deadline, not news', () => {
     expect(alertLink('WILL_REVIEW_DUE', { key: 'k', willId: 'w1' })).toBe('/will');
     expect(isInformationalAlert('WILL_REVIEW_DUE')).toBe(false);

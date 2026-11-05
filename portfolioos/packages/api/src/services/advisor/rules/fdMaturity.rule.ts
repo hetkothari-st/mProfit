@@ -4,7 +4,7 @@
  * time the choice is free. Urgent in the last 7 days.
  */
 import { CATEGORY_BASE_PRIORITY, FD_MATURITY_WINDOW_DAYS, LIQUID_FUND_YIELD_PCT } from '../constants.js';
-import { daysUntil, dec, inr, money2, promise, urgentIfWithin } from '../actOnItDraft.js';
+import { daysUntil, dec, inr, money2, promise, urgentIfWithin, inrWhole } from '../actOnItDraft.js';
 import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js';
 
 export const fdMaturityRule: AdvisorRule = {
@@ -35,7 +35,7 @@ export const fdMaturityRule: AdvisorRule = {
         inputsUsed: { asOf: facts.asOf.toISOString(), fdKey: fd.key, amountInr: dec(fd.amount), ratePct: fd.ratePct, maturityDate: date },
         provenance: { kind: 'NONE' },
         dedupeKey: `FD_MATURITY:${fd.key}:${date}`,
-        headline: `Your ${inr(fd.amount)} FD matures on ${date}. Decide before it renews.`,
+        headline: `Your ${inrWhole(fd.amount)} FD matures on ${date}. Decide before it renews.`,
         promise: promise({ riskBand: 'LOW' }),
         measurement: { method: 'RATE_DIFF', horizonDays: 365, baseline: { kind: 'FD', fdKey: fd.key, amountInr: money2(fd.amount), ratePct: fd.ratePct, maturityDate: date } },
         expiresAt: fd.maturityDate,

@@ -6,7 +6,7 @@
  */
 import { Decimal } from 'decimal.js';
 import { CATEGORY_BASE_PRIORITY, LTCG_BOOKING_MIN_INR } from '../constants.js';
-import { dec, fyEnd, inr, money2, promise, urgentIfWithin } from '../actOnItDraft.js';
+import { dec, fyEnd, inr, money2, promise, urgentIfWithin, inrWhole } from '../actOnItDraft.js';
 import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js';
 
 export const ltcgBookingRule: AdvisorRule = {
@@ -52,7 +52,7 @@ export const ltcgBookingRule: AdvisorRule = {
         },
         provenance: { kind: 'NONE' },
         dedupeKey: `LTCG_BOOKING:${x.ltcg.fy}:${c.portfolioId}:${c.isin ?? c.assetName}`,
-        headline: `Book ${inr(book)} of gains tax-free before 31 March`,
+        headline: `Book ${inrWhole(book)} of gains tax-free before 31 March`,
         promise: promise({ gainInr: money2(taxSaved), riskBand: 'LOW', costInr: null, liquidity: null }),
         measurement: {
           method: 'TAX_SAVED',

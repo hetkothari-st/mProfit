@@ -33,7 +33,7 @@ import type {
   RecommendationDraft,
   TradeAction,
 } from '../types.js';
-import { BUCKET_RISK, addDays, notMeasured, promise } from '../actOnItDraft.js';
+import { BUCKET_RISK, addDays, notMeasured, promise, inrWhole } from '../actOnItDraft.js';
 
 const ZERO = new Decimal(0);
 const BASE_PRIORITY = CATEGORY_BASE_PRIORITY.GOAL_SHORTFALL_SIP;
@@ -219,7 +219,7 @@ function buildDraft(
     },
     provenance: m.target && m.resolved ? m.resolved.provenance : { kind: 'NONE' },
     dedupeKey: `GOAL_SHORTFALL_SIP:${goal.goalId}`,
-    headline: `Add ${inr(m.gap)} a month to stay on track for ${goal.name}`,
+    headline: `Add ${inrWhole(m.gap)} a month to stay on track for ${goal.name}`,
     promise: promise({ riskBand: m.target ? BUCKET_RISK[m.target.bucket] : 'MEDIUM' }),
     measurement: notMeasured(),
     expiresAt: addDays(facts.asOf, 60),

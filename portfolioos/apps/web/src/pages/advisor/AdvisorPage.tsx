@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { Link } from 'react-router-dom';
 import { Info, Loader2, Pencil, RefreshCw, ShieldAlert } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +20,6 @@ import {
 } from '@/api/advisor.api';
 import { RiskQuestionnaire } from './RiskQuestionnaire';
 import { AllocationDriftCard } from './widgets/AllocationDriftCard';
-import { RecommendationFeed } from './widgets/RecommendationFeed';
 import { ApprovedProductsPanel } from './ApprovedProductsPanel';
 
 import { formatDateTimeIST } from '@everypaisa/shared';
@@ -71,6 +71,7 @@ function RefreshAction() {
           : `${res.recommendationCount} recommendations ready`,
       );
       qc.invalidateQueries({ queryKey: ['advisor', 'recommendations'] });
+      qc.invalidateQueries({ queryKey: ['act-on-it'] });
       qc.invalidateQueries({ queryKey: advisorKeys.allocation });
       qc.invalidateQueries({ queryKey: advisorKeys.runs });
     },
@@ -108,13 +109,6 @@ function AdvisorContent() {
     // Allocation is only meaningful once a profile exists — and `data` is the
     // `{ profile, history }` envelope, which is truthy even with no profile.
     enabled: !!profileQuery.data?.profile,
-  });
-
-  // The prose button only exists when the backend says the model is available.
-  const llmQuery = useQuery({
-    queryKey: advisorKeys.llmStatus,
-    queryFn: () => advisorApi.llmStatus(),
-    staleTime: 5 * 60_000,
   });
 
   if (profileQuery.isLoading) {
@@ -171,7 +165,19 @@ function AdvisorContent() {
         isError={allocationQuery.isError}
       />
 
-      <RecommendationFeed llmEnabled={llmQuery.data?.enabled === true} />
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-4 p-6">
+          <div>
+            <CardTitle className="font-display text-xl">Your recommendations live in Act on it</CardTitle>
+            <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">
+              Each one with what it should earn, its risk and cost, and a track record of what happened when you acted or didn&apos;t.
+            </p>
+          </div>
+          <Button asChild>
+            <Link to="/act-on-it">Open Act on it</Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       <ApprovedProductsPanel />
     </div>

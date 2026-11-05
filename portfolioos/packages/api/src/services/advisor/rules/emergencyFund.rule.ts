@@ -3,7 +3,7 @@
  * the value of a buffer is the bad month it covers, which has no price.
  */
 import { CATEGORY_BASE_PRIORITY, IDLE_BUFFER_MONTHS } from '../constants.js';
-import { addDays, dec, inr, notMeasured, promise } from '../actOnItDraft.js';
+import { addDays, dec, inr, notMeasured, promise, inrWhole } from '../actOnItDraft.js';
 import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js';
 
 export const emergencyFundRule: AdvisorRule = {
@@ -31,7 +31,7 @@ export const emergencyFundRule: AdvisorRule = {
       inputsUsed: { asOf: facts.asOf.toISOString(), monthlySpending: dec(spend), liquidAssets: dec(have), needInr: dec(need) },
       provenance: { kind: 'NONE' },
       dedupeKey: 'EMERGENCY_FUND:3m',
-      headline: `Build your safety net: ${inr(gap)} to go`,
+      headline: `Build your safety net: ${inrWhole(gap)} to go`,
       promise: promise({ riskBand: 'LOW' }),
       measurement: notMeasured(),
       expiresAt: addDays(facts.asOf, 30),

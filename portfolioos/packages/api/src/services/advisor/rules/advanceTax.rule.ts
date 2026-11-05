@@ -4,7 +4,7 @@
  * Tax page's own advance-tax report (gains this app can see).
  */
 import { ADVANCE_TAX_WINDOW_DAYS, CATEGORY_BASE_PRIORITY } from '../constants.js';
-import { daysUntil, dec, inr, money2, promise, urgentIfWithin } from '../actOnItDraft.js';
+import { daysUntil, dec, inr, money2, promise, urgentIfWithin, inrWhole } from '../actOnItDraft.js';
 import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js';
 
 export const advanceTaxRule: AdvisorRule = {
@@ -32,7 +32,7 @@ export const advanceTaxRule: AdvisorRule = {
       inputsUsed: { asOf: facts.asOf.toISOString(), label: at.label, dueDate: date, shortfall: dec(at.shortfall), interest: dec(at.interest) },
       provenance: { kind: 'NONE' },
       dedupeKey: `ADVANCE_TAX:${date}`,
-      headline: `Pay ${inr(at.shortfall)} of advance tax by ${date}`,
+      headline: `Pay ${inrWhole(at.shortfall)} of advance tax by ${date}`,
       promise: promise({ gainInr: money2(at.interest), riskBand: 'LOW', costInr: '0.00', liquidity: null, confidence: 'MEDIUM' }),
       measurement: { method: 'TAX_SAVED', horizonDays: left + 1, baseline: { kind: 'ADVANCE_TAX', dueDate: date, shortfallInr: money2(at.shortfall), interestInr: money2(at.interest) } },
       expiresAt: at.dueDate,

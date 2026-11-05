@@ -36,7 +36,7 @@ import type {
   RecommendationDraft,
   TradeAction,
 } from '../types.js';
-import { addDays, notMeasured, promise } from '../actOnItDraft.js';
+import { addDays, notMeasured, promise, inrWhole } from '../actOnItDraft.js';
 
 const ZERO = new Decimal(0);
 const BASE_PRIORITY = CATEGORY_BASE_PRIORITY.CONCENTRATION_TRIM;
@@ -202,7 +202,7 @@ function buildDraft(
     // Sell-only: nothing is being bought, so there is no product to attribute.
     provenance: destination ? destination.provenance : { kind: 'NONE' },
     dedupeKey: `CONCENTRATION_TRIM:${holding.holdingKey}`,
-    headline: `Trim ${inr(m.amount)} from ${holding.assetName}`,
+    headline: `Trim ${inrWhole(m.amount)} from ${holding.assetName}`,
     promise: promise({ riskBand: 'MEDIUM' }),
     measurement: notMeasured(),
     expiresAt: addDays(facts.asOf, 60),

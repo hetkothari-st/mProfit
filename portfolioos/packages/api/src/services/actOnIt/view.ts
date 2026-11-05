@@ -65,13 +65,17 @@ const LABELS: Record<string, string> = {
   fallPct: 'Market fall (%)', totalPortfolioValue: 'Portfolio value',
 };
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** '2026-08' → 'Aug 2026'; anything else unchanged. */
+const readable = (v: string) => (/^\d{4}-\d{2}$/.test(v) ? `${MONTHS[Number.parseInt(v.slice(5), 10) - 1]} ${v.slice(0, 4)}` : v);
+
 function factItems(inputs: unknown): { label: string; value: string }[] {
   const out: { label: string; value: string }[] = [];
   for (const [k, v] of Object.entries(obj(inputs))) {
     const label = LABELS[k];
     if (!label) continue;
-    if (typeof v === 'string' || typeof v === 'number') out.push({ label, value: String(v) });
-    else if (Array.isArray(v) && v.every((x) => typeof x === 'string')) out.push({ label, value: v.join(', ') });
+    if (typeof v === 'string' || typeof v === 'number') out.push({ label, value: readable(String(v)) });
+    else if (Array.isArray(v) && v.every((x) => typeof x === 'string')) out.push({ label, value: (v as string[]).map(readable).join(', ') });
   }
   return out;
 }

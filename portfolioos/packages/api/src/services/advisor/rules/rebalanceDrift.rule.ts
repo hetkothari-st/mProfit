@@ -35,7 +35,7 @@ import type {
   RecommendationDraft,
   TradeAction,
 } from '../types.js';
-import { BUCKET_RISK, addDays, money2, promise } from '../actOnItDraft.js';
+import { BUCKET_RISK, addDays, money2, promise, inrWhole } from '../actOnItDraft.js';
 
 const ZERO = new Decimal(0);
 const BASE_PRIORITY = CATEGORY_BASE_PRIORITY.REBALANCE;
@@ -220,7 +220,7 @@ function buildPairedDraft(
     inputsUsed: inputsFor(facts, total, [over.row, under.row], source, resolved),
     provenance: resolved.provenance,
     dedupeKey: `REBALANCE_DRIFT:${over.row.bucket}->${under.row.bucket}`,
-    headline: `Move ${inr(amount)} from ${BUCKET_LABEL[over.row.bucket]} to ${BUCKET_LABEL[under.row.bucket]}`,
+    headline: `Move ${inrWhole(amount)} from ${BUCKET_LABEL[over.row.bucket]} to ${BUCKET_LABEL[under.row.bucket]}`,
     promise: promise({ riskBand: 'MEDIUM' }),
     measurement: { method: 'PORTFOLIO_VS_HELD', horizonDays: 365, baseline: { amountInr: money2(amount), from: over.row.bucket, to: under.row.bucket } },
     expiresAt: addDays(facts.asOf, 45),
@@ -262,7 +262,7 @@ function buildSellOnlyDraft(
     inputsUsed: inputsFor(facts, total, [over.row], source, null),
     provenance: { kind: 'NONE' },
     dedupeKey: `REBALANCE_DRIFT:${over.row.bucket}->NONE`,
-    headline: `Take ${inr(amount)} out of ${BUCKET_LABEL[over.row.bucket]}`,
+    headline: `Take ${inrWhole(amount)} out of ${BUCKET_LABEL[over.row.bucket]}`,
     promise: promise({ riskBand: 'MEDIUM' }),
     measurement: { method: 'PORTFOLIO_VS_HELD', horizonDays: 365, baseline: { amountInr: money2(amount), from: over.row.bucket, to: null } },
     expiresAt: addDays(facts.asOf, 45),
@@ -312,7 +312,7 @@ function buildBuyOnlyDraft(
     inputsUsed: inputsFor(facts, total, [under.row], null, resolved),
     provenance: resolved.provenance,
     dedupeKey: `REBALANCE_DRIFT:NONE->${under.row.bucket}`,
-    headline: `Add ${inr(amount)} to ${BUCKET_LABEL[under.row.bucket]}`,
+    headline: `Add ${inrWhole(amount)} to ${BUCKET_LABEL[under.row.bucket]}`,
     promise: promise({ riskBand: BUCKET_RISK[under.row.bucket] }),
     measurement: { method: 'PORTFOLIO_VS_HELD', horizonDays: 365, baseline: { amountInr: money2(amount), from: null, to: under.row.bucket } },
     expiresAt: addDays(facts.asOf, 45),

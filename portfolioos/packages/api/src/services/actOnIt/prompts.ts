@@ -71,8 +71,10 @@ async function candidates(userId: string, now: Date): Promise<Candidate[]> {
       out.push({ recommendationId: r.id, kind: 'NEW', urgent, weight: gainOf(r.promise).times(confidenceWeight(r.promise)), headline, body: firstSentence(r.rationale) });
     }
   }
-  // Deadlines first, then the biggest rupee impact (weighted by confidence).
-  return out.sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0) || b.weight.comparedTo(a.weight) || a.recommendationId.localeCompare(b.recommendationId));
+  // Deadlines first; then new advice (something to act on) before nudges and
+  // results (news); within a kind, the biggest rupee impact weighted by confidence.
+  const KIND_ORDER: Record<PromptKind, number> = { NEW: 0, NUDGE: 1, RESULT: 2 };
+  return out.sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0) || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || b.weight.comparedTo(a.weight) || a.recommendationId.localeCompare(b.recommendationId));
 }
 
 /** Send what the weekly cap allows. Returns how many went out and how many wait. */

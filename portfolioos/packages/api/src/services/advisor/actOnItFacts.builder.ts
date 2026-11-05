@@ -234,10 +234,12 @@ async function sipFacts(userId: string, asOf: Date): Promise<ActOnItFacts['sips'
     where: { portfolio: { userId }, transactionType: 'SIP', tradeDate: { gte: new Date(`${months[0]}-01T00:00:00Z`) } },
     select: { fundId: true, assetName: true, tradeDate: true },
   });
+  const fundIds = plans.map((p) => p.fundId).filter((x): x is string => !!x);
+  const names = new Map((fundIds.length ? await prisma.mutualFundMaster.findMany({ where: { id: { in: fundIds } }, select: { id: true, schemeName: true } }) : []).map((f) => [f.id, f.schemeName]));
   return plans.map((p) => {
     const paid = new Set(txns.filter((t) => (p.fundId ? t.fundId === p.fundId : t.assetName === p.assetName)).map((t) => monthOf(t.tradeDate)));
     return {
-      sipId: p.id, name: p.assetName ?? 'your SIP', fundId: p.fundId, monthlyAmount: d(p.amount),
+      sipId: p.id, name: p.assetName ?? (p.fundId ? names.get(p.fundId) ?? '' : ''), fundId: p.fundId, monthlyAmount: d(p.amount),
       missedMonths: months.filter((m) => m >= monthOf(p.startDate) && !paid.has(m)),
     };
   });

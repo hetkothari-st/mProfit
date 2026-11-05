@@ -79,6 +79,7 @@ export function AdviceCard({
           </div>
           <div className="mt-1.5 flex justify-between text-[12px] text-muted-foreground"><span>Low</span><span>High</span></div>
         </div>
+        {(card.costInr !== null || card.liquidity !== null) && (
         <div className="grid grid-cols-2 gap-4">
           <div>
             <h3 className="mb-1 text-[13px] font-medium text-muted-foreground">You pay</h3>
@@ -90,6 +91,7 @@ export function AdviceCard({
             <p className="text-[24px] font-medium leading-tight">{card.liquidity ?? '—'}</p>
           </div>
         </div>
+        )}
         <p className="text-[12.5px] text-muted-foreground">
           Confidence: {card.confidence === 'HIGH' ? 'high' : 'medium'}. Built from your own data.
           {card.expiresAt && <> Stands until {new Date(card.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}.</>}

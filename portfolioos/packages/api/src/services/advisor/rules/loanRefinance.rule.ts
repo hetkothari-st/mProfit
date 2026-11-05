@@ -4,7 +4,7 @@
  * Only for loans of ₹5 lakh or more with at least 2 years left.
  */
 import { CATEGORY_BASE_PRIORITY, LOAN_REFI_MIN_MONTHS_LEFT, LOAN_REFI_MIN_OUTSTANDING_INR } from '../constants.js';
-import { addDays, dec, inr, money2, promise } from '../actOnItDraft.js';
+import { addDays, dec, inr, money2, promise, inrWhole } from '../actOnItDraft.js';
 import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js';
 
 export const loanRefinanceRule: AdvisorRule = {
@@ -37,7 +37,7 @@ export const loanRefinanceRule: AdvisorRule = {
         },
         provenance: { kind: 'NONE' },
         dedupeKey: `LOAN_REFINANCE:${l.loanId}`,
-        headline: `Save about ${inr(l.netSaving)} on your ${l.loanType.toLowerCase()} loan`,
+        headline: `Save about ${inrWhole(l.netSaving)} on your ${l.loanType.toLowerCase()} loan`,
         promise: promise({ gainInr: money2(l.netSaving), riskBand: 'LOW', costInr: null, liquidity: null }),
         measurement: {
           method: 'RATE_DIFF',

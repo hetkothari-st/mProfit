@@ -14,7 +14,7 @@ import {
   CATEGORY_BASE_PRIORITY, IDLE_BUFFER_MONTHS, IDLE_MIN_AMOUNT_INR, IDLE_MIN_GAIN_INR, IDLE_MIN_MONTHS, LIQUID_FUND_YIELD_PCT,
 } from '../constants.js';
 import { resolveProduct } from '../productResolution.js';
-import { addDays, dec, inr, money2, promise } from '../actOnItDraft.js';
+import { addDays, dec, inr, money2, promise, inrWhole } from '../actOnItDraft.js';
 import type { AdvisorFacts, AdvisorRule, RecommendationDraft, TradeAction } from '../types.js';
 
 const ROUND_TO = new Decimal(10_000);
@@ -84,7 +84,7 @@ export const idleCashParkingRule: AdvisorRule = {
       },
       provenance: resolved ? resolved.provenance : { kind: 'NONE' },
       dedupeKey: 'IDLE_CASH_PARKING:bank',
-      headline: `Your ${inr(amount)} is resting. Put it to work.`,
+      headline: `Your ${inrWhole(amount)} is resting. Put it to work.`,
       promise: promise({
         gainInr: money2(gain), riskBand: 'LOW', costInr: '0.00', liquidity: '1 working day',
         confidence: x.bank.savingsRateAssumed ? 'MEDIUM' : 'HIGH',

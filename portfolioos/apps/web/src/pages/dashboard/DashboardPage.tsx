@@ -72,6 +72,8 @@ function alertHref(type: string): string {
       return '/loans?view=given';
     case 'WILL_REVIEW_DUE':
       return '/will';
+    case 'ADVICE':
+      return '/act-on-it';
     default:
       return '/alerts';
   }

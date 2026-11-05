@@ -32,7 +32,7 @@ import type {
   RecommendationDraft,
   TradeAction,
 } from '../types.js';
-import { BUCKET_RISK, addDays, money2, notMeasured, promise } from '../actOnItDraft.js';
+import { BUCKET_RISK, addDays, money2, notMeasured, promise, inrWhole } from '../actOnItDraft.js';
 
 const ZERO = new Decimal(0);
 const BASE_PRIORITY = CATEGORY_BASE_PRIORITY.CASH_DEPLOYMENT;
@@ -193,8 +193,8 @@ export const cashDeploymentRule: AdvisorRule = {
         provenance: target && resolved ? resolved.provenance : { kind: 'NONE' },
         dedupeKey: `CASH_DEPLOYMENT:${target ? target.bucket : 'UNRESOLVED'}`,
         headline: target && resolved
-          ? `Put ${inr(amount)} of spare cash to work in ${BUCKET_LABEL[target.bucket]}`
-          : `${inr(amount)} of spare cash is sitting idle`,
+          ? `Put ${inrWhole(amount)} of spare cash to work in ${BUCKET_LABEL[target.bucket]}`
+          : `${inrWhole(amount)} of spare cash is sitting idle`,
         promise: promise({ riskBand: target ? BUCKET_RISK[target.bucket] : 'MEDIUM', confidence: liquidity.monthlyExpenses != null ? 'HIGH' : 'MEDIUM' }),
         measurement: target && resolved
           ? { method: 'NAV_VS_CASH', horizonDays: 365, baseline: { amountInr: money2(amount), bucket: target.bucket, fundId: resolved.product.fundId, savingsRatePct: null } }

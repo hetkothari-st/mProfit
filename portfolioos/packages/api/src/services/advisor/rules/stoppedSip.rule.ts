@@ -4,8 +4,12 @@
  * costliest time to stop.
  */
 import { CATEGORY_BASE_PRIORITY, SIP_DIP_PCT } from '../constants.js';
-import { addDays, inr, money2, promise } from '../actOnItDraft.js';
+import { addDays, inr, money2, promise, inrWhole } from '../actOnItDraft.js';
 import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js';
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** '2026-08' → 'Aug 2026'. */
+const monthName = (m: string) => `${MONTHS[Number.parseInt(m.slice(5, 7), 10) - 1]} ${m.slice(0, 4)}`;
 
 export const stoppedSipRule: AdvisorRule = {
   id: 'STOPPED_SIP',
@@ -24,9 +28,11 @@ export const stoppedSipRule: AdvisorRule = {
     for (const s of x.sips) {
       if (s.missedMonths.length === 0) continue;
       const missedTotal = s.monthlyAmount.times(s.missedMonths.length);
+      const where = s.name ? ` in ${s.name}` : '';
+      const months = s.missedMonths.map(monthName).join(', ');
       const rationale =
-        `Your ${inr(s.monthlyAmount)} monthly SIP in ${s.name} missed ${s.missedMonths.length} instalment${s.missedMonths.length > 1 ? 's' : ''} ` +
-        `(${s.missedMonths.join(', ')}) while the Nifty 50 fell about ${fallPct.toFixed(1)}% from its recent high. ` +
+        `Your ${inr(s.monthlyAmount)} monthly SIP${where} missed ${s.missedMonths.length} instalment${s.missedMonths.length > 1 ? 's' : ''} ` +
+        `(${months}) while the Nifty 50 fell about ${fallPct.toFixed(1)}% from its recent high. ` +
         `Those ${inr(missedTotal)} would have bought units at lower prices; restarting now keeps buying while prices are still down.`;
       out.push({
         ruleId: stoppedSipRule.id,
@@ -38,7 +44,7 @@ export const stoppedSipRule: AdvisorRule = {
         inputsUsed: { asOf: facts.asOf.toISOString(), sipId: s.sipId, missedMonths: s.missedMonths, fallPct: Math.round(fallPct * 100) / 100, index: recent },
         provenance: { kind: 'NONE' },
         dedupeKey: `STOPPED_SIP:${s.sipId}`,
-        headline: `Restart your ${inr(s.monthlyAmount)} SIP while prices are down`,
+        headline: `Restart your ${inrWhole(s.monthlyAmount)} SIP while prices are down`,
         promise: promise({ riskBand: 'MEDIUM' }),
         measurement: {
           method: 'SIP_UNITS',

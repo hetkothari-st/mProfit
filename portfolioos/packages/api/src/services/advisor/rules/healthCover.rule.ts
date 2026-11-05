@@ -4,7 +4,7 @@
  * cover not entered". Not measured: cover has no price series.
  */
 import { CATEGORY_BASE_PRIORITY, HEALTH_COVER_FLOOR_INR } from '../constants.js';
-import { addDays, dec, inr, notMeasured, promise } from '../actOnItDraft.js';
+import { addDays, dec, inr, notMeasured, promise, inrWhole } from '../actOnItDraft.js';
 import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js';
 
 export const healthCoverRule: AdvisorRule = {
@@ -28,7 +28,7 @@ export const healthCoverRule: AdvisorRule = {
       inputsUsed: { asOf: facts.asOf.toISOString(), sumInsured: dec(h.sumInsured), policies: h.policies, floorInr: dec(HEALTH_COVER_FLOOR_INR) },
       provenance: { kind: 'NONE' },
       dedupeKey: 'HEALTH_COVER:floor',
-      headline: `Your health cover of ${inr(h.sumInsured)} may not be enough`,
+      headline: `Your health cover of ${inrWhole(h.sumInsured)} may not be enough`,
       promise: promise({ riskBand: 'LOW' }),
       measurement: notMeasured(),
       expiresAt: addDays(facts.asOf, 90),

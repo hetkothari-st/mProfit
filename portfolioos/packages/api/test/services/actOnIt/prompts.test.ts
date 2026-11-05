@@ -84,6 +84,15 @@ describe('prompts (DB)', () => {
     expect(await runAsUser(s.userId, () => queuePrompts(s.userId, new Date(NOW.getTime() + 10 * DAY), { send: fakeSend }))).toEqual({ sent: 0, held: 0 });
   });
 
+  it('new advice goes out before results and nudges, whatever their size', async () => {
+    const old = { status: 'ACCEPTED', acceptedAt: new Date(NOW.getTime() - 31 * DAY), createdAt: new Date(NOW.getTime() - 32 * DAY) };
+    // Two big nudges and one small new piece of advice: the cap fits two.
+    const { s, ids } = await user([{ key: 'new', gain: '500.00' }, { key: 'n1', gain: '90000.00', ...old }, { key: 'n2', gain: '80000.00', ...old }]);
+    await runAsUser(s.userId, () => queuePrompts(s.userId, NOW, { send: fakeSend }));
+    const first = await runAsUser(s.userId, () => prisma.advicePrompt.findFirstOrThrow({ where: { userId: s.userId, kind: 'NEW' } }));
+    expect(first.recommendationId).toBe(ids.new);
+  });
+
   it('an email failure does not stop the pop-up and the bell', async () => {
     const { s, ids } = await user([{ key: 'a', gain: '1000.00' }]);
     expect(await runAsUser(s.userId, () => queuePrompts(s.userId, NOW, { send: failingSend }))).toEqual({ sent: 1, held: 0 });

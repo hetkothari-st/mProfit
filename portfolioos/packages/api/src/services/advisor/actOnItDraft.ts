@@ -62,3 +62,6 @@ export const inr = (d: Decimal): string => formatINR(money2(d));
 
 /** JSON-safe copy of a Decimal for inputsUsed. */
 export const dec = (d: Decimal | null | undefined): string | null => (d == null ? null : d.toString());
+
+/** ₹ with Indian grouping, no paise: for headlines, where ".00" is noise. */
+export const inrWhole = (d: Decimal): string => formatINR(d.abs().toFixed(0), { fractionDigits: 0 });

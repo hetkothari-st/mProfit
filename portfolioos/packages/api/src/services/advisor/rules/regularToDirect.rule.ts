@@ -5,7 +5,7 @@
  * the destination is the same scheme's direct plan, named in the reasons.
  */
 import { CATEGORY_BASE_PRIORITY, DIRECT_SWITCH_MIN_GAIN_INR } from '../constants.js';
-import { addDays, dec, inr, money2, promise } from '../actOnItDraft.js';
+import { addDays, dec, inr, money2, promise, inrWhole } from '../actOnItDraft.js';
 import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js';
 
 export const regularToDirectRule: AdvisorRule = {
@@ -41,7 +41,7 @@ export const regularToDirectRule: AdvisorRule = {
         },
         provenance: { kind: 'NONE' },
         dedupeKey: `REGULAR_TO_DIRECT:${p.holdingKey}`,
-        headline: `Switch ${p.schemeName} to its direct plan and keep ${inr(gain)} a year`,
+        headline: `Switch ${p.schemeName} to its direct plan and keep ${inrWhole(gain)} a year`,
         promise: promise({ gainInr: money2(gain), riskBand: 'LOW', costInr: null, liquidity: null }),
         measurement: {
           method: 'DIRECT_VS_REGULAR',

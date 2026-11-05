@@ -25,7 +25,7 @@ import type {
   RecommendationDraft,
   TradeAction,
 } from '../types.js';
-import { fyEnd, money2, promise, urgentIfWithin } from '../actOnItDraft.js';
+import { fyEnd, money2, promise, urgentIfWithin, inrWhole } from '../actOnItDraft.js';
 
 const ZERO = new Decimal(0);
 const BASE_PRIORITY = CATEGORY_BASE_PRIORITY.TAX_HARVEST;
@@ -270,8 +270,8 @@ function buildDraft(
     provenance: reentry ? reentry.provenance : { kind: 'NONE' },
     dedupeKey: `TAX_LOSS_HARVEST:${candidate.portfolioId}:${candidate.isin ?? candidate.assetName}`,
     headline: taxSaved != null
-      ? `Book a ${inr(m.loss)} loss on ${candidate.assetName} to save about ${inr(taxSaved)} in tax`
-      : `Book a ${inr(m.loss)} loss on ${candidate.assetName} before 31 March`,
+      ? `Book a ${inrWhole(m.loss)} loss on ${candidate.assetName} to save about ${inrWhole(taxSaved)} in tax`
+      : `Book a ${inrWhole(m.loss)} loss on ${candidate.assetName} before 31 March`,
     promise: promise({ riskBand: 'LOW', gainInr: taxSaved != null ? money2(taxSaved) : null, confidence: taxSaved != null ? 'HIGH' : 'MEDIUM' }),
     measurement: { method: 'TAX_SAVED', horizonDays: Math.max(1, Math.ceil((fyEnd(facts.asOf).getTime() - facts.asOf.getTime()) / 86_400_000)), baseline: { lossInr: money2(m.loss), ratePct: m.offset.pct, isin: candidate.isin, assetName: candidate.assetName } },
     expiresAt: fyEnd(facts.asOf),
