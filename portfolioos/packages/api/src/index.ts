@@ -53,6 +53,7 @@ import { startLoanRatesJob } from './jobs/loanRatesJob.js';
 import { startCpiJob } from './jobs/cpiJob.js';
 import { startSpendingJob } from './jobs/spendingJob.js';
 import { startRawFilePurgeJob } from './jobs/rawFilePurgeJob.js';
+import { startActOnItJob } from './jobs/actOnItJob.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
 import { makeOriginCheck } from './lib/corsOrigins.js';
@@ -330,6 +331,7 @@ const server = app.listen(env.PORT, '::', () => {
   // Nightly 03:15 IST spending store sync + one-off backfill. ENABLE_SPENDING_SYNC=false disables it.
   startSpendingJob();
   startRawFilePurgeJob();
+  startActOnItJob();
   // These five used to start at the end of runStartupSync, so a DB error early
   // in the sync (or ENABLE_STARTUP_SYNC=false) meant they never ran at all —
   // Succession included. They do not depend on the sync's data.
