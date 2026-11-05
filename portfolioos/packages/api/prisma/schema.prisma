@@ -6074,6 +6074,9 @@ model SpendRecurringSeries {
   latestAmount Decimal  @db.Decimal(14, 2)
   /// Same price payment after payment (rent, fees), as opposed to a varying bill.
   isFixed      Boolean
+  /// The user said a big jump in this payment was a real price rise, not a
+  /// move or a new school, so the rate engine uses its own price change.
+  acceptOwnRate Boolean @default(false)
   createdAt    DateTime @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @db.Timestamptz(3)
 

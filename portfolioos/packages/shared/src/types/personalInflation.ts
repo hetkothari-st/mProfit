@@ -44,6 +44,13 @@ export interface InflationItemView {
   isFixed: boolean;
   /** False for loan EMIs and life-cover premiums: listed, but left out of the rate and totals. */
   inBasket: boolean;
+  /**
+   * A recurring bank payment already covers this item ("already in your bank
+   * data"), so it is left out of the rate while the bank picture is in use.
+   * The item itself is never changed; countAnyway brings it back.
+   */
+  coveredByBank: boolean;
+  countAnyway: boolean;
   resolvedRate: string | null;
   rateSource: InflationRateSource;
   rateNote: InflationRateNote;
@@ -68,6 +75,55 @@ export interface PersonalInflationSummary {
   byDivision: { divisionCode: string; annualAmount: string; share: string; rate: string | null }[];
   /** EMIs and life-cover premiums left out of the basket, or null when there are none. */
   fixedPayments: { annualAmount: string; count: number } | null;
+  /** Where personalRate comes from: the user's own entries, or bank spending plus entries the bank does not show. */
+  rateBasis: 'manual' | 'bank';
+  /** The bank-spending picture, or null when there is no bank spending in the last 12 months. */
+  bank: PirBankView | null;
+}
+
+/**
+ * ready: confidence reached the bar; the rate uses bank spending.
+ * low_confidence: not yet, so the rate stays on the user's own entries.
+ * building: not yet, and there are no entries to fall back on.
+ */
+export type PirBankState = 'ready' | 'low_confidence' | 'building';
+
+export interface PirBankCategoryView {
+  /** Spend category, e.g. 'rent' (SPEND_CATEGORY_LABELS). */
+  category: string;
+  divisionCode: string;
+  /** Spend over the months seen, scaled to a year. */
+  annualAmount: string;
+  /** Share of bank basket spend. */
+  share: string;
+  cpiRate: string | null;
+  /** The user's own price change from fixed payments seen in both years. */
+  ownRate: string | null;
+  /** Share of the category's spend those fixed payments cover (0–1). */
+  alpha: string;
+  rate: string | null;
+  method: 'cpi' | 'own_price' | 'blend';
+}
+
+export interface PirBankView {
+  state: PirBankState;
+  /** 0–1, at 4 dp. */
+  confidence: string;
+  minConfidence: string;
+  monthsOfHistory: number;
+  windowMonths: number;
+  categorisedShare: string;
+  /** 1 when a salary account is visible, else lower. */
+  accountCoverage: string;
+  /** Card bills counted as other spending because no card purchases were seen. */
+  cardBillsCounted: boolean;
+  /** Cash withdrawals are over 15% of debits: the rate may miss cash spending. */
+  cashHeavy: boolean;
+  categories: PirBankCategoryView[];
+  /** Fixed payments that jumped (> +25% or < −10%): CPI is used until the user confirms it was a real rise. */
+  stepChanges: { seriesId: string; payeeKey: string; category: string; rate: string }[];
+  /** Rate from bank spending alone (fraction), or null when nothing is rated. */
+  bankRate: string | null;
 }
 
 export interface InflationItemInput {

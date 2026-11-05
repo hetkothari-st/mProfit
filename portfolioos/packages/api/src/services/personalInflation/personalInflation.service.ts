@@ -12,6 +12,7 @@ import {
   type InflationItemView,
   type OfficialDivisionRate,
   type PersonalInflationSummary,
+  type PirBankView,
 } from '@everypaisa/shared';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../../lib/errors.js';
@@ -23,6 +24,7 @@ import {
   resolveItemRate,
   weightedRate,
 } from './personalInflationMath.js';
+import { loadBankBasis, type LoadedBankBasis } from './pirBankData.js';
 
 export const PROJECTION_HORIZONS = [1, 3, 5, 10] as const;
 
@@ -124,12 +126,16 @@ export async function getProfile(userId: string): Promise<{ stateCode: number; s
   return { stateCode: p?.stateCode ?? CPI_ALL_INDIA_STATE_CODE, sector: p?.sector ?? 'COMBINED' };
 }
 
-export async function getSummary(userId: string): Promise<PersonalInflationSummary> {
+export async function getSummary(userId: string, now: Date = new Date()): Promise<PersonalInflationSummary> {
   const profile = await getProfile(userId);
   const [official, items] = await Promise.all([
     getOfficialRates(profile.stateCode, profile.sector),
     prisma.inflationBasketItem.findMany({ where: { userId }, include: itemInclude, orderBy: { createdAt: 'asc' } }),
   ]);
+  const bank = await loadBankBasis(userId, official.longRun, now);
+  // Decision 6: the bank picture replaces the rate only once it is confident
+  // enough; until then the user's own entries keep giving the rate they had.
+  const useBank = bank?.ready === true;
 
   const views: InflationItemView[] = [];
   const rated: { divisionCode: string; annualAmount: Decimal; rate: Decimal | null }[] = [];
@@ -149,9 +155,12 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
       official.longRun,
     );
     const inBasket = !isOutsideBasket({ sourceRef: it.sourceRef, rateMode: it.rateMode, customRate });
-    if (inBasket) {
+    // Decision 1: a recurring bank payment that matches this item already
+    // counts it; the item stays as typed and comes back with countAnyway.
+    const coveredByBank = useBank && inBasket && it.matchedSeriesId !== null && !it.countAnyway;
+    if (inBasket && !coveredByBank) {
       rated.push({ divisionCode: it.divisionCode, annualAmount, rate: resolved.rate });
-    } else {
+    } else if (!inBasket) {
       outsideAmount = outsideAmount.plus(annualAmount);
       outsideCount += 1;
     }
@@ -169,6 +178,8 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
       sourceRef: it.sourceRef,
       isFixed: it.isFixed,
       inBasket,
+      coveredByBank,
+      countAnyway: it.countAnyway,
       resolvedRate: resolved.rate ? rate6(resolved.rate) : null,
       rateSource: resolved.source,
       rateNote: resolved.note,
@@ -178,6 +189,11 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
         resolved.rate ? serializeMoney(projectAmount(annualAmount, resolved.rate, h)) : null,
       ),
     });
+  }
+
+  const manualBasketCount = rated.length;
+  if (useBank) {
+    for (const c of bank.categories) rated.push({ divisionCode: c.divisionCode, annualAmount: c.annualAmount, rate: c.rate });
   }
 
   // Totals, shares and the rate cover the basket only: EMIs and life premiums
@@ -214,6 +230,36 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
     totals: { annualAmount: serializeMoney(totalAnnual), projections: totalProjections },
     byDivision,
     fixedPayments,
+    rateBasis: useBank ? 'bank' : 'manual',
+    bank: bank ? bankView(bank, manualBasketCount > 0) : null,
+  };
+}
+
+function bankView(b: LoadedBankBasis, hasManualRate: boolean): PirBankView {
+  const total = b.categories.reduce((s, c) => s.plus(c.annualAmount), new Decimal(0));
+  return {
+    state: b.ready ? 'ready' : hasManualRate ? 'low_confidence' : 'building',
+    confidence: b.confidence.toFixed(4, Decimal.ROUND_HALF_EVEN),
+    minConfidence: new Decimal(b.params.minConfidence).toFixed(4),
+    monthsOfHistory: b.monthsOfHistory,
+    windowMonths: b.params.windowMonths,
+    categorisedShare: b.categorisedShare.toFixed(4, Decimal.ROUND_HALF_EVEN),
+    accountCoverage: b.accountCoverage.toFixed(4, Decimal.ROUND_HALF_EVEN),
+    cardBillsCounted: b.cardBillsCounted,
+    cashHeavy: b.cashHeavy,
+    categories: b.categories.map((c) => ({
+      category: c.category,
+      divisionCode: c.divisionCode,
+      annualAmount: serializeMoney(c.annualAmount),
+      share: total.isZero() ? '0.000000' : rate6(c.annualAmount.dividedBy(total)),
+      cpiRate: c.cpiRate ? rate6(c.cpiRate) : null,
+      ownRate: c.ownRate ? rate6(c.ownRate) : null,
+      alpha: rate6(c.alpha),
+      rate: c.rate ? rate6(c.rate) : null,
+      method: c.method,
+    })),
+    stepChanges: b.stepChanges.map((s) => ({ seriesId: s.seriesId, payeeKey: s.payeeKey, category: s.category, rate: rate6(s.rate) })),
+    bankRate: b.rate ? rate6(b.rate) : null,
   };
 }
 
