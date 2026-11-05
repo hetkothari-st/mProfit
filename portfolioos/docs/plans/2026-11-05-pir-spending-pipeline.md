@@ -124,6 +124,8 @@ PRs 1, 4, 5 and 6 are the core; 2 and 3 widen coverage; 7 can ship with 6.
 3. **CPI figure:** the 5-year average for rates and projections, with the latest 12-month change shown next to it (live since #333).
 4. **Consent wording:** drafted below, for legal review before launch.
 5. **Healthcare goals:** done in #333.
+6. **Low confidence never hides a rate the user already has.** Below confidence 0.6 the page keeps today's rate from manual entries, with a note such as "Bank data: 4 of 12 months, using what you've added for now". It switches to the bank-based rate once confidence reaches 0.6. With no manual entries and low confidence, it shows "building your picture" (spec §6.4).
+7. **What changes for users:** PRs 1–5 change nothing on screen. PR 6 changes the rate only for users whose bank data reaches the confidence bar. Goals change only on "Re-plan". Safe to Invest changes only in PR 8.
 
 ## Consent notice (draft, needs legal review)
 
