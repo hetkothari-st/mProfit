@@ -30,8 +30,25 @@ HTTP: `routes/personalInflation.routes.ts` (`/api/personal-inflation`, admin `/a
 
 `PERSONAL_INFLATION_SPEC.md` (the product reference) builds the basket from
 categorised bank spending. That pipeline is planned in
-`docs/plans/2026-11-05-pir-spending-pipeline.md`; until it lands the basket is
-the expenses the user adds. One deliberate difference: rates are the 5-year
+`docs/plans/2026-11-05-pir-spending-pipeline.md`.
+
+## Rate from bank spending (`pirEngine.ts`, `pirBankData.ts`)
+
+- `pirEngine.ts` is pure (spec §6): weights from the last 12 complete months
+  of `SpendMonthlyCategory`; each category at its CPI division's long-run rate,
+  blended by α with the user's own price change on fixed recurring payments
+  seen in both the current and previous 12 months; step changes (> +25% or
+  < −10%) fall back to CPI until the user confirms (`acceptOwnRate`);
+  confidence = months/12 × categorised share × account coverage (1 with a
+  salary account visible, else 0.6), less 0.1 when card bills are counted
+  without card purchases.
+- `getSummary` uses the bank picture only when confidence ≥ 0.6
+  (`rateBasis: 'bank'`). Then manual items a recurring bank payment matches are
+  set aside (`coveredByBank`) unless `countAnyway`; all other manual items
+  still count. Below 0.6 the rate stays on the manual items (`low_confidence`),
+  or is empty (`building`). Manual items are never changed.
+- Overrides without a release: AppSetting `personalInflation.categoryCpiMap`
+  (category → division) and `personalInflation.engine` (parameters). One deliberate difference: rates are the 5-year
 compounded average of yearly CPI changes, not the latest 12-month change, so a
 10-year projection does not swing with one month's reading. The latest
 12-month figure is shown next to it.
