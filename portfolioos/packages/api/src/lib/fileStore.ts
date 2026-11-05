@@ -102,7 +102,7 @@ export async function sealLegacyGmailDocs(): Promise<{ sealed: number; dropped: 
   let dropped = 0;
   let failed = 0;
   const legacy = await prisma.gmailDiscoveredDoc.findMany({
-    where: { blobKey: null },
+    where: { blobKey: null, filePurgedAt: null },
     select: { id: true, userId: true, storagePath: true },
   });
   for (const doc of legacy) {
@@ -127,3 +127,7 @@ export async function sealLegacyGmailDocs(): Promise<{ sealed: number; dropped: 
   }
   return { sealed, dropped, failed };
 }
+
+/** Shown when a statement's original was deleted by the 30-day purge (jobs/rawFilePurgeJob). */
+export const PURGED_MESSAGE =
+  'This statement was deleted 30 days after it was read, as the privacy notice says. What was read from it is kept; upload it again if you need the file.';
