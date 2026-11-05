@@ -27,6 +27,7 @@ import { ADVISOR_ENGINE_VERSION, MATERIALITY_TOLERANCE } from './constants.js';
 import { buildAdvisorFacts } from './advisorFacts.builder.js';
 import { ADVISOR_RULES } from './rules/index.js';
 import { reconcileDrafts } from './reconcile.js';
+import { pausedRuleIds } from '../actOnIt/ruleHealth.js';
 import type {
   AdvisorFacts,
   ProvenanceValue,
@@ -215,7 +216,14 @@ export async function runAdvisorEngine(
   const ruleErrors: Record<string, string> = {};
   const drafts: RecommendationDraft[] = [];
 
+  // Types that kept missing their own estimates are paused (Act on it §6.4).
+  const paused = await pausedRuleIds();
+
   for (const rule of ADVISOR_RULES) {
+    if (paused.has(rule.id)) {
+      ruleErrors[rule.id] = 'paused: missed its own estimates too often';
+      continue;
+    }
     try {
       const emitted = rule.evaluate(facts);
       if (Array.isArray(emitted)) drafts.push(...emitted);
