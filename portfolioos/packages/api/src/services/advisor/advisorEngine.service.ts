@@ -26,6 +26,7 @@ import { prisma } from '../../lib/prisma.js';
 import { ADVISOR_ENGINE_VERSION, MATERIALITY_TOLERANCE } from './constants.js';
 import { buildAdvisorFacts } from './advisorFacts.builder.js';
 import { ADVISOR_RULES } from './rules/index.js';
+import { reconcileDrafts } from './reconcile.js';
 import type {
   AdvisorFacts,
   ProvenanceValue,
@@ -223,6 +224,11 @@ export async function runAdvisorEngine(
       ruleErrors[rule.id] = err instanceof Error ? err.message : String(err);
     }
   }
+
+  // Contradictory advice is settled before anything is stored (Act on it §6.4).
+  const settled = reconcileDrafts(drafts, facts);
+  drafts.length = 0;
+  drafts.push(...settled);
 
   // Deterministic order: urgency first, then rule and dedupe key so two runs
   // over identical facts write rows in identical sequence.

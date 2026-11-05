@@ -39,6 +39,8 @@ import {
   makeHolding,
   makeProduct,
   targets,
+  makeExtra,
+  balances,
 } from './fixtures.js';
 
 // ─── The battery ─────────────────────────────────────────────────
@@ -234,6 +236,42 @@ const BATTERY: Array<{ name: string; facts: AdvisorFacts }> = [
         emergencyFundTarget: d(300_000),
         surplusOverTarget: d(-300_000),
       },
+    }),
+  },
+  // ── Act on it types (spec §7) ──
+  {
+    name: 'act on it: resting savings, regular plan, FD, loan, stopped SIP, thin health cover, weak fund',
+    facts: makeFacts({
+      asOf: new Date('2026-11-06T00:00:00Z'),
+      extra: makeExtra({
+        monthlySpending: d(40_000),
+        bank: { balanceMonths: balances([90_000, 100_000, 110_000, 150_000, 200_000, 250_000, 260_000, 270_000, 280_000, 290_000, 295_000, 300_000]), latestBalance: d(300_000), savingsRatePct: 3, savingsRateAssumed: true },
+        regularPlans: [{ holdingKey: 'fund:a', portfolioId: 'pf-1', fundId: 'f-reg', schemeName: 'Test Flexi Cap - Regular', valueInr: d(500_000), regularTerPct: 1.8, directFundId: 'f-dir', directSchemeCode: 'D1', directName: 'Test Flexi Cap - Direct', directTerPct: 0.6 }],
+        fds: [{ key: 'pf|fd1', issuer: 'Test Bank', amount: d(200_000), ratePct: 7, maturityDate: new Date('2026-11-10T00:00:00Z') }],
+        loans: [{ loanId: 'l1', lender: 'Test HFC', loanType: 'HOME', currentRatePct: 9.4, marketRatePct: 8.4, marketLender: 'Test Bank', outstanding: d(4_000_000), remainingMonths: 180, netSaving: d(285_000), breakEvenMonth: 4 }],
+        sips: [{ sipId: 's1', name: 'Test Index Fund', fundId: 'f1', monthlyAmount: d(10_000), missedMonths: ['2026-09', '2026-10'] }],
+        indexMonthly: [{ month: '2026-07', close: 100 }, { month: '2026-08', close: 104 }, { month: '2026-09', close: 96 }, { month: '2026-10', close: 97 }],
+        healthCover: { sumInsured: d(300_000), policies: 1 },
+        weakFunds: [{ holdingKey: 'fund:w', schemeCode: 'W1', schemeName: 'Test Laggard Fund', valueInr: d(200_000), findingCode: 'HIGH_DOWN_CAPTURE', headline: 'Falls further than its benchmark in bad months', confidence: 0.9 }],
+      }),
+    }),
+  },
+  {
+    name: 'act on it: thin emergency fund',
+    facts: makeFacts({
+      asOf: new Date('2026-11-06T00:00:00Z'),
+      liquidity: { liquidAssets: d(50_000), monthlyExpenses: d(40_000), emergencyFundTarget: d(240_000), surplusOverTarget: d(-190_000) },
+      extra: makeExtra({ monthlySpending: d(40_000) }),
+    }),
+  },
+  {
+    name: 'act on it: February gains and a December tax instalment',
+    facts: makeFacts({
+      asOf: new Date('2026-02-10T00:00:00Z'),
+      extra: makeExtra({
+        ltcg: { fy: '2025-26', realised: d(25_000), exemption: d(125_000), candidates: [{ portfolioId: 'pf-1', assetName: 'Test Bluechip', isin: 'INE000T01019', gain: d(150_000), value: d(600_000) }] },
+        advanceTax: { label: '15 March', dueDate: new Date('2026-02-20T23:59:59Z'), shortfall: d(40_000), interest: d(1_200) },
+      }),
     }),
   },
 ];

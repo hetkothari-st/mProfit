@@ -154,3 +154,25 @@ export const MODEL_PORTFOLIO_NAMES: Record<RiskCategoryValue, string> = {
   GROWTH: 'Growth',
   AGGRESSIVE: 'Aggressive',
 };
+
+// ─── Act on it (docs/superpowers/specs/2026-11-06-act-on-it-design.md §7) ──
+
+/** What a liquid fund has typically yielded lately, percent a year. Promises use it; results use real NAVs. */
+export const LIQUID_FUND_YIELD_PCT = 6.5;
+/** Cash above this many months of spending, held this many of the last 12 months (incl. the last 3), is resting. */
+export const IDLE_BUFFER_MONTHS = 3;
+export const IDLE_MIN_MONTHS = 6;
+export const IDLE_MIN_AMOUNT_INR = new Decimal(50_000);
+export const IDLE_MIN_GAIN_INR = new Decimal(2_000);
+/** A regular → direct switch worth less than this a year is not worth the exit load and the hassle. */
+export const DIRECT_SWITCH_MIN_GAIN_INR = new Decimal(500);
+/** Smallest gain worth booking to use the tax-free limit. */
+export const LTCG_BOOKING_MIN_INR = new Decimal(10_000);
+/** Market fall from its 3-month high that makes a stopped SIP worth restarting. */
+export const SIP_DIP_PCT = 5;
+export const FD_MATURITY_WINDOW_DAYS = 14;
+export const LOAN_REFI_MIN_OUTSTANDING_INR = new Decimal(500_000);
+export const LOAN_REFI_MIN_MONTHS_LEFT = 24;
+export const ADVANCE_TAX_WINDOW_DAYS = 15;
+/** Health cover below this (₹10 lakh) is thin for a family in an Indian city today. */
+export const HEALTH_COVER_FLOOR_INR = new Decimal(1_000_000);

@@ -4,6 +4,7 @@
  * (docs/superpowers/specs/2026-11-06-act-on-it-design.md §6–§7.)
  */
 import type { Decimal } from 'decimal.js';
+import { formatINR } from '@everypaisa/shared';
 import type { AdvisorAssetBucketValue, DraftMeasurement, DraftPromise } from './types.js';
 
 const DAY_MS = 86_400_000;
@@ -55,3 +56,9 @@ export const BUCKET_RISK: Record<AdvisorAssetBucketValue, DraftPromise['riskBand
   EQUITY_INTERNATIONAL: 'HIGH',
   OTHER_ALT: 'HIGH',
 };
+
+/** ₹ with Indian grouping and 2 dp, the form rationales use (the invariant matches figures on this). */
+export const inr = (d: Decimal): string => formatINR(money2(d));
+
+/** JSON-safe copy of a Decimal for inputsUsed. */
+export const dec = (d: Decimal | null | undefined): string | null => (d == null ? null : d.toString());

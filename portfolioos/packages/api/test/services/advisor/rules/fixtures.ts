@@ -251,3 +251,35 @@ export function driftedPortfolioFacts(over: Partial<AdvisorFacts> = {}): Advisor
     ...over,
   });
 }
+
+// ─── Act on it facts ─────────────────────────────────────────────
+
+/** Act on it facts with nothing in them; override the sections a test needs. */
+export function makeExtra(over: Partial<import('../../../../src/services/advisor/types.js').ActOnItFacts> = {}): import('../../../../src/services/advisor/types.js').ActOnItFacts {
+  return {
+    spendingConsent: true,
+    monthlySpending: null,
+    bank: { balanceMonths: [], latestBalance: null, savingsRatePct: 3, savingsRateAssumed: false },
+    regularPlans: [],
+    fds: [],
+    loans: [],
+    sips: [],
+    indexMonthly: [],
+    ltcg: { fy: '2025-26', realised: d(0), exemption: d(125_000), candidates: [] },
+    advanceTax: null,
+    healthCover: { sumInsured: d(0), policies: 0 },
+    weakFunds: [],
+    liquidFund: null,
+    ...over,
+  };
+}
+
+/** Twelve month-end balances ending last month, oldest first. */
+export function balances(values: number[], lastMonth = '2026-10'): { month: string; balance: ReturnType<typeof d> }[] {
+  const [y, m] = lastMonth.split('-').map(Number) as [number, number];
+  return values.map((v, i) => {
+    const back = values.length - 1 - i;
+    const dt = new Date(Date.UTC(y, m - 1 - back, 1));
+    return { month: dt.toISOString().slice(0, 7), balance: d(v) };
+  });
+}
