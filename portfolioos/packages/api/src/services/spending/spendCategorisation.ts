@@ -4,6 +4,7 @@ import { prisma } from '../../lib/prisma.js';
 import { BadRequestError } from '../../lib/errors.js';
 import { categorise, payeeKey } from './categorise.js';
 import { aiPayeeTagger, type PayeeTagger } from './aiPayeeTagger.js';
+import { analyseSpending } from './spendAnalysisStore.js';
 
 /**
  * Applies categories to a user's SpendTxn rows and keeps the per-payee tags
@@ -121,5 +122,8 @@ export async function setPayeeCategory(userId: string, key: string, category: st
       update: { category, source: 'user' },
     });
   }
-  return categoriseSpending(userId, null);
+  const changed = await categoriseSpending(userId, null);
+  // Categories feed the series and monthly totals.
+  if (changed > 0) await analyseSpending(userId);
+  return changed;
 }

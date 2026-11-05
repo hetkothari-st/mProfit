@@ -18,8 +18,9 @@ import { CANONICAL_SPEND_TYPES } from '../services/spending/sources/canonicalEve
 
 const TZ = 'Asia/Kolkata';
 const BOOT_DELAY_MS = 60_000;
-// v2: categories added (20261105140000); re-run once so existing rows get them.
-export const SPENDING_BACKFILL_KEY = 'spending.backfill.v2';
+// Bumped whenever the sync learns something new existing rows need:
+// v2 categories (20261105140000), v3 recurring series + monthly totals (20261105160000).
+export const SPENDING_BACKFILL_KEY = 'spending.backfill.v3';
 
 let running = false;
 
