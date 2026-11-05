@@ -2,7 +2,7 @@ import { readFile, unlink } from 'node:fs/promises';
 import type { AssetClass, ImportType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
-import { NotFoundError, ForbiddenError } from '../../lib/errors.js';
+import { NotFoundError, ForbiddenError, BadRequestError } from '../../lib/errors.js';
 import { runFileImportAdapter } from '../../ingestion/fileImport/runner.js';
 import { projectTransactionEvent } from '../../ingestion/fileImport/projection.js';
 import type { TransactionEvent } from '../../ingestion/fileImport/types.js';
@@ -18,7 +18,7 @@ import {
 } from '../integrity/statementReconciliation.service.js';
 import { runAsUser } from '../../lib/requestContext.js';
 import { hookAutoLinkImportedPremium } from '../insurance/insuranceExtras.service.js';
-import { dropLocalFile, ensureLocalFile, persistLocalFile } from '../../lib/fileStore.js';
+import { dropLocalFile, ensureLocalFile, persistLocalFile, PURGED_MESSAGE } from '../../lib/fileStore.js';
 import { deleteFile } from '../../lib/documentStorage.js';
 
 export interface CreateImportJobInput {
@@ -194,9 +194,10 @@ export async function processImportJob(
 ): ReturnType<typeof processImportJobFromDisk> {
   const file = await prisma.importJob.findUnique({
     where: { id: importJobId },
-    select: { userId: true, filePath: true, blobKey: true },
+    select: { userId: true, filePath: true, blobKey: true, filePurgedAt: true },
   });
   if (!file) throw new NotFoundError('Import job not found');
+  if (file.filePurgedAt) throw new BadRequestError(PURGED_MESSAGE);
   // Put the file back where the parsers expect it if a deploy removed it,
   // and remove the plain-text copy again when done (the encrypted one stays).
   const localPath = await ensureLocalFile(file.userId, file.blobKey, file.filePath);

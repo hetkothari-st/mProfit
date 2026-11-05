@@ -1367,6 +1367,9 @@ model ImportJob {
   /// copy on local disk is temporary: a deploy wipes it, and it is restored
   /// from here when needed. Null on rows from before the store existed.
   blobKey               String?
+  /// Set when the stored original (a bank or card statement) was deleted 30
+  /// days after it was read (rawFilePurgeJob); blobKey is then null.
+  filePurgedAt DateTime? @db.Timestamptz(3)
   broker                String?
   totalRows             Int?
   successRows           Int?
@@ -1503,6 +1506,9 @@ model GmailDiscoveredDoc {
   /// copy on local disk is temporary: a deploy wipes it, and it is restored
   /// from here when needed. Null on rows from before the store existed.
   blobKey     String?
+  /// Set when the stored original (a bank or card statement) was deleted 30
+  /// days after it was read (rawFilePurgeJob); blobKey is then null.
+  filePurgedAt DateTime? @db.Timestamptz(3)
 
   status GmailDocStatus @default(CLASSIFYING)
 

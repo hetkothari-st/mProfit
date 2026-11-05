@@ -12,6 +12,7 @@ import {
 } from '../services/imports/import.service.js';
 import { ok, created } from '../lib/response.js';
 import { AppError, BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
+import { PURGED_MESSAGE } from '../lib/fileStore.js';
 import { verifyUploadedFile } from '../lib/uploadSecurity.js';
 import { writeIngestionFailure } from '../services/imports/ingestionFailures.service.js';
 import { logger } from '../lib/logger.js';
@@ -249,6 +250,7 @@ export async function download(req: Request, res: Response) {
   const id = req.params.id!;
   const job = await getImportJob(req.user.id, id);
 
+  if (job.filePurgedAt) throw new NotFoundError(PURGED_MESSAGE);
   // The encrypted copy is the durable one; the disk path is legacy only.
   if (job.blobKey) {
     const bytes = await readBuffer(req.user.id, job.blobKey);

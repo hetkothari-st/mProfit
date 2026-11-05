@@ -2,7 +2,8 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import type { GmailDocStatus } from '@prisma/client';
 import { ok, created } from '../lib/response.js';
-import { UnauthorizedError, BadRequestError } from '../lib/errors.js';
+import { UnauthorizedError, BadRequestError, NotFoundError } from '../lib/errors.js';
+import { PURGED_MESSAGE } from '../lib/fileStore.js';
 import { prisma } from '../lib/prisma.js';
 import { streamFileTo } from '../lib/documentStorage.js';
 import {
@@ -119,6 +120,7 @@ export async function getDocPreviewUrl(req: Request, res: Response) {
 export async function getDocRaw(req: Request, res: Response) {
   if (!req.user) throw new UnauthorizedError();
   const doc = await getDiscoveredDoc(req.user.id, req.params.id!);
+  if (doc.filePurgedAt) throw new NotFoundError(PURGED_MESSAGE);
   res.setHeader('Content-Type', doc.mimeType);
   res.setHeader(
     'Content-Disposition',
