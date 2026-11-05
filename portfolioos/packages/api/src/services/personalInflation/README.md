@@ -15,10 +15,23 @@ HTTP: `routes/personalInflation.routes.ts` (`/api/personal-inflation`, admin `/a
   in sync). `sourceRef` (`loan:<id>` …) plus the unique index on
   `(userId, sourceRef)` stops the same source being added twice. EMIs and level
   life premiums go in at a custom 0%.
-- Items pinned at 0% are "fixed payments": they count in the personal rate but
-  are kept out of `byDivision`, so an EMI never makes housing or education look flat.
+- Loan EMIs and life-cover premiums (`isOutsideBasket`) are listed but left out
+  of the basket: not in the personal rate, the shares or the totals. They repay
+  the same loan or buy the same cover, so they are not prices that rise
+  (PERSONAL_INFLATION_SPEC §5). Health and motor premiums stay in.
 - `inflationGoals.ts` — per active goal: target (today's rupees) grown at the
   suggested rate vs official headline CPI, the gap, and the extra monthly SIP
-  (`goalMath.requiredMonthlySip`, at the goal's expected return). Re-plan
+  (`monthlySipFor`: start-of-month SIP, equivalent monthly rate, at the goal's
+  expected return or 12%). Re-plan
   recomputes rates server-side and writes them to the chosen goals. Both are
   gated on `GOAL_PROJECTIONS`, like `/api/goals`.
+
+## Against the product spec
+
+`PERSONAL_INFLATION_SPEC.md` (the product reference) builds the basket from
+categorised bank spending. That pipeline is planned in
+`docs/plans/2026-11-05-pir-spending-pipeline.md`; until it lands the basket is
+the expenses the user adds. One deliberate difference: rates are the 5-year
+compounded average of yearly CPI changes, not the latest 12-month change, so a
+10-year projection does not swing with one month's reading. The latest
+12-month figure is shown next to it.

@@ -41,3 +41,35 @@ export function suggestGoalRate(summary: PersonalInflationSummary | undefined, c
   const headline = summary.official.find((o) => o.divisionCode === '00')?.longRunRate;
   return pick(summary.personalRate, 'your personal inflation') ?? pick(headline, 'official CPI inflation');
 }
+
+export interface DriverRow {
+  /** CPI division code, or null for the folded "other small categories" row. */
+  code: string | null;
+  share: Decimal;
+  rate: Decimal;
+  /** Categories folded into this row (1 for a normal row). */
+  count: number;
+}
+
+/** Categories below this share of basket spend are folded into one row. */
+export const SMALL_CATEGORY_FOLD = new Decimal('0.02');
+
+/**
+ * The "what's driving it" rows: rated categories ordered by how much they push
+ * the personal rate (share × rate). Categories under 2% of spend are folded
+ * into one row at their spend-weighted rate, so the list stays readable;
+ * a lone small category is shown as itself.
+ */
+export function driverRows(byDivision: PersonalInflationSummary['byDivision']): DriverRow[] {
+  const rows = byDivision
+    .filter((d) => d.rate != null)
+    .map((d) => ({ code: d.divisionCode as string | null, share: new Decimal(d.share), rate: new Decimal(d.rate!), count: 1 }));
+  const small = rows.filter((r) => r.share.lessThan(SMALL_CATEGORY_FOLD));
+  const out = small.length > 1 ? rows.filter((r) => !small.includes(r)) : rows;
+  if (small.length > 1) {
+    const share = small.reduce((s, r) => s.plus(r.share), new Decimal(0));
+    const weighted = small.reduce((s, r) => s.plus(r.share.times(r.rate)), new Decimal(0));
+    out.push({ code: null, share, rate: share.isZero() ? new Decimal(0) : weighted.dividedBy(share), count: small.length });
+  }
+  return out.sort((a, b) => b.share.times(b.rate).comparedTo(a.share.times(a.rate)));
+}

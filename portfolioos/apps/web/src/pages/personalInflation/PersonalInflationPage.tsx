@@ -105,6 +105,22 @@ export function PersonalInflationPage() {
   const basketVersion = [data.asOf, data.personalRate, data.profile.stateCode, data.profile.sector,
     ...data.byDivision.map((d) => `${d.divisionCode}:${d.rate}`)].join('|');
   const headlineRate = data.official.find((o) => o.divisionCode === '00')?.longRunRate ?? null;
+  const basket = data.items.filter((it) => it.inBasket);
+  const outside = data.items.filter((it) => !it.inBasket);
+  const itemActions = (it: InflationItemView) => (
+    <>
+      <Button variant="ghost" size="icon" aria-label={`Edit ${it.name}`}
+        className="opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
+        onClick={() => { setEditing(it); setPreset(null); setDialogOpen(true); }}>
+        <Pencil className="h-4 w-4" />
+      </Button>
+      <Button variant="ghost" size="icon" aria-label={`Remove ${it.name}`} disabled={deleteMut.isPending}
+        className="opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
+        onClick={() => deleteMut.mutate(it.id)}>
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </>
+  );
 
   return (
     <div className="space-y-6">
@@ -128,12 +144,12 @@ export function PersonalInflationPage() {
             <p className="text-xs text-muted-foreground">Yearly cost now, and what it grows to</p>
           )}
         </div>
-        {data.items.length === 0 ? (
+        {basket.length === 0 ? (
           <div className="p-5 sm:p-6">
             <EmptyState
               icon={TrendingUp}
               title="No expenses yet"
-              description="Add the costs that matter to you, such as a school fee, rent or groceries, or pick loans and premiums you already track here. Each one shows what it will cost in 1, 3, 5 and 10 years."
+              description="Add the costs that matter to you, such as a school fee, rent or groceries, or pick health premiums and society maintenance you already track here. Each one shows what it will cost in 1, 3, 5 and 10 years."
               action={<Button onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Add expense</Button>}
             />
           </div>
@@ -152,7 +168,7 @@ export function PersonalInflationPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.items.map((it) => {
+                {basket.map((it) => {
                   const hot = headlineRate != null && it.resolvedRate != null && new Decimal(it.resolvedRate).greaterThan(headlineRate);
                   const last = it.projections.length - 1;
                   return (
@@ -178,18 +194,7 @@ export function PersonalInflationPage() {
                           {inr(p)}
                         </td>
                       ))}
-                      <td className="py-2 pr-4 sm:pr-5 text-right whitespace-nowrap">
-                        <Button variant="ghost" size="icon" aria-label={`Edit ${it.name}`}
-                          className="opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
-                          onClick={() => { setEditing(it); setPreset(null); setDialogOpen(true); }}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" aria-label={`Remove ${it.name}`} disabled={deleteMut.isPending}
-                          className="opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
-                          onClick={() => deleteMut.mutate(it.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </td>
+                      <td className="py-2 pr-4 sm:pr-5 text-right whitespace-nowrap">{itemActions(it)}</td>
                     </tr>
                   );
                 })}
@@ -199,7 +204,7 @@ export function PersonalInflationPage() {
                   <th scope="row" className="py-3.5 pl-5 sm:pl-6 pr-3 text-left font-semibold">
                     Total
                     <div className="text-[11px] font-normal text-muted-foreground">
-                      {data.items.length} {data.items.length === 1 ? 'expense' : 'expenses'}
+                      {basket.length} {basket.length === 1 ? 'expense' : 'expenses'}
                     </div>
                   </th>
                   <td className="py-3.5 px-3 text-right numeric">{inr(data.totals.annualAmount)}</td>
@@ -214,6 +219,25 @@ export function PersonalInflationPage() {
                 </tr>
               </tfoot>
             </table>
+          </div>
+        )}
+        {outside.length > 0 && (
+          <div className="border-t px-5 py-4 sm:px-6">
+            <h3 className="text-sm font-medium">Not counted in your rate</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              EMIs and life cover premiums repay the same loan or buy the same cover each month, so they don&apos;t rise with prices.
+            </p>
+            <ul className="mt-2 divide-y">
+              {outside.map((it) => (
+                <li key={it.id} className="group flex items-center justify-between gap-3 py-2 text-sm">
+                  <span className="min-w-0">
+                    <span className="font-medium">{it.name}</span>
+                    <span className="text-muted-foreground"> · <span className="numeric">{inr(it.annualAmount)}</span> a year</span>
+                  </span>
+                  <span className="whitespace-nowrap">{itemActions(it)}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </section>

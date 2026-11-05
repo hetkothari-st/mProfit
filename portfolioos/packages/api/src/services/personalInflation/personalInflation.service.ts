@@ -19,6 +19,7 @@ import {
   annualise,
   longRunRate,
   projectAmount,
+  isOutsideBasket,
   resolveItemRate,
   weightedRate,
 } from './personalInflationMath.js';
@@ -131,24 +132,29 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
   ]);
 
   const views: InflationItemView[] = [];
-  const rated: { divisionCode: string; annualAmount: Decimal; rate: Decimal | null; fixed: boolean }[] = [];
+  const rated: { divisionCode: string; annualAmount: Decimal; rate: Decimal | null }[] = [];
+  let outsideAmount = new Decimal(0);
+  let outsideCount = 0;
   for (const it of items) {
     const amount = dec(it.amount);
     const annualAmount = annualise(amount, it.frequency);
+    const customRate = it.customRate ? dec(it.customRate) : null;
     const resolved = resolveItemRate(
       {
         divisionCode: it.divisionCode,
         rateMode: it.rateMode,
-        customRate: it.customRate ? dec(it.customRate) : null,
+        customRate,
         pricePoints: it.pricePoints.map((p) => ({ asOf: p.asOf, amount: dec(p.amount) })),
       },
       official.longRun,
     );
-    // A payment the user pinned at 0% (an EMI, a level life premium) is not a
-    // price: blending it into its category would make housing or education
-    // look flat. It still counts in the personal rate, at 0%.
-    const fixed = resolved.source === 'CUSTOM' && resolved.rate !== null && resolved.rate.isZero();
-    rated.push({ divisionCode: it.divisionCode, annualAmount, rate: resolved.rate, fixed });
+    const inBasket = !isOutsideBasket({ sourceRef: it.sourceRef, rateMode: it.rateMode, customRate });
+    if (inBasket) {
+      rated.push({ divisionCode: it.divisionCode, annualAmount, rate: resolved.rate });
+    } else {
+      outsideAmount = outsideAmount.plus(annualAmount);
+      outsideCount += 1;
+    }
     views.push({
       id: it.id,
       name: it.name,
@@ -157,11 +163,12 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
       frequency: it.frequency,
       annualAmount: serializeMoney(annualAmount),
       rateMode: it.rateMode,
-      customRate: it.customRate ? rate6(dec(it.customRate)) : null,
+      customRate: customRate ? rate6(customRate) : null,
       notes: it.notes,
       pricePoints: it.pricePoints.map((p) => ({ asOf: isoDay(p.asOf), amount: serializeMoney(dec(p.amount)) })),
       sourceRef: it.sourceRef,
       isFixed: it.isFixed,
+      inBasket,
       resolvedRate: resolved.rate ? rate6(resolved.rate) : null,
       rateSource: resolved.source,
       rateNote: resolved.note,
@@ -173,16 +180,17 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
     });
   }
 
+  // Totals, shares and the rate cover the basket only: EMIs and life premiums
+  // are listed but are not consumption that rises with prices.
   const totalAnnual = rated.reduce((s, r) => s.plus(r.annualAmount), new Decimal(0));
   // Unrated items (no CPI loaded yet) stay flat in the totals rather than vanish.
   const totalProjections = PROJECTION_HORIZONS.map((h) =>
     serializeMoney(rated.reduce((s, r) => s.plus(r.rate ? projectAmount(r.annualAmount, r.rate, h) : r.annualAmount), new Decimal(0))),
   );
 
-  const priced = rated.filter((r) => !r.fixed);
-  const divisionCodes = [...new Set(priced.map((r) => r.divisionCode))];
+  const divisionCodes = [...new Set(rated.map((r) => r.divisionCode))];
   const byDivision = divisionCodes.map((code) => {
-    const group = priced.filter((r) => r.divisionCode === code);
+    const group = rated.filter((r) => r.divisionCode === code);
     const amt = group.reduce((s, r) => s.plus(r.annualAmount), new Decimal(0));
     const wr = weightedRate(group);
     return {
@@ -193,10 +201,7 @@ export async function getSummary(userId: string): Promise<PersonalInflationSumma
     };
   });
 
-  const fixedAmount = rated.filter((r) => r.fixed).reduce((s, r) => s.plus(r.annualAmount), new Decimal(0));
-  const fixedPayments = fixedAmount.isZero()
-    ? null
-    : { annualAmount: serializeMoney(fixedAmount), share: totalAnnual.isZero() ? '0.000000' : rate6(fixedAmount.dividedBy(totalAnnual)) };
+  const fixedPayments = outsideCount === 0 ? null : { annualAmount: serializeMoney(outsideAmount), count: outsideCount };
 
   const personal = weightedRate(rated);
   return {

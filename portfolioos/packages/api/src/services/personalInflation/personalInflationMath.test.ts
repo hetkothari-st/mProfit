@@ -7,6 +7,8 @@ import {
   weightedRate,
   projectAmount,
   annualise,
+  isOutsideBasket,
+  monthlySipFor,
 } from './personalInflationMath.js';
 
 const D = (v: string | number) => new Decimal(v);
@@ -120,5 +122,44 @@ describe('weightedRate / projectAmount / annualise', () => {
   it('annualises monthly amounts', () => {
     expect(annualise(D('12000'), 'MONTHLY').toString()).toBe('144000');
     expect(annualise(D('12000'), 'YEARLY').toString()).toBe('12000');
+  });
+});
+
+// The worked example in the product spec (PERSONAL_INFLATION_SPEC.md §7).
+describe('spec worked example', () => {
+  it('weights category rates by spend: 8.801%', () => {
+    const basket = [
+      { annualAmount: D(9), rate: D('0.126') },
+      { annualAmount: D(22), rate: D('0.112') },
+      { annualAmount: D(31), rate: D('0.081') },
+      { annualAmount: D(18), rate: D('0.074') },
+      { annualAmount: D(20), rate: D('0.068') },
+    ];
+    expect(weightedRate(basket)!.toFixed(5)).toBe('0.08801');
+  });
+
+  it('education goal: gap ₹35,16,717 and extra SIP ₹11,414 a month at 12%', () => {
+    const fvMine = projectAmount(D(2000000), D('0.112'), 12);
+    const fvCpi = projectAmount(D(2000000), D('0.051'), 12);
+    expect(fvMine.toFixed(0)).toBe('7149694');
+    expect(fvCpi.toFixed(0)).toBe('3632976');
+    const gap = fvMine.minus(fvCpi);
+    expect(gap.toFixed(0)).toBe('3516717');
+    expect(monthlySipFor(gap, 12, D('0.12'))!.toFixed(0)).toBe('11414');
+  });
+
+  it('no return means the gap split evenly over the months', () => {
+    expect(monthlySipFor(D(1200), 1, D(0))!.toFixed(0)).toBe('100');
+    expect(monthlySipFor(D(0), 5, D('0.12'))).toBeNull();
+  });
+});
+
+describe('isOutsideBasket', () => {
+  it('leaves out EMIs and fixed life premiums, keeps everything else', () => {
+    expect(isOutsideBasket({ sourceRef: 'loan:x', rateMode: 'CUSTOM', customRate: D(0) })).toBe(true);
+    expect(isOutsideBasket({ sourceRef: 'insurance:x', rateMode: 'CUSTOM', customRate: D(0) })).toBe(true);
+    expect(isOutsideBasket({ sourceRef: 'insurance:x', rateMode: 'OFFICIAL', customRate: null })).toBe(false);
+    expect(isOutsideBasket({ sourceRef: null, rateMode: 'CUSTOM', customRate: D(0) })).toBe(false);
+    expect(isOutsideBasket({ sourceRef: 'property:x', rateMode: 'OFFICIAL', customRate: null })).toBe(false);
   });
 });

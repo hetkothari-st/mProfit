@@ -18,7 +18,7 @@ import {
   listGoalImpacts,
   suggestRateForGoal,
 } from '../../src/services/personalInflation/inflationGoals.js';
-import { requiredMonthlySip } from '../../src/services/goals/goalMath.js';
+import { monthlySipFor } from '../../src/services/personalInflation/personalInflationMath.js';
 import { getSummary } from '../../src/services/personalInflation/personalInflation.service.js';
 
 const SUMMARY: PersonalInflationSummary = {
@@ -133,12 +133,15 @@ describe('personal inflation: sources and goals (DB)', () => {
     expect(c.filter((x) => x.alreadyAdded)).toHaveLength(2);
   });
 
-  it('keeps a 0% EMI out of its category but in the personal rate', async () => {
+  it('lists the EMI but leaves it out of the rate, shares and totals', async () => {
     const s = await runAsUser(a.userId, () => getSummary(a.userId));
-    // Home loan EMI: 22,000 × 12, pinned at 0%.
-    expect(s.fixedPayments?.annualAmount).toBe('264000.0000');
-    expect(s.byDivision.map((d) => d.divisionCode)).not.toContain('04');
-    expect(s.byDivision.map((d) => d.divisionCode)).toContain('06');
+    // Home loan EMI: 22,000 × 12.
+    expect(s.fixedPayments).toEqual({ annualAmount: '264000.0000', count: 1 });
+    expect(s.items.find((i) => i.sourceRef?.startsWith('loan:'))!.inBasket).toBe(false);
+    expect(s.byDivision.map((d) => d.divisionCode)).toEqual(['06']);
+    // Only the 18,000 health premium is in the basket.
+    expect(s.totals.annualAmount).toBe('18000.0000');
+    expect(s.byDivision[0]!.share).toBe('1.000000');
   });
 
   it("user B sees none of A's sources and cannot import them", async () => {
@@ -164,7 +167,7 @@ describe('personal inflation: sources and goals (DB)', () => {
     expect(edu.officialRate).toBe('0.0500');
     expect(new Decimal(edu.neededAtSuggested!).minus(at('0.15')).abs().lessThan('0.01')).toBe(true);
     expect(new Decimal(edu.gap!).minus(gap).abs().lessThan('0.01')).toBe(true);
-    const sip = requiredMonthlySip(gap, years, 12)!;
+    const sip = monthlySipFor(gap, years, new Decimal('0.12'))!;
     expect(new Decimal(edu.extraMonthlySip!).minus(sip).abs().lessThan('0.01')).toBe(true);
     expect(edu.rateInUse).toBe(false);
   });

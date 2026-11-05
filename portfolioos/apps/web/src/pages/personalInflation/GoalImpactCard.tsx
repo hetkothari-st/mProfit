@@ -138,7 +138,7 @@ export function GoalImpactCard({ basketVersion }: { basketVersion: string }) {
                 {gap && !gap.isZero() && (
                   <p className="text-xs text-muted-foreground mt-1">
                     {gap.greaterThan(0) ? (
-                      <>Gap {lakh(g.gap)}{g.extraMonthlySip && <> · extra SIP about {rupees(g.extraMonthlySip)}/month to cover it</>}</>
+                      <>Gap {lakh(g.gap)}{g.extraMonthlySip && <> · extra SIP about {rupees(g.extraMonthlySip)}/month to cover it, at {formatRatePct(g.assumedReturn, 0)}{g.returnIsDefault && ' (assumed)'}</>}</>
                     ) : (
                       <>Your rate is lower, so the goal needs {lakh(gap.abs().toString())} less than a CPI plan.</>
                     )}
@@ -150,7 +150,7 @@ export function GoalImpactCard({ basketVersion }: { basketVersion: string }) {
         })}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           <p className="text-xs text-muted-foreground">
-            The extra SIP assumes each goal&apos;s expected return, or no growth if none is set.
+            The extra SIP is paid at the start of each month and assumes each goal&apos;s expected return, or 12% a year if none is set.
           </p>
           {goals.some(replannable) ? (
             <Button disabled={chosen.length === 0} onClick={() => setConfirmOpen(true)}>

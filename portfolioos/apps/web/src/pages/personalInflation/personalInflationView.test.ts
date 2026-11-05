@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PersonalInflationSummary } from '@everypaisa/shared';
-import { formatRatePct, formatCpiMonth, suggestGoalRate } from './personalInflationView';
+import { driverRows, formatRatePct, formatCpiMonth, suggestGoalRate } from './personalInflationView';
 
 const base: PersonalInflationSummary = {
   profile: { stateCode: 1, sector: 'COMBINED' },
@@ -38,5 +38,25 @@ describe('personalInflationView', () => {
   it('nothing to suggest before CPI is loaded', () => {
     expect(suggestGoalRate(undefined, 'RETIREMENT')).toBeNull();
     expect(suggestGoalRate({ ...base, official: [] }, 'RETIREMENT')).toBeNull();
+  });
+});
+
+describe('driverRows', () => {
+  const div = (code: string, share: string, rate: string | null) => ({ divisionCode: code, annualAmount: '0', share, rate });
+  it('orders by push and folds categories under 2% into one row', () => {
+    const rows = driverRows([
+      div('01', '0.600000', '0.050000'),
+      div('10', '0.380000', '0.110000'),
+      div('03', '0.010000', '0.030000'),
+      div('08', '0.010000', '0.010000'),
+    ]);
+    expect(rows.map((r) => r.code)).toEqual(['10', '01', null]);
+    expect(rows[2]!.share.toFixed(2)).toBe('0.02');
+    expect(rows[2]!.rate.toFixed(3)).toBe('0.020');
+    expect(rows[2]!.count).toBe(2);
+  });
+  it('keeps a single small category as itself and skips unrated ones', () => {
+    const rows = driverRows([div('01', '0.990000', '0.050000'), div('03', '0.010000', '0.030000'), div('08', '0', null)]);
+    expect(rows.map((r) => r.code)).toEqual(['01', '03']);
   });
 });
