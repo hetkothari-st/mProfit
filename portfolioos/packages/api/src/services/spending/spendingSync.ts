@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma.js';
 import { isOwnTransfer, nameTokens } from '../safeToInvest/creditClassifier.js';
 import { findDuplicates } from './dedupe.js';
 import { categoriseSpending } from './spendCategorisation.js';
+import { analyseSpending, type AnalysisResult } from './spendAnalysisStore.js';
 import { aiPayeeTagger, type PayeeTagger } from './aiPayeeTagger.js';
 import { canonicalEventSource } from './sources/canonicalEventSource.js';
 import type { NormalisedTxn, SpendExcludeReason, SpendSource } from './spendTypes.js';
@@ -17,7 +18,8 @@ import type { NormalisedTxn, SpendExcludeReason, SpendSource } from './spendType
  * user's request context (runAsUser) or as system.
  *
  * Ends by categorising every row (rules, merchant list, the user's tags, then
- * the AI fallback for payees still unknown).
+ * the AI fallback for payees still unknown), then rebuilding the recurring
+ * series, one-off and refund marks, monthly totals and manual-item matches.
  */
 
 /** Sources the store is built from. Statements, manual and Finvu join here later. */
@@ -30,6 +32,7 @@ export interface SyncResult {
   duplicates: number;
   /** Rows whose category changed. */
   categorised: number;
+  analysis: AnalysisResult | null;
 }
 
 export interface SyncOptions {
@@ -53,7 +56,7 @@ export async function syncSpending(
 ): Promise<SyncResult> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
   const tokens = nameTokens(user?.name);
-  const result: SyncResult = { created: 0, updated: 0, removed: 0, duplicates: 0, categorised: 0 };
+  const result: SyncResult = { created: 0, updated: 0, removed: 0, duplicates: 0, categorised: 0, analysis: null };
 
   for (const source of sources) {
     const incoming = await source.fetch(userId);
@@ -128,6 +131,7 @@ export async function syncSpending(
   }
   result.duplicates = dupes.size;
   result.categorised = await categoriseSpending(userId, opts.tagger === undefined ? aiPayeeTagger : opts.tagger);
+  result.analysis = await analyseSpending(userId);
   return result;
 }
 

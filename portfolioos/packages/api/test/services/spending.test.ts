@@ -95,7 +95,7 @@ describe('spending store (DB)', () => {
 
   it('a re-run with nothing new writes nothing', async () => {
     const r = await runAsUser(a.userId, () => syncSpending(a.userId));
-    expect(r).toEqual({ created: 0, updated: 0, removed: 0, duplicates: 0, categorised: 0 });
+    expect(r).toMatchObject({ created: 0, updated: 0, removed: 0, duplicates: 0, categorised: 0 });
   });
 
   it('follows approvals, edits and rejections in review', async () => {
@@ -185,5 +185,52 @@ describe('spending store (DB)', () => {
   it("one user's payee tags never touch another's", async () => {
     const tagsSeenByB = await runAsUser(b.userId, () => prisma.spendPayeeTag.findMany({}));
     expect(tagsSeenByB).toEqual([]);
+  });
+
+  it('finds recurring rent, totals each month, and matches the typed rent to it', async () => {
+    const c = await createTestScope('spend-c');
+    try {
+      await runAsUser(c.userId, async () => {
+        for (let m = 1; m <= 12; m++) {
+          const mm = String(m).padStart(2, '0');
+          await event(c.userId, 'NEFT_DEBIT', `2026-${mm}-05`, m <= 6 ? '24000' : '26000', 'Mr Kulkarni', { notes: 'House rent' });
+          await event(c.userId, 'UPI_DEBIT', `2026-${mm}-12`, '3000', 'BIGBASKET');
+        }
+        await event(c.userId, 'UPI_DEBIT', '2026-08-20', '60000', 'BIGBASKET'); // a one-off stock-up
+        await prisma.inflationBasketItem.create({
+          data: { userId: c.userId, name: 'Rent', divisionCode: '04', amount: '26000', frequency: 'MONTHLY' },
+        });
+        await prisma.inflationBasketItem.create({
+          data: { userId: c.userId, name: 'Cook', divisionCode: '05', amount: '6000', frequency: 'MONTHLY' },
+        });
+      });
+      const r = await runAsUser(c.userId, () => syncSpending(c.userId));
+      expect(r.analysis).toMatchObject({ series: 2, oneOffs: 1, months: 12, matchedItems: 1 });
+
+      const series = await runAsUser(c.userId, () => prisma.spendRecurringSeries.findMany({ where: { userId: c.userId }, orderBy: { category: 'asc' } }));
+      expect(series.map((s) => [s.category, s.cadence, s.isFixed, s.latestAmount.toString()])).toEqual([
+        ['groceries', 'MONTHLY', true, '3000'],
+        ['rent', 'MONTHLY', true, '26000'],
+      ]);
+
+      const aug = await runAsUser(c.userId, () => prisma.spendMonthlyCategory.findMany({ where: { userId: c.userId, month: '2026-08' }, orderBy: { category: 'asc' } }));
+      expect(aug.map((t) => [t.category, t.amount.toString(), t.oneOffAmount.toString()])).toEqual([
+        ['groceries', '3000', '60000'],
+        ['rent', '26000', '0'],
+      ]);
+
+      const items = await runAsUser(c.userId, () => prisma.inflationBasketItem.findMany({ where: { userId: c.userId }, orderBy: { name: 'asc' } }));
+      const rentSeries = series.find((s) => s.category === 'rent')!;
+      expect(items.map((i) => [i.name, i.matchedSeriesId])).toEqual([['Cook', null], ['Rent', rentSeries.id]]);
+      // The typed item itself is untouched.
+      expect(items.find((i) => i.name === 'Rent')!.amount.toString()).toBe('26000');
+
+      // A re-run keeps the same series rows.
+      await runAsUser(c.userId, () => syncSpending(c.userId));
+      const again = await runAsUser(c.userId, () => prisma.spendRecurringSeries.findMany({ where: { userId: c.userId } }));
+      expect(again.map((s) => s.id).sort()).toEqual(series.map((s) => s.id).sort());
+    } finally {
+      await c.cleanup();
+    }
   });
 });

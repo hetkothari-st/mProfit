@@ -256,6 +256,8 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   // Spending store (20261105120000): normalised bank/card movements.
   'SpendTxn',
   'SpendPayeeTag', // 20261105140000: per-payee category tags
+  'SpendRecurringSeries', // 20261105160000: recurring payments
+  'SpendMonthlyCategory', // 20261105160000: monthly spend per category
 ]);
 
 /**

@@ -172,6 +172,8 @@ model User {
   safeToInvestDecisions SafeToInvestCreditDecision[]
   spendTxns             SpendTxn[]
   spendPayeeTags        SpendPayeeTag[]
+  spendSeries           SpendRecurringSeries[]
+  spendMonthly          SpendMonthlyCategory[]
 
   // Recurring income entries (salary, business, trading, freelance, etc.)
   // — the preferred income source for Health Score and any future module
@@ -5913,6 +5915,11 @@ model InflationBasketItem {
   /// A cost that must be paid every month whatever the income (rent, school
   /// fees). Safe-to-Invest subtracts it before sizing the SIP.
   isFixed      Boolean                  @default(false)
+  /// The recurring bank payment this item matches ("already in your bank
+  /// data"), set by the spending sync; null when the bank shows no match.
+  matchedSeriesId String?
+  /// The user chose to count the item even though it matches a bank payment.
+  countAnyway  Boolean                  @default(false)
   createdAt    DateTime                 @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime                 @updatedAt @db.Timestamptz(3)
   pricePoints  InflationPricePoint[]
@@ -6022,6 +6029,12 @@ model SpendTxn {
   category      String?
   /// user | rule | dictionary | model | none
   categorySrc   String?
+  /// The recurring series this payment belongs to (rent, fees, subscriptions).
+  seriesId      String?
+  /// A big non-recurring purchase, left out of the basket weights.
+  isOneOff      Boolean  @default(false)
+  /// For a refund credit: the payment it reverses.
+  refundOfId    String?
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -6044,4 +6057,40 @@ model SpendPayeeTag {
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@unique([userId, payeeKey])
+}
+
+/// A payee paid on a regular cadence, detected from SpendTxn (rebuilt each sync).
+model SpendRecurringSeries {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payeeKey     String
+  category     String
+  /// MONTHLY | QUARTERLY | ANNUAL
+  cadence      String
+  firstSeen    DateTime @db.Date
+  lastSeen     DateTime @db.Date
+  occurrences  Int
+  latestAmount Decimal  @db.Decimal(14, 2)
+  /// Same price payment after payment (rent, fees), as opposed to a varying bill.
+  isFixed      Boolean
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, payeeKey, cadence])
+}
+
+/// Monthly spend per category: the derived store the rate engine reads (rebuilt each sync).
+model SpendMonthlyCategory {
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 'YYYY-MM'
+  month        String
+  category     String
+  /// Payments minus matched refunds, one-offs left out.
+  amount       Decimal  @db.Decimal(14, 2)
+  oneOffAmount Decimal  @default(0) @db.Decimal(14, 2)
+  txnCount     Int
+
+  @@id([userId, month, category])
 }
