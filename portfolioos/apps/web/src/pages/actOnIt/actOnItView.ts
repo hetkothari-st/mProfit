@@ -37,6 +37,10 @@ export function outcomeLabel(o: AdviceOutcome, value: string | null): string {
       return `+${formatINR(value!, { fractionDigits: 0 })}`;
     case 'MISSED':
       return `Missed ${formatINR(new Decimal(value!).abs().toFixed(2), { fractionDigits: 0 })}`;
+    case 'LOST':
+      return `Behind ${formatINR(new Decimal(value!).abs().toFixed(2), { fractionDigits: 0 })}`;
+    case 'AVOIDED':
+      return `Skipping saved ${formatINR(new Decimal(value!).abs().toFixed(2), { fractionDigits: 0 })}`;
     case 'WAITING':
       return 'Waiting';
     case 'PENDING':

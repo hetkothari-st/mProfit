@@ -2,6 +2,7 @@ import { Decimal } from 'decimal.js';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { cashGrowth, directVsRegular, loanInterestSaved, navGrowth, navVsCash, sipDipGain } from './measureMath.js';
+import { taxHarvestReport } from '../tax/tax.service.js';
 
 /**
  * The result against doing nothing (spec §6.3), once a recommendation's
@@ -76,10 +77,23 @@ async function measureOne(userId: string, method: string, b: Baseline, acted: bo
     }
     case 'TAX_SAVED': {
       if (b.kind === 'ADVANCE_TAX') return { kind: 'NOT_MEASURED', reason: 'tax payments are not visible to the app' };
+      if (b.kind !== 'LTCG_BOOKING') {
+        // A harvested loss saves tax only against gains we cannot see in full (other brokers, carry-forward).
+        return { kind: 'NOT_MEASURED', reason: 'the tax saved depends on gains outside the app' };
+      }
       const rate = num(b.ratePct);
-      const base = new Decimal(str(b.bookInr) ?? str(b.lossInr) ?? '0');
-      if (rate === null || base.lessThanOrEqualTo(0)) return { kind: 'NOT_MEASURED', reason: 'no tax rate on record' };
-      return { kind: 'MEASURED', value: base.times(rate).dividedBy(100), detail: { baseInr: base.toFixed(2), ratePct: rate } };
+      const book = new Decimal(str(b.bookInr) ?? '0');
+      const fy = str(b.fy);
+      if (rate === null || book.lessThanOrEqualTo(0) || !fy) return { kind: 'NOT_MEASURED', reason: 'no tax rate on record' };
+      const realisedNow = new Decimal((await taxHarvestReport(userId, fy)).totals.realisedLtcgInFy);
+      const atAdvice = new Decimal(str(b.realisedAtAdvice) ?? '0');
+      const exemption = new Decimal(str(b.exemptionInr) ?? '125000');
+      // Acted: the tax-free gain really booked since the advice, up to what was advised.
+      // Skipped: the tax-free room left unused at year end, up to what was advised.
+      const used = acted
+        ? Decimal.min(book, Decimal.max(0, realisedNow.minus(atAdvice)))
+        : Decimal.min(book, Decimal.max(0, exemption.minus(realisedNow)));
+      return { kind: 'MEASURED', value: used.times(rate).dividedBy(100), detail: { bookedInr: used.toFixed(2), ratePct: rate, realisedAtYearEnd: realisedNow.toFixed(2) } };
     }
     case 'RATE_DIFF': {
       if (b.kind !== 'LOAN') return { kind: 'NOT_MEASURED', reason: 'the alternative rate is not known' };
@@ -109,7 +123,7 @@ async function measureOne(userId: string, method: string, b: Baseline, acted: bo
 export async function measureDue(userId: string, now: Date = new Date()): Promise<number> {
   const recs = await prisma.advisorRecommendation.findMany({
     where: { userId, supersededById: null, outcomeStatus: 'PENDING', status: { in: ['DONE', 'DISMISSED', 'EXPIRED'] } },
-    select: { id: true, status: true, createdAt: true, confirmedAt: true, confirmedBy: true, confirmation: true, measurement: true, promise: true },
+    select: { id: true, ruleId: true, dedupeKey: true, status: true, createdAt: true, confirmedAt: true, confirmedBy: true, confirmation: true, measurement: true, promise: true },
   });
   let measured = 0;
   for (const r of recs) {
@@ -120,6 +134,16 @@ export async function measureDue(userId: string, now: Date = new Date()): Promis
       continue;
     }
     const acted = r.status === 'DONE';
+    if (!acted) {
+      const newer = await prisma.advisorRecommendation.findFirst({
+        where: { userId, ruleId: r.ruleId, dedupeKey: r.dedupeKey, createdAt: { gt: r.createdAt, lt: new Date(r.createdAt.getTime() + (m.horizonDays ?? 365) * DAY_MS) } },
+        select: { id: true },
+      });
+      if (newer) {
+        await prisma.advisorRecommendation.update({ where: { id: r.id }, data: { outcomeStatus: 'NOT_MEASURED', outcomeDetail: { reason: 'replaced by newer advice for the same money' }, measuredAt: now } });
+        continue;
+      }
+    }
     const start = acted && r.confirmedAt ? r.confirmedAt : r.createdAt;
     const due = new Date(r.createdAt.getTime() + (m.horizonDays ?? 365) * DAY_MS);
     if (due > now) continue;

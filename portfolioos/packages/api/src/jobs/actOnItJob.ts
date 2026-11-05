@@ -55,6 +55,9 @@ export async function runActOnItJob(
     for (const userId of ids) {
       try {
         await runAsUser(userId, async () => {
+          // Moves first: advice acted on straight from its card stops firing, and
+          // must be credited before the engine would withdraw it.
+          out.confirmed += await confirmFromData(userId, now);
           await runAdvisorEngine(userId, { triggeredBy: 'SYSTEM', asOf: now });
           await expireDue(userId, now);
           out.confirmed += await confirmFromData(userId, now);

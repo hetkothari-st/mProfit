@@ -197,7 +197,7 @@ export const cashDeploymentRule: AdvisorRule = {
           : `${inrWhole(amount)} of spare cash is sitting idle`,
         promise: promise({ riskBand: target ? BUCKET_RISK[target.bucket] : 'MEDIUM', confidence: liquidity.monthlyExpenses != null ? 'HIGH' : 'MEDIUM' }),
         measurement: target && resolved
-          ? { method: 'NAV_VS_CASH', horizonDays: 365, baseline: { amountInr: money2(amount), bucket: target.bucket, fundId: resolved.product.fundId, savingsRatePct: null } }
+          ? { method: 'NAV_VS_CASH', horizonDays: 365, baseline: { amountInr: money2(amount), bucket: target.bucket, fundId: resolved.product.fundId, referenceFundId: resolved.product.fundId, savingsRatePct: facts.extra?.bank.savingsRatePct ?? 3 } }
           : notMeasured(),
         expiresAt: addDays(facts.asOf, 30),
         urgentUntil: null,

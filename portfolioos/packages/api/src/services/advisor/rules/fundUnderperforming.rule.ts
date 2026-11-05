@@ -11,6 +11,7 @@ import type { AdvisorFacts, AdvisorRule, RecommendationDraft, TradeAction } from
 export const fundUnderperformingRule: AdvisorRule = {
   id: 'FUND_UNDERPERFORMING',
   version: 1,
+  needs: ['weakFunds'],
   description: 'Moves out of a fund the fund analysis flags critically with high confidence.',
 
   evaluate(facts: AdvisorFacts): RecommendationDraft[] {
@@ -18,14 +19,14 @@ export const fundUnderperformingRule: AdvisorRule = {
     if (!x) return [];
     const out: RecommendationDraft[] = [];
     for (const w of x.weakFunds) {
-      const resolved = resolveProduct('EQUITY_DOMESTIC', facts);
+      const resolved = resolveProduct(w.bucket, facts);
       const action: TradeAction[] = [{
-        direction: 'SELL', bucket: 'EQUITY_DOMESTIC', portfolioId: null, instrumentName: w.schemeName, fundId: null,
+        direction: 'SELL', bucket: w.bucket, portfolioId: null, instrumentName: w.schemeName, fundId: null,
         stockId: null, isin: null, holdingKey: w.holdingKey, units: null, amountInr: money2(w.valueInr),
       }];
       if (resolved) {
         action.push({
-          direction: 'BUY', bucket: 'EQUITY_DOMESTIC', portfolioId: facts.defaultPortfolioId, instrumentName: resolved.product.label,
+          direction: 'BUY', bucket: w.bucket, portfolioId: facts.defaultPortfolioId, instrumentName: resolved.product.label,
           fundId: resolved.product.fundId, stockId: resolved.product.stockId, isin: null, holdingKey: null, units: null, amountInr: money2(w.valueInr),
         });
       }

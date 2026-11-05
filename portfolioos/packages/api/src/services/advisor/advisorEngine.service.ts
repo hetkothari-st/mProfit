@@ -224,6 +224,11 @@ export async function runAdvisorEngine(
       ruleErrors[rule.id] = 'paused: missed its own estimates too often';
       continue;
     }
+    const missing = (rule.needs ?? []).filter((n) => facts.extra?.unavailable.includes(n));
+    if (missing.length > 0) {
+      ruleErrors[rule.id] = `data unavailable: ${missing.join(', ')}`;
+      continue;
+    }
     try {
       const emitted = rule.evaluate(facts);
       if (Array.isArray(emitted)) drafts.push(...emitted);
@@ -270,7 +275,7 @@ export async function runAdvisorEngine(
         continue;
       }
 
-      const changed = isMateriallyChanged(existing, draft);
+      const changed = isMateriallyChanged(existing, draft) || existing.headline === null || existing.outcomeStatus === 'BEFORE_TRACKING';
       const isLive = (LIVE_STATUSES as readonly string[]).includes(existing.status);
 
       // Accepted advice is waiting to be seen in the user's data and measured
@@ -304,7 +309,7 @@ export async function runAdvisorEngine(
         // left exactly as they were shown.
         await prisma.advisorRecommendation.update({
           where: { id: existing.id },
-          data: { inputsSnapshot: draft.inputsUsed as unknown as Prisma.InputJsonValue },
+          data: { inputsSnapshot: draft.inputsUsed as unknown as Prisma.InputJsonValue, urgentUntil: draft.urgentUntil, expiresAt: draft.expiresAt },
         });
         refreshed += 1;
         continue;

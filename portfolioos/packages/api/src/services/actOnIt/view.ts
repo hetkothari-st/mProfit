@@ -122,7 +122,13 @@ function card(r: Row, now: Date): AdviceCardView {
 function outcomeOf(r: Row, state: AdviceState): AdviceOutcome {
   if (state === 'BEFORE_TRACKING') return 'BEFORE_TRACKING';
   if (r.outcomeStatus === 'NOT_MEASURED') return 'NOT_MEASURED';
-  if (r.outcomeStatus === 'MEASURED' && r.outcomeInr !== null) return new Decimal(r.outcomeInr.toString()).isNegative() ? 'MISSED' : 'GAINED';
+  if (r.outcomeStatus === 'MEASURED' && r.outcomeInr !== null) {
+    // Stored signed from the user's side: acted = acting minus doing nothing;
+    // skipped = minus what acting would have earned.
+    const negative = new Decimal(r.outcomeInr.toString()).isNegative();
+    if (state === 'SKIPPED') return negative ? 'MISSED' : 'AVOIDED';
+    return negative ? 'LOST' : 'GAINED';
+  }
   if (state === 'ACCEPTED') return 'WAITING';
   if (state === 'CONFIRMED' || state === 'SKIPPED') return 'PENDING';
   return 'NONE';
@@ -148,7 +154,8 @@ export async function getActOnItView(userId: string, now: Date = new Date()): Pr
       total = total.plus(v);
       measured += 1;
     } else if (st === 'SKIPPED') {
-      missed = missed.plus(v.abs());
+      // Only skips that would have earned are missed; a skip that saved money is not.
+      if (v.isNegative()) missed = missed.plus(v.abs());
       measured += 1;
     }
   }

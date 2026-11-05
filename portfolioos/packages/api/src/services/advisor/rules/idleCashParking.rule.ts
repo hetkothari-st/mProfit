@@ -24,6 +24,7 @@ const monthsBack = (asOf: Date, n: number) =>
 export const idleCashParkingRule: AdvisorRule = {
   id: 'IDLE_CASH_PARKING',
   version: 1,
+  needs: ['consent', 'spending', 'bank', 'liquidFund'],
   description: 'Moves savings that have rested above 3 months of spending into a liquid fund.',
 
   evaluate(facts: AdvisorFacts): RecommendationDraft[] {

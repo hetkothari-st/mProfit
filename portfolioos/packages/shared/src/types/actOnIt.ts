@@ -50,7 +50,11 @@ export interface AdviceCardView {
   twoPaths: { amountInr: string; doNothingRatePct: number; actRatePct: number; doNothingLabel: string; actLabel: string } | null;
 }
 
-export type AdviceOutcome = 'GAINED' | 'MISSED' | 'WAITING' | 'NOT_MEASURED' | 'PENDING' | 'BEFORE_TRACKING' | 'NONE';
+/**
+ * GAINED / LOST: advice followed, ahead of or behind doing nothing.
+ * MISSED / AVOIDED: advice skipped; acting would have earned (missed) or lost (avoided).
+ */
+export type AdviceOutcome = 'GAINED' | 'LOST' | 'MISSED' | 'AVOIDED' | 'WAITING' | 'NOT_MEASURED' | 'PENDING' | 'BEFORE_TRACKING' | 'NONE';
 
 export interface AdviceHistoryRow {
   id: string;

@@ -9,6 +9,7 @@ import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js
 export const emergencyFundRule: AdvisorRule = {
   id: 'EMERGENCY_FUND',
   version: 1,
+  needs: ['consent', 'spending'],
   description: 'Builds a buffer when liquid money is under 3 months of spending.',
 
   evaluate(facts: AdvisorFacts): RecommendationDraft[] {

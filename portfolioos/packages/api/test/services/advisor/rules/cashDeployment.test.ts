@@ -10,6 +10,7 @@ import {
   makeFacts,
   makeProduct,
   targets,
+  makeExtra,
 } from './fixtures.js';
 
 /** ₹20L portfolio, ₹3L emergency-fund target, ₹5L of cash sitting above it. */
@@ -189,5 +190,15 @@ describe('cashDeploymentRule', () => {
     expect(Number.isInteger(draft.priority)).toBe(true);
     expect(draft.priority).toBeGreaterThanOrEqual(35);
     expect(draft.priority).toBeLessThanOrEqual(60);
+  });
+});
+
+describe('cashDeploymentRule — Act on it measurement (final review I7)', () => {
+  it("measures against the account's savings rate and the advised fund, not cash at 0%", () => {
+    const facts = { ...surplusFacts(), extra: makeExtra({ bank: { balanceMonths: [], latestBalance: null, savingsRatePct: 2.75, savingsRateAssumed: false } }) };
+    const [draft] = cashDeploymentRule.evaluate(facts);
+    expect(draft!.measurement.method).toBe('NAV_VS_CASH');
+    expect(draft!.measurement.baseline).toMatchObject({ savingsRatePct: 2.75 });
+    expect(draft!.measurement.baseline.referenceFundId).toBe(draft!.action[0]!.fundId);
   });
 });

@@ -16,7 +16,7 @@ import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { hasSpendingConsent } from '../safeToInvest/stiSpendStore.js';
 import { advanceTaxReport } from '../tax/advanceTax.service.js';
-import { financialYearOf } from '../tax/capitalGains.service.js';
+import { computeOpenLots, financialYearOf, lotTaxStatus } from '../tax/capitalGains.service.js';
 import { bestMarketRate, loanPosition } from '../loans/loanChecks/marketCheck.service.js';
 import type { StoredLoan } from '../loans/loans.service.js';
 import type { ActOnItFacts, AdvisorHoldingFact } from './types.js';
@@ -46,46 +46,79 @@ export interface ActOnItFactInputs {
   };
 }
 
-async function safe<T>(label: string, fallback: T, fn: () => Promise<T>): Promise<T> {
+async function safe<T>(label: string, fallback: T, fn: () => Promise<T>, failed?: string[]): Promise<T> {
   try {
     return await fn();
   } catch (err) {
-    // A missing or broken source silences the suggestions that need it; it never fails the run.
+    // A broken source skips the rules that need it (engine: rule.needs): never
+    // run them on empty data, which would withdraw advice that is still true.
+    failed?.push(label);
     logger.warn({ err: err instanceof Error ? err.message : String(err), section: label }, '[actOnIt] facts section unavailable');
     return fallback;
   }
 }
 
 export async function buildActOnItFacts(userId: string, asOf: Date, input: ActOnItFactInputs): Promise<ActOnItFacts> {
-  const consent = await safe('consent', false, () => hasSpendingConsent(userId));
+  const failed: string[] = [];
+  const consent = await safe('consent', false, () => hasSpendingConsent(userId), failed);
   const [monthlySpending, bank, regularPlans, fds, loans, sips, indexMonthly, advanceTax, healthCover, weakFunds, liquidFund] =
     await Promise.all([
-      safe('spending', input.fallbackMonthlyExpenses, () => monthlySpendingFor(userId, asOf, consent, input.fallbackMonthlyExpenses)),
-      safe('bank', { balanceMonths: [], latestBalance: null, savingsRatePct: TYPICAL_SAVINGS_RATE_PCT, savingsRateAssumed: true }, () => bankFacts(userId, asOf)),
-      safe('regularPlans', [], () => regularPlanFacts(input.holdings)),
-      safe('fds', [], () => fdFacts(userId)),
-      safe('loans', [], () => loanFacts(userId, asOf)),
-      safe('sips', [], () => sipFacts(userId, asOf)),
-      safe('index', [], () => indexFacts(asOf)),
-      safe('advanceTax', null, () => advanceTaxFacts(userId, asOf)),
-      safe('health', { sumInsured: new Decimal(0), policies: 0 }, () => healthFacts(userId)),
-      safe('weakFunds', [], () => weakFundFacts(userId, input.holdings)),
-      safe('liquidFund', null, () => liquidFundFact()),
+      safe('spending', input.fallbackMonthlyExpenses, () => monthlySpendingFor(userId, asOf, consent, input.fallbackMonthlyExpenses), failed),
+      safe('bank', { balanceMonths: [], latestBalance: null, savingsRatePct: TYPICAL_SAVINGS_RATE_PCT, savingsRateAssumed: true }, () => bankFacts(userId, asOf), failed),
+      safe('regularPlans', [], () => regularPlanFacts(input.holdings), failed),
+      safe('fds', [], () => fdFacts(userId), failed),
+      safe('loans', [], () => loanFacts(userId, asOf), failed),
+      safe('sips', [], () => sipFacts(userId, asOf), failed),
+      safe('index', [], () => indexFacts(asOf), failed),
+      safe('advanceTax', null, () => advanceTaxFacts(userId, asOf), failed),
+      safe('health', { sumInsured: new Decimal(0), policies: 0 }, () => healthFacts(userId), failed),
+      safe('weakFunds', [], () => weakFundFacts(userId, input.holdings), failed),
+      safe('liquidFund', null, () => liquidFundFact(), failed),
     ]);
 
   const equityIsins = new Set(input.holdings.filter((h) => h.bucket === 'EQUITY_DOMESTIC' && h.isin).map((h) => h.isin));
   const equityNames = new Set(input.holdings.filter((h) => h.bucket === 'EQUITY_DOMESTIC').map((h) => h.assetName));
+  const rows = input.harvest.rows
+    .filter((r) => r.classification === 'LTCG_GAIN' && ((r.isin && equityIsins.has(r.isin)) || equityNames.has(r.assetName)))
+    .filter((r) => d(r.unrealisedPnL).greaterThan(0));
+  const candidates = await safe('ltcgLots', [] as ActOnItFacts['ltcg']['candidates'], () => ltcgLots(userId, asOf, rows), failed);
   const ltcg = {
     fy: financialYearOf(asOf),
     realised: d(input.harvest.totals.realisedLtcgInFy),
     exemption: d(input.harvest.savings.ltcgExemption),
-    candidates: input.harvest.rows
-      .filter((r) => r.classification === 'LTCG_GAIN' && ((r.isin && equityIsins.has(r.isin)) || equityNames.has(r.assetName)))
-      .map((r) => ({ portfolioId: r.portfolioId, assetName: r.assetName, isin: r.isin, gain: d(r.unrealisedPnL), value: d(r.currentValue) }))
-      .filter((c) => c.gain.greaterThan(0)),
+    candidates,
   };
 
-  return { spendingConsent: consent, monthlySpending, bank, regularPlans, fds, loans, sips, indexMonthly, ltcg, advanceTax, healthCover, weakFunds, liquidFund };
+  return { spendingConsent: consent, monthlySpending, bank, regularPlans, fds, loans, sips, indexMonthly, ltcg, advanceTax, healthCover, weakFunds, liquidFund, unavailable: failed };
+}
+
+/**
+ * Each candidate's open lots in FIFO sale order, with whether each would be
+ * long-term if sold today, so gain booking is sized on the lots a sale would
+ * really take, not on the holding's average gain.
+ */
+async function ltcgLots(
+  userId: string,
+  asOf: Date,
+  rows: ActOnItFactInputs['harvest']['rows'],
+): Promise<ActOnItFacts['ltcg']['candidates']> {
+  const out: ActOnItFacts['ltcg']['candidates'] = [];
+  for (const r of rows) {
+    const txs = await prisma.transaction.findMany({
+      where: { portfolioId: r.portfolioId, portfolio: { userId }, ...(r.isin ? { isin: r.isin } : { assetName: r.assetName }) },
+      orderBy: { tradeDate: 'asc' },
+    });
+    const position = computeOpenLots(txs)[0];
+    if (!position) continue;
+    const quantity = position.lots.reduce((s, l) => s.plus(l.quantity), new Decimal(0));
+    const value = d(r.currentValue);
+    out.push({
+      portfolioId: r.portfolioId, assetName: r.assetName, isin: r.isin, gain: d(r.unrealisedPnL), value,
+      price: quantity.greaterThan(0) ? value.dividedBy(quantity) : null,
+      lots: position.lots.map((l) => ({ buyDate: l.buyDate, quantity: l.quantity, costPerUnit: l.costPerUnit, longTerm: lotTaxStatus(position, l.buyDate, asOf).longTerm })),
+    });
+  }
+  return out;
 }
 
 async function monthlySpendingFor(userId: string, asOf: Date, consent: boolean, fallback: Decimal | null): Promise<Decimal | null> {
@@ -114,8 +147,9 @@ async function bankFacts(userId: string, asOf: Date): Promise<ActOnItFacts['bank
     let total = new Decimal(0);
     let seen = 0;
     for (const a of accounts) {
-      // The last balance on or before the month end; an account with none yet does not count that month.
-      const last = [...a.snapshots].reverse().find((s) => s.asOfDate < next);
+      // The last balance read inside that month. An older reading is not carried
+      // forward: one snapshot must not stand in for months nobody looked.
+      const last = [...a.snapshots].reverse().find((s) => s.asOfDate < next && s.asOfDate >= end);
       if (last) {
         total = total.plus(d(last.balance));
         seen += 1;
@@ -172,7 +206,7 @@ async function regularPlanFacts(holdings: AdvisorHoldingFact[]): Promise<ActOnIt
     const dTer = direct ? ter.get(direct.schemeCode) : undefined;
     if (!direct || rTer === undefined || dTer === undefined || dTer >= rTer) continue;
     out.push({
-      holdingKey: h.holdingKey, portfolioId: h.portfolioId, fundId: f.id, schemeName: h.assetName, valueInr: h.currentValue,
+      holdingKey: h.holdingKey, portfolioId: h.portfolioId, fundId: f.id, schemeName: h.assetName, valueInr: h.currentValue, bucket: h.bucket,
       regularTerPct: rTer, directFundId: direct.id, directSchemeCode: direct.schemeCode, directName: `${f.schemeName} - Direct`, directTerPct: dTer,
     });
   }
@@ -231,7 +265,8 @@ async function sipFacts(userId: string, asOf: Date): Promise<ActOnItFacts['sips'
   if (plans.length === 0) return [];
   const months = monthsBack(asOf, 3);
   const txns = await prisma.transaction.findMany({
-    where: { portfolio: { userId }, transactionType: 'SIP', tradeDate: { gte: new Date(`${months[0]}-01T00:00:00Z`) } },
+    // CAS imports label an instalment SIP only when the line says so; a BUY in the plan's fund counts too.
+    where: { portfolio: { userId }, transactionType: { in: ['SIP', 'BUY'] }, tradeDate: { gte: new Date(`${months[0]}-01T00:00:00Z`) } },
     select: { fundId: true, assetName: true, tradeDate: true },
   });
   const fundIds = plans.map((p) => p.fundId).filter((x): x is string => !!x);
@@ -283,7 +318,7 @@ async function weakFundFacts(userId: string, holdings: AdvisorHoldingFact[]): Pr
     const fundId = funds.find((x) => x.schemeCode === f.schemeCode)?.id;
     const h = holdings.find((x) => x.fundId === fundId && x.currentValue.greaterThan(0));
     if (!h || out.some((o) => o.schemeCode === f.schemeCode)) continue;
-    out.push({ holdingKey: h.holdingKey, schemeCode: f.schemeCode!, schemeName: h.assetName, valueInr: h.currentValue, findingCode: f.code, headline: f.headline, confidence: Number.parseFloat(f.confidence.toString()) });
+    out.push({ holdingKey: h.holdingKey, schemeCode: f.schemeCode!, schemeName: h.assetName, valueInr: h.currentValue, bucket: h.bucket, findingCode: f.code, headline: f.headline, confidence: Number.parseFloat(f.confidence.toString()) });
   }
   return out;
 }

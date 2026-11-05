@@ -91,3 +91,16 @@ describe('act on it facts (DB)', () => {
     ]);
   });
 });
+
+describe('act on it facts — final review I2', () => {
+  it('one old balance reading does not stand in for the months after it', async () => {
+    const s = await createTestScope('aoi-facts-i2');
+    scopes.push(s);
+    await runAsUser(s.userId, async () => {
+      const acc = await prisma.bankAccount.create({ data: { userId: s.userId, bankName: 'Test Bank', accountType: 'SAVINGS', accountHolder: 'Test User', last4: '1111', currentBalance: '300000' } });
+      await prisma.bankBalanceSnapshot.create({ data: { accountId: acc.id, asOfDate: new Date('2026-01-20'), balance: '300000', source: 'manual' } });
+    });
+    const f = await runAsUser(s.userId, () => buildActOnItFacts(s.userId, NOW, { holdings: [], fallbackMonthlyExpenses: null, harvest: noHarvest }));
+    expect(f.bank.balanceMonths.map((m) => m.month)).toEqual(['2026-01']);
+  });
+});

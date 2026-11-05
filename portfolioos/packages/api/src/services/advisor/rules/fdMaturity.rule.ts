@@ -10,6 +10,7 @@ import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js
 export const fdMaturityRule: AdvisorRule = {
   id: 'FD_MATURITY',
   version: 1,
+  needs: ['fds'],
   description: 'Asks for a decision on a fixed deposit before it auto-renews.',
 
   evaluate(facts: AdvisorFacts): RecommendationDraft[] {

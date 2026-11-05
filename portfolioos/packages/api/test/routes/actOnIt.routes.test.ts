@@ -47,6 +47,9 @@ describe('/api/act-on-it routes', () => {
       ids.gain = (await prisma.advisorRecommendation.create({ data: { ...base, dedupeKey: 'g', promise, measurement, inputsSnapshot: {}, status: 'DONE', confirmedBy: 'DATA', outcomeStatus: 'MEASURED', outcomeInr: '18900' } })).id;
       ids.user = (await prisma.advisorRecommendation.create({ data: { ...base, dedupeKey: 'u', promise, measurement, inputsSnapshot: {}, status: 'DONE', confirmedBy: 'USER', outcomeStatus: 'NOT_MEASURED' } })).id;
       ids.miss = (await prisma.advisorRecommendation.create({ data: { ...base, dedupeKey: 'm', promise, measurement, inputsSnapshot: {}, status: 'DISMISSED', outcomeStatus: 'MEASURED', outcomeInr: '-9400' } })).id;
+      // Followed but lost money; skipped and the path would have lost (skipping saved).
+      ids.lost = (await prisma.advisorRecommendation.create({ data: { ...base, dedupeKey: 'l', promise, measurement, inputsSnapshot: {}, status: 'DONE', confirmedBy: 'DATA', outcomeStatus: 'MEASURED', outcomeInr: '-1500' } })).id;
+      ids.avoided = (await prisma.advisorRecommendation.create({ data: { ...base, dedupeKey: 'v', promise, measurement, inputsSnapshot: {}, status: 'EXPIRED', outcomeStatus: 'MEASURED', outcomeInr: '2000' } })).id;
       ids.old = (await prisma.advisorRecommendation.create({ data: { ...base, dedupeKey: 'o', promise, measurement, inputsSnapshot: {}, status: 'ACCEPTED', outcomeStatus: 'BEFORE_TRACKING' } })).id;
       ids.prompt = (await prisma.advicePrompt.create({ data: { userId: a.userId, recommendationId: ids.open, kind: 'NEW' } })).id;
     });
@@ -82,12 +85,15 @@ describe('/api/act-on-it routes', () => {
     expect(v.current).toMatchObject({ id: ids.open, gainInr: '6300.00', riskBand: 'LOW', state: 'OPEN', whyNow: { kind: 'BALANCE', bufferInr: '120000.00' } });
     expect(v.current.twoPaths).toMatchObject({ amountInr: '180000.00', doNothingRatePct: 3, actRatePct: 6.5 });
     // The user's own claim and the before-tracking advice never add to the totals.
-    expect(v.record).toMatchObject({ given: 4, acted: 2, confirmed: 1, skipped: 1, totalInr: '18900.00', missedInr: '9400.00', measured: 2 });
+    // Followed advice counts at its real result (a loss included); only skips that would have earned count as missed.
+    expect(v.record).toMatchObject({ given: 6, acted: 3, confirmed: 2, skipped: 2, totalInr: '17400.00', missedInr: '9400.00', measured: 4 });
     const state = (id: string) => v.history.find((h: { id: string }) => h.id === id);
     expect(state(ids.gain)).toMatchObject({ state: 'CONFIRMED', outcome: 'GAINED', outcomeInr: '18900.00' });
     expect(state(ids.miss)).toMatchObject({ state: 'SKIPPED', outcome: 'MISSED', outcomeInr: '-9400.00' });
     expect(state(ids.user)).toMatchObject({ state: 'CONFIRMED_BY_USER', outcome: 'NOT_MEASURED' });
     expect(state(ids.old)).toMatchObject({ state: 'BEFORE_TRACKING', outcome: 'BEFORE_TRACKING' });
+    expect(state(ids.lost)).toMatchObject({ state: 'CONFIRMED', outcome: 'LOST', outcomeInr: '-1500.00' });
+    expect(state(ids.avoided)).toMatchObject({ state: 'SKIPPED', outcome: 'AVOIDED', outcomeInr: '2000.00' });
     expect(v.compliance.line).toMatch(/Advice, not a guarantee of returns/);
   });
 

@@ -233,7 +233,7 @@ export interface ActOnItFacts {
   };
   /** Regular-plan funds the user holds that have a direct plan with a lower expense ratio. */
   regularPlans: {
-    holdingKey: string; portfolioId: string; fundId: string; schemeName: string; valueInr: Decimal;
+    holdingKey: string; portfolioId: string; fundId: string; schemeName: string; valueInr: Decimal; bucket: AdvisorAssetBucketValue;
     regularTerPct: number; directFundId: string; directSchemeCode: string; directName: string; directTerPct: number;
   }[];
   /** Open fixed deposits with a maturity date. */
@@ -249,15 +249,20 @@ export interface ActOnItFacts {
   indexMonthly: { month: string; close: number }[];
   ltcg: {
     fy: string; realised: Decimal; exemption: Decimal;
-    /** Long-term equity gains that could be booked now. */
-    candidates: { portfolioId: string; assetName: string; isin: string | null; gain: Decimal; value: Decimal }[];
+    /** Long-term equity gains that could be booked now, with the holding's open lots oldest first (FIFO sale order). */
+    candidates: {
+      portfolioId: string; assetName: string; isin: string | null; gain: Decimal; value: Decimal; price: Decimal | null;
+      lots: { buyDate: Date; quantity: Decimal; costPerUnit: Decimal; longTerm: boolean }[];
+    }[];
   };
   /** The next advance-tax instalment with a shortfall, or null. */
   advanceTax: { label: string; dueDate: Date; shortfall: Decimal; interest: Decimal } | null;
   /** Active health cover; policies = 0 when none. */
   healthCover: { sumInsured: Decimal; policies: number };
   /** Funds the fund analysis flagged critically, with high confidence. */
-  weakFunds: { holdingKey: string; schemeCode: string; schemeName: string; valueInr: Decimal; findingCode: string; headline: string; confidence: number }[];
+  weakFunds: { holdingKey: string; schemeCode: string; schemeName: string; valueInr: Decimal; bucket: AdvisorAssetBucketValue; findingCode: string; headline: string; confidence: number }[];
+  /** Fact sections whose source failed this run: rules that need them say nothing either way (nothing is withdrawn). */
+  unavailable: string[];
   /** A direct-plan liquid fund to suggest and measure against, or null. */
   liquidFund: { schemeCode: string; name: string; fundId: string | null } | null;
 }
@@ -368,6 +373,8 @@ export interface AdvisorRule {
    *  Stamped onto every recommendation so old advice stays reconstructable. */
   version: number;
   description: string;
+  /** Act on it fact sections this rule reads; if any failed to load, the rule is skipped, not run on empty data. */
+  needs?: readonly string[];
   /** Pure. No I/O, no Date.now(), no randomness. */
   evaluate(facts: AdvisorFacts): RecommendationDraft[];
 }

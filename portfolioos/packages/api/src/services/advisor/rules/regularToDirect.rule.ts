@@ -11,6 +11,7 @@ import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js
 export const regularToDirectRule: AdvisorRule = {
   id: 'REGULAR_TO_DIRECT',
   version: 1,
+  needs: ['regularPlans'],
   description: "Switches a regular-plan fund to the same fund's cheaper direct plan.",
 
   evaluate(facts: AdvisorFacts): RecommendationDraft[] {
@@ -31,7 +32,7 @@ export const regularToDirectRule: AdvisorRule = {
         category: 'REGULAR_TO_DIRECT',
         priority: CATEGORY_BASE_PRIORITY.REGULAR_TO_DIRECT,
         action: [{
-          direction: 'SELL', bucket: 'EQUITY_DOMESTIC', portfolioId: p.portfolioId, instrumentName: p.schemeName, fundId: p.fundId,
+          direction: 'SELL', bucket: p.bucket, portfolioId: p.portfolioId, instrumentName: p.schemeName, fundId: p.fundId,
           stockId: null, isin: null, holdingKey: p.holdingKey, units: null, amountInr: money2(p.valueInr),
         }],
         rationale,

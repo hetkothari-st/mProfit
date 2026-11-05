@@ -10,6 +10,7 @@ import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js
 export const healthCoverRule: AdvisorRule = {
   id: 'HEALTH_COVER',
   version: 1,
+  needs: ['health'],
   description: 'Raises health cover that is under ₹10 lakh.',
 
   evaluate(facts: AdvisorFacts): RecommendationDraft[] {

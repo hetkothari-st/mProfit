@@ -273,7 +273,7 @@ function buildDraft(
       ? `Book a ${inrWhole(m.loss)} loss on ${candidate.assetName} to save about ${inrWhole(taxSaved)} in tax`
       : `Book a ${inrWhole(m.loss)} loss on ${candidate.assetName} before 31 March`,
     promise: promise({ riskBand: 'LOW', gainInr: taxSaved != null ? money2(taxSaved) : null, confidence: taxSaved != null ? 'HIGH' : 'MEDIUM' }),
-    measurement: { method: 'TAX_SAVED', horizonDays: Math.max(1, Math.ceil((fyEnd(facts.asOf).getTime() - facts.asOf.getTime()) / 86_400_000)), baseline: { lossInr: money2(m.loss), ratePct: m.offset.pct, isin: candidate.isin, assetName: candidate.assetName } },
+    measurement: { method: 'TAX_SAVED', horizonDays: Math.max(1, Math.ceil((fyEnd(facts.asOf).getTime() - facts.asOf.getTime()) / 86_400_000)), baseline: { lossInr: money2(m.loss), proceedsInr: money2(m.proceeds), ratePct: m.offset.pct, isin: candidate.isin, assetName: candidate.assetName } },
     expiresAt: fyEnd(facts.asOf),
     urgentUntil: urgentIfWithin(fyEnd(facts.asOf), facts.asOf),
   };

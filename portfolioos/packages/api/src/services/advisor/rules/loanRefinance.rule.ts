@@ -10,6 +10,7 @@ import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js
 export const loanRefinanceRule: AdvisorRule = {
   id: 'LOAN_REFINANCE',
   version: 1,
+  needs: ['loans'],
   description: 'Moves a loan to a lender with a materially lower rate when it saves money after costs.',
 
   evaluate(facts: AdvisorFacts): RecommendationDraft[] {
@@ -18,11 +19,12 @@ export const loanRefinanceRule: AdvisorRule = {
     const out: RecommendationDraft[] = [];
     for (const l of x.loans) {
       if (l.outstanding.lessThan(LOAN_REFI_MIN_OUTSTANDING_INR) || l.remainingMonths < LOAN_REFI_MIN_MONTHS_LEFT || !l.netSaving.greaterThan(0)) continue;
+      const firstYear = l.outstanding.times(l.currentRatePct - l.marketRatePct).dividedBy(100);
       const breakEven = l.breakEvenMonth != null ? ` The switching costs are paid back in about ${l.breakEvenMonth} months.` : '';
       const rationale =
         `Your ${l.loanType.toLowerCase()} loan with ${l.lender} charges ${l.currentRatePct.toFixed(2)}% on ${inr(l.outstanding)} outstanding, ` +
         `with ${l.remainingMonths} months to go. ${l.marketLender} advertises ${l.marketRatePct.toFixed(2)}%. ` +
-        `Moving the loan saves about ${inr(l.netSaving)} over the remaining term after typical processing and legal costs.${breakEven} ` +
+        `That is about ${inr(firstYear)} less interest in the first year, and about ${inr(l.netSaving)} over the remaining term after typical processing and legal costs.${breakEven} ` +
         'Ask your lender to match the rate first: many will, and that saves the switching costs too.';
       out.push({
         ruleId: loanRefinanceRule.id,
@@ -38,7 +40,7 @@ export const loanRefinanceRule: AdvisorRule = {
         provenance: { kind: 'NONE' },
         dedupeKey: `LOAN_REFINANCE:${l.loanId}`,
         headline: `Save about ${inrWhole(l.netSaving)} on your ${l.loanType.toLowerCase()} loan`,
-        promise: promise({ gainInr: money2(l.netSaving), riskBand: 'LOW', costInr: null, liquidity: null }),
+        promise: promise({ gainInr: money2(firstYear), riskBand: 'LOW', costInr: null, liquidity: null }),
         measurement: {
           method: 'RATE_DIFF',
           horizonDays: 365,

@@ -50,7 +50,7 @@ export function TrackRecord({ view }: { view: ActOnItView }) {
         <ol className="overflow-hidden rounded-3xl border bg-card">
           {view.history.map((h) => {
             const share = barShare(h.outcomeInr, values);
-            const tone = h.outcome === 'GAINED' ? 'text-accent-ink' : h.outcome === 'MISSED' ? 'text-negative' : 'text-muted-foreground';
+            const tone = h.outcome === 'GAINED' ? 'text-accent-ink' : h.outcome === 'MISSED' || h.outcome === 'LOST' ? 'text-negative' : 'text-muted-foreground';
             const dot = h.state === 'CONFIRMED' ? 'bg-accent' : h.state === 'ACCEPTED' ? 'bg-warning' : h.state === 'SKIPPED' ? 'bg-negative' : 'bg-muted-foreground/60';
             return (
               <li key={h.id} className="grid grid-cols-[64px_1fr] items-center gap-x-4 gap-y-2 border-t px-5 py-3.5 first:border-t-0 sm:grid-cols-[72px_1fr_160px_minmax(110px,auto)] sm:px-6">
@@ -67,10 +67,11 @@ export function TrackRecord({ view }: { view: ActOnItView }) {
                 <div className="relative col-span-2 h-5 sm:col-span-1" aria-hidden>
                   <span className="absolute inset-y-[-12px] left-1/2 w-px bg-border" />
                   {h.outcome === 'GAINED' && <span className="absolute left-1/2 h-full rounded-r-md bg-accent" style={{ width: `${share / 2}%` }} />}
-                  {h.outcome === 'MISSED' && <span className="absolute right-1/2 h-full rounded-l-md bg-negative" style={{ width: `${share / 2}%` }} />}
+                  {(h.outcome === 'MISSED' || h.outcome === 'LOST') && <span className="absolute right-1/2 h-full rounded-l-md bg-negative" style={{ width: `${share / 2}%` }} />}
+                  {h.outcome === 'AVOIDED' && <span className="absolute left-1/2 h-full rounded-r-md bg-muted-foreground/40" style={{ width: `${share / 2}%` }} />}
                   {h.outcome === 'WAITING' && <span className="absolute left-1/2 h-full w-[30%] rounded-r-md border border-warning/60 bg-[repeating-linear-gradient(135deg,hsl(var(--warning)/0.35)_0_5px,transparent_5px_10px)]" />}
                 </div>
-                <div className={cn('col-span-2 text-right sm:col-span-1', h.outcome === 'GAINED' || h.outcome === 'MISSED' ? 'numeric-display text-[19px] font-semibold' : 'text-[13px]', tone)}>
+                <div className={cn('col-span-2 text-right sm:col-span-1', ['GAINED', 'MISSED', 'LOST'].includes(h.outcome) ? 'numeric-display text-[19px] font-semibold' : 'text-[13px]', tone)}>
                   {outcomeLabel(h.outcome, h.outcomeInr)}
                 </div>
               </li>

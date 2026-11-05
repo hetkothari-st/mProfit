@@ -14,6 +14,7 @@ import { emergencyFundRule } from '../../../../src/services/advisor/rules/emerge
 import { healthCoverRule } from '../../../../src/services/advisor/rules/healthCover.rule.js';
 import { fundUnderperformingRule } from '../../../../src/services/advisor/rules/fundUnderperforming.rule.js';
 import { reconcileDrafts } from '../../../../src/services/advisor/reconcile.js';
+import { cashDeploymentRule } from '../../../../src/services/advisor/rules/cashDeployment.rule.js';
 import { balances, d, makeExtra, makeFacts } from './fixtures.js';
 
 const NOV = new Date('2026-11-06T00:00:00Z');
@@ -62,7 +63,7 @@ describe('idle savings → liquid fund', () => {
 });
 
 describe('regular → direct', () => {
-  const plan = { holdingKey: 'fund:a', portfolioId: 'pf-1', fundId: 'f-reg', schemeName: 'Test Flexi Cap - Regular', valueInr: d(500_000), regularTerPct: 1.8, directFundId: 'f-dir', directSchemeCode: 'D1', directName: 'Test Flexi Cap - Direct', directTerPct: 0.6 };
+  const plan = { holdingKey: 'fund:a', portfolioId: 'pf-1', fundId: 'f-reg', schemeName: 'Test Flexi Cap - Regular', valueInr: d(500_000), bucket: 'EQUITY_DOMESTIC' as const, regularTerPct: 1.8, directFundId: 'f-dir', directSchemeCode: 'D1', directName: 'Test Flexi Cap - Direct', directTerPct: 0.6 };
   it('saves ₹6,000 a year on ₹5,00,000 at 1.8% vs 0.6%', () => {
     const [r] = regularToDirectRule.evaluate(makeFacts({ asOf: NOV, extra: makeExtra({ regularPlans: [plan] }) }));
     expect(r!.promise.gainInr).toBe('6000.00');
@@ -76,7 +77,7 @@ describe('regular → direct', () => {
 });
 
 describe('book gains up to the tax-free limit', () => {
-  const ltcg = { fy: '2025-26', realised: d(25_000), exemption: d(125_000), candidates: [{ portfolioId: 'pf-1', assetName: 'Test Bluechip', isin: 'INE000T01019', gain: d(150_000), value: d(600_000) }] };
+  const ltcg = { fy: '2025-26', realised: d(25_000), exemption: d(125_000), candidates: [{ portfolioId: 'pf-1', assetName: 'Test Bluechip', isin: 'INE000T01019', gain: d(150_000), value: d(600_000), price: d(400), lots: [{ buyDate: new Date('2020-01-10T00:00:00Z'), quantity: d(1500), costPerUnit: d(300), longTerm: true }] }] };
   it('books ₹1,00,000 of gain (sell ₹4,00,000), saving ₹12,500 of future tax', () => {
     const [r] = ltcgBookingRule.evaluate(makeFacts({ asOf: new Date('2026-02-10T00:00:00Z'), extra: makeExtra({ ltcg }) }));
     expect(r!.action).toEqual([expect.objectContaining({ direction: 'SELL', amountInr: '400000.00' })]);
@@ -115,9 +116,10 @@ describe('FD maturing', () => {
 
 describe('loan refinance', () => {
   const loan = { loanId: 'l1', lender: 'Test HFC', loanType: 'HOME', currentRatePct: 9.4, marketRatePct: 8.4, marketLender: 'Test Bank', outstanding: d(4_000_000), remainingMonths: 180, netSaving: d(285_000), breakEvenMonth: 4 };
-  it('promises the saving after switching costs', () => {
+  it('states the saving after switching costs, and promises the first year', () => {
     const [r] = loanRefinanceRule.evaluate(makeFacts({ asOf: NOV, extra: makeExtra({ loans: [loan] }) }));
-    expect(r!.promise.gainInr).toBe('285000.00');
+    expect(r!.rationale.replace(/[₹,]/g, '')).toContain('285000.00');
+    expect(r!.promise.gainInr).toBe('40000.00');
     expect(r!.measurement.method).toBe('RATE_DIFF');
   });
   it('is silent for a small loan or a short remaining term', () => {
@@ -153,7 +155,7 @@ describe('emergency fund and health cover (not measured)', () => {
 
 describe('weak fund', () => {
   it('suggests selling a critically flagged fund', () => {
-    const weakFunds = [{ holdingKey: 'fund:w', schemeCode: 'W1', schemeName: 'Test Laggard Fund', valueInr: d(200_000), findingCode: 'HIGH_DOWN_CAPTURE', headline: 'Falls further than its benchmark in bad months', confidence: 0.9 }];
+    const weakFunds = [{ holdingKey: 'fund:w', schemeCode: 'W1', schemeName: 'Test Laggard Fund', valueInr: d(200_000), bucket: 'EQUITY_DOMESTIC' as const, findingCode: 'HIGH_DOWN_CAPTURE', headline: 'Falls further than its benchmark in bad months', confidence: 0.9 }];
     const [r] = fundUnderperformingRule.evaluate(makeFacts({ asOf: NOV, extra: makeExtra({ weakFunds }) }));
     expect(r!.action[0]).toMatchObject({ direction: 'SELL', amountInr: '200000.00' });
     expect(r!.measurement.method).toBe('FUND_VS_ALT');
@@ -172,5 +174,60 @@ describe('reconcile', () => {
     const weak = { ...idleCashParkingRule.evaluate(idleFacts())[0]!, category: 'FUND_UNDERPERFORMING' as const, inputsUsed: { holdingKey: 'fund:a' } };
     const r2d = { ...weak, category: 'REGULAR_TO_DIRECT' as const, inputsUsed: { holdingKey: 'fund:a' } };
     expect(reconcileDrafts([r2d, weak], makeFacts()).map((x) => x.category)).toEqual(['FUND_UNDERPERFORMING']);
+  });
+});
+
+// ─── Review fixes (final review I3, I7, I10, I11) ────────────────
+
+describe('review fixes', () => {
+  it('I3: sizes gain booking from the oldest long-term lots, and says buy back the next trading day', () => {
+    const ltcg = {
+      fy: '2025-26', realised: d(25_000), exemption: d(125_000),
+      candidates: [{
+        portfolioId: 'pf-1', assetName: 'Test Bluechip', isin: 'INE000T01019', gain: d(130_000), value: d(80_000), price: d(400),
+        lots: [
+          { buyDate: new Date('2020-01-10T00:00:00Z'), quantity: d(500), costPerUnit: d(100), longTerm: true },
+          { buyDate: new Date('2023-01-10T00:00:00Z'), quantity: d(100), costPerUnit: d(390), longTerm: true },
+        ],
+      }],
+    };
+    const [r] = ltcgBookingRule.evaluate(makeFacts({ asOf: new Date('2026-02-10T00:00:00Z'), extra: makeExtra({ ltcg }) }));
+    // ₹1,00,000 of room: the oldest lot gains ₹300 a share, so 333 shares (₹99,900 gain) = ₹1,33,200 to sell.
+    expect(r!.action[0]!.amountInr).toBe('133200.00');
+    expect(r!.rationale).toMatch(/next trading day/);
+    expect(r!.rationale).not.toMatch(/same day/);
+  });
+
+  it('I3: stays silent when the oldest lot is short-term (selling would book short-term gains)', () => {
+    const ltcg = {
+      fy: '2025-26', realised: d(0), exemption: d(125_000),
+      candidates: [{ portfolioId: 'pf-1', assetName: 'X', isin: 'INE1', gain: d(50_000), value: d(100_000), price: d(100), lots: [{ buyDate: new Date('2025-12-01T00:00:00Z'), quantity: d(1000), costPerUnit: d(50), longTerm: false }] }],
+    };
+    expect(ltcgBookingRule.evaluate(makeFacts({ asOf: new Date('2026-02-10T00:00:00Z'), extra: makeExtra({ ltcg }) }))).toEqual([]);
+  });
+
+  it("I10: a weak debt fund is replaced within debt, never with an equity fund", () => {
+    const weakFunds = [{ holdingKey: 'fund:d', schemeCode: 'D9', schemeName: 'Test Debt Laggard', valueInr: d(200_000), bucket: 'DEBT' as const, findingCode: 'X', headline: 'Lags its peers', confidence: 0.9 }];
+    const facts = makeFacts({ asOf: NOV, approvedProducts: { ...makeFacts().approvedProducts, EQUITY_DOMESTIC: [{ approvedProductId: 'ap1', fundId: 'eq1', stockId: null, label: 'Test Equity Fund', score: null }] }, extra: makeExtra({ weakFunds }) });
+    const [r] = fundUnderperformingRule.evaluate(facts);
+    expect(r!.action.every((l) => l.bucket === 'DEBT')).toBe(true);
+    expect(r!.rationale).not.toContain('Test Equity Fund');
+  });
+
+  it('I11: no stopped-SIP advice once the market has recovered, or for a month outside the dip', () => {
+    const sips = [{ sipId: 's1', name: 'Test Index Fund', fundId: 'f1', monthlyAmount: d(10_000), missedMonths: ['2026-10'] }];
+    const recovered = [{ month: '2026-07', close: 100 }, { month: '2026-08', close: 94 }, { month: '2026-09', close: 100 }, { month: '2026-10', close: 110 }];
+    expect(stoppedSipRule.evaluate(makeFacts({ asOf: NOV, extra: makeExtra({ sips, indexMonthly: recovered }) }))).toEqual([]);
+    const stillDown = [{ month: '2026-07', close: 104 }, { month: '2026-08', close: 104 }, { month: '2026-09', close: 103 }, { month: '2026-10', close: 96 }];
+    const before = [{ ...sips[0]!, missedMonths: ['2026-07'] }];
+    expect(stoppedSipRule.evaluate(makeFacts({ asOf: NOV, extra: makeExtra({ sips: before, indexMonthly: stillDown }) }))).toEqual([]);
+    expect(stoppedSipRule.evaluate(makeFacts({ asOf: NOV, extra: makeExtra({ sips, indexMonthly: stillDown }) }))).toHaveLength(1);
+  });
+
+  it('I7: a loan promise is the first year’s interest saving, the same span it is measured over', () => {
+    const loan = { loanId: 'l1', lender: 'Test HFC', loanType: 'HOME', currentRatePct: 9.4, marketRatePct: 8.4, marketLender: 'Test Bank', outstanding: d(4_000_000), remainingMonths: 180, netSaving: d(285_000), breakEvenMonth: 4 };
+    const [r] = loanRefinanceRule.evaluate(makeFacts({ asOf: NOV, extra: makeExtra({ loans: [loan] }) }));
+    expect(r!.promise.gainInr).toBe('40000.00');
+    expect(r!.rationale.replace(/[₹,]/g, '')).toContain('285000.00');
   });
 });

@@ -52,7 +52,7 @@ async function candidates(userId: string, now: Date): Promise<Candidate[]> {
         { outcomeStatus: 'MEASURED', measuredAt: { gte: new Date(now.getTime() - ANNOUNCE_WITHIN_DAYS * DAY_MS) } },
       ],
     },
-    select: { id: true, status: true, headline: true, rationale: true, promise: true, urgentUntil: true, outcomeStatus: true, outcomeInr: true },
+    select: { id: true, status: true, headline: true, rationale: true, promise: true, urgentUntil: true, outcomeStatus: true, outcomeInr: true, confirmedBy: true },
   });
   const out: Candidate[] = [];
   for (const r of recs) {
@@ -61,9 +61,14 @@ async function candidates(userId: string, now: Date): Promise<Candidate[]> {
     if (r.outcomeStatus === 'MEASURED' && r.outcomeInr !== null) {
       if (done.has(`${r.id}|RESULT`)) continue;
       const v = new Decimal(r.outcomeInr.toString());
-      const body = v.greaterThanOrEqualTo(0)
-        ? `Acting on this earned ${rupees(v)} more than doing nothing.`
-        : `Skipping this cost about ${rupees(v)} compared with acting on it.`;
+      const acted = r.status === 'DONE';
+      const body = acted
+        ? v.greaterThanOrEqualTo(0)
+          ? `Acting on this earned ${rupees(v)} more than doing nothing.`
+          : `Acting on this came out ${rupees(v)} behind doing nothing. We record that too.`
+        : v.lessThan(0)
+          ? `Skipping this cost about ${rupees(v)} compared with acting on it.`
+          : `Skipping this turned out ${rupees(v)} better than acting on it.`;
       out.push({ recommendationId: r.id, kind: 'RESULT', urgent: false, weight: v.abs(), headline, body });
     } else if (r.status === 'ACCEPTED') {
       out.push({ recommendationId: r.id, kind: 'NUDGE', urgent: false, weight: gainOf(r.promise), headline, body: "You accepted this a month ago, but we haven't seen it in your accounts yet. If you did it somewhere we can't see, you can mark it done." });

@@ -270,6 +270,7 @@ export function makeExtra(over: Partial<import('../../../../src/services/advisor
     healthCover: { sumInsured: d(0), policies: 0 },
     weakFunds: [],
     liquidFund: null,
+    unavailable: [],
     ...over,
   };
 }

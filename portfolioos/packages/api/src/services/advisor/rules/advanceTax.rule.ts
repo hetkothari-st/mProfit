@@ -10,6 +10,7 @@ import type { AdvisorFacts, AdvisorRule, RecommendationDraft } from '../types.js
 export const advanceTaxRule: AdvisorRule = {
   id: 'ADVANCE_TAX',
   version: 1,
+  needs: ['advanceTax'],
   description: 'Pays an advance-tax instalment before its due date to avoid interest.',
 
   evaluate(facts: AdvisorFacts): RecommendationDraft[] {

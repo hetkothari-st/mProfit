@@ -29,8 +29,9 @@ ALTER TABLE "AdvisorRecommendation"
   ADD COLUMN "measuredAt" TIMESTAMP(3),
   ADD COLUMN "nudgedAt" TIMESTAMP(3);
 
--- Advice given before tracking existed has no promise to measure.
-UPDATE "AdvisorRecommendation" SET "outcomeStatus" = 'BEFORE_TRACKING';
+-- Advice decided before tracking existed has no promise to measure. Live
+-- (OPEN/SNOOZED) advice is re-issued by the next engine run with a promise.
+UPDATE "AdvisorRecommendation" SET "outcomeStatus" = 'BEFORE_TRACKING' WHERE "status" NOT IN ('OPEN', 'SNOOZED');
 
 CREATE TABLE "AdvicePrompt" (
   "id" TEXT NOT NULL,
