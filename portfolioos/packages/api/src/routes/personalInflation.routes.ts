@@ -14,6 +14,9 @@ import {
   profileHandler,
   summaryHandler,
   updateItemHandler,
+  giveConsentHandler,
+  withdrawConsentHandler,
+  stepChangeHandler,
 } from '../controllers/personalInflation.controller.js';
 
 /** /api/personal-inflation — every write answers with the fresh summary. */
@@ -29,6 +32,9 @@ personalInflationRouter.get('/goals', asyncHandler(goalsHandler));
 personalInflationRouter.post('/goals/apply', asyncHandler(applyGoalsHandler));
 personalInflationRouter.patch('/items/:id', asyncHandler(updateItemHandler));
 personalInflationRouter.delete('/items/:id', asyncHandler(deleteItemHandler));
+personalInflationRouter.post('/spending-consent', asyncHandler(giveConsentHandler));
+personalInflationRouter.delete('/spending-consent', asyncHandler(withdrawConsentHandler));
+personalInflationRouter.put('/step-changes/:seriesId', asyncHandler(stepChangeHandler));
 
 /** /api/admin/cpi — ADMIN + second factor, same gate as admin loan rates. */
 export const adminCpiRouter = Router();

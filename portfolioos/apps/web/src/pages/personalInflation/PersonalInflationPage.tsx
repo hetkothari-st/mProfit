@@ -5,6 +5,7 @@ import { ChevronDown, Info, Loader2, Pencil, Plus, Trash2, TrendingUp } from 'lu
 import {
   CPI_DIVISIONS,
   CPI_SECTOR_LABELS,
+  SPEND_CATEGORY_LABELS,
   Decimal,
   cpiDivisionLabel,
   cpiStateName,
@@ -28,6 +29,7 @@ import { AddExpensePicker } from './AddExpensePicker';
 import { DrivingCard } from './DrivingCard';
 import { GoalImpactCard } from './GoalImpactCard';
 import { InflationHero } from './InflationHero';
+import { BankSpendingCard, SourceChip } from './BankSpendingCard';
 import { formatCpiMonth, formatRatePct } from './personalInflationView';
 
 const SOURCE_LABEL: Record<InflationItemView['rateSource'], string> = {
@@ -85,6 +87,12 @@ export function PersonalInflationPage() {
     onError: (e) => toast.error(apiErrorMessage(e)),
   });
 
+  const countMut = useMutation({
+    mutationFn: (a: { id: string; countAnyway: boolean }) => personalInflationApi.updateItem(a.id, { countAnyway: a.countAnyway }),
+    onSuccess: onFresh,
+    onError: (e) => toast.error(apiErrorMessage(e)),
+  });
+
   const openNew = () => setPickerOpen(true);
   const compose = (p: Partial<InflationItemInput> | null) => {
     setPickerOpen(false);
@@ -107,6 +115,11 @@ export function PersonalInflationPage() {
   const headlineRate = data.official.find((o) => o.divisionCode === '00')?.longRunRate ?? null;
   const basket = data.items.filter((it) => it.inBasket);
   const outside = data.items.filter((it) => !it.inBasket);
+  // While the rate uses bank spending, its categories are rows too, so the total adds up.
+  const bankRows = data.rateBasis === 'bank' && data.bank ? data.bank.categories : [];
+  const countedItems = basket.filter((it) => !it.coveredByBank).length;
+  const toggleCountAnyway = (it: InflationItemView) =>
+    countMut.mutate({ id: it.id, countAnyway: !it.countAnyway });
   const itemActions = (it: InflationItemView) => (
     <>
       <Button variant="ghost" size="icon" aria-label={`Edit ${it.name}`}
@@ -137,6 +150,8 @@ export function PersonalInflationPage() {
 
       <InflationHero data={data} saving={profileMut.isPending} onProfile={(p) => profileMut.mutate(p)} />
 
+      <BankSpendingCard data={data} />
+
       <section className="rounded-xl border bg-card" aria-labelledby="pi-expenses">
         <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-5 sm:px-6">
           <h2 id="pi-expenses" className="font-display text-2xl">Your expenses</h2>
@@ -144,7 +159,7 @@ export function PersonalInflationPage() {
             <p className="text-xs text-muted-foreground">Yearly cost now, and what it grows to</p>
           )}
         </div>
-        {basket.length === 0 ? (
+        {basket.length === 0 && bankRows.length === 0 ? (
           <div className="p-5 sm:p-6">
             <EmptyState
               icon={TrendingUp}
@@ -168,14 +183,48 @@ export function PersonalInflationPage() {
                 </tr>
               </thead>
               <tbody>
+                {bankRows.map((c) => {
+                  const last = c.projections.length - 1;
+                  return (
+                    <tr key={`bank:${c.category}`} className="border-t align-top">
+                      <td className="py-3 pl-5 sm:pl-6 pr-3">
+                        <div className="font-medium">{SPEND_CATEGORY_LABELS[c.category as keyof typeof SPEND_CATEGORY_LABELS] ?? c.category}</div>
+                        <div className="text-xs text-muted-foreground">From your bank</div>
+                      </td>
+                      <td className="py-3 px-3 text-right numeric">{inr(c.annualAmount)}</td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="numeric font-semibold">{formatRatePct(c.rate)}</div>
+                        <div className="mt-0.5"><SourceChip method={c.method} /></div>
+                      </td>
+                      {c.projections.map((p, i) => (
+                        <td key={i} className={cn('py-3 px-3 text-right numeric', i === last ? 'text-foreground' : 'text-muted-foreground')}>
+                          {inr(p)}
+                        </td>
+                      ))}
+                      <td className="pr-5 sm:pr-6" />
+                    </tr>
+                  );
+                })}
                 {basket.map((it) => {
                   const hot = headlineRate != null && it.resolvedRate != null && new Decimal(it.resolvedRate).greaterThan(headlineRate);
                   const last = it.projections.length - 1;
                   return (
-                    <tr key={it.id} className="group border-t align-top transition-colors hover:bg-muted/30">
+                    <tr key={it.id} className={cn('group border-t align-top transition-colors hover:bg-muted/30', it.coveredByBank && 'text-muted-foreground')}>
                       <td className="py-3 pl-5 sm:pl-6 pr-3">
                         <div className="font-medium">{it.name}</div>
-                        <div className="text-xs text-muted-foreground">{cpiDivisionLabel(it.divisionCode)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {cpiDivisionLabel(it.divisionCode)}{bankRows.length > 0 && ' · Added by you'}
+                        </div>
+                        {(it.coveredByBank || (it.countAnyway && bankRows.length > 0)) && (
+                          <div className="text-[11px] mt-1 flex flex-wrap items-center gap-x-2">
+                            <span>{it.coveredByBank ? 'Already in your bank data, so not counted twice' : 'Counted even though your bank shows it'}</span>
+                            <button type="button" disabled={countMut.isPending}
+                              className="underline underline-offset-2 hover:text-foreground"
+                              onClick={() => toggleCountAnyway(it)}>
+                              {it.coveredByBank ? 'Count it anyway' : 'Undo'}
+                            </button>
+                          </div>
+                        )}
                         {it.notes && <div className="text-[11px] text-muted-foreground/80 mt-1 max-w-[280px] leading-snug">{it.notes}</div>}
                       </td>
                       <td className="py-3 px-3 text-right numeric">{inr(it.annualAmount)}</td>
@@ -204,7 +253,9 @@ export function PersonalInflationPage() {
                   <th scope="row" className="py-3.5 pl-5 sm:pl-6 pr-3 text-left font-semibold">
                     Total
                     <div className="text-[11px] font-normal text-muted-foreground">
-                      {basket.length} {basket.length === 1 ? 'expense' : 'expenses'}
+                      {bankRows.length > 0
+                        ? `${bankRows.length} from your bank, ${countedItems} added by you`
+                        : `${basket.length} ${basket.length === 1 ? 'expense' : 'expenses'}`}
                     </div>
                   </th>
                   <td className="py-3.5 px-3 text-right numeric">{inr(data.totals.annualAmount)}</td>
