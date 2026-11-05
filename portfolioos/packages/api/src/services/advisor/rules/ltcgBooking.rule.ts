@@ -57,7 +57,7 @@ export const ltcgBookingRule: AdvisorRule = {
         measurement: {
           method: 'TAX_SAVED',
           horizonDays: Math.max(1, Math.ceil((deadline.getTime() - facts.asOf.getTime()) / 86_400_000)),
-          baseline: { kind: 'LTCG_BOOKING', bookInr: money2(book), ratePct, realisedAtAdvice: x.ltcg.realised.toFixed(2), fy: x.ltcg.fy },
+          baseline: { kind: 'LTCG_BOOKING', bookInr: money2(book), ratePct, realisedAtAdvice: x.ltcg.realised.toFixed(2), fy: x.ltcg.fy, isin: c.isin, assetName: c.assetName },
         },
         expiresAt: deadline,
         urgentUntil: urgentIfWithin(deadline, facts.asOf),
