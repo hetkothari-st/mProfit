@@ -170,6 +170,7 @@ export const CPI_LONG_RUN_YEARS = 5;
 export function goalRateDivision(category: string): string | null {
   if (category === 'CHILD_EDUCATION') return '10';
   if (category === 'VEHICLE_PURCHASE') return '07';
+  if (category === 'HEALTHCARE') return '06';
   return null;
 }
 

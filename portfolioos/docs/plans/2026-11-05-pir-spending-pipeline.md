@@ -118,7 +118,7 @@ PRs 1, 4, 5 and 6 are the core; 2 and 3 widen coverage; 7 can ship with 6.
 2. **LLM fallback.** Keep the LLM for formats with no parser (costs money until templates are learned, within the ₹1,000/month cap)? Or rules-only, with unmatched emails waiting for a parser? Proposed: keep it as a fallback, with the first backfill counted against the cap as today.
 3. **Which CPI figure.** Keep the 5-year average for rates and projections (current behaviour, steadier), or switch to the spec's latest 12-month change? Proposed: keep the 5-year average and show the latest figure next to it (done in the quick-fix PR).
 4. **Consent wording** at upload (DPDP notice) needs your text, or approval of a draft.
-5. **Healthcare goals.** The spec maps healthcare goals to health inflation, but we have no healthcare goal category. Add `HEALTHCARE` to `GoalCategory`?
+5. ~~Healthcare goals~~: done. `HEALTHCARE` goal category added; such goals use health inflation.
 
 ## Risks
 

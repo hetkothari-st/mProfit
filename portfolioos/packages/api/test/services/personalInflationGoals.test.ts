@@ -153,6 +153,14 @@ describe('personal inflation: sources and goals (DB)', () => {
     expect(suggestRateForGoal(SUMMARY, 'CHILD_EDUCATION')).toMatchObject({ label: 'your education inflation' });
     expect(suggestRateForGoal(SUMMARY, 'CHILD_EDUCATION')!.rate.toFixed(4)).toBe('0.1500');
     expect(suggestRateForGoal(SUMMARY, 'VEHICLE_PURCHASE')!.rate.toFixed(4)).toBe('0.0400');
+    // No health spend in the basket and no official health rate here → nothing to suggest.
+    expect(suggestRateForGoal(SUMMARY, 'HEALTHCARE')).toBeNull();
+    const withHealth = {
+      ...SUMMARY,
+      official: [...SUMMARY.official, { divisionCode: '06', latestYoy: '0.041000', longRunRate: '0.070000', yearsUsed: 5, source: 'STATE' as const }],
+    };
+    expect(suggestRateForGoal(withHealth, 'HEALTHCARE')).toMatchObject({ label: 'official health inflation' });
+    expect(suggestRateForGoal(withHealth, 'HEALTHCARE')!.rate.toFixed(4)).toBe('0.0700');
     expect(suggestRateForGoal(SUMMARY, 'RETIREMENT')!.rate.toFixed(4)).toBe('0.0940');
   });
 

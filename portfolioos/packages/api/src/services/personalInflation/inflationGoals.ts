@@ -18,7 +18,7 @@ import { DEFAULT_GOAL_RETURN, monthlySipFor } from './personalInflationMath.js';
  */
 
 const YEAR_MS = 365.25 * 24 * 60 * 60 * 1000;
-const DIVISION_WORD: Record<string, string> = { '10': 'education', '07': 'transport' };
+const DIVISION_WORD: Record<string, string> = { '10': 'education', '07': 'transport', '06': 'health' };
 
 interface Suggestion {
   rate: Decimal;

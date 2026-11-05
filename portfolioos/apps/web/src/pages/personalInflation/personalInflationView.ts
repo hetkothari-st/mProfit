@@ -23,7 +23,7 @@ export interface RateSuggestion {
 /**
  * What the Goal dialog offers for a goal category. Education goals use the
  * user's own education rate (their school-fee items) or the official education
- * rate; vehicle goals use transport; everything else the personal basket rate,
+ * rate; vehicle goals use transport, healthcare goals health; everything else the personal basket rate,
  * then official headline CPI.
  */
 export function suggestGoalRate(summary: PersonalInflationSummary | undefined, category: string): RateSuggestion | null {
@@ -34,7 +34,7 @@ export function suggestGoalRate(summary: PersonalInflationSummary | undefined, c
 
   if (division) {
     const mine = summary.byDivision.find((d) => d.divisionCode === division)?.rate;
-    const what = division === '10' ? 'education' : 'transport';
+    const what = division === '10' ? 'education' : division === '06' ? 'health' : 'transport';
     const official = summary.official.find((o) => o.divisionCode === division)?.longRunRate;
     return pick(mine, `your ${what} inflation`) ?? pick(official, `official ${what} inflation`);
   }

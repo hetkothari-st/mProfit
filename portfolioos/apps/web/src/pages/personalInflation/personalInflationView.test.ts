@@ -60,3 +60,12 @@ describe('driverRows', () => {
     expect(rows.map((r) => r.code)).toEqual(['01', '03']);
   });
 });
+
+describe('suggestGoalRate: healthcare', () => {
+  it('uses your health rate, then the official one', () => {
+    const official = [...base.official, { divisionCode: '06', latestYoy: '0.041000', longRunRate: '0.068000', yearsUsed: 5, source: 'ALL_INDIA' as const }];
+    expect(suggestGoalRate({ ...base, official }, 'HEALTHCARE')).toEqual({ rate: '0.0680', label: 'official health inflation' });
+    const byDivision = [{ divisionCode: '06', annualAmount: '28400.0000', share: '1.000000', rate: '0.120000' }];
+    expect(suggestGoalRate({ ...base, official, byDivision }, 'HEALTHCARE')).toEqual({ rate: '0.1200', label: 'your health inflation' });
+  });
+});
