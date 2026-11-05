@@ -57,6 +57,12 @@ function isOwnName(t: string, tokens: readonly string[]): boolean {
   return has(tokens[0]!) && has(tokens[tokens.length - 1]!);
 }
 
+/** A transfer between the user's own accounts ("self", "own a/c", their own name). */
+export function isOwnTransfer(e: MoneyEventText, userTokens: readonly string[]): boolean {
+  const t = text(e);
+  return OWN_TRANSFER.test(t) || isOwnName(t, userTokens);
+}
+
 /** Should this credit count as income? Null = yes; otherwise the reason it does not. */
 export function classifyCredit(e: MoneyEventText, userTokens: readonly string[]): CreditExclusion | null {
   if (e.currency !== 'INR') return 'foreign_currency';
