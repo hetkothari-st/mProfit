@@ -79,7 +79,9 @@ export function InflationHero({ data, saving, onProfile }: Props) {
               ? <>
                   CPI: {place}{data.profile.sector !== 'COMBINED' && `, ${CPI_SECTOR_LABELS[data.profile.sector].toLowerCase()}`}, 5-year average
                   {headline?.latestYoy && <> · last 12 months {formatRatePct(headline.latestYoy)}</>}
-                  {mine && <> · your rate is an estimate from the expenses you&apos;ve added</>}
+                  {mine && (data.rateBasis === 'bank'
+                    ? <> · your rate is an estimate from your bank spending and expenses you&apos;ve added</>
+                    : <> · your rate is an estimate from the expenses you&apos;ve added</>)}
                 </>
               : <>Official figures haven&apos;t loaded yet. They usually appear within a few minutes of the app starting.</>}
           </p>

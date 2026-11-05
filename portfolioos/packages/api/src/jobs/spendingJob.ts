@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { SPENDING_CONSENT_VERSION } from '@everypaisa/shared';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { runAsSystem, runAsUser } from '../lib/requestContext.js';
@@ -10,7 +11,8 @@ import { CANONICAL_SPEND_TYPES } from '../services/spending/sources/canonicalEve
  * 03:15 IST, plus a one-off backfill shortly after the first boot that has
  * this job (recorded in AppSetting, so later deploys skip it).
  *
- * Only users who have bank events or spending rows are synced. The user list
+ * Only users who agreed to the spending consent notice and have bank events
+ * or spending rows are synced. The user list
  * is read as system; each user's sync runs in their own context so row-level
  * security applies. One user's failure is logged and the rest still run.
  * ENABLE_SPENDING_SYNC=false disables both.
@@ -25,6 +27,14 @@ export const SPENDING_BACKFILL_KEY = 'spending.backfill.v3';
 let running = false;
 
 async function usersToSync(): Promise<string[]> {
+  // Only users who agreed to their bank spending being read (consent notice).
+  const consented = new Set(
+    (await prisma.inflationProfile.findMany({
+      where: { spendingConsentAt: { not: null }, spendingConsentVersion: SPENDING_CONSENT_VERSION },
+      select: { userId: true },
+    })).map((p) => p.userId),
+  );
+  if (consented.size === 0) return [];
   const [fromEvents, fromStore] = await Promise.all([
     prisma.canonicalEvent.findMany({
       where: { eventType: { in: CANONICAL_SPEND_TYPES } },
@@ -33,7 +43,7 @@ async function usersToSync(): Promise<string[]> {
     }),
     prisma.spendTxn.findMany({ select: { userId: true }, distinct: ['userId'] }),
   ]);
-  return [...new Set([...fromEvents, ...fromStore].map((r) => r.userId))];
+  return [...new Set([...fromEvents, ...fromStore].map((r) => r.userId))].filter((id) => consented.has(id));
 }
 
 export interface SpendingJobResult {

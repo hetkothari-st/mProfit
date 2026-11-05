@@ -73,3 +73,8 @@ export function driverRows(byDivision: PersonalInflationSummary['byDivision']): 
   }
   return out.sort((a, b) => b.share.times(b.rate).comparedTo(a.share.times(a.rate)));
 }
+
+/** Where a bank category's rate comes from, for its chip. */
+export function methodLabel(method: 'cpi' | 'own_price' | 'blend'): string {
+  return method === 'own_price' ? 'Your prices' : method === 'blend' ? 'Your prices + CPI' : 'Official CPI';
+}

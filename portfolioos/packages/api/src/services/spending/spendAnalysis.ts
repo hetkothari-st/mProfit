@@ -130,7 +130,11 @@ export function detectSeries(rows: readonly AnalysisRow[]): DetectedSeries[] {
       lastSeen: sorted[sorted.length - 1]!.txnDate,
       occurrences: sorted.length,
       latestAmount: sorted[sorted.length - 1]!.amount,
-      isFixed: steady / (sorted.length - 1) >= SPEND_ANALYSIS.fixedShare,
+      // A yearly payment (school fee, premium) is one price a year, so it is
+      // fixed by nature; its change between payments is the price change the
+      // engine measures (and step-checks). With only one gap, the steadiness
+      // test would wrongly reject every fee that rose more than 10%.
+      isFixed: cadence === 'ANNUAL' || steady / (sorted.length - 1) >= SPEND_ANALYSIS.fixedShare,
       memberIds: sorted.map((r) => r.id),
     });
   }

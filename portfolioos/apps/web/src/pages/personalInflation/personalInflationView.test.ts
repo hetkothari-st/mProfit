@@ -17,6 +17,7 @@ const base: PersonalInflationSummary = {
   fixedPayments: null,
   rateBasis: 'manual',
   bank: null,
+  spendingConsent: { given: false, givenAt: null, askNow: false, version: 'v', grievanceContact: null, aiZeroRetention: false },
 };
 
 describe('personalInflationView', () => {

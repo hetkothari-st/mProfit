@@ -28,7 +28,7 @@ const cpi = new Map<string, Decimal>([
 ]);
 
 const series = (over: Partial<SeriesPayments>): SeriesPayments => ({
-  id: 's1', payeeKey: 'landlord', category: 'rent', cadence: 'MONTHLY', isFixed: true, acceptOwnRate: false,
+  id: 's1', payeeKey: 'landlord', category: 'rent', cadence: 'MONTHLY', isFixed: true, acceptOwnRate: null,
   current: [], previous: [], ...over,
 });
 
@@ -105,6 +105,12 @@ describe('step change', () => {
     const b = bankBasis({ ...full, months: spread('education', 210000), series: [{ ...fees, acceptOwnRate: true }] });
     expect(b.stepChanges).toEqual([]);
     expect(b.categories[0]!.rate!.toNumber()).toBeCloseTo(0.4, 6);
+  });
+
+  it('once the user says they moved, CPI stays and the question goes', () => {
+    const b = bankBasis({ ...full, months: spread('education', 210000), series: [{ ...fees, acceptOwnRate: false }] });
+    expect(b.stepChanges).toEqual([]);
+    expect(b.categories[0]).toMatchObject({ method: 'cpi' });
   });
 
   it('a fall of more than 10% is a step change too', () => {

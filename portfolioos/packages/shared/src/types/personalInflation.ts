@@ -77,8 +77,25 @@ export interface PersonalInflationSummary {
   fixedPayments: { annualAmount: string; count: number } | null;
   /** Where personalRate comes from: the user's own entries, or bank spending plus entries the bank does not show. */
   rateBasis: 'manual' | 'bank';
-  /** The bank-spending picture, or null when there is no bank spending in the last 12 months. */
+  /** The bank-spending picture, or null without consent or without bank spending in the last 12 months. */
   bank: PirBankView | null;
+  spendingConsent: SpendingConsentView;
+}
+
+/** Bump when the consent notice's wording changes: everyone is asked again. */
+export const SPENDING_CONSENT_VERSION = '2026-11-06';
+
+export interface SpendingConsentView {
+  given: boolean;
+  /** When the user agreed (ISO), or null. */
+  givenAt: string | null;
+  /** True when bank alerts exist that this page could use, and the user has not agreed yet. */
+  askNow: boolean;
+  version: string;
+  /** "Name, email" of the grievance officer, or null until it is set (AppSetting privacy.grievance_contact). */
+  grievanceContact: string | null;
+  /** The AI provider's zero data retention is confirmed for this deployment. */
+  aiZeroRetention: boolean;
 }
 
 /**
@@ -103,6 +120,8 @@ export interface PirBankCategoryView {
   alpha: string;
   rate: string | null;
   method: 'cpi' | 'own_price' | 'blend';
+  /** Projected annual cost at each of `horizons`, or null when unrated. */
+  projections: (string | null)[];
 }
 
 export interface PirBankView {
@@ -135,6 +154,8 @@ export interface InflationItemInput {
   customRate?: string | null;
   notes?: string | null;
   isFixed?: boolean;
+  /** Count the item even though a recurring bank payment matches it. */
+  countAnyway?: boolean;
   pricePoints?: InflationPricePointView[];
 }
 

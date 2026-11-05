@@ -68,8 +68,8 @@ export interface SeriesPayments {
   category: string;
   cadence: string;
   isFixed: boolean;
-  /** The user said the jump was a real price rise, not a move or a new school. */
-  acceptOwnRate: boolean;
+  /** The user's answer to a step change: true = real price rise, false = moved, null = not answered. */
+  acceptOwnRate: boolean | null;
   /** Payment amounts in the current window. */
   current: Decimal[];
   /** Payment amounts in the 12 months before it. */
@@ -178,8 +178,9 @@ export function bankBasis(input: BankInputs): BankBasis {
     const r = seriesOwnRate(s);
     if (r === null) continue;
     const step = r.greaterThan(p.stepChangeUpper) || r.lessThan(p.stepChangeLower);
-    if (step && !s.acceptOwnRate) {
-      stepChanges.push({ seriesId: s.id, payeeKey: s.payeeKey, category: s.category, rate: r });
+    if (step && s.acceptOwnRate !== true) {
+      // Unanswered: ask. Answered "moved": CPI, without asking again.
+      if (s.acceptOwnRate === null) stepChanges.push({ seriesId: s.id, payeeKey: s.payeeKey, category: s.category, rate: r });
       continue;
     }
     const paid = sum(s.current);

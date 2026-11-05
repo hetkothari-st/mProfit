@@ -48,7 +48,17 @@ categorised bank spending. That pipeline is planned in
   still count. Below 0.6 the rate stays on the manual items (`low_confidence`),
   or is empty (`building`). Manual items are never changed.
 - Overrides without a release: AppSetting `personalInflation.categoryCpiMap`
-  (category → division) and `personalInflation.engine` (parameters). One deliberate difference: rates are the 5-year
+  (category → division) and `personalInflation.engine` (parameters).
+- Consent (`spendingConsent.ts`): nothing is read from bank spending until the
+  user agrees to the notice (`SPENDING_CONSENT_VERSION`; a new version asks
+  again). It is stored on InflationProfile, with an AuditLog row
+  `consent.spending_analysis` as proof. The nightly sync skips users without
+  it. Turning it off deletes the derived spending rows and tags; bank alerts
+  and typed expenses stay. The notice names the grievance officer only when
+  AppSetting `privacy.grievance_contact` is set, and says the AI provider
+  keeps nothing only when `ANTHROPIC_ZERO_RETENTION_CONFIRMED=true`.
+- Step changes: `acceptOwnRate` is null (ask), true (real rise: own rate) or
+  false (moved: CPI, stop asking). One deliberate difference: rates are the 5-year
 compounded average of yearly CPI changes, not the latest 12-month change, so a
 10-year projection does not swing with one month's reading. The latest
 12-month figure is shown next to it.

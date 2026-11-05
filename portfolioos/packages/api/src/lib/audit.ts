@@ -70,7 +70,9 @@ export type AuditAction =
   | 'insurance_gmail_fetch_enabled'
   | 'insurance_gmail_fetch_disabled'
   | 'ai_disclosure_acknowledged'
-  | 'cpi_refresh_run';
+  | 'cpi_refresh_run'
+  | 'consent.spending_analysis'
+  | 'consent.spending_analysis_withdrawn';
 
 export interface AuditInput {
   userId?: string | null;

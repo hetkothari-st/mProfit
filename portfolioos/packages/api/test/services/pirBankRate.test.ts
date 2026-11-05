@@ -5,12 +5,18 @@
  * the CPI side is covered by the pure engine tests.
  */
 
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, vi } from 'vitest';
+
+// The nightly job uses the real AI tagger: never let a test reach the model.
+vi.mock('../../src/services/spending/aiPayeeTagger.js', () => ({ aiPayeeTagger: async () => new Map() }));
 import { createHash } from 'node:crypto';
 import { createTestScope, prisma, type TestScope } from '../helpers/db.js';
-import { runAsUser } from '../../src/lib/requestContext.js';
+import { runAsSystem, runAsUser } from '../../src/lib/requestContext.js';
 import { syncSpending, SPEND_SOURCES } from '../../src/services/spending/spendingSync.js';
 import { getSummary } from '../../src/services/personalInflation/personalInflation.service.js';
+import { answerStepChange, giveSpendingConsent, withdrawSpendingConsent } from '../../src/services/personalInflation/spendingConsent.js';
+import { runSpendingSync } from '../../src/jobs/spendingJob.js';
+import { SPENDING_CONSENT_VERSION } from '@everypaisa/shared';
 
 const NOW = new Date('2026-11-05T06:00:00Z');
 const scopes: TestScope[] = [];
@@ -32,9 +38,10 @@ async function event(userId: string, eventType: string, date: string, amount: st
 /** Month `i` months before November 2026, as 'YYYY-MM'. */
 const monthBack = (i: number) => new Date(Date.UTC(2026, 10 - i, 1)).toISOString().slice(0, 7);
 
-async function user(label: string) {
+async function user(label: string, consent = true) {
   const s = await createTestScope(label);
   scopes.push(s);
+  if (consent) await runAsUser(s.userId, () => giveSpendingConsent(s.userId, SPENDING_CONSENT_VERSION));
   return s.userId;
 }
 
@@ -100,7 +107,7 @@ describe('personal inflation from bank spending (DB)', () => {
     expect(s.bank!.stepChanges).toEqual([expect.objectContaining({ category: 'rent', rate: '0.400000' })]);
     expect(s.bank!.categories[0]).toMatchObject({ category: 'rent', method: 'cpi', ownRate: null });
 
-    await runAsUser(uid, () => prisma.spendRecurringSeries.updateMany({ where: { userId: uid }, data: { acceptOwnRate: true } }));
+    await runAsUser(uid, () => answerStepChange(uid, s.bank!.stepChanges[0]!.seriesId, true));
     // A re-sync keeps the answer.
     await runAsUser(uid, () => syncSpending(uid, SPEND_SOURCES, { tagger: null }));
     const after = await runAsUser(uid, () => getSummary(uid, NOW));
@@ -134,6 +141,59 @@ describe('personal inflation from bank spending (DB)', () => {
     const s = await runAsUser(uid, () => getSummary(uid, NOW));
     expect(s.bank!.state).toBe('building');
     expect(s.personalRate).toBeNull();
+  });
+
+  it('without consent nothing is read, and the user is asked; withdrawing deletes what was derived', async () => {
+    const uid = await user('pir-consent', false);
+    await runAsUser(uid, async () => {
+      for (let i = 13; i >= 1; i--) {
+        await event(uid, 'UPI_DEBIT', `${monthBack(i)}-12`, '3000', 'BIGBASKET');
+        await event(uid, 'NEFT_CREDIT', `${monthBack(i)}-01`, '150000', 'Brightline Media LLP', 'salary credit');
+      }
+    });
+    // The nightly job passes over a user who has not agreed.
+    await runSpendingSync();
+    expect(await runAsUser(uid, () => prisma.spendTxn.count({ where: { userId: uid } }))).toBe(0);
+    const before = await runAsUser(uid, () => getSummary(uid, NOW));
+    expect(before.spendingConsent).toMatchObject({ given: false, askNow: true });
+    expect(before.bank).toBeNull();
+
+    await runAsUser(uid, () => giveSpendingConsent(uid, SPENDING_CONSENT_VERSION));
+    await expect(runAsUser(uid, () => giveSpendingConsent(uid, 'old'))).rejects.toThrow(/current version/);
+    await runSpendingSync();
+    const after = await runAsUser(uid, () => getSummary(uid, NOW));
+    expect(after.spendingConsent).toMatchObject({ given: true, askNow: false });
+    expect(after.bank!.state).toBe('ready');
+    const audit = await runAsSystem(() => prisma.auditLog.findMany({ where: { userId: uid, action: 'consent.spending_analysis' } }));
+    expect(audit).toHaveLength(1);
+
+    const removed = await runAsUser(uid, () => withdrawSpendingConsent(uid));
+    expect(removed).toBeGreaterThan(0);
+    const counts = await runAsUser(uid, () => Promise.all([
+      prisma.spendTxn.count({ where: { userId: uid } }),
+      prisma.spendRecurringSeries.count({ where: { userId: uid } }),
+      prisma.spendMonthlyCategory.count({ where: { userId: uid } }),
+    ]));
+    expect(counts).toEqual([0, 0, 0]);
+    // The bank alerts themselves stay.
+    expect(await runAsUser(uid, () => prisma.canonicalEvent.count({ where: { userId: uid } }))).toBe(26);
+    expect((await runAsUser(uid, () => getSummary(uid, NOW))).spendingConsent.given).toBe(false);
+  });
+
+  it('a step-change answer of "moved" keeps CPI and stops asking', async () => {
+    const uid = await user('pir-moved');
+    await runAsUser(uid, async () => {
+      for (let i = 24; i >= 1; i--) await event(uid, 'NEFT_DEBIT', `${monthBack(i)}-05`, i > 12 ? '20000' : '28000', 'Mr Kulkarni', 'House rent');
+    });
+    await runAsUser(uid, () => syncSpending(uid, SPEND_SOURCES, { tagger: null }));
+    const s = await runAsUser(uid, () => getSummary(uid, NOW));
+    await runAsUser(uid, () => answerStepChange(uid, s.bank!.stepChanges[0]!.seriesId, false));
+    const after = await runAsUser(uid, () => getSummary(uid, NOW));
+    expect(after.bank!.stepChanges).toEqual([]);
+    expect(after.bank!.categories[0]).toMatchObject({ method: 'cpi' });
+    // Another user's series cannot be answered.
+    const other = await user('pir-moved-other');
+    await expect(runAsUser(other, () => answerStepChange(other, s.bank!.stepChanges[0]!.seriesId, true))).rejects.toThrow(/not found/i);
   });
 
   it('no bank spending: the page is exactly as before', async () => {

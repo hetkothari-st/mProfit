@@ -17,6 +17,13 @@ import {
 } from '../services/personalInflation/personalInflation.service.js';
 import { importSourceCandidates, listSourceCandidates } from '../services/personalInflation/inflationSources.js';
 import { applySuggestedGoalRates, listGoalImpacts } from '../services/personalInflation/inflationGoals.js';
+import {
+  answerStepChange,
+  giveSpendingConsent,
+  withdrawSpendingConsent,
+} from '../services/personalInflation/spendingConsent.js';
+import { syncSpending } from '../services/spending/spendingSync.js';
+import { runAsUser } from '../lib/requestContext.js';
 
 const profileSchema = z.object({
   stateCode: z.number().int().refine(isCpiStateCode, 'Unknown state'),
@@ -35,6 +42,7 @@ const itemSchema = z.object({
   customRate: decimalInput(1).transform(String).nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
   isFixed: z.boolean().optional(),
+  countAnyway: z.boolean().optional(),
   pricePoints: z.array(pricePoint).max(30).optional(),
 });
 
@@ -68,6 +76,30 @@ export async function updateItemHandler(req: Request, res: Response) {
 export async function deleteItemHandler(req: Request, res: Response) {
   const uid = userId(req);
   await deleteItem(uid, req.params['id']!);
+  return ok(res, await getSummary(uid));
+}
+
+const consentSchema = z.object({ version: z.string().min(1).max(40), agree: z.literal(true) });
+const stepAnswerSchema = z.object({ realRise: z.boolean() });
+
+/** Agree to bank spending being read; the first read starts in the background. */
+export async function giveConsentHandler(req: Request, res: Response) {
+  const uid = userId(req);
+  await giveSpendingConsent(uid, consentSchema.parse(req.body).version, req);
+  void runAsUser(uid, () => syncSpending(uid)).catch((err) => logger.error({ err }, 'spending.first_sync_failed'));
+  return ok(res, await getSummary(uid));
+}
+
+/** Turn it off and delete what was derived from bank spending. */
+export async function withdrawConsentHandler(req: Request, res: Response) {
+  const uid = userId(req);
+  await withdrawSpendingConsent(uid, req);
+  return ok(res, await getSummary(uid));
+}
+
+export async function stepChangeHandler(req: Request, res: Response) {
+  const uid = userId(req);
+  await answerStepChange(uid, req.params['seriesId']!, stepAnswerSchema.parse(req.body).realRise);
   return ok(res, await getSummary(uid));
 }
 

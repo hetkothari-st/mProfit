@@ -25,6 +25,7 @@ import {
   weightedRate,
 } from './personalInflationMath.js';
 import { loadBankBasis, type LoadedBankBasis } from './pirBankData.js';
+import { getSpendingConsent } from './spendingConsent.js';
 
 export const PROJECTION_HORIZONS = [1, 3, 5, 10] as const;
 
@@ -132,7 +133,9 @@ export async function getSummary(userId: string, now: Date = new Date()): Promis
     getOfficialRates(profile.stateCode, profile.sector),
     prisma.inflationBasketItem.findMany({ where: { userId }, include: itemInclude, orderBy: { createdAt: 'asc' } }),
   ]);
-  const bank = await loadBankBasis(userId, official.longRun, now);
+  const spendingConsent = await getSpendingConsent(userId);
+  // Bank spending is read only with the user's consent.
+  const bank = spendingConsent.given ? await loadBankBasis(userId, official.longRun, now) : null;
   // Decision 6: the bank picture replaces the rate only once it is confident
   // enough; until then the user's own entries keep giving the rate they had.
   const useBank = bank?.ready === true;
@@ -232,6 +235,7 @@ export async function getSummary(userId: string, now: Date = new Date()): Promis
     fixedPayments,
     rateBasis: useBank ? 'bank' : 'manual',
     bank: bank ? bankView(bank, manualBasketCount > 0) : null,
+    spendingConsent,
   };
 }
 
@@ -257,6 +261,7 @@ function bankView(b: LoadedBankBasis, hasManualRate: boolean): PirBankView {
       alpha: rate6(c.alpha),
       rate: c.rate ? rate6(c.rate) : null,
       method: c.method,
+      projections: PROJECTION_HORIZONS.map((h) => (c.rate ? serializeMoney(projectAmount(c.annualAmount, c.rate, h)) : null)),
     })),
     stepChanges: b.stepChanges.map((s) => ({ seriesId: s.seriesId, payeeKey: s.payeeKey, category: s.category, rate: rate6(s.rate) })),
     bankRate: b.rate ? rate6(b.rate) : null,
@@ -303,6 +308,7 @@ export async function createItem(userId: string, input: InflationItemInput): Pro
         customRate: input.customRate ?? null,
         notes: input.notes ?? null,
         isFixed: input.isFixed ?? false,
+        countAnyway: input.countAnyway ?? false,
       },
     });
     if (points.length > 0) {
@@ -333,6 +339,7 @@ export async function updateItem(userId: string, id: string, input: Partial<Infl
         ...(input.customRate !== undefined && { customRate: input.customRate }),
         ...(input.notes !== undefined && { notes: input.notes }),
         ...(input.isFixed !== undefined && { isFixed: input.isFixed }),
+        ...(input.countAnyway !== undefined && { countAnyway: input.countAnyway }),
       },
     });
     // Price history is replaced wholesale — the client edits it as one list.

@@ -5883,6 +5883,11 @@ model InflationProfile {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   stateCode Int       @default(1)
   sector    CpiSector @default(COMBINED)
+  /// When the user agreed to their bank spending being read for this page
+  /// (the notice version is kept alongside; the AuditLog row is the proof).
+  /// Null: not agreed, or withdrawn. The spending sync skips such users.
+  spendingConsentAt      DateTime? @db.Timestamptz(3)
+  spendingConsentVersion String?
   updatedAt DateTime  @updatedAt @db.Timestamptz(3)
 }
 
@@ -6074,9 +6079,10 @@ model SpendRecurringSeries {
   latestAmount Decimal  @db.Decimal(14, 2)
   /// Same price payment after payment (rent, fees), as opposed to a varying bill.
   isFixed      Boolean
-  /// The user said a big jump in this payment was a real price rise, not a
-  /// move or a new school, so the rate engine uses its own price change.
-  acceptOwnRate Boolean @default(false)
+  /// The user's answer to a big jump in this payment: true = a real price
+  /// rise (use its own price change), false = a move or a new school (use
+  /// CPI, stop asking), null = not asked or not answered yet.
+  acceptOwnRate Boolean?
   createdAt    DateTime @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @db.Timestamptz(3)
 

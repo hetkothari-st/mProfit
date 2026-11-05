@@ -27,6 +27,11 @@ describe('detectSeries', () => {
     expect(detectSeries(rows)).toEqual([expect.objectContaining({ cadence: 'ANNUAL', occurrences: 2, isFixed: true })]);
   });
 
+  it('a yearly fee is fixed even after a big rise, so its price change can be measured', () => {
+    const rows = [row('2025-06-10', 150000, 'education', 'dps2'), row('2026-06-08', 210000, 'education', 'dps2')];
+    expect(detectSeries(rows)).toEqual([expect.objectContaining({ cadence: 'ANNUAL', isFixed: true })]);
+  });
+
   it('a monthly bill that varies is recurring but not fixed', () => {
     const rows = monthly('bescom', 'utilities', [1800, 2600, 3400, 2100, 1500, 2900]);
     expect(detectSeries(rows)[0]).toMatchObject({ cadence: 'MONTHLY', isFixed: false });
