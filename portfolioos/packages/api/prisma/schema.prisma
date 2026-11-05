@@ -261,6 +261,7 @@ model User {
 
   @@index([deletionScheduledFor])
   @@index([managedById])
+  advicePrompts AdvicePrompt[]
 }
 
 model UserNotificationConfig {
@@ -1668,6 +1669,7 @@ enum AlertType {
   LOAN_REFINANCE
   LOAN_BENCHMARK_CHANGE
   WILL_REVIEW_DUE
+  ADVICE
   CUSTOM
 }
 
@@ -4355,6 +4357,16 @@ enum AdvisorRecommendationCategory {
   GOAL_SHORTFALL_SIP
   CASH_DEPLOYMENT
   RISK_PROFILE_REVIEW
+  IDLE_CASH_PARKING
+  REGULAR_TO_DIRECT
+  LTCG_BOOKING
+  STOPPED_SIP
+  FD_MATURITY
+  LOAN_REFINANCE
+  ADVANCE_TAX
+  EMERGENCY_FUND
+  HEALTH_COVER
+  FUND_UNDERPERFORMING
 }
 
 enum AdvisorRecommendationStatus {
@@ -4363,6 +4375,10 @@ enum AdvisorRecommendationStatus {
   DISMISSED
   SNOOZED
   DONE
+  /// Passed its expiresAt without a decision: counts as skipped.
+  EXPIRED
+  /// No longer true (the rule stopped emitting it, or its type was paused) before the user acted.
+  WITHDRAWN
 }
 
 enum AdvisorProvenance {
@@ -4437,12 +4453,66 @@ model AdvisorRecommendation {
   snoozedUntil    DateTime?
   statusChangedAt DateTime?
 
+  // Act on it: what was promised, what the user did, what happened.
+  /// One plain sentence for the card. Code-written.
+  headline      String?
+  /// { gainInr, riskBand, costInr, liquidity, confidence }, frozen at creation.
+  promise       Json?
+  /// { method, horizonDays, baseline }: how the result is measured against doing nothing.
+  measurement   Json?
+  /// Until when this is urgent (bypasses the weekly prompt cap). Null = not urgent.
+  urgentUntil   DateTime?
+  /// After this, an undecided recommendation becomes EXPIRED (skipped).
+  expiresAt     DateTime?
+  acceptedAt    DateTime?
+  /// When the action was seen: in the user's data (DATA) or claimed by the user (USER).
+  confirmedAt   DateTime?
+  confirmedBy   String?
+  confirmation  Json?
+  /// PENDING | MEASURED | NOT_MEASURED | BEFORE_TRACKING
+  outcomeStatus String    @default("PENDING")
+  /// Acted minus doing nothing (negative = missed by skipping), in rupees.
+  outcomeInr    Decimal?  @db.Decimal(18, 2)
+  outcomeDetail Json?
+  measuredAt    DateTime?
+  nudgedAt      DateTime?
+  prompts       AdvicePrompt[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId, status, priority])
   @@index([userId, ruleId, dedupeKey])
   @@index([generationRunId])
+}
+
+/// A pop-up/alert sent about a recommendation. Counted for the 2-a-week cap.
+model AdvicePrompt {
+  id               String                @id @default(cuid())
+  userId           String
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recommendationId String
+  recommendation   AdvisorRecommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  /// NEW | NUDGE | RESULT
+  kind             String
+  urgent           Boolean               @default(false)
+  popupSeenAt      DateTime?
+  emailedAt        DateTime?
+  createdAt        DateTime              @default(now())
+
+  @@index([userId, createdAt])
+  @@index([recommendationId])
+}
+
+/// Per-rule promise keeping across all users; a rule that keeps missing its
+/// promises is paused automatically. System table (no user data, no RLS).
+model AdviceRuleHealth {
+  ruleId      String    @id
+  pausedAt    DateTime?
+  pauseReason String?
+  measured    Int       @default(0)
+  misses      Int       @default(0)
+  updatedAt   DateTime  @updatedAt
 }
 
 // ─── MF ANALYTICS — REFERENCE DATA (docs/mf-analytics/01 §2) ─────

@@ -84,6 +84,17 @@ export const CATEGORY_BASE_PRIORITY: Record<AdvisorRecommendationCategoryValue, 
   CASH_DEPLOYMENT: 35,
   GOAL_SHORTFALL_SIP: 40,
   RISK_PROFILE_REVIEW: 55,
+  // Act on it types (docs/superpowers/specs/2026-11-06-act-on-it-design.md §7).
+  ADVANCE_TAX: 2,
+  LTCG_BOOKING: 4,
+  FD_MATURITY: 6,
+  EMERGENCY_FUND: 12,
+  STOPPED_SIP: 14,
+  IDLE_CASH_PARKING: 22,
+  LOAN_REFINANCE: 24,
+  FUND_UNDERPERFORMING: 26,
+  REGULAR_TO_DIRECT: 32,
+  HEALTH_COVER: 45,
 };
 
 /**
