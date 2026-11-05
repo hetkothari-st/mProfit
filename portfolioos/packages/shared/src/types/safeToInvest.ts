@@ -56,6 +56,12 @@ export interface SafeToInvestSummary {
    * Why bank data may be missing, so the page can say what to do next:
    * connect Gmail, add bank senders, approve waiting alerts.
    */
+  /**
+   * SPENDING: income and spending come from the categorised spending store
+   * (the user agreed to the spending notice), the same data Personal
+   * Inflation uses. ALERTS: worked out from bank alerts directly.
+   */
+  dataSource: 'SPENDING' | 'ALERTS';
   dataStatus: {
     gmailConnected: boolean;
     monitoredSenders: number;

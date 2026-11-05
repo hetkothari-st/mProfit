@@ -29,3 +29,15 @@ lean-month income   P20 of the last 12 complete IST months of income credits
   average of SIP transactions; "missed months" counts months without a SIP after the first.
 - **Not used**: uploaded bank statements (they land as CASH `Transaction` rows and would
   double count against alerts). The app never edits real SIP mandates.
+- **Spending store (`stiSpendStore.ts`)**: once the user agrees to the spending
+  notice (Personal Inflation) and the store has rows in the window, income and
+  the buffer come from `SpendTxn` / `SpendMonthlyCategory` instead
+  (`dataSource: 'SPENDING'`), so both pages use the same figures:
+  - Income: credits categorised `income`, duplicates across sources counted
+    once, own-account transfers, refunds, investment money and loan payouts
+    left out. The user's per-credit choices still win (except on a duplicate).
+  - Buffer: everyday categories plus unsorted spending and cash, one-offs
+    out, refunds netted; card bills count only when no card purchases are
+    seen. A fixed expense matched to a bank payment has that payment taken
+    out month by month, instead of every fixed expense being subtracted.
+  Without consent, everything above works from bank alerts as before.

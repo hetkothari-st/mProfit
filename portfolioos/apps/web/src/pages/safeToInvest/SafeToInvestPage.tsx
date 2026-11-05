@@ -66,7 +66,9 @@ export function SafeToInvestPage() {
             <div>
               <h2 id="sti-income" className="font-display text-2xl">Your income, last 12 months</h2>
               <p className="text-xs text-muted-foreground mt-1">
-                From your bank alerts. Click a month to see its credits or type its total.
+                {data.dataSource === 'SPENDING'
+                  ? 'From your sorted bank spending, the same figures Personal Inflation uses. Click a month to see its credits or type its total.'
+                  : 'From your bank alerts. Click a month to see its credits or type its total.'}
               </p>
             </div>
             <StabilityMeter data={data} />

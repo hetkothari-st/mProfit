@@ -35,6 +35,7 @@ import {
   isEverydaySpend,
   nameTokens,
 } from './creditClassifier.js';
+import { loadStoreMonths } from './stiSpendStore.js';
 
 /**
  * Safe-to-Invest: a monthly SIP sized on the user's lean-month income so it
@@ -217,15 +218,16 @@ export async function getSummary(userId: string, now: Date = new Date()): Promis
 
   const decided = new Map(decisions.map((d) => [d.canonicalEventId, d.include]));
   const override = new Map(overrides.map((o) => [o.month, dec(o.inflow)]));
+  const store = await loadStoreMonths(userId, months, decided);
 
   // Income per month: counted credits, unless the user typed the month's total.
-  const counted = new Map<string, { sum: Decimal; credits: number; included: number }>();
+  const counted = store?.credits ?? new Map<string, { sum: Decimal; credits: number; included: number }>();
   const touch = (m: string) => {
     let c = counted.get(m);
     if (!c) counted.set(m, (c = { sum: ZERO, credits: 0, included: 0 }));
     return c;
   };
-  for (const e of credits) {
+  for (const e of store ? [] : credits) {
     const c = touch(dateMonth(e.eventDate));
     c.credits += 1;
     const include = decided.get(e.id) ?? classifyCredit(e, tokens) === null;
@@ -235,8 +237,8 @@ export async function getSummary(userId: string, now: Date = new Date()): Promis
     }
   }
   // Everyday spend per month.
-  const spend = new Map<string, Decimal>();
-  for (const e of debits) {
+  const spend = store?.spend ?? new Map<string, Decimal>();
+  for (const e of store ? [] : debits) {
     const m = dateMonth(e.eventDate);
     touch(m); // a month with any bank activity has data, even if no income came in
     if (isEverydaySpend(e, tokens)) spend.set(m, (spend.get(m) ?? ZERO).plus(e.amount));
@@ -278,7 +280,8 @@ export async function getSummary(userId: string, now: Date = new Date()): Promis
     const spendMonths = months.filter((m) => spend.has(m)).map((m) => spend.get(m)!);
     if (spendMonths.length >= MIN_DEBIT_MONTHS) {
       const p = percentile(spendMonths, BUFFER_PERCENTILE)!;
-      buffer = { monthly: money(Decimal.max(ZERO, p.minus(fixed.expenseMonthly))), source: 'DEBITS' };
+      // The store already took out the fixed payments it can see, month by month.
+      buffer = { monthly: money(Decimal.max(ZERO, store ? p : p.minus(fixed.expenseMonthly))), source: 'DEBITS' };
     } else {
       buffer = { monthly: money((lean ?? ZERO).times(ESTIMATED_BUFFER_SHARE)), source: 'ESTIMATE' };
     }
@@ -311,6 +314,7 @@ export async function getSummary(userId: string, now: Date = new Date()): Promis
     buffer,
     currentSip: sips,
     thisMonth: { month: current, inflowSoFar: money(soFar), surplus: money(up.surplus), topUp: money(up.topUp) },
+    dataSource: store ? 'SPENDING' : 'ALERTS',
     dataStatus,
     plan: {
       topUpShare: share.toFixed(4),
@@ -351,8 +355,10 @@ export async function listCredits(userId: string, month: string, now: Date = new
     userNameTokens(userId),
   ]);
   const decided = new Map(decisions.map((d) => [d.canonicalEventId, d.include]));
+  // Same verdicts as the totals: the store's when the user's spending is read from it.
+  const store = await loadStoreMonths(userId, [month], decided);
   return events.map((e) => {
-    const reason = classifyCredit(e, tokens);
+    const reason = store?.verdictByEvent.has(e.id) ? store.verdictByEvent.get(e.id)! : classifyCredit(e, tokens);
     const decision = decided.get(e.id) ?? null;
     return {
       id: e.id,
