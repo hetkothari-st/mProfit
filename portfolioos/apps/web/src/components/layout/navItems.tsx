@@ -39,13 +39,11 @@ import {
   HeartPulse,
   IndianRupee,
   ShieldCheck,
-  Compass,
   Percent,
   Gauge,
   FolderTree,
   ScrollText,
-  HeartHandshake,
-} from 'lucide-react';
+  HeartHandshake, Zap } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 export interface NavItem {
@@ -83,7 +81,7 @@ export const OVERVIEW_ITEMS: NavItem[] = [
   { label: 'Family', to: '/family', icon: Users },
   { label: 'Income', to: '/income', icon: IndianRupee },
   { label: 'Portfolio Score', to: '/health-score', icon: HeartPulse },
-  { label: 'Advisor', to: '/advisor', icon: Compass },
+  { label: 'Act on it', to: '/act-on-it', icon: Zap },
   { label: 'Transactions', to: '/transactions', icon: Receipt },
   { label: 'Cash Activity', to: '/cashflows', icon: ArrowLeftRight },
 ];
