@@ -3241,6 +3241,9 @@ model BankAccount {
   debitCardExpiry String? // MM/YY
 
   // Balance
+  /// Yearly interest the account pays, percent (e.g. 3.00). Null = not told;
+  /// Act on it then assumes a typical savings rate and says so.
+  interestRatePct Decimal? @db.Decimal(5, 2)
   currentBalance Decimal?  @db.Decimal(14, 2)
   balanceAsOf    DateTime?
   balanceSource  String? // "manual" | "statement" | "auto_event"

@@ -212,6 +212,54 @@ export interface AdvisorFacts {
   };
   /** Portfolio that BUY legs are attributed to (the user's default). */
   defaultPortfolioId: string | null;
+  /** Inputs for the Act on it suggestion types (actOnItFacts.builder.ts). Absent in older fixtures: rules then stay silent. */
+  extra?: ActOnItFacts;
+}
+
+// ─── Act on it facts ─────────────────────────────────────────────
+
+export interface ActOnItFacts {
+  /** The user agreed to bank spending being read (Personal Inflation notice). */
+  spendingConsent: boolean;
+  /** Typical monthly spending: the spending store with consent, else the alert-based estimate; null when unknown. */
+  monthlySpending: Decimal | null;
+  bank: {
+    /** Total savings/current balance at each month end, oldest first; months without data left out. */
+    balanceMonths: { month: string; balance: Decimal }[];
+    latestBalance: Decimal | null;
+    /** The accounts' own rate when the user gave it, else the typical rate below. */
+    savingsRatePct: number;
+    savingsRateAssumed: boolean;
+  };
+  /** Regular-plan funds the user holds that have a direct plan with a lower expense ratio. */
+  regularPlans: {
+    holdingKey: string; portfolioId: string; fundId: string; schemeName: string; valueInr: Decimal;
+    regularTerPct: number; directFundId: string; directSchemeCode: string; directName: string; directTerPct: number;
+  }[];
+  /** Open fixed deposits with a maturity date. */
+  fds: { key: string; issuer: string; amount: Decimal; ratePct: number | null; maturityDate: Date }[];
+  /** Loans where a lender advertises a lower rate, with the saving after switching costs. */
+  loans: {
+    loanId: string; lender: string; loanType: string; currentRatePct: number; marketRatePct: number; marketLender: string;
+    outstanding: Decimal; remainingMonths: number; netSaving: Decimal; breakEvenMonth: number | null;
+  }[];
+  /** Active monthly SIPs and the complete months (of the last 3) with no instalment. */
+  sips: { sipId: string; name: string; fundId: string | null; monthlyAmount: Decimal; missedMonths: string[] }[];
+  /** Nifty 50 TRI month-end closes, oldest first, last 7 months. */
+  indexMonthly: { month: string; close: number }[];
+  ltcg: {
+    fy: string; realised: Decimal; exemption: Decimal;
+    /** Long-term equity gains that could be booked now. */
+    candidates: { portfolioId: string; assetName: string; isin: string | null; gain: Decimal; value: Decimal }[];
+  };
+  /** The next advance-tax instalment with a shortfall, or null. */
+  advanceTax: { label: string; dueDate: Date; shortfall: Decimal; interest: Decimal } | null;
+  /** Active health cover; policies = 0 when none. */
+  healthCover: { sumInsured: Decimal; policies: number };
+  /** Funds the fund analysis flagged critically, with high confidence. */
+  weakFunds: { holdingKey: string; schemeCode: string; schemeName: string; valueInr: Decimal; findingCode: string; headline: string; confidence: number }[];
+  /** A direct-plan liquid fund to suggest and measure against, or null. */
+  liquidFund: { schemeCode: string; name: string; fundId: string | null } | null;
 }
 
 // ─── Rule output ─────────────────────────────────────────────────
