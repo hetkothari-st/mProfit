@@ -143,7 +143,7 @@ Shown once, before the first statement upload or before alert emails are first u
 >
 > **What we keep:** the categorised transactions and monthly totals, until you
 > delete them or your account. Uploaded files are deleted as soon as they are
-> read (within 30 days at most). We never store statement passwords.
+> read (within 30 days at most). A statement password is kept only if you choose to save it, and is stored encrypted.
 >
 > **Automated reading:** some statements and emails are read by an AI model
 > (Anthropic), with your name, PAN, account and card numbers masked first. The

@@ -78,7 +78,7 @@ function ConsentNotice({ data, onFresh }: { data: PersonalInflationSummary; onFr
           </p>
           <p>
             <strong>What we keep:</strong> the categorised transactions and monthly totals, until you turn this off or
-            delete your account. Uploaded files are deleted once they are read. We never store statement passwords.
+            delete your account. Uploaded files are deleted once they are read. A statement password is kept only if you choose to save it, and is stored encrypted.
           </p>
           <p>
             <strong>Automated reading:</strong> payees we can&apos;t place ourselves are sorted by an AI model
