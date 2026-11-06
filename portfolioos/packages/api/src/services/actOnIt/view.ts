@@ -4,6 +4,7 @@ import type {
   AdviceCardView,
   AdviceHistoryRow,
   AdviceOutcome,
+  AdviceFact,
   AdviceState,
   AdviceWhyNow,
   AdviceWhyView,
@@ -57,25 +58,37 @@ const s = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 const LABELS: Record<string, string> = {
   monthlySpending: 'Monthly spending', bufferInr: '3 months of spending', latestBalance: 'Bank balance now', monthsAboveBuffer: 'Months above that',
-  savingsRatePct: 'Savings rate (%)', liquidYieldPct: 'Liquid fund yield (%)', valueInr: 'Value', regularTerPct: 'Regular plan cost (%)',
-  directTerPct: 'Direct plan cost (%)', realised: 'Gains booked this year', exemption: 'Tax-free limit', bookInr: 'Gain to book',
-  amountInr: 'Amount', ratePct: 'Rate (%)', maturityDate: 'Matures on', currentRatePct: 'Your rate (%)', marketRatePct: 'Best rate (%)',
+  savingsRatePct: 'Savings rate', liquidYieldPct: 'Liquid fund yield', valueInr: 'Value', regularTerPct: 'Regular plan cost',
+  directTerPct: 'Direct plan cost', realised: 'Gains booked this year', exemption: 'Tax-free limit', bookInr: 'Gain to book',
+  amountInr: 'Amount', ratePct: 'Rate', maturityDate: 'Matures on', currentRatePct: 'Your rate', marketRatePct: 'Best rate',
   outstanding: 'Outstanding', remainingMonths: 'Months left', netSaving: 'Saving after costs', dueDate: 'Due on', shortfall: 'Short by',
   interest: 'Interest avoided', liquidAssets: 'Liquid money', sumInsured: 'Health cover', confidence: 'Confidence', missedMonths: 'Missed months',
-  fallPct: 'Market fall (%)', totalPortfolioValue: 'Portfolio value',
+  fallPct: 'Market fall', totalPortfolioValue: 'Portfolio value',
 };
+/** Facts that are rupee amounts; keys ending in Pct are percentages. */
+const MONEY_KEYS = new Set([
+  'monthlySpending', 'bufferInr', 'latestBalance', 'valueInr', 'realised', 'exemption', 'bookInr', 'amountInr', 'outstanding',
+  'netSaving', 'shortfall', 'interest', 'liquidAssets', 'sumInsured', 'totalPortfolioValue',
+]);
+const NUMERIC = /^-?\d+(\.\d+)?$/;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** '2026-08' → 'Aug 2026'; anything else unchanged. */
 const readable = (v: string) => (/^\d{4}-\d{2}$/.test(v) ? `${MONTHS[Number.parseInt(v.slice(5), 10) - 1]} ${v.slice(0, 4)}` : v);
 
-function factItems(inputs: unknown): { label: string; value: string }[] {
-  const out: { label: string; value: string }[] = [];
+function factItems(inputs: unknown): AdviceFact[] {
+  const out: AdviceFact[] = [];
   for (const [k, v] of Object.entries(obj(inputs))) {
     const label = LABELS[k];
     if (!label) continue;
-    if (typeof v === 'string' || typeof v === 'number') out.push({ label, value: readable(String(v)) });
-    else if (Array.isArray(v) && v.every((x) => typeof x === 'string')) out.push({ label, value: (v as string[]).map(readable).join(', ') });
+    if (typeof v === 'string' || typeof v === 'number') {
+      const raw = String(v);
+      if (NUMERIC.test(raw) && MONEY_KEYS.has(k)) out.push({ label, value: new Decimal(raw).toFixed(2), kind: 'inr' });
+      else if (NUMERIC.test(raw) && k.endsWith('Pct')) out.push({ label, value: new Decimal(raw).toString(), kind: 'pct' });
+      else out.push({ label, value: readable(raw), kind: 'text' });
+    } else if (Array.isArray(v) && v.every((x) => typeof x === 'string')) {
+      out.push({ label, value: (v as string[]).map(readable).join(', '), kind: 'text' });
+    }
   }
   return out;
 }
@@ -205,15 +218,17 @@ const METHOD_TEXT: Record<string, string> = {
 };
 
 export async function getAdviceWhy(userId: string, id: string): Promise<AdviceWhyView> {
-  const r = await prisma.advisorRecommendation.findFirst({ where: { id, userId }, select: { id: true, headline: true, rationale: true, inputsSnapshot: true, measurement: true, createdAt: true } });
+  const r = await prisma.advisorRecommendation.findFirst({ where: { id, userId }, select: { id: true, category: true, headline: true, rationale: true, inputsSnapshot: true, measurement: true, createdAt: true } });
   if (!r) throw new NotFoundError('Recommendation not found');
   const method = s(obj(r.measurement).method) ?? 'NOT_MEASURED';
   return {
     id: r.id,
     headline: r.headline ?? 'Advice for you',
+    category: r.category,
     rationale: r.rationale,
     facts: factItems(r.inputsSnapshot),
     measuredBy: METHOD_TEXT[method] ?? METHOD_TEXT.NOT_MEASURED!,
+    tracked: method !== 'NOT_MEASURED' && method !== 'PORTFOLIO_VS_HELD',
     givenAt: r.createdAt.toISOString(),
   };
 }

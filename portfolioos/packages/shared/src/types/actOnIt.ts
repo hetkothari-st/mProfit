@@ -22,13 +22,20 @@ export type AdviceState =
 
 export type AdviceRiskBand = 'LOW' | 'MEDIUM' | 'HIGH';
 
+/** One figure an advice was built from. Money arrives as a 2-decimal string. */
+export interface AdviceFact {
+  label: string;
+  value: string;
+  kind: 'inr' | 'pct' | 'text';
+}
+
 export interface AdviceWhyNow {
   kind: 'BALANCE' | 'FACTS';
   /** BALANCE: month-end balances, oldest first, and the buffer line. */
   months?: { month: string; balance: string }[];
   bufferInr?: string | null;
   /** FACTS: short label/value pairs from the facts the advice used. */
-  items?: { label: string; value: string }[];
+  items?: AdviceFact[];
 }
 
 export interface AdviceCardView {
@@ -95,9 +102,12 @@ export interface AdviceWhyView {
   id: string;
   headline: string;
   rationale: string;
+  category: string;
   /** What the advice was built from, frozen when it was given. */
-  facts: { label: string; value: string }[];
+  facts: AdviceFact[];
   measuredBy: string;
+  /** Whether the result is priced into the track record. */
+  tracked: boolean;
   givenAt: string;
 }
 

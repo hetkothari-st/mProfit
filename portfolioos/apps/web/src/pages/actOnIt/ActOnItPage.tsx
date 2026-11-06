@@ -5,11 +5,11 @@ import { Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatINR, type ActOnItView } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { apiErrorMessage } from '@/api/client';
 import { ACT_ON_IT_KEY, actOnItApi, type AdviceAction } from '@/api/actOnIt.api';
 import { AdviceCard } from './AdviceCard';
 import { TrackRecord } from './TrackRecord';
+import { WhyDialog } from './WhyDialog';
 import { CATEGORY_LABEL } from './actOnItView';
 
 const DONE_TOAST: Record<AdviceAction, string> = {
@@ -93,7 +93,7 @@ export function ActOnItPage() {
 
       <TrackRecord view={data} />
 
-      <WhyDialog id={whyId} onClose={() => setWhyId(null)} />
+      <WhyDialog id={whyId} card={all.find((c) => c.id === whyId) ?? null} onClose={() => setWhyId(null)} />
     </div>
   );
 }
@@ -107,43 +107,5 @@ function EmptyAdvice({ view }: { view: ActOnItView }) {
       </p>
       <p className="mt-4 text-[12px] text-muted-foreground">{view.compliance.line}</p>
     </section>
-  );
-}
-
-function WhyDialog({ id, onClose }: { id: string | null; onClose: () => void }) {
-  const { data, isLoading } = useQuery({ queryKey: ['act-on-it', 'why', id], queryFn: () => actOnItApi.why(id!), enabled: id !== null });
-  return (
-    <Dialog open={id !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="font-display text-[22px]">{data?.headline ?? 'Why this advice'}</DialogTitle>
-          <DialogDescription>Given on {data ? new Date(data.givenAt).toLocaleDateString('en-IN') : '…'}. Written from your data by code, not guessed.</DialogDescription>
-        </DialogHeader>
-        {isLoading || !data ? (
-          <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
-        ) : (
-          <div className="space-y-4 text-[14px]">
-            <p className="leading-relaxed">{data.rationale}</p>
-            {data.facts.length > 0 && (
-              <div>
-                <h3 className="mb-1.5 text-[13px] font-medium text-muted-foreground">What it was built from</h3>
-                <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
-                  {data.facts.map((f) => (
-                    <div key={f.label} className="contents">
-                      <dt className="text-muted-foreground">{f.label}</dt>
-                      <dd className="numeric-display text-right">{f.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            )}
-            <div>
-              <h3 className="mb-1 text-[13px] font-medium text-muted-foreground">How we will check it</h3>
-              <p>{data.measuredBy}</p>
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
   );
 }

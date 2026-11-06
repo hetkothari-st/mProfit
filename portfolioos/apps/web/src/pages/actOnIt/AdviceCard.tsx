@@ -2,7 +2,7 @@ import { Decimal, formatINR, type AdviceCardView } from '@everypaisa/shared';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
-import { riskSteps, twoPathEnds } from './actOnItView';
+import { factValue, riskSteps, twoPathEnds } from './actOnItView';
 
 const inr0 = (v: string) => formatINR(v, { fractionDigits: 0 });
 
@@ -165,7 +165,7 @@ function WhyNow({ card }: { card: AdviceCardView }) {
         {(w.items ?? []).slice(0, 6).map((i) => (
           <div key={i.label} className="contents">
             <dt className="text-muted-foreground">{i.label}</dt>
-            <dd className="numeric-display text-right">{i.value}</dd>
+            <dd className="numeric-display text-right">{factValue(i)}</dd>
           </div>
         ))}
       </dl>
