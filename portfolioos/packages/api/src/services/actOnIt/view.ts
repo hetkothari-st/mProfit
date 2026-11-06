@@ -72,6 +72,27 @@ const MONEY_KEYS = new Set([
 ]);
 const NUMERIC = /^-?\d+(\.\d+)?$/;
 
+/** A title for advice given before headlines existed, from its kind. */
+const FALLBACK_HEADLINE: Record<string, string> = {
+  CONCENTRATION_TRIM: 'Trim a holding that has grown too big',
+  REBALANCE: 'Bring your mix back to target',
+  CASH_DEPLOYMENT: 'Put your spare cash to work',
+  TAX_HARVEST: 'Book a loss to cut your tax',
+  GOAL_SHORTFALL_SIP: 'Top up a goal that is falling behind',
+  RISK_PROFILE_REVIEW: 'Tell us how much risk suits you',
+  IDLE_CASH_PARKING: 'Put your resting savings to work',
+  REGULAR_TO_DIRECT: 'Move to the direct plan',
+  LTCG_BOOKING: 'Book gains while they are tax-free',
+  STOPPED_SIP: 'Restart your SIP while prices are down',
+  FD_MATURITY: 'Decide what your maturing FD does next',
+  LOAN_REFINANCE: 'Ask for a lower loan rate',
+  ADVANCE_TAX: 'Pay your advance tax on time',
+  EMERGENCY_FUND: 'Build up your safety net',
+  HEALTH_COVER: 'Raise your health cover',
+  FUND_UNDERPERFORMING: 'Replace a fund that keeps lagging',
+};
+export const fallbackHeadline = (category: string) => FALLBACK_HEADLINE[category] ?? 'Advice for you';
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** '2026-08' → 'Aug 2026'; anything else unchanged. */
 const readable = (v: string) => (/^\d{4}-\d{2}$/.test(v) ? `${MONTHS[Number.parseInt(v.slice(5), 10) - 1]} ${v.slice(0, 4)}` : v);
@@ -116,7 +137,7 @@ function card(r: Row, now: Date): AdviceCardView {
   return {
     id: r.id,
     category: r.category,
-    headline: r.headline ?? 'Advice for you',
+    headline: r.headline ?? fallbackHeadline(r.category),
     rationale: r.rationale,
     gainInr: s(p.gainInr),
     riskBand: (s(p.riskBand) ?? 'MEDIUM') as AdviceCardView['riskBand'],
@@ -180,7 +201,7 @@ export async function getActOnItView(userId: string, now: Date = new Date()): Pr
         id: r.id,
         date: r.createdAt.toISOString().slice(0, 10),
         category: r.category,
-        headline: r.headline ?? r.rationale.slice(0, 80),
+        headline: r.headline ?? fallbackHeadline(r.category),
         state: st,
         outcome: outcomeOf(r, st),
         outcomeInr: r.outcomeStatus === 'MEASURED' && r.outcomeInr !== null ? new Decimal(r.outcomeInr.toString()).toFixed(2) : null,
@@ -218,17 +239,18 @@ const METHOD_TEXT: Record<string, string> = {
 };
 
 export async function getAdviceWhy(userId: string, id: string): Promise<AdviceWhyView> {
-  const r = await prisma.advisorRecommendation.findFirst({ where: { id, userId }, select: { id: true, category: true, headline: true, rationale: true, inputsSnapshot: true, measurement: true, createdAt: true } });
+  const r = await prisma.advisorRecommendation.findFirst({ where: { id, userId }, select: { id: true, category: true, headline: true, rationale: true, inputsSnapshot: true, measurement: true, outcomeStatus: true, createdAt: true } });
   if (!r) throw new NotFoundError('Recommendation not found');
   const method = s(obj(r.measurement).method) ?? 'NOT_MEASURED';
   return {
     id: r.id,
-    headline: r.headline ?? 'Advice for you',
+    headline: r.headline ?? fallbackHeadline(r.category),
     category: r.category,
     rationale: r.rationale,
     facts: factItems(r.inputsSnapshot),
-    measuredBy: METHOD_TEXT[method] ?? METHOD_TEXT.NOT_MEASURED!,
-    tracked: method !== 'NOT_MEASURED' && method !== 'PORTFOLIO_VS_HELD',
+    measuredBy: r.outcomeStatus === 'MEASURED' && method === 'NOT_MEASURED' ? 'Priced against doing nothing, using real prices.' : (METHOD_TEXT[method] ?? METHOD_TEXT.NOT_MEASURED!),
+    // A result already priced counts, whatever the method on file says.
+    tracked: r.outcomeStatus === 'MEASURED' || (method !== 'NOT_MEASURED' && method !== 'PORTFOLIO_VS_HELD'),
     givenAt: r.createdAt.toISOString(),
   };
 }

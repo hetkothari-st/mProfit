@@ -1,5 +1,5 @@
 import { Decimal, formatINR } from '@everypaisa/shared';
-import type { AdviceFact, AdviceOutcome, AdviceRiskBand, AdviceState } from '@everypaisa/shared';
+import type { ActOnItView, AdviceFact, AdviceHistoryRow, AdviceOutcome, AdviceRiskBand, AdviceState } from '@everypaisa/shared';
 
 /** Pure helpers for the Act on it page. Money arrives as strings; Decimal for any maths. */
 
@@ -116,4 +116,24 @@ export function figureParts(text: string): { text: string; figure: boolean }[] {
     .split(FIGURE)
     .map((t, i) => ({ text: t, figure: i % 2 === 1 }))
     .filter((p) => p.text !== '');
+}
+
+export type AdviceTabKey = 'open' | 'accepted' | 'done' | 'skipped' | 'past';
+const TAB_STATES: { key: Exclude<AdviceTabKey, 'open'>; label: string; states: AdviceState[] }[] = [
+  { key: 'accepted', label: 'Accepted', states: ['ACCEPTED'] },
+  { key: 'done', label: 'Done', states: ['CONFIRMED', 'CONFIRMED_BY_USER'] },
+  { key: 'skipped', label: 'Skipped', states: ['SKIPPED'] },
+  { key: 'past', label: 'No longer applies', states: ['WITHDRAWN', 'BEFORE_TRACKING'] },
+];
+
+/** Every piece of advice in a tab: what is waiting, then the decided ones by what happened. */
+export function adviceTabs(view: ActOnItView): { key: AdviceTabKey; label: string; count: number; rows: AdviceHistoryRow[] }[] {
+  const open = (view.current ? 1 : 0) + view.waiting.length;
+  return [
+    { key: 'open', label: 'For you', count: open, rows: [] },
+    ...TAB_STATES.map((t) => {
+      const rows = view.history.filter((h) => t.states.includes(h.state));
+      return { key: t.key, label: t.label, count: rows.length, rows };
+    }),
+  ];
 }

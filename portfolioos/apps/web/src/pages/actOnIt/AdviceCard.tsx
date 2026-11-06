@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import { factValue, riskSteps, twoPathEnds } from './actOnItView';
+import { ReasonPoints } from './ReasonPoints';
 
 const inr0 = (v: string) => formatINR(v, { fractionDigits: 0 });
 
@@ -41,7 +42,7 @@ export function AdviceCard({
         <h2 id="aoi-headline" className="mt-4 max-w-[18ch] font-display text-[clamp(28px,3.4vw,44px)] font-semibold leading-[1.08] tracking-[-0.015em]">
           {card.headline}
         </h2>
-        <p className="mt-3 max-w-[60ch] text-[15px] leading-relaxed text-muted-foreground">{card.rationale}</p>
+        <ReasonPoints rationale={card.rationale} limit={2} className="mt-4 max-w-[60ch]" />
 
         {card.twoPaths ? (
           <TwoPaths card={card} />
