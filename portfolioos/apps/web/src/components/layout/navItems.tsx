@@ -43,7 +43,7 @@ import {
   Gauge,
   FolderTree,
   ScrollText,
-  HeartHandshake, Zap } from 'lucide-react';
+  HeartHandshake, Zap, Compass, ScanSearch } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 export interface NavItem {
@@ -82,6 +82,8 @@ export const OVERVIEW_ITEMS: NavItem[] = [
   { label: 'Income', to: '/income', icon: IndianRupee },
   { label: 'Portfolio Score', to: '/health-score', icon: HeartPulse },
   { label: 'Act on it', to: '/act-on-it', icon: Zap },
+  { label: 'Advisor', to: '/advisor', icon: Compass },
+  { label: 'Hidden costs', to: '/hidden-costs', icon: ScanSearch },
   { label: 'Transactions', to: '/transactions', icon: Receipt },
   { label: 'Cash Activity', to: '/cashflows', icon: ArrowLeftRight },
 ];

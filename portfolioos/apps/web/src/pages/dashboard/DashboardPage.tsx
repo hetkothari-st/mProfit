@@ -36,6 +36,7 @@ import { UpgradeBanner } from '@/components/dashboard/UpgradeBanner';
 import { GmailScanProgressCard } from '@/components/dashboard/GmailScanProgressCard';
 import { DashboardFxStrip } from '@/pages/forex/DashboardFxStrip';
 import { DashboardTaxStrip } from '@/components/dashboard/DashboardTaxStrip';
+import { DashboardHiddenCostStrip } from '@/components/dashboard/DashboardHiddenCostStrip';
 import { NetWorthTrendChart } from '@/components/dashboard/NetWorthTrendChart';
 import { HealthScore } from '@/components/intelligence/HealthScore';
 import { apiErrorMessage } from '@/api/client';
@@ -832,6 +833,9 @@ export function DashboardPage() {
 
       {/* Tax estimate strip — FY summary + CA report download */}
       <DashboardTaxStrip />
+
+      {/* Hidden costs — this year's fees and commissions, links to /hidden-costs */}
+      <DashboardHiddenCostStrip />
 
       {/* Investment metric cards */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">

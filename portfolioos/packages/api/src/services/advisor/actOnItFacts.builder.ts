@@ -171,7 +171,7 @@ async function bankFacts(userId: string, asOf: Date): Promise<ActOnItFacts['bank
   };
 }
 
-async function latestTer(schemeCodes: string[]): Promise<Map<string, number>> {
+export async function latestTer(schemeCodes: string[]): Promise<Map<string, number>> {
   if (schemeCodes.length === 0) return new Map();
   const rows = await prisma.mfSchemeTer.findMany({
     where: { schemeCode: { in: schemeCodes } },
