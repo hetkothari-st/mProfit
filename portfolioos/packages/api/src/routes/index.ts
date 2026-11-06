@@ -57,6 +57,7 @@ import { personalInflationRouter, adminCpiRouter } from './personalInflation.rou
 import { safeToInvestRouter } from './safeToInvest.routes.js';
 import { spendingRouter } from './spending.routes.js';
 import { actOnItRouter } from './actOnIt.routes.js';
+import { hiddenCostsRouter } from './hiddenCosts.routes.js';
 import { advisorRouter } from './advisor.routes.js';
 import { incomeRouter } from './income.routes.js';
 import { intelligenceRouter } from './intelligence.routes.js';
@@ -140,6 +141,7 @@ export function registerRoutes(app: Express): void {
   app.use('/api/safe-to-invest', safeToInvestRouter);
   app.use('/api/spending', spendingRouter);
   app.use('/api/act-on-it', actOnItRouter);
+  app.use('/api/hidden-costs', hiddenCostsRouter);
   app.use('/api/admin/cpi', adminCpiRouter);
   app.use('/api/advisor', advisorRouter);
   app.use('/api/income', incomeRouter);
