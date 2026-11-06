@@ -9,6 +9,7 @@ export { INFORMATIONAL_ALERT_TYPES, isInformationalAlert } from '@everypaisa/sha
  */
 export function alertLink(type: string, metadata: unknown): string | null {
   if (type === 'WILL_REVIEW_DUE') return '/will';
+  if (type === 'ADVICE') return '/act-on-it';
   if (!isInformationalAlert(type)) return null;
   const loanId = typeof metadata === 'object' && metadata !== null ? (metadata as { loanId?: unknown }).loanId : undefined;
   return typeof loanId === 'string' && loanId !== '' ? `/loans/${encodeURIComponent(loanId)}` : '/loans';

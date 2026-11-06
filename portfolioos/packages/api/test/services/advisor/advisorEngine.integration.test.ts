@@ -58,6 +58,11 @@ function emittingRule(id: string, amountInr: string, version = 1): AdvisorRule {
           inputsUsed: { amountInr },
           provenance: { kind: 'NONE' },
           dedupeKey: DEDUPE_KEY,
+          headline: 'Close the equity gap',
+          promise: { gainInr: null, riskBand: 'HIGH', costInr: null, liquidity: null, confidence: 'HIGH' },
+          measurement: { method: 'PORTFOLIO_VS_HELD', horizonDays: 365, baseline: { amountInr } },
+          expiresAt: null,
+          urgentUntil: null,
         },
       ];
     },

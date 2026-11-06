@@ -32,6 +32,16 @@ export const ADVISOR_RECOMMENDATION_CATEGORIES = [
   'GOAL_SHORTFALL_SIP',
   'CASH_DEPLOYMENT',
   'RISK_PROFILE_REVIEW',
+  'IDLE_CASH_PARKING',
+  'REGULAR_TO_DIRECT',
+  'LTCG_BOOKING',
+  'STOPPED_SIP',
+  'FD_MATURITY',
+  'LOAN_REFINANCE',
+  'ADVANCE_TAX',
+  'EMERGENCY_FUND',
+  'HEALTH_COVER',
+  'FUND_UNDERPERFORMING',
 ] as const;
 export type AdvisorRecommendationCategoryValue = (typeof ADVISOR_RECOMMENDATION_CATEGORIES)[number];
 
@@ -202,6 +212,59 @@ export interface AdvisorFacts {
   };
   /** Portfolio that BUY legs are attributed to (the user's default). */
   defaultPortfolioId: string | null;
+  /** Inputs for the Act on it suggestion types (actOnItFacts.builder.ts). Absent in older fixtures: rules then stay silent. */
+  extra?: ActOnItFacts;
+}
+
+// ─── Act on it facts ─────────────────────────────────────────────
+
+export interface ActOnItFacts {
+  /** The user agreed to bank spending being read (Personal Inflation notice). */
+  spendingConsent: boolean;
+  /** Typical monthly spending: the spending store with consent, else the alert-based estimate; null when unknown. */
+  monthlySpending: Decimal | null;
+  bank: {
+    /** Total savings/current balance at each month end, oldest first; months without data left out. */
+    balanceMonths: { month: string; balance: Decimal }[];
+    latestBalance: Decimal | null;
+    /** The accounts' own rate when the user gave it, else the typical rate below. */
+    savingsRatePct: number;
+    savingsRateAssumed: boolean;
+  };
+  /** Regular-plan funds the user holds that have a direct plan with a lower expense ratio. */
+  regularPlans: {
+    holdingKey: string; portfolioId: string; fundId: string; schemeName: string; valueInr: Decimal; bucket: AdvisorAssetBucketValue;
+    regularTerPct: number; directFundId: string; directSchemeCode: string; directName: string; directTerPct: number;
+  }[];
+  /** Open fixed deposits with a maturity date. */
+  fds: { key: string; issuer: string; amount: Decimal; ratePct: number | null; maturityDate: Date }[];
+  /** Loans where a lender advertises a lower rate, with the saving after switching costs. */
+  loans: {
+    loanId: string; lender: string; loanType: string; currentRatePct: number; marketRatePct: number; marketLender: string;
+    outstanding: Decimal; remainingMonths: number; netSaving: Decimal; breakEvenMonth: number | null;
+  }[];
+  /** Active monthly SIPs and the complete months (of the last 3) with no instalment. */
+  sips: { sipId: string; name: string; fundId: string | null; monthlyAmount: Decimal; missedMonths: string[] }[];
+  /** Nifty 50 TRI month-end closes, oldest first, last 7 months. */
+  indexMonthly: { month: string; close: number }[];
+  ltcg: {
+    fy: string; realised: Decimal; exemption: Decimal;
+    /** Long-term equity gains that could be booked now, with the holding's open lots oldest first (FIFO sale order). */
+    candidates: {
+      portfolioId: string; assetName: string; isin: string | null; gain: Decimal; value: Decimal; price: Decimal | null;
+      lots: { buyDate: Date; quantity: Decimal; costPerUnit: Decimal; longTerm: boolean }[];
+    }[];
+  };
+  /** The next advance-tax instalment with a shortfall, or null. */
+  advanceTax: { label: string; dueDate: Date; shortfall: Decimal; interest: Decimal } | null;
+  /** Active health cover; policies = 0 when none. */
+  healthCover: { sumInsured: Decimal; policies: number };
+  /** Funds the fund analysis flagged critically, with high confidence. */
+  weakFunds: { holdingKey: string; schemeCode: string; schemeName: string; valueInr: Decimal; bucket: AdvisorAssetBucketValue; findingCode: string; headline: string; confidence: number }[];
+  /** Fact sections whose source failed this run: rules that need them say nothing either way (nothing is withdrawn). */
+  unavailable: string[];
+  /** A direct-plan liquid fund to suggest and measure against, or null. */
+  liquidFund: { schemeCode: string; name: string; fundId: string | null } | null;
 }
 
 // ─── Rule output ─────────────────────────────────────────────────
@@ -238,6 +301,41 @@ export interface DraftProvenance {
   selectionEvidence?: Record<string, unknown>;
 }
 
+// ─── Act on it: promise and measurement ─────────────────────────
+
+/** How a recommendation's result is measured against doing nothing. */
+export const MEASURE_METHODS = [
+  'NAV_VS_CASH',
+  'DIRECT_VS_REGULAR',
+  'TAX_SAVED',
+  'SIP_UNITS',
+  'RATE_DIFF',
+  'PORTFOLIO_VS_HELD',
+  'FUND_VS_ALT',
+  'NOT_MEASURED',
+] as const;
+export type MeasureMethod = (typeof MEASURE_METHODS)[number];
+
+/** What the card promises. Frozen at creation and checked against the result. */
+export interface DraftPromise {
+  /** Expected gain over the horizon, rupees with 2 dp ("6300.00"); null when not a money figure. */
+  gainInr: string | null;
+  riskBand: 'LOW' | 'MEDIUM' | 'HIGH';
+  /** What acting costs (commission, fees, exit load), "0.00" when nothing; null when unknown. */
+  costInr: string | null;
+  /** How fast the money can come back, in words ("1 working day"); null when not applicable. */
+  liquidity: string | null;
+  confidence: 'HIGH' | 'MEDIUM';
+}
+
+export interface DraftMeasurement {
+  method: MeasureMethod;
+  /** Days after creation at which the result is final; 0 for NOT_MEASURED. */
+  horizonDays: number;
+  /** The do-nothing path's inputs, frozen (amounts, rates, scheme codes). */
+  baseline: Record<string, unknown>;
+}
+
 export interface RecommendationDraft {
   ruleId: string;
   ruleVersion: number;
@@ -254,6 +352,14 @@ export interface RecommendationDraft {
   /** Stable identity for this issue within this rule, so a re-run supersedes
    *  rather than duplicates. */
   dedupeKey: string;
+  /** One plain sentence for the card. Code-written, may carry figures from the rationale. */
+  headline: string;
+  promise: DraftPromise;
+  measurement: DraftMeasurement;
+  /** Undecided after this: EXPIRED (skipped). Null = no expiry. */
+  expiresAt: Date | null;
+  /** A hard deadline close enough to bypass the weekly prompt cap. Null = not urgent. */
+  urgentUntil: Date | null;
 }
 
 /**
@@ -267,6 +373,8 @@ export interface AdvisorRule {
    *  Stamped onto every recommendation so old advice stays reconstructable. */
   version: number;
   description: string;
+  /** Act on it fact sections this rule reads; if any failed to load, the rule is skipped, not run on empty data. */
+  needs?: readonly string[];
   /** Pure. No I/O, no Date.now(), no randomness. */
   evaluate(facts: AdvisorFacts): RecommendationDraft[];
 }

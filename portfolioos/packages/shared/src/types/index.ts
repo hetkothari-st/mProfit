@@ -12,4 +12,5 @@ export * from './gmailIngestion.js';
 export * from './preferences.js';
 export * from './familyDashboard.js';
 export * from './personalInflation.js';
+export * from './actOnIt.js';
 export * from './safeToInvest.js';

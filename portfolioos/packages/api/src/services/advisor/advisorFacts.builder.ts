@@ -52,6 +52,7 @@ import {
   loadRankedUniverse,
 } from './fundRanking/candidates.service.js';
 import { schemeOverlapPct } from './fundRanking/overlap.js';
+import { buildActOnItFacts, type ActOnItFactInputs } from './actOnItFacts.builder.js';
 
 const ZERO = new Decimal(0);
 
@@ -394,6 +395,12 @@ export async function buildAdvisorFacts(userId: string, asOf: Date = new Date())
         surplusOverTarget: null,
       };
 
+  const extra = await buildActOnItFacts(userId, asOf, {
+    holdings,
+    fallbackMonthlyExpenses: liquidity.monthlyExpenses,
+    harvest: harvest as unknown as ActOnItFactInputs['harvest'],
+  });
+
   const statutoryRates = ratesForDate(asOf);
   const defaultPortfolioId =
     portfolios.find((p) => p.isDefault)?.id ?? portfolios[0]?.id ?? null;
@@ -429,5 +436,6 @@ export async function buildAdvisorFacts(userId: string, asOf: Date = new Date())
       slabPct: riskProfile?.taxSlabPct ?? null,
     },
     defaultPortfolioId,
+    extra,
   };
 }

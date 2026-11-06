@@ -80,6 +80,7 @@ import { WillWizardPage } from './pages/will/WillWizardPage';
 import { IncomePage } from './pages/income/IncomePage';
 import { HealthScorePage } from './pages/intelligence/HealthScorePage';
 import { AdvisorPage } from './pages/advisor/AdvisorPage';
+import { ActOnItPage } from './pages/actOnIt/ActOnItPage';
 import { CreditCardListPage } from './pages/creditCards/CreditCardListPage';
 import { CreditCardDetailPage } from './pages/creditCards/CreditCardDetailPage';
 import { RealEstateListPage } from './pages/realEstate/RealEstateListPage';
@@ -259,6 +260,7 @@ export function App() {
         <Route path="/income" element={<IncomePage />} />
         <Route path="/health-score" element={<HealthScorePage />} />
         <Route path="/advisor" element={<AdvisorPage />} />
+        <Route path="/act-on-it" element={<ActOnItPage />} />
         <Route path="/credit-cards" element={<CreditCardListPage />} />
         <Route path="/credit-cards/:id" element={<CreditCardDetailPage />} />
         <Route path="/bank-accounts" element={<BankAccountListPage />} />

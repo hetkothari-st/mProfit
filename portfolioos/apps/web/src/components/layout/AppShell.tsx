@@ -6,6 +6,7 @@ import { Header } from './Header';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { MobileTabBar } from './MobileTabBar';
 import { GmailAutoConnectBanner } from './GmailAutoConnectBanner';
+import { AdvicePopup } from '@/components/actOnIt/AdvicePopup';
 import { ActingAsBanner } from '@/components/family/ActingAsBanner';
 import { useActingAsStore } from '@/stores/actingAs.store';
 import { ScanProvider } from '@/context/ScanContext';
@@ -112,6 +113,7 @@ export function AppShell() {
         </div>
         <MobileTabBar onOpenMenu={() => setDrawerOpen(true)} />
         <AssistantButton />
+        <AdvicePopup />
       </div>
     </ScanProvider>
   );

@@ -9,3 +9,9 @@ The AI adviser: rule-based recommendations, with LLM-written prose layered on to
 - `approvedProducts.service.ts`, `productResolution.ts`, `fallbackRanking*.ts`, `fundRanking/` — which funds may be recommended, and how they're ranked (methodology reports live in `fundRanking/`).
 
 Jobs: `jobs/fundScoring.job.ts`, `jobs/mfProseJob.ts`. HTTP: `routes/advisor.routes.ts`.
+
+Act on it (`services/actOnIt/README.md`): every draft also carries a headline,
+a promise and a measurement (`actOnItDraft.ts`); the Act on it types are in
+`rules/` (idle cash, regular→direct, gain booking, stopped SIP, FD maturing,
+loan refinance, advance tax, emergency fund, health cover, weak fund) with
+their inputs in `actOnItFacts.builder.ts`; `reconcile.ts` settles conflicts.

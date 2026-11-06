@@ -22,6 +22,7 @@ const globalForPrisma = globalThis as unknown as {
  * MFNav, FXRate, …) are excluded — they're shared market data.
  */
 export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
+  'AdvicePrompt',
   'Portfolio',
   'Transaction',
   'Holding',

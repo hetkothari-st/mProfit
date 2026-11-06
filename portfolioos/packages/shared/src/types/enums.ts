@@ -158,6 +158,7 @@ export const AlertType = {
   LOAN_REFINANCE: 'LOAN_REFINANCE',
   LOAN_BENCHMARK_CHANGE: 'LOAN_BENCHMARK_CHANGE',
   WILL_REVIEW_DUE: 'WILL_REVIEW_DUE',
+  ADVICE: 'ADVICE',
   CUSTOM: 'CUSTOM',
 } as const;
 export type AlertType = (typeof AlertType)[keyof typeof AlertType];

@@ -20,6 +20,16 @@ import { rebalanceDriftRule } from './rebalanceDrift.rule.js';
 import { cashDeploymentRule } from './cashDeployment.rule.js';
 import { goalShortfallSipRule } from './goalShortfallSip.rule.js';
 import { riskProfileReviewRule } from './riskProfileReview.rule.js';
+import { advanceTaxRule } from './advanceTax.rule.js';
+import { ltcgBookingRule } from './ltcgBooking.rule.js';
+import { fdMaturityRule } from './fdMaturity.rule.js';
+import { emergencyFundRule } from './emergencyFund.rule.js';
+import { stoppedSipRule } from './stoppedSip.rule.js';
+import { idleCashParkingRule } from './idleCashParking.rule.js';
+import { loanRefinanceRule } from './loanRefinance.rule.js';
+import { fundUnderperformingRule } from './fundUnderperforming.rule.js';
+import { regularToDirectRule } from './regularToDirect.rule.js';
+import { healthCoverRule } from './healthCover.rule.js';
 
 export const ADVISOR_RULES: AdvisorRule[] = [
   taxLossHarvestRule, // 1-10   deadline-driven
@@ -28,6 +38,17 @@ export const ADVISOR_RULES: AdvisorRule[] = [
   cashDeploymentRule, // 31-60  optimisation
   goalShortfallSipRule, // 31-60  optimisation
   riskProfileReviewRule, // 31-60  optimisation
+  // Act on it types (docs/superpowers/specs/2026-11-06-act-on-it-design.md §7)
+  advanceTaxRule,
+  ltcgBookingRule,
+  fdMaturityRule,
+  emergencyFundRule,
+  stoppedSipRule,
+  idleCashParkingRule,
+  loanRefinanceRule,
+  fundUnderperformingRule,
+  regularToDirectRule,
+  healthCoverRule,
 ];
 
 export {
@@ -37,4 +58,14 @@ export {
   cashDeploymentRule,
   goalShortfallSipRule,
   riskProfileReviewRule,
+  advanceTaxRule,
+  ltcgBookingRule,
+  fdMaturityRule,
+  emergencyFundRule,
+  stoppedSipRule,
+  idleCashParkingRule,
+  loanRefinanceRule,
+  fundUnderperformingRule,
+  regularToDirectRule,
+  healthCoverRule,
 };
