@@ -1,5 +1,5 @@
 import { Decimal, formatINR } from '@everypaisa/shared';
-import type { AdviceOutcome, AdviceRiskBand, AdviceState } from '@everypaisa/shared';
+import type { AdviceFact, AdviceOutcome, AdviceRiskBand, AdviceState } from '@everypaisa/shared';
 
 /** Pure helpers for the Act on it page. Money arrives as strings; Decimal for any maths. */
 
@@ -85,3 +85,35 @@ export const CATEGORY_LABEL: Record<string, string> = {
   GOAL_SHORTFALL_SIP: 'Goal on track',
   RISK_PROFILE_REVIEW: 'Risk profile',
 };
+
+/** A fact as shown: whole rupees for money, "6.5%" for rates, text as it is. */
+export function factValue(f: AdviceFact): string {
+  if (f.kind === 'inr') return formatINR(new Decimal(f.value).toDecimalPlaces(0).toFixed(2), { fractionDigits: 0 });
+  if (f.kind === 'pct') return `${f.value}%`;
+  return f.value;
+}
+
+const RUPEES_WITH_PAISE = /₹([\d,]+)\.(\d{1,2})(?!\d)/g;
+
+/**
+ * The reason as short points: one per sentence, rupee amounts to the whole
+ * rupee. Splits only where a full stop is followed by a space, so "0.25"
+ * and "65.0%" stay whole.
+ */
+export function reasonPoints(rationale: string): string[] {
+  const whole = rationale.replace(RUPEES_WITH_PAISE, (_m, r: string, p: string) =>
+    formatINR(new Decimal(`${r.replace(/,/g, '')}.${p}`).toDecimalPlaces(0).toFixed(2), { fractionDigits: 0 }),
+  );
+  return whole.split(/(?<=\.)\s+(?=\S)/).map((x) => x.trim()).filter(Boolean);
+}
+
+const FIGURE = /(₹[\d,]+(?:\.\d+)?|\d+(?:\.\d+)?%)/;
+
+/** Splits text so rupee amounts and percentages can be set in the number font. */
+export function figureParts(text: string): { text: string; figure: boolean }[] {
+  // split() with a capture group puts the matches at the odd positions.
+  return text
+    .split(FIGURE)
+    .map((t, i) => ({ text: t, figure: i % 2 === 1 }))
+    .filter((p) => p.text !== '');
+}

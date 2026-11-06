@@ -99,8 +99,10 @@ describe('/api/act-on-it routes', () => {
 
   it('why explains the facts and how it will be measured', async () => {
     const { body } = await call('GET', `/api/act-on-it/${ids.open}/why`);
-    expect(body.data.facts).toEqual(expect.arrayContaining([{ label: '3 months of spending', value: '120000' }]));
+    expect(body.data.facts).toEqual(expect.arrayContaining([{ label: '3 months of spending', value: '120000.00', kind: 'inr' }]));
     expect(body.data.measuredBy).toMatch(/savings account/);
+    expect(body.data.tracked).toBe(true);
+    expect(body.data.category).toBe('IDLE_CASH_PARKING');
   });
 
   it('the pop-up shows once', async () => {
