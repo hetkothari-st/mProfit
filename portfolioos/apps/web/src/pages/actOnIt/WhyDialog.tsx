@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CircleSlash, Loader2, Target } from 'lucide-react';
-import { formatINR, type AdviceCardView } from '@everypaisa/shared';
+import { formatINR, type AdviceCardView, type AdviceHistoryRow } from '@everypaisa/shared';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/cn';
 import { actOnItApi } from '@/api/actOnIt.api';
-import { CATEGORY_LABEL, factValue, figureParts, reasonPoints, riskSteps } from './actOnItView';
+import { CATEGORY_LABEL, factValue, outcomeLabel, riskSteps, stateLabel } from './actOnItView';
+import { ReasonPoints } from './ReasonPoints';
 
 const RISK_WORD = { LOW: 'Low', MEDIUM: 'Medium', HIGH: 'High' } as const;
 
@@ -15,7 +16,18 @@ const RISK_WORD = { LOW: 'Low', MEDIUM: 'Medium', HIGH: 'High' } as const;
  * out, the facts it was built from as tiles, and whether it counts in the
  * track record.
  */
-export function WhyDialog({ id, card, onClose }: { id: string | null; card: AdviceCardView | null; onClose: () => void }) {
+export function WhyDialog({
+  id,
+  card,
+  row,
+  onClose,
+}: {
+  id: string | null;
+  card: AdviceCardView | null;
+  /** Set for decided advice: its state and result go at the top. */
+  row: AdviceHistoryRow | null;
+  onClose: () => void;
+}) {
   const { data, isLoading } = useQuery({ queryKey: ['act-on-it', 'why', id], queryFn: () => actOnItApi.why(id!), enabled: id !== null });
   const given = data ? new Date(data.givenAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
 
@@ -38,23 +50,12 @@ export function WhyDialog({ id, card, onClose }: { id: string | null; card: Advi
               </div>
               <DialogTitle className="relative mt-3 font-display text-[26px] font-semibold leading-[1.12] tracking-[-0.01em]">{data.headline}</DialogTitle>
               <DialogDescription className="sr-only">Why this advice was given and how it will be checked.</DialogDescription>
-              {card && <Figures card={card} />}
+              {card ? <Figures card={card} /> : row ? <Outcome row={row} /> : null}
             </header>
 
             <div className="space-y-6 px-6 py-6 sm:px-8">
               <section aria-label="Why">
-                <ul className="space-y-2.5">
-                  {reasonPoints(data.rationale).map((point) => (
-                    <li key={point} className="flex gap-3 text-[14px] leading-relaxed text-muted-foreground">
-                      <span aria-hidden className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-                      <span>
-                        {figureParts(point).map((p, i) =>
-                          p.figure ? <b key={i} className="numeric-display font-semibold text-foreground">{p.text}</b> : <span key={i}>{p.text}</span>,
-                        )}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <ReasonPoints rationale={data.rationale} />
               </section>
 
               {data.facts.length > 0 && (
@@ -103,6 +104,22 @@ function Figures({ card }: { card: AdviceCardView }) {
         </span>
       </Tile>
       {card.liquidity && <Tile label="Money back">{card.liquidity}</Tile>}
+    </div>
+  );
+}
+
+/** What happened to decided advice: where it stands and what it made or missed. */
+function Outcome({ row }: { row: AdviceHistoryRow }) {
+  const result = outcomeLabel(row.outcome, row.outcomeInr);
+  const tone = row.outcome === 'GAINED' ? 'text-accent-ink' : row.outcome === 'MISSED' || row.outcome === 'LOST' ? 'text-negative' : 'text-muted-foreground';
+  return (
+    <div className="relative mt-5 grid grid-cols-2 gap-2.5">
+      <Tile label="Where it stands">
+        <span className="font-sans text-[15px]">{stateLabel(row.state)}</span>
+      </Tile>
+      <Tile label="Result against doing nothing">
+        <span className={tone}>{result || 'Not measured'}</span>
+      </Tile>
     </div>
   );
 }

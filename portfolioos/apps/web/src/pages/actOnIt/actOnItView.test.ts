@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { barShare, outcomeLabel, stateLabel, twoPathEnds, riskSteps, shortInr, factValue, reasonPoints, figureParts } from './actOnItView';
+import { barShare, outcomeLabel, stateLabel, twoPathEnds, riskSteps, shortInr, factValue, reasonPoints, figureParts, adviceTabs } from './actOnItView';
+import type { ActOnItView, AdviceHistoryRow } from '@everypaisa/shared';
 
 describe('act on it view helpers', () => {
   it('two paths: ₹1,80,000 for a year at 3% vs 6.5%', () => {
@@ -50,5 +51,18 @@ describe('act on it view helpers', () => {
       { text: '25%', figure: true },
       { text: ' of it', figure: false },
     ]);
+  });
+
+  it('sorts every piece of advice into a tab', () => {
+    const row = (id: string, state: AdviceHistoryRow['state']): AdviceHistoryRow => ({
+      id, date: '2026-10-01', category: 'REBALANCE', headline: id, state, outcome: 'NONE', outcomeInr: null, promisedGainInr: null, note: null,
+    });
+    const view = {
+      current: { id: 'o1' }, waiting: [{ id: 'o2' }],
+      history: [row('a', 'ACCEPTED'), row('d1', 'CONFIRMED'), row('d2', 'CONFIRMED_BY_USER'), row('s', 'SKIPPED'), row('w', 'WITHDRAWN'), row('b', 'BEFORE_TRACKING')],
+    } as unknown as ActOnItView;
+    const t = adviceTabs(view);
+    expect(t.map((x) => [x.key, x.count])).toEqual([['open', 2], ['accepted', 1], ['done', 2], ['skipped', 1], ['past', 2]]);
+    expect(t.find((x) => x.key === 'done')!.rows.map((r) => r.id)).toEqual(['d1', 'd2']);
   });
 });

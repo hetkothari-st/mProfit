@@ -175,3 +175,12 @@ describe('final review fixes (DB)', () => {
     expect(rows.map((x) => x.status)).toEqual(['OPEN']);
   });
 });
+
+describe('act on it — advice from before tracking reads well', () => {
+  it('gets a headline from its kind instead of a generic one', async () => {
+    const { fallbackHeadline } = await import('../../../src/services/actOnIt/view.js');
+    expect(fallbackHeadline('CONCENTRATION_TRIM')).toBe('Trim a holding that has grown too big');
+    expect(fallbackHeadline('REBALANCE')).toBe('Bring your mix back to target');
+    expect(fallbackHeadline('SOMETHING_NEW')).toBe('Advice for you');
+  });
+});
