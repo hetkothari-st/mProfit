@@ -1,6 +1,13 @@
 import { formatINR, type ActOnItView } from '@everypaisa/shared';
+import { CalendarCheck, EyeOff, Scale } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { CATEGORY_LABEL, barShare, outcomeLabel, stateLabel } from './actOnItView';
+
+const RULES = [
+  { Icon: CalendarCheck, text: 'Every advice kept, with its date and reasons' },
+  { Icon: Scale, text: 'Priced against doing nothing, at real prices' },
+  { Icon: EyeOff, text: "Moves we can't see are listed, not counted" },
+];
 
 /**
  * The track record (mockup v4): one big number — what acting earned against
@@ -36,10 +43,14 @@ export function TrackRecord({ view }: { view: ActOnItView }) {
             </div>
           ))}
         </div>
-        <p className="mt-7 max-w-[34ch] text-[12.5px] leading-relaxed text-muted-foreground">
-          Every recommendation is kept with its reasons and the date. Results compare what you did against doing nothing, using real prices.
-          Things you tell us you did, but we can't see, are listed and not counted.
-        </p>
+        <ul className="mt-7 space-y-2 text-[13px]" aria-label="How the record is kept">
+          {RULES.map(({ Icon, text }) => (
+            <li key={text} className="flex items-center gap-2.5 text-muted-foreground">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/10 text-accent-ink"><Icon className="h-3.5 w-3.5" aria-hidden /></span>
+              {text}
+            </li>
+          ))}
+        </ul>
       </div>
 
       {view.history.length === 0 ? (
