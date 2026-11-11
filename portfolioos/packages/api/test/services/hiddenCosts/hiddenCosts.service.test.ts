@@ -27,10 +27,10 @@ const CODES = ['TEST-HC-REG', 'TEST-HC-DIR', 'TEST-HC-NOTER', 'TEST-HC-EQ'];
 let s: TestScope;
 const ids: Record<string, string> = {};
 
-const holding = (key: string, assetClass: string, value: number, fundId: string | null = null): AdvisorHoldingFact => ({
+const holding = (key: string, assetClass: string, value: number, fundId: string | null = null, priceStale = false): AdvisorHoldingFact => ({
   holdingKey: key, portfolioId: 'pf', assetName: key, assetClass, bucket: 'EQUITY_DOMESTIC', fundId, stockId: null, isin: null,
   quantity: new Decimal(1), currentPrice: new Decimal(value), currentValue: new Decimal(value), totalCost: new Decimal(value),
-  unrealisedPnL: new Decimal(0), priceStale: false,
+  unrealisedPnL: new Decimal(0), priceStale,
 });
 
 beforeAll(async () => {
@@ -151,5 +151,16 @@ describe('hidden cost x-ray (DB)', () => {
     } finally {
       await other.cleanup();
     }
+  });
+
+  it('still counts the running cost of a fund whose price is stale', async () => {
+    facts.fail = false;
+    facts.value = {
+      holdings: [holding('fund:stale', 'MUTUAL_FUND', 500000, ids.dir, true)],
+      extra: { regularPlans: [] },
+    };
+    const v = await runAsUser(s.userId, () => getHiddenCosts(s.userId, NOW));
+    // A stale price is the last known value, not an unknown one: 5,00,000 × 0.5% TER.
+    expect(v.sources.find((x) => x.key === 'FUND_RUNNING_COST')).toMatchObject({ amountInr: '2500.00', basis: 'DATA' });
   });
 });

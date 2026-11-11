@@ -52,7 +52,7 @@ export async function getHiddenCosts(userId: string, asOf: Date = new Date()): P
   if (facts) {
     // ── Mutual funds: commission on regular plans, and every fund's running cost ──
     const funds = await safe('funds', { commission: ZERO, commissionFunds: 0, running: ZERO, runningFunds: 0, unknown: 0 }, async () => {
-      const held = facts.holdings.filter((h) => h.fundId && !h.priceStale && h.currentValue.greaterThan(0));
+      const held = facts.holdings.filter((h) => h.fundId && h.currentValue.greaterThan(0));
       const regular = new Map((facts.extra?.regularPlans ?? []).map((r) => [r.holdingKey, r]));
       const masters = await prisma.mutualFundMaster.findMany({ where: { id: { in: held.map((h) => h.fundId!) } }, select: { id: true, schemeCode: true } });
       const codeOf = new Map(masters.map((m) => [m.id, m.schemeCode]));
