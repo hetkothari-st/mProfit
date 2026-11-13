@@ -11,14 +11,18 @@ export const ACTIVITY_THROTTLE_MS = 60 * 60 * 1000;
  * may call this — never system jobs, never an X-Act-As manager.
  */
 export async function touchActivity(userId: string, now: Date = new Date()): Promise<boolean> {
-  const cutoff = new Date(now.getTime() - ACTIVITY_THROTTLE_MS);
-  const res = await runAsSystem(() =>
-    prisma.user.updateMany({
-      where: { id: userId, OR: [{ lastActiveAt: null }, { lastActiveAt: { lt: cutoff } }] },
-      data: { lastActiveAt: now },
-    }),
-  );
-  return res.count === 1;
+  try {
+    const cutoff = new Date(now.getTime() - ACTIVITY_THROTTLE_MS);
+    const res = await runAsSystem(() =>
+      prisma.user.updateMany({
+        where: { id: userId, OR: [{ lastActiveAt: null }, { lastActiveAt: { lt: cutoff } }] },
+        data: { lastActiveAt: now },
+      }),
+    );
+    return res.count === 1;
+  } catch {
+    return false;
+  }
 }
 
 /** Fire-and-forget wrapper for request paths: a failed write must not fail the request. */

@@ -6,5 +6,5 @@ export function getApiBaseUrl(): string {
   if (typeof window !== 'undefined' && /\.railway\.app$/.test(window.location.hostname)) {
     return 'https://mprofit-production.up.railway.app';
   }
-  return 'http://localhost:3001';
+  return 'http://localhost:3020';
 }

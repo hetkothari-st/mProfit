@@ -605,9 +605,26 @@ export async function getCurrentUserRecord(userId: string) {
 }
 
 export async function getCurrentUser(userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      phone: true,
+      pan: true,
+      panLast4: true,
+      panEnc: true,
+      dob: true,
+      role: true,
+      plan: true,
+      planExpiresAt: true,
+      isActive: true,
+      createdAt: true,
+    },
+  });
   if (!user) throw new NotFoundError('User not found');
-  return toAuthUser(user);
+  return toAuthUser(user as User);
 }
 
 // ── Google OAuth (identity only) ──────────────────────────────────────
