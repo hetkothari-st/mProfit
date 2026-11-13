@@ -270,7 +270,7 @@ export async function loadAmfiNavToDb(): Promise<AmfiLoadResult> {
     parseFailures,
     fetchedRows: rows.length,
     mastersCreated: mastersCreated.count,
-    mastersUpdated: 0,
+    mastersUpdated: mastersEnriched,
     navsUpserted,
   };
   logger.info(result, 'AMFI NAV load complete');
