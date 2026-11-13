@@ -8,6 +8,7 @@ import {
 } from '@everypaisa/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
+import { FormBadge } from './FormBadge';
 import { Riskometer } from './Riskometer';
 import { PillarBreakdown } from './PillarBreakdown';
 import { formatIsoDate, formatRatio } from '../mfFormat';
@@ -123,6 +124,7 @@ function ScoreBody({ score, meta }: { score: MfSchemeScoreDto; meta: MfSchemeMet
           )}
         </div>
         <Stars rating={score.rating} />
+        <FormBadge rating={score.rating} size="md" />
       </div>
     );
   }

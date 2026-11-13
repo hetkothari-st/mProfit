@@ -105,6 +105,16 @@ export const STALE_BUSINESS_DAY_THRESHOLD = 3;
  */
 const DEFAULT_LOOKBACK_DAYS = 45;
 
+/**
+ * How far back the nightly run reaches for an index with NO stored rows — one
+ * newly seeded. Forty-five days of a new benchmark is useless: the 3/5/10-year
+ * metrics need years of it, and before this the history arrived only if
+ * someone ran the backfill script or bumped the bootstrap key. Ten years for
+ * the longest horizon plus one of slack, matching the bootstrap. The endpoint
+ * serves it in one request, and it happens once per index.
+ */
+export const EMPTY_INDEX_HISTORY_DAYS = 11 * 366;
+
 /** Rows per `createMany`. Keeps the statement and its parameter list sane. */
 const WRITE_CHUNK = 500;
 
@@ -134,7 +144,8 @@ export interface BenchmarkPriceJobOptions {
   from?: Date;
   /** Explicit window end. Defaults to today (UTC date of `now`). */
   to?: Date;
-  /** Catch-up window when an index has no stored rows. */
+  /** Catch-up window when an index has no stored rows. Omitted, an empty
+   *  index gets `EMPTY_INDEX_HISTORY_DAYS`. */
   lookbackDays?: number;
   /** Ignore the per-index resume point and re-fetch the whole window. The
    *  backfill sets this; the nightly run must not, or it would re-request a
@@ -420,9 +431,11 @@ async function runBenchmarkPricesInner(
     // freeze the last row's value forever.
     const from = options.from
       ? utcMidnight(options.from)
-      : options.fullRange || latestBefore === null
-        ? new Date(windowEnd.getTime() - lookbackDays * DAY_MS)
-        : latestBefore;
+      : latestBefore === null && options.lookbackDays === undefined
+        ? new Date(windowEnd.getTime() - EMPTY_INDEX_HISTORY_DAYS * DAY_MS)
+        : options.fullRange || latestBefore === null
+          ? new Date(windowEnd.getTime() - lookbackDays * DAY_MS)
+          : latestBefore;
 
     if (from.getTime() > windowEnd.getTime()) {
       // Nothing to ask for. Still fall through to the staleness check below.

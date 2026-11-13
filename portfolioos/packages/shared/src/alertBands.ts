@@ -8,7 +8,7 @@
  * Loan-check alerts (EMI calculator spec s6.3) are news, not deadlines: their
  * trigger date is the day the check ran, so they are never "overdue".
  */
-export const INFORMATIONAL_ALERT_TYPES: ReadonlySet<string> = new Set(['LOAN_REFINANCE', 'LOAN_BENCHMARK_CHANGE']);
+export const INFORMATIONAL_ALERT_TYPES: ReadonlySet<string> = new Set(['LOAN_REFINANCE', 'LOAN_BENCHMARK_CHANGE', 'MF_RATING_CHANGE']);
 
 export function isInformationalAlert(type: string): boolean {
   return INFORMATIONAL_ALERT_TYPES.has(type);

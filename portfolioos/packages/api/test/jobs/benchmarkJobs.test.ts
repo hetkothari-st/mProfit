@@ -148,9 +148,10 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('benchmark index seed migration', () => {
-  it('produced exactly the 14 BENCHMARK_INDEX_SEED rows, all total-return', async () => {
+  it('produced exactly the BENCHMARK_INDEX_SEED rows, all total-return', async () => {
     const codes = BENCHMARK_INDEX_SEED.map((e) => e.code);
-    expect(codes).toHaveLength(14);
+    // 14 from the original seed + 35 index-fund benchmarks (20261026120000).
+    expect(codes).toHaveLength(49);
 
     const rows = await runAsSystem(() =>
       prisma.benchmarkIndex.findMany({
@@ -159,7 +160,7 @@ describe('benchmark index seed migration', () => {
       }),
     );
 
-    expect(rows).toHaveLength(14);
+    expect(rows).toHaveLength(49);
     // Name and provider must match the TS seed too — the migration's VALUES
     // list is a hand-copy of `BENCHMARK_INDEX_SEED`, and a drift between them
     // is exactly the sort of thing nobody notices until a fetcher asks the

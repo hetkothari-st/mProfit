@@ -35,6 +35,7 @@
 import { useRef, useState } from 'react';
 
 import { AmcLogo } from '@/components/mf/AmcLogo';
+import { FormBadge } from './FormBadge';
 
 import type {
   MfAlternativesDto,
@@ -1140,8 +1141,9 @@ export function PlainOverview({
                   /100
                 </span>
               </div>
-              <div className="mt-4">
+              <div className="mt-4 flex items-center gap-3">
                 <Stars rating={rating} size={19} />
+                <FormBadge rating={rating} size="md" />
               </div>
             </div>
 

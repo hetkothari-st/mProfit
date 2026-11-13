@@ -75,6 +75,8 @@ function alertHref(type: string): string {
       return '/will';
     case 'ADVICE':
       return '/act-on-it';
+    case 'MF_RATING_CHANGE':
+      return '/mutual-funds/analysis';
     default:
       return '/alerts';
   }

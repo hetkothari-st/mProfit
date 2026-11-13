@@ -13,7 +13,7 @@ const ALERT_AREA: Record<string, AiConnectorArea> = {
   INSURANCE_PREMIUM: 'insurance', INSURANCE_CLAIM: 'insurance',
   LOAN_EMI_DUE: 'loans', LOAN_GIVEN_DUE: 'loans', LOAN_REFINANCE: 'loans', LOAN_BENCHMARK_CHANGE: 'loans',
   CREDIT_CARD_DUE: 'banking', PROPERTY_TAX_DUE: 'property', PROPERTY_POSSESSION_DUE: 'property',
-  PF_REFRESH_DUE: 'retirement', WILL_REVIEW_DUE: 'will',
+  PF_REFRESH_DUE: 'retirement', WILL_REVIEW_DUE: 'will', MF_RATING_CHANGE: 'investments',
 };
 const ALERT_LABEL: Record<string, string> = {
   FD_MATURITY: 'Fixed deposit maturing', BOND_MATURITY: 'Bond maturing', MF_LOCK_IN_EXPIRY: 'Mutual fund lock-in ending',
@@ -23,6 +23,7 @@ const ALERT_LABEL: Record<string, string> = {
   LOAN_EMI_DUE: 'Loan EMI due', LOAN_GIVEN_DUE: 'Money lent due back', LOAN_REFINANCE: 'Refinancing opportunity',
   LOAN_BENCHMARK_CHANGE: 'Loan benchmark changed', CREDIT_CARD_DUE: 'Credit card bill due', PROPERTY_TAX_DUE: 'Property tax due',
   PROPERTY_POSSESSION_DUE: 'Property possession due', PF_REFRESH_DUE: 'PF balance needs refreshing', WILL_REVIEW_DUE: 'Will review due',
+  MF_RATING_CHANGE: 'Held fund rating changed',
 };
 /** Areas whose values make up net worth; all must be shared to reveal the total. */
 const NET_WORTH_AREAS: AiConnectorArea[] = ['investments', 'property', 'vehicles', 'loans', 'banking'];

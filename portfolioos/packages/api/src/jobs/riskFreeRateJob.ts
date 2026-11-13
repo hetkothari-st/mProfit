@@ -213,9 +213,9 @@ function toStored(v: Decimal): string {
   return v.toFixed(6, Decimal.ROUND_HALF_EVEN);
 }
 
-function riskFreeSourceHash(series: string, date: Date, rateFixed: string): string {
+function riskFreeSourceHash(adapterId: string, series: string, date: Date, rateFixed: string): string {
   return createHash('sha256')
-    .update(`riskfree:${RISK_FREE_JOB_ADAPTER_ID}:${series}:${isoDay(date)}:${rateFixed}`)
+    .update(`riskfree:${adapterId}:${series}:${isoDay(date)}:${rateFixed}`)
     .digest('hex');
 }
 
@@ -280,7 +280,7 @@ async function runRiskFreeRatesInner(
 
       // ONLY the rows the parser observed and accepted. No fill, no
       // interpolation, no synthesised weeks. See the header.
-      const written = await persistRows(series, outcome.rows);
+      const written = await persistRows(series, outcome.rows, outcome.adapterId);
       result.rowsInserted = written.inserted;
       result.rowsUpdated = written.updated;
       result.rowsSkipped = written.skipped;
@@ -328,6 +328,7 @@ interface PersistResult {
 async function persistRows(
   series: string,
   rows: readonly RiskFreeRow[],
+  adapterId: string,
 ): Promise<PersistResult> {
   const out: PersistResult = { inserted: 0, updated: 0, skipped: 0 };
   if (rows.length === 0) return out;
@@ -354,7 +355,7 @@ async function persistRows(
         series,
         date: day,
         ratePct: stored,
-        sourceHash: riskFreeSourceHash(series, day, stored),
+        sourceHash: riskFreeSourceHash(adapterId, series, day, stored),
       });
       continue;
     }
@@ -365,7 +366,7 @@ async function persistRows(
     toUpdate.push({
       id: current.id,
       ratePct: stored,
-      sourceHash: riskFreeSourceHash(series, day, stored),
+      sourceHash: riskFreeSourceHash(adapterId, series, day, stored),
     });
   }
 

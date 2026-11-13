@@ -72,6 +72,7 @@
 import { request } from 'undici';
 import { boundedAgent, followRedirects } from '../lib/httpDispatcher.js';
 import { logger } from '../lib/logger.js';
+import { NSE_TRACKED_INDICES } from './benchmarkIndexSeed.js';
 import {
   parseNiftyTriJson,
   type IndexParseFailure,
@@ -185,6 +186,10 @@ export const NSE_INDEX_REQUEST_NAME: Readonly<Record<string, string>> = {
   // They are real NSE indices, but the public historical-data tool does not
   // serve them; NSE puts fixed-income and hybrid history behind its paid data
   // subscription. Guessing another spelling would only produce more `[]`.
+
+  // Sectoral, thematic and factor indices, each verified live on 2026-10-26
+  // with its own request name (see `NSE_TRACKED_INDICES`).
+  ...Object.fromEntries(NSE_TRACKED_INDICES.map((i) => [i.code, i.requestName])),
 };
 
 /** The verified TRI page-method. Overridable per call for tests and mirrors. */

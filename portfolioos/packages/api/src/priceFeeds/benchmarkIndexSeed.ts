@@ -108,7 +108,82 @@ export function assertTotalReturnIndex(
 }
 
 /**
- * The seed. Codes are exactly those listed in `01 §3` plus a BSE Sensex TRI.
+ * An NSE index that index funds track, with everything needed to price it and
+ * to recognise it in a fund's name.
+ */
+export interface NseTrackedIndex {
+  readonly code: string;
+  readonly name: string;
+  /** The `Trading_Index_Name` niftyindices.com answers to, upper-cased. */
+  readonly requestName: string;
+  /**
+   * How a scheme name spells the index once the AMC and wrapper words are
+   * stripped. Compared after `normaliseIndexName` in `amfiSchemeMaster.v1.ts`,
+   * so spacing ("Nifty50" / "Nifty 50"), hyphens and `&` need no variants.
+   */
+  readonly aliases: readonly string[];
+}
+
+/**
+ * Sectoral, thematic and factor indices that Indian index funds and ETFs
+ * track, beyond the eight broad-market ones.
+ *
+ * Every entry was probed live on 2026-10-26 against
+ * `POST niftyindices.com/BackPage/getTotalReturnIndexString` with its
+ * `requestName` and returned 2,663+ daily TRI rows from 01-Jan-2016 to
+ * 30-Sep-2026. The list is the indices that the unbenchmarked index funds
+ * in the AMFI master actually name (Next 50 alone covers 31 schemes) — not
+ * the full catalogue of 260, most of which no fund tracks.
+ *
+ * Deliberately absent, because no free TRI exists: BSE indices (Sensex,
+ * BSE 500 — see `SENSEX_TRI` below), target-maturity SDL / G-Sec ladders,
+ * gold and silver, and overseas indices (S&P 500, NASDAQ 100, Hang Seng).
+ * Those funds stay unbenchmarked and unrated, which is the honest answer.
+ */
+export const NSE_TRACKED_INDICES: readonly NseTrackedIndex[] = [
+  { code: 'NIFTY_NEXT50_TRI', name: 'Nifty Next 50 TRI', requestName: 'NIFTY NEXT 50', aliases: ['nifty next 50'] },
+  { code: 'NIFTY_MIDCAP50_TRI', name: 'Nifty Midcap 50 TRI', requestName: 'NIFTY MIDCAP 50', aliases: ['nifty midcap 50'] },
+  { code: 'NIFTY_MIDCAP100_TRI', name: 'Nifty Midcap 100 TRI', requestName: 'NIFTY MIDCAP 100', aliases: ['nifty midcap 100'] },
+  { code: 'NIFTY_SMALLCAP50_TRI', name: 'Nifty Smallcap 50 TRI', requestName: 'NIFTY SMLCAP 50', aliases: ['nifty smallcap 50'] },
+  { code: 'NIFTY_MICROCAP250_TRI', name: 'Nifty Microcap 250 TRI', requestName: 'NIFTY MICROCAP250', aliases: ['nifty microcap 250'] },
+  // Sectoral
+  { code: 'NIFTY_BANK_TRI', name: 'Nifty Bank TRI', requestName: 'NIFTY BANK', aliases: ['nifty bank'] },
+  { code: 'NIFTY_PRIVATE_BANK_TRI', name: 'Nifty Private Bank TRI', requestName: 'NIFTY PVT BANK', aliases: ['nifty private bank', 'nifty pvt bank'] },
+  { code: 'NIFTY_PSU_BANK_TRI', name: 'Nifty PSU Bank TRI', requestName: 'NIFTY PSU BANK', aliases: ['nifty psu bank'] },
+  { code: 'NIFTY_FIN_SERVICES_TRI', name: 'Nifty Financial Services TRI', requestName: 'NIFTY FIN SERVICE', aliases: ['nifty financial services'] },
+  { code: 'NIFTY_FIN_SERVICES_EX_BANK_TRI', name: 'Nifty Financial Services Ex-Bank TRI', requestName: 'NIFTY FINSEREXBNK', aliases: ['nifty financial services ex bank'] },
+  { code: 'NIFTY_IT_TRI', name: 'Nifty IT TRI', requestName: 'NIFTY IT', aliases: ['nifty it'] },
+  { code: 'NIFTY_PHARMA_TRI', name: 'Nifty Pharma TRI', requestName: 'NIFTY PHARMA', aliases: ['nifty pharma'] },
+  { code: 'NIFTY_HEALTHCARE_TRI', name: 'Nifty Healthcare TRI', requestName: 'NIFTY HEALTHCARE', aliases: ['nifty healthcare'] },
+  { code: 'NIFTY_AUTO_TRI', name: 'Nifty Auto TRI', requestName: 'NIFTY AUTO', aliases: ['nifty auto'] },
+  { code: 'NIFTY_FMCG_TRI', name: 'Nifty FMCG TRI', requestName: 'NIFTY FMCG', aliases: ['nifty fmcg'] },
+  // Thematic
+  { code: 'NIFTY_INDIA_CONSUMPTION_TRI', name: 'Nifty India Consumption TRI', requestName: 'NIFTY CONSUMPTION', aliases: ['nifty india consumption'] },
+  { code: 'NIFTY_INFRA_TRI', name: 'Nifty Infrastructure TRI', requestName: 'NIFTY INFRA', aliases: ['nifty infrastructure', 'nifty infra'] },
+  { code: 'NIFTY_COMMODITIES_TRI', name: 'Nifty Commodities TRI', requestName: 'NIFTY COMMODITIES', aliases: ['nifty commodities'] },
+  { code: 'NIFTY_MNC_TRI', name: 'Nifty MNC TRI', requestName: 'NIFTY MNC', aliases: ['nifty mnc'] },
+  { code: 'NIFTY_INDIA_MANUFACTURING_TRI', name: 'Nifty India Manufacturing TRI', requestName: 'NIFTY INDIA MFG', aliases: ['nifty india manufacturing'] },
+  { code: 'NIFTY_INDIA_DIGITAL_TRI', name: 'Nifty India Digital TRI', requestName: 'NIFTY IND DIGITAL', aliases: ['nifty india digital'] },
+  { code: 'NIFTY100_ESG_SECTOR_LEADERS_TRI', name: 'Nifty100 ESG Sector Leaders TRI', requestName: 'NIFTY100ESGSECLDR', aliases: ['nifty 100 esg sector leaders'] },
+  { code: 'NIFTY50_SHARIAH_TRI', name: 'Nifty50 Shariah TRI', requestName: 'NIFTY50 SHARIAH', aliases: ['nifty 50 shariah'] },
+  // Factor / strategy
+  { code: 'NIFTY50_EQUAL_WEIGHT_TRI', name: 'Nifty50 Equal Weight TRI', requestName: 'NIFTY50 EQL WGT', aliases: ['nifty 50 equal weight'] },
+  { code: 'NIFTY100_EQUAL_WEIGHT_TRI', name: 'Nifty100 Equal Weight TRI', requestName: 'NIFTY100 EQL WGT', aliases: ['nifty 100 equal weight'] },
+  { code: 'NIFTY50_VALUE20_TRI', name: 'Nifty50 Value 20 TRI', requestName: 'NIFTY50 VALUE 20', aliases: ['nifty 50 value 20'] },
+  { code: 'NIFTY500_VALUE50_TRI', name: 'Nifty500 Value 50 TRI', requestName: 'NIFTY500 VALUE 50', aliases: ['nifty 500 value 50'] },
+  { code: 'NIFTY100_LOW_VOL30_TRI', name: 'Nifty100 Low Volatility 30 TRI', requestName: 'NIFTY100 LOWVOL30', aliases: ['nifty 100 low volatility 30'] },
+  { code: 'NIFTY100_QUALITY30_TRI', name: 'Nifty100 Quality 30 TRI', requestName: 'NIFTY100 QUALTY30', aliases: ['nifty 100 quality 30'] },
+  { code: 'NIFTY200_QUALITY30_TRI', name: 'Nifty200 Quality 30 TRI', requestName: 'NIFTY200 QUALITY 30', aliases: ['nifty 200 quality 30'] },
+  { code: 'NIFTY200_MOMENTUM30_TRI', name: 'Nifty200 Momentum 30 TRI', requestName: 'NIFTY200MOMENTM30', aliases: ['nifty 200 momentum 30'] },
+  { code: 'NIFTY_MIDCAP150_MOMENTUM50_TRI', name: 'Nifty Midcap150 Momentum 50 TRI', requestName: 'NIFTYM150MOMNTM50', aliases: ['nifty midcap 150 momentum 50'] },
+  { code: 'NIFTY_MIDCAP150_QUALITY50_TRI', name: 'Nifty Midcap150 Quality 50 TRI', requestName: 'NIFTY M150 QLTY50', aliases: ['nifty midcap 150 quality 50'] },
+  { code: 'NIFTY_ALPHA50_TRI', name: 'Nifty Alpha 50 TRI', requestName: 'NIFTY ALPHA 50', aliases: ['nifty alpha 50'] },
+  { code: 'NIFTY_ALPHA_LOW_VOL30_TRI', name: 'Nifty Alpha Low-Volatility 30 TRI', requestName: 'NIFTY ALPHALOWVOL', aliases: ['nifty alpha low volatility 30'] },
+];
+
+/**
+ * The seed. Codes are exactly those listed in `01 §3` plus a BSE Sensex TRI,
+ * plus the index-fund benchmarks in `NSE_TRACKED_INDICES`.
  *
  * NSE fixed-income indices (`NIFTY_SHORT_DURATION_DEBT`,
  * `NIFTY_CORPORATE_BOND`, `NIFTY_LIQUID`) are marked `isTotalReturn: true`
@@ -148,6 +223,16 @@ export const BENCHMARK_INDEX_SEED: readonly BenchmarkIndexSeedEntry[] = [
     provider: 'NSE',
     isTotalReturn: true,
   },
+
+  // --- NSE sectoral, thematic and factor TRI (index-fund benchmarks) ---------
+  ...NSE_TRACKED_INDICES.map(
+    (i): BenchmarkIndexSeedEntry => ({
+      code: i.code,
+      name: i.name,
+      provider: 'NSE',
+      isTotalReturn: true,
+    }),
+  ),
 
   // --- NSE hybrid ----------------------------------------------------------
   // The SEBI-prescribed benchmark for aggressive hybrid / balanced advantage

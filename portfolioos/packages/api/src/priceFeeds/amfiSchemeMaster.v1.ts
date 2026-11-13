@@ -41,6 +41,7 @@ import {
   type ParsedSchemeRow,
 } from './amfiSchemeMaster.parse.js';
 import { fetchAmfiNavText } from './amfi.service.js';
+import { NSE_TRACKED_INDICES } from './benchmarkIndexSeed.js';
 import { normaliseAmcName, normaliseAmcCode } from '../ingestion/mfFactsheet/registry.js';
 import {
   SEBI_SUBCATEGORY_MAP,
@@ -141,40 +142,48 @@ export function resolveAmcCode(amcName: string): string {
 }
 
 /**
- * Tier-1 benchmark for the sub-category, from `SEBI_SUBCATEGORY_MAP`.
- *
- * `null` for UNMAPPED sub-categories and for sub-categories the map leaves
- * without a `defaultBenchmarkCode` (sectoral/thematic funds, FoFs — SEBI does
- * not mandate one index for them and picking one would fabricate the alpha
- * every metric downstream computes against it).
- *
- * Existence in `BenchmarkIndex` is deliberately NOT checked here: the seed is
- * Task 1.3's, running the two in either order must not change what this feed
- * writes, and `MfSchemeMeta.benchmarkIndexCode` is a soft reference with no FK
- * precisely so the two can land independently (`01 §2`).
+ * Puts an index name into one spelling, so an alias need not list every way
+ * an AMC writes it: "Nifty50" / "Nifty 50", "Midcap150" / "Midcap 150",
+ * "Low- Volatility" / "Low Volatility", "&" / "and".
  */
+export function normaliseIndexName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9: ]+/g, ' ')
+    .replace(/\bnifty\s*(\d)/g, 'nifty $1')
+    .replace(/\b(midcap|smallcap|largemidcap|midsmallcap|microcap)\s*(\d)/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
- * The eight indices we hold priced history for, and the ways an AMC writes each
- * one in a scheme name.
+ * Every index we hold priced history for, and the ways an AMC writes each one
+ * in a scheme name: the eight broad-market indices, then the sectoral,
+ * thematic and factor ones in `NSE_TRACKED_INDICES`.
  *
- * Only these eight, deliberately. `BenchmarkIndexPrice` holds nothing else, and
- * naming an index we cannot price would move a fund from
- * `no_benchmark_index_code` to `no_<CODE>_prices_in_window` — a different
- * message for the same absence.
+ * Only priced indices, deliberately. Naming an index we cannot price would
+ * move a fund from `no_benchmark_index_code` to `no_<CODE>_prices_in_window`
+ * — a different message for the same absence.
+ *
+ * A bare "Nifty" is the Nifty 50: it is how the oldest trackers are named
+ * ("SBI Nifty Index Fund", "Nippon India ETF Nifty BeES").
  */
-const INDEX_FUND_ALIASES: ReadonlyArray<readonly [string, readonly string[]]> = Object.freeze([
-  ['NIFTY50_TRI', Object.freeze(['nifty50', 'nifty 50'])],
-  ['NIFTY100_TRI', Object.freeze(['nifty100', 'nifty 100'])],
-  ['NIFTY200_TRI', Object.freeze(['nifty200', 'nifty 200'])],
-  ['NIFTY500_TRI', Object.freeze(['nifty500', 'nifty 500'])],
-  ['NIFTY_MIDCAP150_TRI', Object.freeze(['nifty midcap150', 'nifty midcap 150'])],
-  ['NIFTY_SMALLCAP250_TRI', Object.freeze(['nifty smallcap250', 'nifty smallcap 250'])],
-  [
-    'NIFTY_LARGEMIDCAP250_TRI',
-    Object.freeze(['nifty largemidcap250', 'nifty largemidcap 250', 'nifty large midcap 250']),
-  ],
-  ['NIFTY_MIDSMALLCAP400_TRI', Object.freeze(['nifty midsmallcap400', 'nifty midsmallcap 400'])],
-] as const);
+const INDEX_FUND_ALIASES: ReadonlyArray<readonly [string, readonly string[]]> = Object.freeze(
+  (
+    [
+      ['NIFTY50_TRI', ['nifty 50', 'nifty']],
+      ['NIFTY100_TRI', ['nifty 100']],
+      ['NIFTY200_TRI', ['nifty 200']],
+      ['NIFTY500_TRI', ['nifty 500']],
+      ['NIFTY_MIDCAP150_TRI', ['nifty midcap 150']],
+      ['NIFTY_SMALLCAP250_TRI', ['nifty smallcap 250']],
+      ['NIFTY_LARGEMIDCAP250_TRI', ['nifty largemidcap 250', 'nifty large midcap 250']],
+      ['NIFTY_MIDSMALLCAP400_TRI', ['nifty midsmallcap 400']],
+      ...NSE_TRACKED_INDICES.map((i) => [i.code, i.aliases] as const),
+    ] as ReadonlyArray<readonly [string, readonly string[]]>
+  ).map(([code, aliases]) => [code, Object.freeze(aliases.map(normaliseIndexName))] as const),
+);
 
 /**
  * Which index a plain index fund tracks, read from its name.
@@ -191,17 +200,17 @@ const INDEX_FUND_ALIASES: ReadonlyArray<readonly [string, readonly string[]]> = 
  * "Nifty Midcap 150" and tracks a DIFFERENT index — a factor variant whose
  * returns diverge from the parent by more than the tracking error the INDEX
  * model exists to measure. So the AMC name and the wrapper words are stripped
- * and what remains must equal a known alias outright; the leftover "quality 50"
- * makes it fail, which is correct. Measured over the 686: 107 match, and every
- * rejection inspected was a factor variant, a sector index, a commodity, an
- * international index or a G-Sec ladder — none of which we can price.
+ * and what remains must equal a known alias outright: it matches the Midcap
+ * 150 Quality 50 index, never its parent. Funds whose index we cannot price —
+ * BSE, overseas, commodities, G-Sec and SDL ladders — match nothing and stay
+ * unbenchmarked.
  */
 export function resolveIndexFundBenchmark(schemeName: string): string | null {
   let s = schemeName.toLowerCase();
   // Parentheticals are AMFI's rename annotations, never the index.
   s = s.replace(/\(.*?\)/g, ' ');
   s = s.replace(
-    /\b(index fund|exchange traded fund|etf fund|etf|fund of fund|fof|index|fund|direct|growth|plan|scheme)\b/g,
+    /\b(index fund|exchange traded fund|etf fund|etf|fund of fund|fof|index|fund|direct|growth|plan|scheme|bees)\b/g,
     ' ',
   );
   // Everything before the first index token is the fund house.
@@ -210,11 +219,7 @@ export function resolveIndexFundBenchmark(schemeName: string): string | null {
   // /\bnifty\b/ fails on "nifty50" and the fund silently goes unbenchmarked.
   const start = s.search(/\b(nifty|bse|s&p)/);
   if (start < 0) return null;
-  const residual = s
-    .slice(start)
-    .replace(/[^a-z0-9&: ]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const residual = normaliseIndexName(s.slice(start));
 
   for (const [code, aliases] of INDEX_FUND_ALIASES) {
     if (aliases.includes(residual)) return code;
@@ -222,6 +227,19 @@ export function resolveIndexFundBenchmark(schemeName: string): string | null {
   return null;
 }
 
+/**
+ * Tier-1 benchmark for the sub-category, from `SEBI_SUBCATEGORY_MAP`.
+ *
+ * `null` for UNMAPPED sub-categories and for sub-categories the map leaves
+ * without a `defaultBenchmarkCode` (sectoral/thematic funds, FoFs — SEBI does
+ * not mandate one index for them and picking one would fabricate the alpha
+ * every metric downstream computes against it).
+ *
+ * Existence in `BenchmarkIndex` is deliberately NOT checked here: the seed is
+ * Task 1.3's, running the two in either order must not change what this feed
+ * writes, and `MfSchemeMeta.benchmarkIndexCode` is a soft reference with no FK
+ * precisely so the two can land independently (`01 §2`).
+ */
 export function resolveBenchmarkCode(
   sebiSubCategory: string,
   schemeName?: string,

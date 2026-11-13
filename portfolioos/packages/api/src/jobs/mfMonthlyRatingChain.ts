@@ -16,14 +16,21 @@ import { logger } from '../lib/logger.js';
 import { runMfMetricsJob } from './mfMetricsJob.js';
 import { runMfPeerRankJob } from './mfPeerRankJob.js';
 import { runMfScoreJob } from './mfScoreJob.js';
+import { runMfRatingChangeAlerts } from '../services/mf/mfAnalytics/mfRatingAlerts.service.js';
 
 /** Last calendar day of the month before `now`, at 00:00 UTC. */
 export function previousMonthEnd(now: Date = new Date()): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
 }
 
+/**
+ * The scheduled run. Only this path alerts holders whose fund changed band;
+ * the bootstrap re-rates past months through `runRatingChainFor` and must not
+ * announce old moves as news.
+ */
 export async function runMonthlyRatingChain(now: Date = new Date()): Promise<void> {
-  await runRatingChainFor(previousMonthEnd(now));
+  const asOf = previousMonthEnd(now);
+  if (await runRatingChainFor(asOf)) await runMfRatingChangeAlerts(asOf, now);
 }
 
 /**

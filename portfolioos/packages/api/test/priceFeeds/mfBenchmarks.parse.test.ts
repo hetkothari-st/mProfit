@@ -50,6 +50,7 @@ import {
   BENCHMARK_TRI_NOT_FREELY_AVAILABLE,
   assertTotalReturnIndex,
   findBenchmarkSeed,
+  NSE_TRACKED_INDICES,
   PriceReturnIndexRejectedError,
 } from '../../src/priceFeeds/benchmarkIndexSeed.js';
 
@@ -71,7 +72,7 @@ const snapshotRows = (rows: readonly { date: Date; value?: unknown; ratePct?: un
 // ---------------------------------------------------------------------------
 
 describe('BENCHMARK_INDEX_SEED', () => {
-  it('contains every code listed in 01 §3 plus a BSE Sensex TRI', () => {
+  it('contains every code listed in 01 §3, the index-fund benchmarks and a BSE Sensex TRI', () => {
     const codes = BENCHMARK_INDEX_SEED.map((e) => e.code);
     expect(codes).toEqual([
       'NIFTY50_TRI',
@@ -82,6 +83,7 @@ describe('BENCHMARK_INDEX_SEED', () => {
       'NIFTY_SMALLCAP250_TRI',
       'NIFTY_LARGEMIDCAP250_TRI',
       'NIFTY_MIDSMALLCAP400_TRI',
+      ...NSE_TRACKED_INDICES.map((i) => i.code),
       'NIFTY50_HYBRID_COMPOSITE_DEBT_65_35_TRI',
       'NIFTY_SHORT_DURATION_DEBT',
       'NIFTY_CORPORATE_BOND',
@@ -146,17 +148,23 @@ describe('BENCHMARK_INDEX_SEED', () => {
 // ---------------------------------------------------------------------------
 
 describe('NSE TRI request', () => {
-  it('maps exactly the eight broad-market equity codes proven to resolve', () => {
-    expect(Object.keys(NSE_INDEX_REQUEST_NAME).sort()).toEqual([
-      'NIFTY100_TRI',
-      'NIFTY200_TRI',
-      'NIFTY500_TRI',
-      'NIFTY50_TRI',
-      'NIFTY_LARGEMIDCAP250_TRI',
-      'NIFTY_MIDCAP150_TRI',
-      'NIFTY_MIDSMALLCAP400_TRI',
-      'NIFTY_SMALLCAP250_TRI',
-    ]);
+  it('maps exactly the broad-market and tracked codes proven to resolve', () => {
+    expect(Object.keys(NSE_INDEX_REQUEST_NAME).sort()).toEqual(
+      [
+        'NIFTY100_TRI',
+        'NIFTY200_TRI',
+        'NIFTY500_TRI',
+        'NIFTY50_TRI',
+        'NIFTY_LARGEMIDCAP250_TRI',
+        'NIFTY_MIDCAP150_TRI',
+        'NIFTY_MIDSMALLCAP400_TRI',
+        'NIFTY_SMALLCAP250_TRI',
+        ...NSE_TRACKED_INDICES.map((i) => i.code),
+      ].sort(),
+    );
+    for (const i of NSE_TRACKED_INDICES) {
+      expect(NSE_INDEX_REQUEST_NAME[i.code]).toBe(i.requestName);
+    }
   });
 
   it('never appends a "TRI" suffix to the index name', () => {
