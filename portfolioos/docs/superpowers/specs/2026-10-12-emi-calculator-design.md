@@ -141,10 +141,10 @@ Append-only history: a new reading inserts a row; previous `ACTIVE` AUTO row →
 
 ### 5.4 Daily job — `loanRatesJob.ts`
 
-- 07:30 IST daily, registered in `startupSync.ts`, gated by `ENABLE_LOAN_RATES_CRON` (default on in prod, off in tests). Monthly RBI sector read on the job's first run each month.
+- 07:30 IST daily, registered in `src/index.ts` (beside the other always-on cron jobs, not gated by the startup sync), gated by `ENABLE_LOAN_RATES_CRON` (default on in prod, off in tests). Monthly RBI sector read on the job's first run each month.
 - Sanity: rate outside 4–30 %, or |Δ| > 2 percentage points vs the last ACTIVE row → `SUSPECT` (not shown to users; admin reviews).
 - Failure: exception or zero readings → `IngestionFailure` row (raw payload truncated to 8 KB, PII-free public page), source `lastError*` updated, other sources continue. Last good rate stays displayed. No successful reading for 7 days → rate shown "stale" and an ops alert to admins (existing ops-alert path).
-- **Effective rate per (source, basis, tenor):** latest `MANUAL` `ACTIVE` if one exists (manual wins until cleared), else latest `AUTO` `ACTIVE`.
+- **Effective rate per (source, tenor):** latest `MANUAL` `ACTIVE` if one exists (manual wins until cleared), else latest `AUTO` `ACTIVE`. Basis is not part of the key because each source has exactly one basis; it is an attribute of the rate row.
 
 ### 5.5 Admin page — Settings → **Loan rates** (role `ADMIN`, plus the existing admin 2FA / mfa session requirement)
 

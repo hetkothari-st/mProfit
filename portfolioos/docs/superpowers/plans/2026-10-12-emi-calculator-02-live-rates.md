@@ -21,7 +21,7 @@
 - Effective rate per (source, tenor): latest MANUAL ACTIVE, else latest AUTO ACTIVE. Basis is an attribute of the rate, not part of the override key.
 - Failures never stop the run: exception, zero readings, or a source missing from its page -> `IngestionFailure` row (owned by the oldest active ADMIN, raw payload = URL + source ids + HTML excerpt truncated to 8192 bytes) and `LoanRateSource.lastErrorAt/lastError`; the last good rate stays displayed.
 - Stale: an AUTO source whose `lastSuccessAt ?? createdAt` is more than 7 days old is shown with `stale: true`, and the run raises one `CUSTOM` ops alert per IST day to the ops admin.
-- Job: daily 07:30 Asia/Kolkata, registered in `startupSync.ts`, disabled only by `ENABLE_LOAN_RATES_CRON=false` (default on; the test env sets `false`).
+- Job: daily 07:30 Asia/Kolkata, registered in `src/index.ts` (moved there from `startupSync.ts` in the Task 8 review so `ENABLE_STARTUP_SYNC` does not gate it), disabled only by `ENABLE_LOAN_RATES_CRON=false` (default on; the test env sets `false`).
 - Admin API: `authenticate` + `requireRole('ADMIN')` + `requireSecondFactor('admin tools')` on the router; every write -> `AuditLog` action `loan_rate_manual_set` | `loan_rate_override_cleared` | `loan_rate_suspect_approved` | `loan_rate_suspect_rejected` | `loan_rate_run_now`.
 - Migration: only against the isolated local DB with BOTH overrides, exactly `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/portfolioos_split DIRECT_URL=postgresql://postgres:postgres@localhost:5432/portfolioos_split npx prisma migrate dev --name emi_loan_rates` (from `portfolioos/packages/api`). Never use `packages/api/.env`. No production migration in this plan.
 - API tests run with `DATABASE_URL=postgresql://portfolioos_app:portfolioos_app_dev@localhost:5432/portfolioos_split DIRECT_URL=postgresql://postgres:postgres@localhost:5432/portfolioos_split RIA_VERDICTS_ENABLED=false`. The loan-rate test suites own the three loan-rate tables in that local DB and clear them.
@@ -2680,7 +2680,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `packages/api/src/jobs/loanRatesJob.ts`
-- Modify: `packages/api/src/jobs/startupSync.ts` (import and call `startLoanRatesJob()` after `startSplitDigestJobs()`), `packages/api/.env.example` (document the flag)
+- Modify: `packages/api/src/index.ts` (import and call `startLoanRatesJob()` beside `startMfScoreJob()`; amended in the Task 8 review - originally `startupSync.ts`), `packages/api/.env.example` (document the flag)
 - Test: `packages/api/test/jobs/loanRatesJob.test.ts`
 
 **Interfaces:**
@@ -2866,7 +2866,7 @@ Expected: FAIL - cannot find module `loanRatesJob.js`.
  * Runs under runAsSystem: the rate tables are global, and IngestionFailure, Alert and User are user-scoped
  * tables this job writes or reads for the ops admin.
  *
- * REGISTRATION: startLoanRatesJob() is called from startupSync.ts. ENABLE_LOAN_RATES_CRON=false disables it
+ * REGISTRATION: startLoanRatesJob() is called from src/index.ts. ENABLE_LOAN_RATES_CRON=false disables it
  * (the test env sets that).
  */
 import cron from 'node-cron';
@@ -3109,6 +3109,8 @@ async function raiseStaleAlert(opsUserId: string | null, staleSources: string[],
 ```
 
 - [ ] **Step 4: Register it and document the flag**
+
+> Amended in the Task 8 review: the registration lives in `packages/api/src/index.ts` beside `startMfScoreJob()`, not in `startupSync.ts` (which `ENABLE_STARTUP_SYNC` gates). The original step follows for the record.
 
 `packages/api/src/jobs/startupSync.ts`: add the import beside the other job imports
 
