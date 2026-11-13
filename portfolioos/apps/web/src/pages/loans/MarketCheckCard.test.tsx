@@ -3,10 +3,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import type { LoanMarketCheckWire } from '@everypaisa/shared';
 import { renderWithProviders } from '@/pages/split/testUtils';
+<<<<<<< HEAD
 import { loansApi } from '@/api/loans/loans.api';
 import { MarketCheckCard } from './MarketCheckCard';
 
 vi.mock('@/api/loans/loans.api', () => ({ loansApi: { getMarketCheck: vi.fn(), update: vi.fn() } }));
+=======
+import { loansApi } from '@/api/loans.api';
+import { MarketCheckCard } from './MarketCheckCard';
+
+vi.mock('@/api/loans.api', () => ({ loansApi: { getMarketCheck: vi.fn(), update: vi.fn() } }));
+>>>>>>> feat/emi-loan-checks
 
 const CHECK: LoanMarketCheckWire = {
   loanId: 'l1', status: 'ACTIVE', loanType: 'HOME', rateLoanType: 'HOME', lender: 'HDFC Bank',

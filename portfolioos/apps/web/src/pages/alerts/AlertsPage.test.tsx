@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
+<<<<<<< HEAD
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+=======
+import { cleanup, screen, within } from '@testing-library/react';
+>>>>>>> feat/emi-loan-checks
 import { renderWithProviders } from '@/pages/split/testUtils';
 import { alertsApi } from '@/api/alerts.api';
 import { AlertsPage } from './AlertsPage';
@@ -19,7 +23,11 @@ describe('AlertsPage - loan check alerts', () => {
         { id: 'a1', type: 'LOAN_REFINANCE', title: 'Home loan with HDFC Bank at 9.10%; market from 8.35%', description: 'Switching could save ≈ ₹2.1 lakh after switching costs (lowest: SBI). Open the loan to compare.', triggerDate: today, isRead: false, metadata: { key: 'loan:refi:l1:2026-10' }, createdAt: `${today}T03:00:00.000Z` },
         { id: 'a2', type: 'LOAN_BENCHMARK_CHANGE', title: 'RBI cut the repo rate by 0.25% on 08/10/2026', description: null, triggerDate: today, isRead: false, metadata: { key: 'loan:bench:l2:REPO:2026-10-08' }, createdAt: `${today}T03:00:00.000Z` },
       ],
+<<<<<<< HEAD
       total: 2, unreadCount: 2, page: 1, limit: 30, counts: { all: 2, overdue: 0, soon: 2, unread: 2 },
+=======
+      total: 2, unreadCount: 2, page: 1, limit: 30,
+>>>>>>> feat/emi-loan-checks
     });
     renderWithProviders(<AlertsPage />);
     expect(await screen.findByText('Home loan with HDFC Bank at 9.10%; market from 8.35%')).toBeTruthy();
@@ -35,7 +43,11 @@ describe('AlertsPage - loan check alerts', () => {
         { id: 'a1', type: 'LOAN_REFINANCE', title: 'Refinance HDFC', description: null, triggerDate: ago, isRead: false, metadata: { key: 'k1', loanId: 'loan-1' }, createdAt: `${ago}T03:00:00.000Z` },
         { id: 'a2', type: 'LOAN_BENCHMARK_CHANGE', title: 'Repo cut', description: null, triggerDate: ago, isRead: false, metadata: { key: 'k2', loanId: 'loan-2' }, createdAt: `${ago}T03:00:00.000Z` },
       ],
+<<<<<<< HEAD
       total: 2, unreadCount: 2, page: 1, limit: 30, counts: { all: 2, overdue: 0, soon: 2, unread: 2 },
+=======
+      total: 2, unreadCount: 2, page: 1, limit: 30,
+>>>>>>> feat/emi-loan-checks
     });
     renderWithProviders(<AlertsPage />);
     const refi = await screen.findByText('Refinance HDFC');
@@ -56,7 +68,11 @@ describe('AlertsPage - loan check alerts', () => {
       alerts: [
         { id: 'c1', type: 'CUSTOM', title: 'Pay the society bill', description: null, triggerDate: ago, isRead: false, metadata: null, createdAt: `${ago}T03:00:00.000Z` },
       ],
+<<<<<<< HEAD
       total: 1, unreadCount: 1, page: 1, limit: 30, counts: { all: 1, overdue: 1, soon: 0, unread: 1 },
+=======
+      total: 1, unreadCount: 1, page: 1, limit: 30,
+>>>>>>> feat/emi-loan-checks
     });
     renderWithProviders(<AlertsPage />);
     const title = await screen.findByText('Pay the society bill');
@@ -64,6 +80,7 @@ describe('AlertsPage - loan check alerts', () => {
     expect(screen.getByText('3d late')).toBeTruthy();
     expect(title.closest('a')).toBeNull();
   });
+<<<<<<< HEAD
   // The chips used to count only the 30 alerts on the loaded page, so the page
   // under-counted against the bell. They now show the server's
   // inbox-wide counts, and choosing one asks the server for that lens.
@@ -86,4 +103,6 @@ describe('AlertsPage - loan check alerts', () => {
       expect(vi.mocked(alertsApi.list)).toHaveBeenLastCalledWith(expect.objectContaining({ lens: 'overdue', page: 1 })),
     );
   });
+=======
+>>>>>>> feat/emi-loan-checks
 });

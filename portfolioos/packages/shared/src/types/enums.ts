@@ -157,9 +157,12 @@ export const AlertType = {
   PROPERTY_POSSESSION_DUE: 'PROPERTY_POSSESSION_DUE',
   LOAN_REFINANCE: 'LOAN_REFINANCE',
   LOAN_BENCHMARK_CHANGE: 'LOAN_BENCHMARK_CHANGE',
+<<<<<<< HEAD
   WILL_REVIEW_DUE: 'WILL_REVIEW_DUE',
   ADVICE: 'ADVICE',
   MF_RATING_CHANGE: 'MF_RATING_CHANGE',
+=======
+>>>>>>> feat/emi-loan-checks
   CUSTOM: 'CUSTOM',
 } as const;
 export type AlertType = (typeof AlertType)[keyof typeof AlertType];

@@ -25,7 +25,11 @@ import { InstitutionField } from '@/components/common/InstitutionField';
 import { LoansGivenSection } from './given/LoansGivenSection';
 import { LoanSectionHeader, LoanSectionNav, LoansOverview, type LoanSectionKey } from './LoanSections';
 import { LoanRateFields, rateFieldsFrom, rateFieldsPayload, type RateFieldsValue } from './LoanRateFields';
+<<<<<<< HEAD
 import { loansGivenApi } from '@/api/loans/loansGiven.api';
+=======
+import { loansGivenApi } from '@/api/loansGiven.api';
+>>>>>>> feat/emi-loan-checks
 import { InstallmentProgress, InstallmentTracker } from './InstallmentTracker';
 import { DownloadReportButton } from '@/components/reports/DownloadReportButton';
 import { Button } from '@/components/ui/button';

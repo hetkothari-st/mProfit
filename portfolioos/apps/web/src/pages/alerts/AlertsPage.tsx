@@ -54,16 +54,23 @@ const TYPE_LABELS: Record<AlertType, string> = {
   PRICE_TARGET: 'Price target',
   LOAN_REFINANCE: 'Loan refinance',
   LOAN_BENCHMARK_CHANGE: 'Loan rate change',
+<<<<<<< HEAD
   WILL_REVIEW_DUE: 'Will review',
   ADVICE: 'Advice',
   MF_RATING_CHANGE: 'Fund rating',
+=======
+>>>>>>> feat/emi-loan-checks
   CUSTOM: 'Custom',
 };
 
 const ALL_TYPES: AlertType[] = [
   'FD_MATURITY', 'BOND_MATURITY', 'MF_LOCK_IN_EXPIRY', 'SIP_DUE',
   'INSURANCE_PREMIUM', 'DIVIDEND_RECEIVED', 'CORPORATE_ACTION', 'PRICE_TARGET',
+<<<<<<< HEAD
   'LOAN_REFINANCE', 'LOAN_BENCHMARK_CHANGE', 'WILL_REVIEW_DUE', 'ADVICE', 'MF_RATING_CHANGE', 'CUSTOM',
+=======
+  'LOAN_REFINANCE', 'LOAN_BENCHMARK_CHANGE', 'CUSTOM',
+>>>>>>> feat/emi-loan-checks
 ];
 
 const PAGE_SIZE = 30;
@@ -99,9 +106,18 @@ const BANDS: { key: BandKey; label: string; caption: string }[] = [
   { key: 'later',   label: 'Later',      caption: 'beyond 30 days' },
 ];
 
+<<<<<<< HEAD
 /** One rule with the server's lens counts: see alertBandOf in @everypaisa/shared. */
 function bandOf(days: number, informational = false): BandKey {
   return alertBandOf(days, informational);
+=======
+function bandOf(days: number, informational = false): BandKey {
+  // Informational alerts (loan checks) are dated when they were raised: past means recent, never overdue.
+  if (days < 0) return informational ? 'week' : 'overdue';
+  if (days <= 7) return 'week';
+  if (days <= 30) return 'month';
+  return 'later';
+>>>>>>> feat/emi-loan-checks
 }
 
 // ─── Row ─────────────────────────────────────────────────────────────
@@ -366,9 +382,35 @@ export function AlertsPage() {
   const unreadCount = data?.unreadCount ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+<<<<<<< HEAD
   const counts = data?.counts ?? { all: 0, overdue: 0, soon: 0, unread: 0 };
   const visible = alerts;
   const chooseLens = (l: Lens) => { setLens(l); setPage(1); };
+=======
+  /**
+   * Lens counts describe the LOADED page, not the whole ledger — the API
+   * paginates, and only `total` / `unreadCount` are ledger-wide. The footer
+   * states the scope so the two kinds of number are never read as one.
+   */
+  const counts = useMemo(() => {
+    let overdue = 0, soon = 0, unread = 0;
+    for (const a of alerts) {
+      const band = bandOf(daysUntil(a.triggerDate), isInformationalAlert(a.type));
+      if (band === 'overdue') overdue += 1;
+      else if (band === 'week') soon += 1;
+      if (!a.isRead) unread += 1;
+    }
+    return { all: alerts.length, overdue, soon, unread };
+  }, [alerts]);
+
+  const visible = useMemo(() => alerts.filter((a) => {
+    const band = bandOf(daysUntil(a.triggerDate), isInformationalAlert(a.type));
+    if (lens === 'overdue') return band === 'overdue';
+    if (lens === 'soon') return band === 'week';
+    if (lens === 'unread') return !a.isRead;
+    return true;
+  }), [alerts, lens]);
+>>>>>>> feat/emi-loan-checks
 
   /** Bucket into time bands, each internally sorted soonest-first. */
   const banded = useMemo(() => {

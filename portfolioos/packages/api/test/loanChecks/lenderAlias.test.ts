@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
+<<<<<<< HEAD
 import { MATCHED_LENDERS, canonicalLender, normaliseLenderName } from '../../src/services/loans/loanChecks/lenderAlias.js';
 import { LOAN_RATE_SOURCES } from '../../src/services/loans/loanRates/sourceList.js';
+=======
+import { MATCHED_LENDERS, canonicalLender, normaliseLenderName } from '../../src/services/loanChecks/lenderAlias.js';
+import { LOAN_RATE_SOURCES } from '../../src/services/loanRates/sourceList.js';
+>>>>>>> feat/emi-loan-checks
 
 describe('canonicalLender (spec s6.1 LenderAlias)', () => {
   it.each([
