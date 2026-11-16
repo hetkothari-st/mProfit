@@ -8,6 +8,10 @@ import { syncCryptoPrices } from '../priceFeeds/crypto.service.js';
 import { syncFxRates } from '../priceFeeds/fx.service.js';
 import { refreshAllHoldingPrices } from '../services/holdings/holdings.service.js';
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
+import { startPfFetchWorker } from './pfFetchWorker.js';
+import { startPfNudgeJob } from './pfNudgeJob.js';
+import { startSplitShareLinkReconcileJob } from './splitShareLinkReconcileJob.js';
+import { startSplitDigestJobs } from './splitDigestJobs.js';
 // Self-registering PF adapters — import side-effects call registerPfAdapter()
 import '../ingestion/pf/epf/epfo.v1.js';
 import '../ingestion/pf/ppf/sbi.v1.js';
@@ -98,10 +102,12 @@ async function runStartupSyncInner(): Promise<void> {
   } catch (err) {
     logger.warn({ err }, '[startup] holdings refresh failed');
   }
-  // Workers and crons are NOT started here. They used to be, at the end of
-  // this function, so a DB error early in the sync (or ENABLE_STARTUP_SYNC=false)
-  // left the PF worker, PF nudges, Split digests/reconcile and Succession
-  // never running for the life of the process. They start in index.ts now.
+  // Start PF headless fetch worker (SSE-driven Playwright scrape for EPFO)
+  startPfFetchWorker();
+  // Daily nudge: alert users with stale PF balances (Plan E, Track 5)
+  startPfNudgeJob();
+  startSplitShareLinkReconcileJob();
+  startSplitDigestJobs();
 
   logger.info('[startup] initial data sync complete');
 }
