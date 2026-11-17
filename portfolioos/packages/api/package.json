@@ -29,6 +29,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@napi-rs/canvas": "0.1.99",
     "@anthropic-ai/sdk": "^0.131.0",
     "@everypaisa/shared": "workspace:*",
     "@google/generative-ai": "^0.24.1",

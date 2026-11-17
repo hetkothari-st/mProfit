@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Car, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, Car, Pencil, Shield, Trash2 } from 'lucide-react';
 import { formatINR } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
+import { useEntitlement } from '@/hooks/useEntitlement';
+import { LockedFeature } from '@/components/common/LockedFeature';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiErrorMessage } from '@/api/client';
 import { insuranceApi, type AddPremiumInput, type InsurancePolicyDTO } from '@/api/insurance/insurance.api';
@@ -189,6 +191,7 @@ export function InsuranceDetailPage() {
   const qc = useQueryClient();
   const [record, setRecord] = useState<Partial<AddPremiumInput> | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const healthCheckEntitlement = useEntitlement('INSURANCE_HEALTH_CHECK');
 
   const { data: policy, isLoading } = useQuery({
     queryKey: ['insurance-policy', id],
@@ -245,6 +248,22 @@ export function InsuranceDetailPage() {
           </Link>
         </Button>
         <div className="flex gap-2">
+          {/* Health check - HEALTH policies only; PLUS and above */}
+          {policy.type === 'HEALTH' && (
+            healthCheckEntitlement.allowed ? (
+              <Button asChild variant="outline" size="sm">
+                <Link to={`/insurance/${id}/health-check`}>
+                  <Shield className="h-4 w-4" /> Run Health Check
+                </Link>
+              </Button>
+            ) : (
+              <LockedFeature requiredTier="PLUS" featureName="Insurance Health Check" compact>
+                <Button variant="outline" size="sm" disabled>
+                  <Shield className="h-4 w-4" /> Run Health Check
+                </Button>
+              </LockedFeature>
+            )
+          )}
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
             <Pencil className="h-4 w-4" /> Edit
           </Button>

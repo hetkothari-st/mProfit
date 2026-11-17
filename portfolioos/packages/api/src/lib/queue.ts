@@ -181,6 +181,10 @@ export async function closeQueues(): Promise<void> {
     await _docSortQueue.close();
     _docSortQueue = null;
   }
+  if (_policyCheckQueue) {
+    await _policyCheckQueue.close();
+    _policyCheckQueue = null;
+  }
 }
 
 /**
@@ -209,4 +213,54 @@ export async function enqueueBounded(add: Promise<unknown>, label: string, ms = 
   clearTimeout(timer);
   if (!ok) logger.warn({ label, waitedMs: ms }, '[queue] not enqueued in time (Redis unavailable?) — will run if Redis recovers');
   return ok;
+}
+
+// ---------------------------------------------------------------------------
+// Policy check queue
+// ---------------------------------------------------------------------------
+
+export interface PolicyCheckJobPayload {
+  checkId: string;
+  userId: string;
+  /** 'extraction' = text extraction phase; 'analysis' = full rules+scoring+verdict */
+  phase: 'extraction' | 'analysis';
+}
+
+let _policyCheckQueue: Bull.Queue<PolicyCheckJobPayload> | null = null;
+
+export function getPolicyCheckQueue(): Bull.Queue<PolicyCheckJobPayload> {
+  if (!_policyCheckQueue) {
+    _policyCheckQueue = new Bull<PolicyCheckJobPayload>('policy-check', env.REDIS_URL, {
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 5_000 },
+        removeOnComplete: { count: 200 },
+        removeOnFail: { count: 500 },
+        timeout: JOB_TIMEOUT_MS,
+      },
+      settings: {
+        lockDuration: LOCK_DURATION_MS,
+        lockRenewTime: LOCK_DURATION_MS / 2,
+        stalledInterval: 30_000,
+        maxStalledCount: 1,
+      },
+    });
+
+    _policyCheckQueue.on('failed', (job, err) => {
+      logger.error({ jobId: job?.id, checkId: job?.data?.checkId, err }, '[queue] policy-check job failed');
+    });
+    _policyCheckQueue.on('completed', (job) => {
+      logger.info(
+        { jobId: job.id, checkId: job.data.checkId, phase: job.data.phase },
+        '[queue] policy-check job completed',
+      );
+    });
+    _policyCheckQueue.on('stalled', (job) => {
+      logger.warn(
+        { jobId: job?.id, checkId: job?.data?.checkId },
+        '[queue] policy-check job stalled — will retry once',
+      );
+    });
+  }
+  return _policyCheckQueue;
 }

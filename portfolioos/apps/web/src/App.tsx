@@ -49,6 +49,14 @@ import { VehicleListPage } from './pages/vehicles/VehicleListPage';
 import { VehicleDetailPage } from './pages/vehicles/VehicleDetailPage';
 import { VehicleValuePage } from './pages/vehicles/VehicleValuePage';
 import { CashFlowsPage } from './pages/cashflows/CashFlowsPage';
+import {
+  UploadPageRoute,
+  ExtractionProgressRoute,
+  VerificationPageRoute,
+  AnalysisProgressRoute,
+  VerdictPageRoute,
+  HealthCheckReportRoute,
+} from './pages/insurance/healthCheck/index';
 import { RentalListPage } from './pages/rental/RentalListPage';
 import { RentalDetailPage } from './pages/rental/RentalDetailPage';
 import { TenantKhataPage } from './pages/rental/TenantKhataPage';
@@ -240,6 +248,13 @@ export function App() {
         <Route path="/insurance/emergency-sheet" element={<EmergencySheetPage />} />
         <Route path="/insurance/help" element={<HelpLibraryPage />} />
         <Route path="/insurance/coverage" element={<CoveragePage />} />
+        {/* Health check flow */}
+        <Route path="/insurance/:id/health-check" element={<UploadPageRoute />} />
+        <Route path="/insurance/health-check/:checkId/progress" element={<ExtractionProgressRoute />} />
+        <Route path="/insurance/health-check/:checkId/verify" element={<VerificationPageRoute />} />
+        <Route path="/insurance/health-check/:checkId/analyzing" element={<AnalysisProgressRoute />} />
+        <Route path="/insurance/health-check/:checkId/verdict" element={<VerdictPageRoute />} />
+        <Route path="/insurance/health-check/:checkId/report" element={<HealthCheckReportRoute />} />
         <Route path="/insurance/:id" element={<InsuranceDetailPage />} />
         <Route path="/loans" element={<LoanListPage />} />
         <Route path="/loans/given/:id" element={<LoanGivenDetailPage />} />

@@ -30,3 +30,5 @@ export * from './documentSorter.js';
 export * from './metalPurity.js';
 export * from './zodMessages.js';
 export * from './alertBands.js';
+// Insurance Policy Health Check & Audit Engine
+export * from './policyHealthCheck.js';

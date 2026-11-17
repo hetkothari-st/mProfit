@@ -60,6 +60,8 @@ export const FEATURE_MIN_TIER = {
   // inactivity or a scheduled date. An armed plan keeps running after a lapse
   // (see plan.service) — only *configuring* it needs this flag.
   LEGACY_TRANSFER: 'PLUS',
+  // Insurance policy health check: upload, extraction, rule engine, score, simulator, insurer data.
+  INSURANCE_HEALTH_CHECK: 'PLUS',
   ACCOUNTING_MODULE: 'PRO_ADVISOR', // Trial Balance, P&L, Balance Sheet, Chart of Accounts, Tally export
   // The CA workspace: hold client records, keep their books, run their
   // reports. Sits at PRO_ADVISOR beside ACCOUNTING_MODULE because a CA

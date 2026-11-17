@@ -259,6 +259,15 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'SpendPayeeTag', // 20261105140000: per-payee category tags
   'SpendRecurringSeries', // 20261105160000: recurring payments
   'SpendMonthlyCategory', // 20261105160000: monthly spend per category
+  // Insurance Policy Health Check (20261115120000_policy_health_check). PolicyFinding and
+  // PolicyVerdict carry a denormalised userId; PolicyExtractionDoc and ExtractedPolicyData use an
+  // EXISTS join through PolicyHealthCheck. InsurerMetrics is shared IRDAI reference data and is
+  // deliberately NOT here (no userId, no RLS) - the invariants test asserts both sides.
+  'PolicyHealthCheck',
+  'PolicyExtractionDoc',
+  'ExtractedPolicyData',
+  'PolicyFinding',
+  'PolicyVerdict',
 ]);
 
 /**

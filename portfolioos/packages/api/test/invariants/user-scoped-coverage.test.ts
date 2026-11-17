@@ -68,6 +68,12 @@ const MUST_BE_PROTECTED_BY_NAME = [
   // Will Maker: a will's whole content, sealed or not, is one person's.
   'Will',
   'WillVersion',
+  // Insurance Policy Health Check - see 20261115120000_policy_health_check.
+  'PolicyHealthCheck',
+  'PolicyExtractionDoc',
+  'ExtractedPolicyData',
+  'PolicyFinding',
+  'PolicyVerdict',
 ] as const;
 
 describe('USER_SCOPED_MODELS covers every RLS-protected table', () => {
@@ -270,4 +276,14 @@ describe('USER_SCOPED_MODELS covers every RLS-protected table', () => {
         `NO_POLICY_BY_DESIGN in this file with a reason.`,
     ).toEqual([]);
   }, 120_000);
+
+  it('does not scope InsurerMetrics as a user-owned table', () => {
+    // InsurerMetrics is IRDAI-sourced reference data shared by every user,
+    // in the same class as StockMaster, MFNav and FXRate. It has no userId
+    // column and no RLS policy. Registering it in USER_SCOPED_MODELS would
+    // make the hook issue app.current_user_id for it; adding a matching policy
+    // would then make the reference table return zero rows to every job and
+    // read as a dead feed. Both halves of the mistake are blocked here.
+    expect(USER_SCOPED_MODELS.has('InsurerMetrics')).toBe(false);
+  });
 });
