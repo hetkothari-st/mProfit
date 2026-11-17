@@ -31,7 +31,7 @@ const USER_REFRESH_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 // Rate limiting
 // ---------------------------------------------------------------------------
 
-async function checkRateLimit(checkId: string, userId: string): Promise<void> {
+export async function assertAnalysisCooldown(checkId: string, userId: string): Promise<void> {
   // Cooldown applies to RE-analysis only: a check that already completed
   // within the window AND whose extraction has not been edited since. The
   // first analysis (and any run after the user corrected a field) is never
@@ -78,7 +78,7 @@ export function startPolicyCheckJobWorker(): void {
       if (phase === 'extraction') {
         await processTextExtractionJob({ checkId, userId });
       } else if (phase === 'analysis') {
-        await checkRateLimit(checkId, userId);
+        await assertAnalysisCooldown(checkId, userId);
         const result = await runPolicyAnalysis(checkId, userId);
         logger.info(
           { checkId, userId, status: result.status, findings: result.findings.length },

@@ -24,6 +24,8 @@ import { createDocument } from '../services/documents/document.service.js';
 import { extractPolicyData } from '../services/policyCheck/extract.service.js';
 import { PolicyExtractionSchema } from '../services/policyCheck/extractionSchema.js';
 import { runPolicyAnalysis } from '../services/policyCheck/analysisEngine.service.js';
+import { assertAnalysisCooldown } from '../jobs/policyCheckJob.js';
+import { enqueuePolicyProse } from '../jobs/policyCheckProseJob.js';
 import { simulateFinancialOutcome } from '../services/policyCheck/financialSimulator.service.js';
 import { getInsurerIntelligence } from '../services/policyCheck/insurerMetrics.service.js';
 import type { FinancialSimulatorInput } from '@everypaisa/shared';
@@ -375,23 +377,34 @@ export async function triggerAnalysisHandler(req: Request, res: Response) {
   });
   if (!check) throw new NotFoundError('Health check not found');
 
-  if (!['VERIFIED', 'EXTRACTED'].includes(check.status)) {
+  // Already running (page reload, double click, React dev double-mount): not an error.
+  if (check.status === 'ANALYZING') {
+    ok(res, { checkId, status: 'ANALYZING', alreadyRunning: true });
+    return;
+  }
+
+  // A failed or finished run can be re-run; an unextracted one cannot.
+  if (!['VERIFIED', 'EXTRACTED', 'FAILED', 'COMPLETED', 'PARTIAL'].includes(check.status)) {
     throw new BadRequestError(
-      `Check status is '${check.status}' — expected VERIFIED or EXTRACTED`,
+      `Check status is '${check.status}' — finish extraction and review before analysing`,
     );
   }
 
-  if (env.ENABLE_POLICY_CHECK_JOB !== 'false') {
-    await getPolicyCheckQueue().add(
-      { checkId, userId, phase: 'analysis' },
-      { jobId: `analysis:${checkId}` },
-    );
-    ok(res, { checkId, queued: true });
-  } else {
-    // Run inline for environments with jobs disabled (dev/test)
-    const result = await runPolicyAnalysis(checkId, userId);
-    ok(res, { checkId, queued: false, result });
+  await assertAnalysisCooldown(checkId, userId);
+
+  // The rules, scoring and verdict are deterministic and take well under a
+  // second, so run them here rather than depending on a queue worker: nothing
+  // to stall, and the caller gets the outcome (or the error) in one response.
+  const result = await runPolicyAnalysis(checkId, userId);
+
+  // Optional plain-language summary (LLM). Best effort — never fails the analysis.
+  try {
+    enqueuePolicyProse(userId, checkId);
+  } catch (err) {
+    logger.warn({ err, checkId }, '[policyCheck] could not queue verdict prose');
   }
+
+  ok(res, { checkId, status: result.status, verdictId: result.verdictId });
 }
 
 // ---------------------------------------------------------------------------
