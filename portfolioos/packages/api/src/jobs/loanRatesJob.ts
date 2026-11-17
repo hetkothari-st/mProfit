@@ -21,7 +21,6 @@ import type { LoanRateSource, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { runAsSystem } from '../lib/requestContext.js';
-<<<<<<< HEAD
 import { writeIngestionFailure } from '../services/imports/ingestionFailures.service.js';
 import { FetchPageError, fetchPage } from '../services/loans/loanRates/fetchPage.js';
 import { isSourceStale, istDate, STALE_AFTER_DAYS } from '../services/loans/loanRates/sanity.js';
@@ -30,16 +29,6 @@ import { PAGE_READERS } from '../services/loans/loanRates/sources/index.js';
 import { clean, loadPage } from '../services/loans/loanRates/sources/parseUtil.js';
 import { dateOnly, recordReading } from '../services/loans/loanRates/store.js';
 import type { PageReader } from '../services/loans/loanRates/types.js';
-=======
-import { writeIngestionFailure } from '../services/ingestionFailures.service.js';
-import { FetchPageError, fetchPage } from '../services/loanRates/fetchPage.js';
-import { isSourceStale, istDate, STALE_AFTER_DAYS } from '../services/loanRates/sanity.js';
-import { ensureLoanRateSources } from '../services/loanRates/sourceList.js';
-import { PAGE_READERS } from '../services/loanRates/sources/index.js';
-import { clean, loadPage } from '../services/loanRates/sources/parseUtil.js';
-import { dateOnly, recordReading } from '../services/loanRates/store.js';
-import type { PageReader } from '../services/loanRates/types.js';
->>>>>>> feat/emi-loan-checks
 import { runLoanChecksJob } from './loanChecksJob.js';
 
 const TZ = 'Asia/Kolkata';

@@ -182,11 +182,7 @@ model User {
   incomes Income[]
 
   // UI preferences — sidebar asset class order + visibility per user.
-<<<<<<< HEAD
   preferences    Json?
-=======
-  preferences Json?
->>>>>>> feat/emi-loan-checks
   /// Settings -> Notifications -> Loan rate alerts (EMI plan 3, spec s6.3). Default on.
   loanRateAlerts Boolean @default(true)
 
@@ -1672,13 +1668,10 @@ enum AlertType {
   PF_REFRESH_DUE
   LOAN_REFINANCE
   LOAN_BENCHMARK_CHANGE
-<<<<<<< HEAD
   WILL_REVIEW_DUE
   ADVICE
   /// A held fund's rating moved to another form band (Leading/Steady/Lagging/Weak) on the monthly re-rate.
   MF_RATING_CHANGE
-=======
->>>>>>> feat/emi-loan-checks
   CUSTOM
 }
 

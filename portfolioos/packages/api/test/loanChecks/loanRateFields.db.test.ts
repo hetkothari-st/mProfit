@@ -4,11 +4,7 @@ import { Prisma } from '@prisma/client';
 import { NotFoundError, ValidationError } from '../../src/lib/errors.js';
 import {
   computeLoanSummary, createLoan, updateLoan, type CreateLoanInput, type StoredLoan,
-<<<<<<< HEAD
 } from '../../src/services/loans/loans.service.js';
-=======
-} from '../../src/services/loans.service.js';
->>>>>>> feat/emi-loan-checks
 import { createTestScope, type TestScope } from '../helpers/db.js';
 
 const DB_URL = process.env.DATABASE_URL ?? '';

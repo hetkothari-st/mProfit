@@ -1,8 +1,4 @@
-<<<<<<< HEAD:portfolioos/apps/web/src/api/loans/loans.api.ts
 import { api } from '../client';
-=======
-import { api } from './client';
->>>>>>> feat/emi-loan-checks:portfolioos/apps/web/src/api/loans.api.ts
 import type { ApiResponse, LoanMarketCheckWire, LoanRateBenchmark, LoanRateType } from '@everypaisa/shared';
 
 function unwrap<T>(r: ApiResponse<T>): T {

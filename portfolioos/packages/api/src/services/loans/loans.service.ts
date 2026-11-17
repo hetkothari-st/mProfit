@@ -10,7 +10,6 @@
 
 import { Decimal } from 'decimal.js';
 import { Prisma } from '@prisma/client';
-<<<<<<< HEAD:portfolioos/packages/api/src/services/loans/loans.service.ts
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
@@ -25,14 +24,6 @@ import {
 } from '@everypaisa/shared';
 import { loanAccountNumberColumns, PLATE_SELECT, readLoanAccountNumber, revealVehicle } from '../security/piiAtRest.service.js';
 import { last4 } from '../pf/pfCredentials.service.js';
-=======
-import { prisma } from '../lib/prisma.js';
-import { NotFoundError, ValidationError } from '../lib/errors.js';
-import { logger } from '../lib/logger.js';
-import { serializeMoney, type LoanRateBenchmark, type LoanRateType } from '@everypaisa/shared';
-import { loanAccountNumberColumns, PLATE_SELECT, readLoanAccountNumber, revealVehicle } from './piiAtRest.service.js';
-import { last4 } from './pfCredentials.service.js';
->>>>>>> feat/emi-loan-checks:portfolioos/packages/api/src/services/loans.service.ts
 import { isRealDate } from './loanRates/sanity.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
