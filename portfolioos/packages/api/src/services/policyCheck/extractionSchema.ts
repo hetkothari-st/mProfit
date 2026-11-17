@@ -75,7 +75,7 @@ export const PolicyExtractionSchema = z.object({
   roomRentLimitInr: extractedField(z.string().nullable()),
   roomRentLimitPct: extractedField(z.string().nullable()),
   proportionateDeductionApplies: extractedField(z.boolean()),
-  diseaseSubLimits: extractedField(z.record(z.string())),
+  diseaseSubLimits: extractedField(z.record(z.string(), z.string())),
   deductibleInr: extractedField(z.string().nullable()),
   cumulativeDeductibleInr: extractedField(z.string().nullable()),
 

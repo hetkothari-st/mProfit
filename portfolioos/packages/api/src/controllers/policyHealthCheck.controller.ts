@@ -20,7 +20,7 @@ import { logger } from '../lib/logger.js';
 import { Prisma } from '@prisma/client';
 import { getPolicyCheckQueue } from '../lib/queue.js';
 import { env } from '../config/env.js';
-import { createDocument } from '../services/document.service.js';
+import { createDocument } from '../services/documents/document.service.js';
 import { extractPolicyData } from '../services/policyCheck/extract.service.js';
 import { PolicyExtractionSchema } from '../services/policyCheck/extractionSchema.js';
 import { runPolicyAnalysis } from '../services/policyCheck/analysisEngine.service.js';

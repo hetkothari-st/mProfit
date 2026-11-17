@@ -109,6 +109,7 @@ async function ocrPdfPages(fileBytes: Buffer, passwords: string[]): Promise<stri
 
   const candidates = ['', ...passwords.filter((p) => p.length > 0)];
   let doc: Awaited<ReturnType<typeof pdfjs.getDocument>['promise']> | null = null;
+  let loadingTask: ReturnType<typeof pdfjs.getDocument> | null = null;
 
   for (const pw of candidates) {
     const standalone = new ArrayBuffer(fileBytes.byteLength);
@@ -116,6 +117,7 @@ async function ocrPdfPages(fileBytes: Buffer, passwords: string[]): Promise<stri
     try {
       const task = pdfjs.getDocument({ data: standalone, password: pw || undefined, verbosity: 0 });
       doc = await task.promise;
+      loadingTask = task;
       break;
     } catch (err) {
       // Wrong/absent password for this candidate — try the next one.
@@ -150,7 +152,7 @@ async function ocrPdfPages(fileBytes: Buffer, passwords: string[]): Promise<stri
     }
   } finally {
     await worker.terminate();
-    await doc.destroy();
+    await loadingTask?.destroy();
   }
 
   return pageTexts.join(PAGE_BREAK);
@@ -240,7 +242,7 @@ export async function extractDocumentText(
           }
           digitalText += PAGE_BREAK;
         }
-        await doc.destroy();
+        await task.destroy();
         break;
       } catch (err) {
         const e = err as { name?: string };
