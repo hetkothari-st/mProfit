@@ -16,6 +16,8 @@ datasource db {
 // ─── USERS & AUTH ───────────────────────────────────────────────
 
 model User {
+  // Insurance Policy Health Check. PolicyFinding/PolicyVerdict carry their own userId (RLS), no relation here.
+  policyHealthChecks PolicyHealthCheck[]
   splitContacts          SplitContact[]   @relation("SplitContactOwner")
   splitMembers           SplitMember[]    @relation("SplitMemberUser")
   splitDetections        SplitDetection[] @relation("SplitDetectionUser")
@@ -2343,6 +2345,7 @@ model PropertyExpense {
 // ─── §4.8 INSURANCE ──────────────────────────────────────────────
 
 model InsurancePolicy {
+  healthChecks    PolicyHealthCheck[]
   id                        String    @id @default(cuid())
   userId                    String
   user                      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -2919,6 +2922,7 @@ enum EquityTaxTreatment {
 // stored bytes change so OnlyOffice's internal cache invalidates.
 
 model Document {
+  extractionDocs  PolicyExtractionDoc[]
   id              String            @id @default(cuid())
   userId          String
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -6183,4 +6187,203 @@ model SpendMonthlyCategory {
   txnCount     Int
 
   @@id([userId, month, category])
+}
+
+// ─── §INSURANCE POLICY HEALTH CHECK ──────────────────────────────────────────
+
+/// Lifecycle of one health check run. Append-only: re-runs produce new rows.
+/// A run NEVER edits an earlier verdict — supersededById chains instead.
+model PolicyHealthCheck {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  /// FK to InsurancePolicy. Only HEALTH-type policies trigger checks.
+  policyId String
+  policy   InsurancePolicy @relation(fields: [policyId], references: [id])
+
+  status String
+
+  /// ISO date-time snapshot reference used for the analysis.
+  asOf DateTime
+
+  /// JSON snapshot of the extracted policy fields at run time. Closed value —
+  /// JSON-round-trippable. Used for regression replay.
+  factsSnapshot Json
+
+  /// One entry per rule that ran, including rules that emitted nothing, so
+  /// "why was X not flagged?" is answerable.
+  ruleVersionsSnapshot Json
+
+  /// PolicyScoreSnapshot stored verbatim — overall, pillars, ratingCategory,
+  /// strongestAspects, weakestAspects, criticalIssues, scoringVersion.
+  scoreSnapshot Json
+
+  /// USER_REQUEST, DOCUMENT_UPLOAD, SCHEDULE.
+  triggeredBy String
+
+  /// Bump when scoring weights or rule thresholds change.
+  scoringVersion String
+
+  /// Total LLM cost incurred for this run (extraction + prose).
+  llmSpendInr Decimal? @db.Decimal(18, 4)
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  docs          PolicyExtractionDoc[]
+  extractedData ExtractedPolicyData?
+  findings      PolicyFinding[]
+  verdicts      PolicyVerdict[]
+
+  @@index([userId, policyId, asOf])
+}
+
+/// One uploaded document attached to a health check.
+model PolicyExtractionDoc {
+  id       String            @id @default(cuid())
+  checkId  String
+  check    PolicyHealthCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+
+  /// FK to Document (generic document store).
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id])
+
+  classification String
+  pageCount      Int
+  extractedText  String @db.Text
+  ocrUsed        Boolean @default(false)
+
+  /// SHA-256 of the raw file bytes — deduplication guard, scoped per check.
+  sourceHash String
+
+  @@unique([checkId, sourceHash])
+}
+
+/// Structured fields extracted from policy documents, stored as one JSON blob
+/// per check. Version is incremented on each user-edit cycle.
+model ExtractedPolicyData {
+  id      String            @id @default(cuid())
+  checkId String            @unique
+  check   PolicyHealthCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+
+  /// ExtractedPolicyDataDTO as a JSON value. Decimal strings, ISO dates, no Decimal/Date.
+  fields Json
+
+  verifiedAt DateTime?
+
+  /// PolicyFieldConflict[] — disagreements between documents. Null = none found.
+  conflicts Json?
+
+  /// Incremented whenever the user submits corrections.
+  version Int @default(1)
+}
+
+/// One rule finding from the deterministic engine. Append-only within a run.
+model PolicyFinding {
+  id      String            @id @default(cuid())
+  checkId String
+  check   PolicyHealthCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+
+  /// Denormalised so the RLS predicate is a direct column comparison rather
+  /// than an EXISTS join — mirrors MfFinding.userId.
+  userId String
+
+  ruleId      String
+  ruleVersion String
+  code        String
+  category    String
+  severity    String
+
+  /// Evidence-quality confidence in [0, 1] as a Decimal string.
+  confidence Decimal @db.Decimal(12, 6)
+
+  /// ≤120 chars, deterministic from a template, never LLM-authored.
+  headline String
+
+  /// PolicyEvidence[] — docId, page, clauseHeading, extractedText.
+  evidence Json
+
+  /// What the user would need to change for this finding to go away.
+  whatWouldChangeThis String
+
+  createdAt DateTime @default(now())
+
+  @@index([checkId])
+  @@index([userId, category])
+}
+
+/// The engine's overall verdict for one check. APPEND-ONLY.
+/// Re-runs write a new row and point the old row's supersededById at it.
+model PolicyVerdict {
+  id      String            @id @default(cuid())
+  checkId String
+  /// Deliberately NOT onDelete: Cascade — the audit trail must outlive the run.
+  /// A run that produced a verdict cannot be deleted until the verdict is
+  /// explicitly removed (same discipline as MfFundVerdict).
+  check   PolicyHealthCheck @relation(fields: [checkId], references: [id], onDelete: Restrict)
+
+  /// Denormalised for direct-column RLS — mirrors MfFundVerdict.userId.
+  userId String
+
+  /// GREEN | AMBER | RED | INCOMPLETE
+  verdict String
+
+  /// 0-100. Null if INCOMPLETE.
+  score Decimal? @db.Decimal(5, 2)
+
+  /// Finding codes that drove this verdict.
+  reasons Json
+
+  /// LLM narration. Shown only when proseVerified is true; a failed narration
+  /// is silent to the user and does not affect the deterministic verdict.
+  prose         String? @db.Text
+  proseModel    String?
+  proseVerified Boolean @default(false)
+
+  /// Set on the OLD row when a later run changes the verdict.
+  supersededById String?       @unique
+  supersededBy   PolicyVerdict? @relation("PolicyVerdictSupersede", fields: [supersededById], references: [id])
+  supersedes     PolicyVerdict[] @relation("PolicyVerdictSupersede")
+
+  createdAt DateTime @default(now())
+}
+
+/// IRDAI-sourced reference metrics for Indian health insurers.
+/// REFERENCE DATA — NOT user-scoped, NO RLS policy.
+/// CSR (claim settlement ratio) ≠ ICR (incurred claim ratio) — both present.
+model InsurerMetrics {
+  id           String @id @default(cuid())
+  insurerName  String
+  financialYear String
+
+  /// Claim Settlement Ratio: % of claims settled by count.
+  claimSettlementRatio Decimal? @db.Decimal(6, 2)
+
+  /// Incurred Claim Ratio: claims incurred / net premium earned, as %.
+  incurredClaimRatio Decimal? @db.Decimal(6, 2)
+
+  claimsTotal   Int?
+  claimsSettled Int?
+  claimsPending Int?
+  /// Claims repudiated during the year (by number).
+  claimsRepudiated Int?
+  /// Health-segment claims incurred (net) and net earned premium, in INR
+  /// (the Handbook reports Rs lakh; converted x100000 on import).
+  claimsIncurredInr   Decimal? @db.Decimal(20, 2)
+  netEarnedPremiumInr Decimal? @db.Decimal(20, 2)
+  /// 'HEALTH_ONLY' (standalone health insurers) | 'ALL_LINES' (general
+  /// insurers' claim COUNTS cover motor, fire etc., not just health).
+  claimsScope String?
+  /// Plain-language definition of how claimSettlementRatio was computed.
+  methodology String?
+
+  /// JSON: complaints per 10k policies, etc.
+  complaints Json?
+
+  /// E.g. "IRDAI Annual Report 2023-24"
+  source      String
+  retrievedAt DateTime
+
+  @@index([insurerName, financialYear])
 }

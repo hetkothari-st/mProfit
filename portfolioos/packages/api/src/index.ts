@@ -56,6 +56,8 @@ import { startRawFilePurgeJob } from './jobs/rawFilePurgeJob.js';
 import { startActOnItJob } from './jobs/actOnItJob.js';
 import { closeQueues } from './lib/queue.js';
 import { initSentry, Sentry } from './lib/sentry.js';
+import { startPolicyCheckJobWorker } from './jobs/policyCheckJob.js';
+import { startPolicyProseJob } from './jobs/policyCheckProseJob.js';
 import { makeOriginCheck } from './lib/corsOrigins.js';
 import { mcpCors, mcpOAuthRouter } from './routes/mcpOAuth.routes.js';
 import { mcpRouter } from './routes/mcp.routes.js';
@@ -242,6 +244,11 @@ const server = app.listen(env.PORT, '::', () => {
   startSecretRotationJobs();
   startAlertJobs();
   startWillReviewJob();
+  // Policy Health Check workers (extraction + analysis share one queue; prose is in-process).
+  if (env.ENABLE_POLICY_CHECK_JOB !== 'false') {
+    startPolicyCheckJobWorker();
+    startPolicyProseJob();
+  }
   startMcpCleanupJob();
   startNetWorthSnapshotJob();
   startDataIntegrityJob();

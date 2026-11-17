@@ -174,6 +174,8 @@ const EnvSchema = z.object({
   // record. Turning it on without them is a configuration error, not a
   // degraded mode — see collectProductionSecretProblems.
   RIA_VERDICTS_ENABLED: z.enum(['true', 'false']).default('false'),
+  // Policy Check job enable flag. Defaults to 'true'. Set 'false' in tests to stop jobs firing.
+  ENABLE_POLICY_CHECK_JOB: z.string().default('true'),
   // The individual who signed off the fund-ranking methodology. Stamped onto
   // RankingMethodologyVersion.signedOffBy, so "who decided these weights?"
   // has an answer years later.

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/validate.js';
+import { requireFeature } from '../middleware/requirePlan.js';
 import { piiLimiter } from '../middleware/rateLimit.js';
 import {
   revealPolicyNumberHandler,
@@ -31,6 +32,19 @@ import {
   scanInsuranceNowHandler,
   setInsuranceFetchHandler,
 } from '../controllers/insuranceGmailFetch.controller.js';
+import {
+  createHealthCheckHandler,
+  uploadDocumentsHandler,
+  getHealthCheckHandler,
+  triggerExtractionHandler,
+  getExtractionHandler,
+  patchExtractionHandler,
+  triggerAnalysisHandler,
+  getReportHandler,
+  simulateHandler,
+  listHealthChecksHandler,
+  uploadPolicyDocuments,
+} from '../controllers/policyHealthCheck.controller.js';
 
 export const insuranceRouter = Router();
 insuranceRouter.use(authenticate);
@@ -80,3 +94,67 @@ insuranceRouter.post('/documents/:docId/renewal', asyncHandler(answerRenewalHand
 
 // Manual trigger for renewal alerts (useful for testing §9.4)
 insuranceRouter.post('/alerts/trigger', asyncHandler(triggerRenewalAlertsHandler));
+
+// ─── Health Check ─────────────────────────────────────────────────────────
+// All health check endpoints require the INSURANCE_HEALTH_CHECK feature (PLUS+).
+
+insuranceRouter.get(
+  '/policies/:id/health-checks',
+  requireFeature('INSURANCE_HEALTH_CHECK'),
+  asyncHandler(listHealthChecksHandler),
+);
+
+insuranceRouter.post(
+  '/policies/:id/health-check',
+  requireFeature('INSURANCE_HEALTH_CHECK'),
+  asyncHandler(createHealthCheckHandler),
+);
+
+insuranceRouter.post(
+  '/health-check/:checkId/documents',
+  requireFeature('INSURANCE_HEALTH_CHECK'),
+  uploadPolicyDocuments,
+  asyncHandler(uploadDocumentsHandler),
+);
+
+insuranceRouter.get(
+  '/health-check/:checkId',
+  requireFeature('INSURANCE_HEALTH_CHECK'),
+  asyncHandler(getHealthCheckHandler),
+);
+
+insuranceRouter.post(
+  '/health-check/:checkId/extract',
+  requireFeature('INSURANCE_HEALTH_CHECK'),
+  asyncHandler(triggerExtractionHandler),
+);
+
+insuranceRouter.get(
+  '/health-check/:checkId/extraction',
+  requireFeature('INSURANCE_HEALTH_CHECK'),
+  asyncHandler(getExtractionHandler),
+);
+
+insuranceRouter.patch(
+  '/health-check/:checkId/extraction',
+  requireFeature('INSURANCE_HEALTH_CHECK'),
+  asyncHandler(patchExtractionHandler),
+);
+
+insuranceRouter.post(
+  '/health-check/:checkId/analyze',
+  requireFeature('INSURANCE_HEALTH_CHECK'),
+  asyncHandler(triggerAnalysisHandler),
+);
+
+insuranceRouter.get(
+  '/health-check/:checkId/report',
+  requireFeature('INSURANCE_HEALTH_CHECK'),
+  asyncHandler(getReportHandler),
+);
+
+insuranceRouter.post(
+  '/health-check/:checkId/simulate',
+  requireFeature('INSURANCE_HEALTH_CHECK'),
+  asyncHandler(simulateHandler),
+);
