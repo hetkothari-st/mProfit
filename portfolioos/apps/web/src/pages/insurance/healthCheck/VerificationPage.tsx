@@ -60,6 +60,15 @@ function ConfidenceBadge({ confidence, status }: { confidence: number; status: s
   return <Badge className="text-xs bg-red-100 text-red-800">Low confidence — verify</Badge>;
 }
 
+function fieldTitle(key: string): string {
+  const base = key.split('.')[0]!;
+  const sub = key.includes('.') ? ` (${key.split('.').slice(1).join('.')})` : '';
+  const label = (FIELD_LABELS as Record<string, string | undefined>)[base] ?? base.replace(/([A-Z])/g, ' $1').toLowerCase();
+  return label + sub;
+}
+
+const kindOf = (c: string) => c.replace('_', ' ').toLowerCase();
+
 const CRITICAL_FIELDS: Array<keyof ExtractedPolicyDataDTO> = ['sumInsured', 'policyType'];
 
 const FIELD_LABELS: Partial<Record<keyof ExtractedPolicyDataDTO, string>> = {
@@ -126,6 +135,16 @@ export function VerificationPage({ checkId }: Props) {
     });
   }, [fields]);
 
+  // One entry per field: an unresolved disagreement outranks a resolved override.
+  const conflictByField = useMemo(() => {
+    const m = new Map<string, 'UNRESOLVED' | 'RESOLVED_BY_PRECEDENCE'>();
+    for (const c of data?.conflicts ?? []) {
+      const key = c.field.split('.')[0]!;
+      if (c.status === 'UNRESOLVED' || !m.has(key)) m.set(key, c.status);
+    }
+    return m;
+  }, [data?.conflicts]);
+
   const confirmMutation = useMutation({
     mutationFn: () => patchExtraction(checkId, corrections),
     onSuccess: () => {
@@ -161,17 +180,30 @@ export function VerificationPage({ checkId }: Props) {
         </Alert>
       )}
 
-      {(data?.conflicts ?? []).length > 0 && (
+      {(data?.conflicts ?? []).some((c) => c.status === 'UNRESOLVED') && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="space-y-2">
-            <p className="font-medium">Your documents disagree on {(data?.conflicts ?? []).length} value(s)</p>
-            {(data?.conflicts ?? []).map((c, i) => (
+            <p className="font-medium">Your documents disagree — please confirm the right value</p>
+            {(data?.conflicts ?? []).filter((c) => c.status === 'UNRESOLVED').map((c, i) => (
               <p key={i} className="text-xs">
-                <strong>{c.field.replace(/([A-Z])/g, ' $1').toLowerCase()}</strong>:{' '}
-                {c.status === 'UNRESOLVED'
-                  ? `"${c.chosen.value}" (p.${c.chosen.page ?? '?'}) vs "${c.other.value}" (p.${c.other.page ?? '?'}) — confirm the right one below.`
-                  : `using the ${c.chosen.classification.replace('_', ' ').toLowerCase()} value "${c.chosen.value}" over the ${c.other.classification.replace('_', ' ').toLowerCase()} value "${c.other.value}".`}
+                <strong>{fieldTitle(c.field)}</strong>: "{c.chosen.value}" (p.{c.chosen.page ?? '?'}, {kindOf(c.chosen.classification)}) vs
+                "{c.other.value}" (p.{c.other.page ?? '?'}, {kindOf(c.other.classification)}). Edit the field below to settle it.
+              </p>
+            ))}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {(data?.conflicts ?? []).some((c) => c.status === 'RESOLVED_BY_PRECEDENCE') && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription className="space-y-2">
+            <p className="font-medium">Some values were changed by a later document</p>
+            {(data?.conflicts ?? []).filter((c) => c.status === 'RESOLVED_BY_PRECEDENCE').map((c, i) => (
+              <p key={i} className="text-xs">
+                <strong>{fieldTitle(c.field)}</strong>: using the {kindOf(c.chosen.classification)} value "{c.chosen.value}"
+                (p.{c.chosen.page ?? '?'}) instead of the {kindOf(c.other.classification)} value "{c.other.value}" (p.{c.other.page ?? '?'}).
               </p>
             ))}
           </AlertDescription>
@@ -204,6 +236,26 @@ export function VerificationPage({ checkId }: Props) {
                       </Label>
                       {field && (
                         <ConfidenceBadge confidence={field.confidence} status={field.status} />
+                      )}
+                      {conflictByField.get(fieldKey as string) === 'UNRESOLVED' && !(fieldKey in corrections) && (
+                        <>
+                          <Badge className="text-xs bg-red-100 text-red-800">Documents disagree</Badge>
+                          <button
+                            type="button"
+                            className="text-xs text-blue-600 hover:underline"
+                            onClick={() =>
+                              setCorrections((prev) => ({ ...prev, [fieldKey]: { value: field?.value ?? null } }))
+                            }
+                          >
+                            Confirm this value
+                          </button>
+                        </>
+                      )}
+                      {conflictByField.get(fieldKey as string) === 'UNRESOLVED' && fieldKey in corrections && (
+                        <Badge variant="outline" className="text-xs text-green-700">You confirmed this</Badge>
+                      )}
+                      {conflictByField.get(fieldKey as string) === 'RESOLVED_BY_PRECEDENCE' && (
+                        <Badge variant="outline" className="text-xs text-amber-700">Changed by a later document</Badge>
                       )}
                       {field?.sourcePage && (
                         <span className="text-xs text-muted-foreground">
