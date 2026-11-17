@@ -22,7 +22,9 @@ import { getPolicyCheckQueue } from '../lib/queue.js';
 import { env } from '../config/env.js';
 import { createDocument } from '../services/documents/document.service.js';
 import { extractPolicyData } from '../services/policyCheck/extract.service.js';
-import { PolicyExtractionSchema } from '../services/policyCheck/extractionSchema.js';
+import { asProductType, getExtractionSpec } from '../services/policyCheck/extractionSpecs.js';
+import { calculateTermAdequacy } from '../services/policyCheck/termAdequacy.js';
+import type { PolicyProductType, TermAdequacyInput } from '@everypaisa/shared';
 import { runPolicyAnalysis } from '../services/policyCheck/analysisEngine.service.js';
 import { assertAnalysisCooldown } from '../jobs/policyCheckJob.js';
 import { enqueuePolicyProse } from '../jobs/policyCheckProseJob.js';
@@ -107,6 +109,18 @@ async function getCheckOrThrow(checkId: string, userId: string) {
   return check;
 }
 
+/** The product type of a check, from its insurance policy (never from extracted text). */
+async function productTypeOf(checkId: string, userId: string): Promise<PolicyProductType> {
+  const row = await prisma.policyHealthCheck.findFirst({
+    where: { id: checkId, userId },
+    select: { policy: { select: { type: true } } },
+  });
+  if (!row) throw new NotFoundError('Health check not found');
+  const pt = asProductType(row.policy.type);
+  if (!pt) throw new BadRequestError(`Policy type ${row.policy.type} is not supported`);
+  return pt;
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/insurance/policies/:id/health-check
 // ---------------------------------------------------------------------------
@@ -126,8 +140,8 @@ export async function createHealthCheckHandler(req: Request, res: Response) {
   });
 
   if (!policy) throw new NotFoundError('Policy not found');
-  if (policy.type !== 'HEALTH') {
-    throw new BadRequestError('Health checks are only supported for HEALTH-type policies');
+  if (!asProductType(policy.type)) {
+    throw new BadRequestError('Policy checks are supported for health and term life policies');
   }
 
   const check = await runInTransaction((tx) =>
@@ -259,6 +273,7 @@ export async function getExtractionHandler(req: Request, res: Response) {
   ok(res, {
     id: data.id,
     checkId,
+    productType: await productTypeOf(checkId, userId),
     fields: data.fields,
     conflicts: data.conflicts ?? [],
     verifiedAt: data.verifiedAt?.toISOString() ?? null,
@@ -305,7 +320,7 @@ export async function patchExtractionHandler(req: Request, res: Response) {
     }
   }
   // The merged result must still be a valid extraction.
-  const validated = PolicyExtractionSchema.safeParse(updatedFields);
+  const validated = getExtractionSpec(await productTypeOf(checkId, userId)).schema.safeParse(updatedFields);
   if (!validated.success) {
     throw new BadRequestError('Corrected values are invalid: ' + validated.error.issues.slice(0, 3).map((i) => i.path.join('.') + ' ' + i.message).join('; '));
   }
@@ -351,6 +366,7 @@ export async function getHealthCheckHandler(req: Request, res: Response) {
     id: check.id,
     userId: check.userId,
     policyId: check.policyId,
+    productType: await productTypeOf(checkId, userId),
     status: check.status,
     asOf: check.asOf.toISOString(),
     scoringVersion: check.scoringVersion,
@@ -476,13 +492,15 @@ export async function getReportHandler(req: Request, res: Response) {
       ? ((extractedData.fields as Record<string, { value: string | null }>)['insurerName']?.value ?? policy?.insurer ?? null)
       : policy?.insurer ?? null;
 
+  const productType = asProductType(policy?.type ?? '') ?? 'HEALTH';
   const insurerIntel = insurerName
-    ? await getInsurerIntelligence(insurerName)
+    ? await getInsurerIntelligence(insurerName, productType === 'TERM' ? 'LIFE' : 'HEALTH')
     : null;
 
   ok(res, {
     checkId,
     policyId: check.policyId,
+    productType,
     status: check.status,
     asOf: check.asOf.toISOString(),
     generatedAt: new Date().toISOString(),
@@ -549,17 +567,15 @@ export async function listHealthChecksHandler(req: Request, res: Response) {
 // POST /api/insurance/health-check/:checkId/simulate
 // ---------------------------------------------------------------------------
 
-/** Run the financial simulator for a health check. */
+/**
+ * Health: out-of-pocket simulator for a hypothetical hospital bill.
+ * Term life: cover-adequacy calculator from the user's own income and liabilities.
+ */
 export async function simulateHandler(req: Request, res: Response) {
   const userId = getUserId(req);
   const checkId = req.params['checkId']!;
 
-  // Ownership check
-  const check = await prisma.policyHealthCheck.findFirst({
-    where: { id: checkId, userId },
-    select: { id: true },
-  });
-  if (!check) throw new NotFoundError('Health check not found');
+  const productType = await productTypeOf(checkId, userId);
 
   const data = await prisma.extractedPolicyData.findUnique({
     where: { checkId },
@@ -567,13 +583,23 @@ export async function simulateHandler(req: Request, res: Response) {
   });
   if (!data) throw new BadRequestError('No extracted data — run extraction first');
 
+  if (productType === 'TERM') {
+    const input = req.body as TermAdequacyInput;
+    const sa = (data.fields as unknown as { sumAssured?: { value: string | null; status: string } }).sumAssured;
+    const sumAssured = sa && sa.status !== 'NOT_FOUND' ? sa.value : null;
+    try {
+      ok(res, calculateTermAdequacy(input, sumAssured));
+    } catch (err) {
+      throw new BadRequestError(err instanceof Error ? err.message : 'Invalid input');
+    }
+    return;
+  }
+
   const input = req.body as FinancialSimulatorInput;
   if (!input.totalBillInr) throw new BadRequestError('totalBillInr is required');
 
   const extraction = data.fields as unknown as import('../services/policyCheck/extractionSchema.js').PolicyExtraction;
-  const result = simulateFinancialOutcome(input, extraction);
-
-  ok(res, result);
+  ok(res, simulateFinancialOutcome(input, extraction));
 }
 
 // ---------------------------------------------------------------------------

@@ -23,10 +23,10 @@
 import type { PolicyConflictSource, PolicyDocClassification, PolicyFieldConflict } from '@everypaisa/shared';
 import type { PolicyExtraction } from './extractionSchema.js';
 
-export interface ChunkExtraction {
+export interface ChunkExtraction<T extends object = PolicyExtraction> {
   docId: string;
   classification: PolicyDocClassification;
-  extraction: PolicyExtraction;
+  extraction: T;
 }
 
 export const DOC_PRECEDENCE: Record<PolicyDocClassification, number> = {
@@ -38,7 +38,7 @@ export const DOC_PRECEDENCE: Record<PolicyDocClassification, number> = {
 
 /** Naming variants across documents are not contradictions. */
 const NO_CONFLICT_KEYS = new Set(['insuredName', 'planName', 'continuityCreditNote', 'restorationConditionsText']);
-const UNION_KEYS = new Set(['permanentExclusions', 'specificExclusions', 'otherBenefits']);
+const UNION_KEYS = new Set(['permanentExclusions', 'specificExclusions', 'otherBenefits', 'exclusions']);
 
 type AnyField = {
   value: unknown;
@@ -128,8 +128,8 @@ function pickScalar(key: string, cands: Candidate[]): { chosen: Candidate; confl
   return { chosen: top, conflicts };
 }
 
-export function mergeWithProvenance(chunks: ChunkExtraction[]): {
-  merged: PolicyExtraction;
+export function mergeWithProvenance<T extends object = PolicyExtraction>(chunks: ChunkExtraction<T>[]): {
+  merged: T;
   conflicts: PolicyFieldConflict[];
 } {
   if (chunks.length === 0) throw new Error('No extractions to merge');
@@ -197,5 +197,5 @@ export function mergeWithProvenance(chunks: ChunkExtraction[]): {
     conflicts.push(...cs);
   }
 
-  return { merged: merged as unknown as PolicyExtraction, conflicts };
+  return { merged: merged as unknown as T, conflicts };
 }

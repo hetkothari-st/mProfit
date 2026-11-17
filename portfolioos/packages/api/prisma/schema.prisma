@@ -6372,6 +6372,13 @@ model InsurerMetrics {
   /// (the Handbook reports Rs lakh; converted x100000 on import).
   claimsIncurredInr   Decimal? @db.Decimal(20, 2)
   netEarnedPremiumInr Decimal? @db.Decimal(20, 2)
+  /// 'HEALTH' (default) or 'LIFE'. A life row's counts are INDIVIDUAL death claims
+  /// (all individual life policies, not term alone).
+  segment String @default("HEALTH")
+  /// Death claims paid, INR (LIFE rows; the Handbook reports Rs crore).
+  claimsPaidInr Decimal? @db.Decimal(20, 2)
+  /// Claim settlement ratio by amount, % (LIFE rows).
+  claimSettlementRatioByAmount Decimal? @db.Decimal(6, 2)
   /// 'HEALTH_ONLY' (standalone health insurers) | 'ALL_LINES' (general
   /// insurers' claim COUNTS cover motor, fire etc., not just health).
   claimsScope String?
@@ -6386,4 +6393,5 @@ model InsurerMetrics {
   retrievedAt DateTime
 
   @@index([insurerName, financialYear])
+  @@index([segment, financialYear])
 }
