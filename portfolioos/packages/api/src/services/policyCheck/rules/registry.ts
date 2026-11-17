@@ -21,6 +21,7 @@ import { exclusionsPermanentRule } from './exclusions.permanent.js';
 import { benefitsAdditionalRule } from './benefits.additional.js';
 import { waitingContinuityRule } from './waiting.continuity.js';
 import { documentsConflictsRule } from './documents.conflicts.js';
+import { TERM_RULES } from './term.rules.js';
 
 export const POLICY_RULES: PolicyRule[] = [
   copayMandatoryRule,
@@ -35,19 +36,24 @@ export const POLICY_RULES: PolicyRule[] = [
   documentsConflictsRule,
 ];
 
+/** Term life rules (see term.rules.ts). Evaluated for TERM policies only. */
+export const TERM_POLICY_RULES = TERM_RULES;
+
 // Duplicate-id guard — catches copy-paste errors at module load, not at runtime
 // when two rules emit findings and one silently overwrites the other.
 (function checkDuplicateIds() {
-  const seen = new Map<string, string>();
-  for (const rule of POLICY_RULES) {
-    const existing = seen.get(rule.id);
-    if (existing !== undefined) {
+  const seen = new Set<string>();
+  const all: Array<{ id: string }> = [
+    ...POLICY_RULES,
+    // The cross-document conflicts rule is intentionally shared by both lists.
+    ...TERM_POLICY_RULES.filter((r) => r.id !== documentsConflictsRule.id),
+  ];
+  for (const rule of all) {
+    if (seen.has(rule.id)) {
       throw new Error(
-        `[policy rules] Duplicate rule id "${rule.id}" — ` +
-          `first seen at index ${existing}, re-registered at index ${POLICY_RULES.indexOf(rule)}. ` +
-          'Rule ids must be unique and stable across versions.',
+        `[policy rules] Duplicate rule id "${rule.id}". Rule ids must be unique and stable across versions.`,
       );
     }
-    seen.set(rule.id, String(POLICY_RULES.indexOf(rule)));
+    seen.add(rule.id);
   }
 })();

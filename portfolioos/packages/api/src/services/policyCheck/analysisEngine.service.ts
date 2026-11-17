@@ -21,11 +21,14 @@ import type { PolicyFindingDTO, PolicyFindingCategory, PolicyFieldConflict } fro
 import { logger } from '../../lib/logger.js';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { loadLatestInsurerRows, matchInsurerRow } from './insurerMetrics.service.js';
-import { POLICY_RULES } from './rules/registry.js';
+import { POLICY_RULES, TERM_POLICY_RULES } from './rules/registry.js';
 import { computePolicyScore } from './scoring/policyScoreMath.js';
+import { computeTermScore } from './scoring/termScoreMath.js';
+import { asProductType } from './extractionSpecs.js';
 import { decidePolicyVerdict } from './verdict.js';
-import type { PolicyAnalysisFacts, PolicyRule } from './types.js';
-import { DEFAULT_POLICY_RULE_CONSTANTS } from './types.js';
+import type { PolicyAnalysisFacts, PolicyRule, TermAnalysisFacts, TermRule } from './types.js';
+import { DEFAULT_POLICY_RULE_CONSTANTS, DEFAULT_TERM_RULE_CONSTANTS } from './types.js';
+import type { PolicyProductType } from '@everypaisa/shared';
 
 // ---------------------------------------------------------------------------
 // Rule evaluation (pure)
@@ -55,10 +58,27 @@ function sortFindings(findings: PolicyFindingDTO[]): PolicyFindingDTO[] {
   );
 }
 
+interface AnyRule<F> {
+  id: string;
+  version: string;
+  category: PolicyFindingCategory;
+  evaluate(facts: F): PolicyFindingDTO[];
+}
+
+/** Health entry point (kept for callers and tests). */
 export function evaluatePolicyRules(
   facts: PolicyAnalysisFacts,
   rules: PolicyRule[] = POLICY_RULES,
 ): PolicyRuleEvaluation {
+  return evaluateRules(facts, rules);
+}
+
+/**
+ * Run a rule set against facts. Which rules apply is decided by the caller
+ * (one list per product type) — never by a value the LLM extracted, which used
+ * to skip every rule whenever the extracted "policy type" read FAMILY_FLOATER.
+ */
+export function evaluateRules<F>(facts: F, rules: Array<AnyRule<F>>): PolicyRuleEvaluation {
   const records = new Map<string, { ruleId: string; version: string; ran: boolean; emitted: number; category: PolicyFindingCategory; errors: string[] }>();
 
   for (const rule of rules) {
@@ -76,17 +96,6 @@ export function evaluatePolicyRules(
 
   for (const rule of rules) {
     const record = records.get(rule.id)!;
-
-    // Skip rules that don't apply to this policy type
-    const policyType = facts.extraction.policyType;
-    if (
-      rule.policyType.length > 0 &&
-      policyType.status !== 'NOT_FOUND' &&
-      policyType.value !== null &&
-      !rule.policyType.includes(policyType.value)
-    ) {
-      continue;
-    }
 
     record.ran = true;
     try {
@@ -130,12 +139,23 @@ export function evaluatePolicyRules(
 // Facts builder
 // ---------------------------------------------------------------------------
 
-async function buildFacts(checkId: string, userId: string): Promise<PolicyAnalysisFacts> {
+type AnyFacts = PolicyAnalysisFacts | TermAnalysisFacts;
+
+function isTerm(f: AnyFacts): f is TermAnalysisFacts {
+  return 'productType' in f && f.productType === 'TERM';
+}
+
+async function buildFacts(checkId: string, userId: string): Promise<AnyFacts> {
   const check = await prisma.policyHealthCheck.findFirst({
     where: { id: checkId, userId },
-    select: { id: true, policyId: true, asOf: true },
+    select: { id: true, policyId: true, asOf: true, policy: { select: { type: true } } },
   });
   if (!check) throw new Error(`PolicyHealthCheck ${checkId} not found for user ${userId}`);
+
+  // Which rules and score apply is decided by the insurance record, never by
+  // anything the LLM extracted from the documents.
+  const productType: PolicyProductType | null = asProductType(check.policy.type);
+  if (!productType) throw new Error(`Policy type ${check.policy.type} is not supported`);
 
   const data = await prisma.extractedPolicyData.findUnique({
     where: { checkId },
@@ -143,17 +163,17 @@ async function buildFacts(checkId: string, userId: string): Promise<PolicyAnalys
   });
   if (!data) throw new Error(`No ExtractedPolicyData for check ${checkId}`);
 
-  // Load insurer metrics for the insurer named in the extraction
-  const extraction = data.fields as unknown as import('./extractionSchema.js').PolicyExtraction;
+  // Insurer metrics for the insurer named in the extraction (health or life table).
+  const fields = data.fields as unknown as Record<string, { value: unknown; status: string } | undefined>;
+  const nameField = fields['insurerName'];
   const insurerName =
-    extraction.insurerName.status !== 'NOT_FOUND' && extraction.insurerName.value
-      ? extraction.insurerName.value
+    nameField && nameField.status !== 'NOT_FOUND' && typeof nameField.value === 'string' && nameField.value
+      ? nameField.value
       : null;
 
   let insurer: PolicyAnalysisFacts['insurer'] = null;
-
   if (insurerName) {
-    const row = matchInsurerRow(await loadLatestInsurerRows(), insurerName);
+    const row = matchInsurerRow(await loadLatestInsurerRows(productType === 'TERM' ? 'LIFE' : 'HEALTH'), insurerName);
     if (row) {
       insurer = {
         insurerName: row.insurerName,
@@ -168,15 +188,27 @@ async function buildFacts(checkId: string, userId: string): Promise<PolicyAnalys
     }
   }
 
-  return {
+  const base = {
     asOf: check.asOf.toISOString(),
     userId,
     policyId: check.policyId,
     checkId,
-    constants: DEFAULT_POLICY_RULE_CONSTANTS,
-    extraction,
     insurer,
     conflicts: (data.conflicts as unknown as PolicyFieldConflict[] | null) ?? [],
+  };
+
+  if (productType === 'TERM') {
+    return {
+      ...base,
+      productType: 'TERM',
+      constants: DEFAULT_TERM_RULE_CONSTANTS,
+      extraction: data.fields as unknown as TermAnalysisFacts['extraction'],
+    };
+  }
+  return {
+    ...base,
+    constants: DEFAULT_POLICY_RULE_CONSTANTS,
+    extraction: data.fields as unknown as import('./extractionSchema.js').PolicyExtraction,
   };
 }
 
@@ -199,7 +231,7 @@ export interface RunPolicyAnalysisResult extends PolicyRuleEvaluation {
 export async function runPolicyAnalysis(
   checkId: string,
   userId: string,
-  rules: PolicyRule[] = POLICY_RULES,
+  healthRulesOverride?: PolicyRule[],
 ): Promise<RunPolicyAnalysisResult> {
   // Mark as ANALYZING
   await runInTransaction((tx) =>
@@ -209,7 +241,7 @@ export async function runPolicyAnalysis(
     }),
   );
 
-  let facts: PolicyAnalysisFacts;
+  let facts: AnyFacts;
   try {
     facts = await buildFacts(checkId, userId);
   } catch (err) {
@@ -223,7 +255,7 @@ export async function runPolicyAnalysis(
   }
 
   try {
-    return await evaluateAndCommit(checkId, userId, facts, rules);
+    return await evaluateAndCommit(checkId, userId, facts, healthRulesOverride);
   } catch (err) {
     // Never leave the check spinning forever in ANALYZING.
     await runInTransaction((tx) =>
@@ -236,11 +268,13 @@ export async function runPolicyAnalysis(
 async function evaluateAndCommit(
   checkId: string,
   userId: string,
-  facts: PolicyAnalysisFacts,
-  rules: PolicyRule[],
+  facts: AnyFacts,
+  healthRulesOverride?: PolicyRule[],
 ): Promise<RunPolicyAnalysisResult> {
-  const evaluation = evaluatePolicyRules(facts, rules);
-  const scoreResult = computePolicyScore(facts, evaluation.findings);
+  const evaluation = isTerm(facts)
+    ? evaluateRules<TermAnalysisFacts>(facts, TERM_POLICY_RULES)
+    : evaluatePolicyRules(facts, healthRulesOverride ?? POLICY_RULES);
+  const scoreResult = isTerm(facts) ? computeTermScore(facts, evaluation.findings) : computePolicyScore(facts, evaluation.findings);
   const verdictDecision = decidePolicyVerdict(evaluation.findings, scoreResult.scoreSnapshot);
 
   let verdictId: string | null = null;

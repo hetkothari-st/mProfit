@@ -12,6 +12,9 @@ import type {
   PolicyHealthCheckDTO,
   PolicyExtractionDocDTO,
   PolicyFieldConflict,
+  PolicyProductType,
+  TermAdequacyInput,
+  TermAdequacyOutput,
   FinancialSimulatorInput,
   FinancialSimulatorOutput,
 } from '@everypaisa/shared';
@@ -83,6 +86,7 @@ export async function triggerExtraction(
 export async function getExtraction(checkId: string): Promise<{
   id: string;
   checkId: string;
+  productType: PolicyProductType;
   fields: unknown;
   conflicts: PolicyFieldConflict[];
   verifiedAt: string | null;
@@ -91,6 +95,7 @@ export async function getExtraction(checkId: string): Promise<{
   const r = await api.get<ApiResponse<{
     id: string;
     checkId: string;
+    productType: PolicyProductType;
     fields: unknown;
     conflicts: PolicyFieldConflict[];
     verifiedAt: string | null;
@@ -168,4 +173,16 @@ export async function listHealthChecks(policyId: string): Promise<HealthCheckHis
     `/api/insurance/policies/${policyId}/health-checks`,
   );
   return unwrap(r.data).checks;
+}
+
+/** Term life: size the cover against the user's own income and liabilities. */
+export async function simulateTermAdequacy(
+  checkId: string,
+  input: TermAdequacyInput,
+): Promise<TermAdequacyOutput> {
+  const r = await api.post<ApiResponse<TermAdequacyOutput>>(
+    `/api/insurance/health-check/${checkId}/simulate`,
+    input,
+  );
+  return unwrap(r.data);
 }

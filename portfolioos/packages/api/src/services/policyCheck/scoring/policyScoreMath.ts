@@ -29,6 +29,7 @@
 
 import { Decimal } from '@everypaisa/shared';
 import type { PolicyAnalysisFacts } from '../types.js';
+import { composeScore, type PillarResult } from './composeScore.js';
 import type { PolicyFindingDTO } from '@everypaisa/shared';
 import type { PolicyScoreSnapshot, PolicyPillarScore } from '@everypaisa/shared';
 
@@ -298,99 +299,10 @@ export function computePolicyScore(
     benefits: scoreBenefits(facts),
   };
 
-  let weightedSum = new Decimal('0');
-  let totalWeight = new Decimal('0');
-  let unknownWeight = new Decimal('0');
-  const pillars: PolicyPillarScore[] = [];
-
-  for (const [key, result] of Object.entries(pillarResults) as Array<[PillarKey, typeof pillarResults[PillarKey]]>) {
-    const weight = weights[key];
-    if (result.score !== null) {
-      weightedSum = weightedSum.plus(result.score.mul(weight));
-      totalWeight = totalWeight.plus(weight);
-    } else {
-      unknownWeight = unknownWeight.plus(weight);
-    }
-
-    pillars.push({
-      pillar: key,
-      score: result.score?.toFixed(2) ?? null,
-      appliedWeight: weight.toFixed(4),
-      inputs: result.inputs,
-    });
-  }
-
-  // Check for incomplete analysis
-  const unknownFraction = unknownWeight.div(new Decimal('1'));
-  const incomplete = unknownFraction.gt(INCOMPLETE_THRESHOLD) || totalWeight.isZero();
-
-  if (incomplete) {
-    return {
-      incomplete: true,
-      scoreSnapshot: {
-        overall: null,
-        pillars,
-        ratingCategory: null,
-        strongestAspects: [],
-        weakestAspects: [],
-        criticalIssues: findings
-          .filter((f) => f.severity === 'CRITICAL')
-          .map((f) => f.headline)
-          .slice(0, 3),
-        scoringVersion: SCORING_VERSION,
-        incompleteAnalysis: true,
-      },
-    };
-  }
-
-  // Normalise weighted sum by total known weight
-  const composite = weightedSum.div(totalWeight);
-
-  // Assert bounds
-  if (composite.lt(new Decimal('0')) || composite.gt(new Decimal('100'))) {
-    throw new Error(
-      `[policyScore] computed score ${composite.toFixed(2)} is outside [0, 100]. ` +
-        'This is a bug in the pillar scorers.',
-    );
-  }
-
-  const compositeFixed = composite.toFixed(2);
-
-  // Rating category
-  let ratingCategory: string;
-  if (composite.gte(new Decimal('80'))) ratingCategory = 'Strong';
-  else if (composite.gte(new Decimal('65'))) ratingCategory = 'Good';
-  else if (composite.gte(new Decimal('45'))) ratingCategory = 'Needs Attention';
-  else ratingCategory = 'Significant Limitations';
-
-  // Strongest and weakest aspects
-  const scoredPillars = pillars.filter((p) => p.score !== null);
-  scoredPillars.sort((a, b) =>
-    new Decimal(b.score!).minus(new Decimal(a.score!)).toNumber(),
+  return composeScore(
+    pillarResults as unknown as Record<string, PillarResult>,
+    weights as unknown as Record<string, Decimal>,
+    SCORING_VERSION,
+    findings,
   );
-  const strongestAspects = scoredPillars.slice(0, 2).map((p) =>
-    p.pillar.replace(/_/g, ' '),
-  );
-  const weakestAspects = scoredPillars.slice(-2).map((p) =>
-    p.pillar.replace(/_/g, ' '),
-  );
-
-  const criticalIssues = findings
-    .filter((f) => f.severity === 'CRITICAL')
-    .map((f) => f.headline)
-    .slice(0, 3);
-
-  return {
-    incomplete: false,
-    scoreSnapshot: {
-      overall: compositeFixed,
-      pillars,
-      ratingCategory,
-      strongestAspects,
-      weakestAspects,
-      criticalIssues,
-      scoringVersion: SCORING_VERSION,
-      incompleteAnalysis: false,
-    },
-  };
 }

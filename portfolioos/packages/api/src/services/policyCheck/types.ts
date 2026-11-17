@@ -29,6 +29,7 @@ import type {
 } from '@everypaisa/shared';
 import { toDecimal } from '@everypaisa/shared';
 import type { PolicyExtraction } from './extractionSchema.js';
+import type { TermExtraction } from './termExtractionSchema.js';
 
 // ---------------------------------------------------------------------------
 // Thresholds (passed through facts so tests can override without changing
@@ -201,7 +202,7 @@ export interface PolicyFindingInput {
  * createdAt is facts.asOf so replay produces the same timestamps.
  */
 export function makePolicyFinding(
-  facts: PolicyAnalysisFacts,
+  facts: Pick<PolicyAnalysisFacts, 'checkId' | 'asOf'>,
   input: PolicyFindingInput,
 ): PolicyFindingDTO {
   const counterfactual = input.whatWouldChangeThis.trim();
@@ -249,4 +250,54 @@ export function makePolicyFinding(
     whatWouldChangeThis: counterfactual,
     createdAt: facts.asOf,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Term life
+// ---------------------------------------------------------------------------
+
+export interface TermRuleConstants {
+  /** Cover ending before this age is a WARNING (default 60: before retirement). */
+  horizonWarnAge: number;
+  /** Cover ending before this age is a NOTICE (default 70). */
+  horizonNoticeAge: number;
+  /** Usual suicide-exclusion length in months (12). Longer is a WARNING. */
+  standardSuicideMonths: number;
+  /** IRDAI minimum grace period for non-monthly premiums (30 days). */
+  minGraceDays: number;
+  /** ...and for monthly premiums (15 days). */
+  minGraceMonthlyDays: number;
+  /** Section 45, Insurance Act 1938: 3 years (36 months) to contest a claim. */
+  contestabilityMonths: number;
+}
+
+export const DEFAULT_TERM_RULE_CONSTANTS: TermRuleConstants = {
+  horizonWarnAge: 60,
+  horizonNoticeAge: 70,
+  standardSuicideMonths: 12,
+  minGraceDays: 30,
+  minGraceMonthlyDays: 15,
+  contestabilityMonths: 36,
+};
+
+/** The input to every term rule: same shape as the health facts, a term extraction. */
+export interface TermAnalysisFacts {
+  asOf: string;
+  userId: string;
+  policyId: string;
+  checkId: string;
+  productType: 'TERM';
+  constants: TermRuleConstants;
+  extraction: TermExtraction;
+  /** IRDAI life-insurer metrics. Null if unavailable. */
+  insurer: InsurerMetricsFacts | null;
+  conflicts?: PolicyFieldConflict[];
+}
+
+export interface TermRule {
+  id: string;
+  version: string;
+  category: PolicyFindingCategory;
+  /** Pure, synchronous, no I/O. */
+  evaluate(facts: TermAnalysisFacts): PolicyFindingDTO[];
 }

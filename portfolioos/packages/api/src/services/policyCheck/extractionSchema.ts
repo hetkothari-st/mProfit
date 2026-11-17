@@ -27,7 +27,7 @@ import { z } from 'zod';
 // Field wrapper
 // ---------------------------------------------------------------------------
 
-function extractedField<T extends z.ZodTypeAny>(valueType: T) {
+export function extractedField<T extends z.ZodTypeAny>(valueType: T) {
   return z.object({
     value: valueType.nullable(),
     confidence: z.number().min(0).max(1),
@@ -139,12 +139,12 @@ function fieldSchema(
   };
 }
 
-const stringField = (desc: string) => fieldSchema({ type: ['string', 'null'] }, desc);
-const boolField = (desc: string) => fieldSchema({ type: ['boolean', 'null'] }, desc);
-const intField = (desc: string) => fieldSchema({ type: ['integer', 'null'], minimum: 0 }, desc);
+export const stringField = (desc: string) => fieldSchema({ type: ['string', 'null'] }, desc);
+export const boolField = (desc: string) => fieldSchema({ type: ['boolean', 'null'] }, desc);
+export const intField = (desc: string) => fieldSchema({ type: ['integer', 'null'], minimum: 0 }, desc);
 const recordField = (desc: string) =>
   fieldSchema({ type: ['object', 'null'], additionalProperties: { type: 'string' } }, desc);
-const arrayField = (desc: string) =>
+export const arrayField = (desc: string) =>
   fieldSchema({ type: ['array', 'null'], items: { type: 'string' } }, desc);
 
 export const ANTHROPIC_TOOL_JSON_SCHEMA = {

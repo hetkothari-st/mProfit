@@ -7,7 +7,8 @@
 
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { insuranceApi } from '@/api/insurance/insurance.api';
 import { Upload, FileText, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,6 +30,12 @@ export function UploadPage({ policyId }: Props) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: policy } = useQuery({
+    queryKey: ['insurance-policy', policyId],
+    queryFn: () => insuranceApi.getPolicy(policyId),
+  });
+  const isTerm = policy?.type === 'TERM';
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -65,10 +72,11 @@ export function UploadPage({ policyId }: Props) {
   return (
     <div className="max-w-2xl mx-auto space-y-6 p-4">
       <div>
-        <h1 className="text-2xl font-semibold">Policy Health Check</h1>
+        <h1 className="text-2xl font-semibold">{isTerm ? 'Term Life Policy Check' : 'Policy Health Check'}</h1>
         <p className="text-muted-foreground mt-1">
-          Upload your policy documents to get a detailed analysis of your coverage, restrictions, and
-          recommendations.
+          {isTerm
+            ? 'Upload your policy documents to check how long the cover lasts, how the benefit is paid, the riders and exclusions, and the claim terms.'
+            : 'Upload your policy documents to get a detailed analysis of your coverage, restrictions, and recommendations.'}
         </p>
       </div>
 
@@ -83,7 +91,7 @@ export function UploadPage({ policyId }: Props) {
           </p>
           <p>
             <strong className="text-foreground">Policy schedule</strong> — the summary page with
-            your sum insured, premium, and member details.
+            your {isTerm ? 'sum assured, term, premium and nominee' : 'sum insured, premium, and member details'}.
           </p>
           <p>
             <strong className="text-foreground">Endorsements</strong> — any changes or additions

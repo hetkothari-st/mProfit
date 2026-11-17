@@ -81,7 +81,7 @@ function estimateCost(input: number, output: number, fx: Decimal): Decimal {
 async function narrateCheck(userId: string, checkId: string): Promise<void> {
   const check = await prisma.policyHealthCheck.findFirst({
     where: { id: checkId, userId },
-    select: { id: true, status: true, scoreSnapshot: true },
+    select: { id: true, status: true, scoreSnapshot: true, policy: { select: { type: true } } },
   });
 
   if (!check || !['COMPLETED', 'PARTIAL'].includes(check.status)) return;
@@ -112,8 +112,9 @@ async function narrateCheck(userId: string, checkId: string): Promise<void> {
   const ratingCategory = scoreSnapshot?.['ratingCategory'] as string | null;
   const overall = verdict.score?.toString() ?? null;
 
+  const kind = check.policy.type === 'TERM' ? 'term life' : 'health';
   const userMessage = [
-    `Policy Health Verdict: ${verdict.verdict}`,
+    `Policy ${kind} check verdict: ${verdict.verdict}`,
     `Score: ${overall ?? 'N/A'}${ratingCategory ? ` (${ratingCategory})` : ''}`,
     '',
     'Key Findings:',
@@ -121,8 +122,8 @@ async function narrateCheck(userId: string, checkId: string): Promise<void> {
   ].join('\n');
 
   const systemPrompt =
-    'You are a health insurance policy analyst. Write a concise, factual summary ' +
-    '(2-3 sentences, max 500 characters) of the key findings from this policy health check. ' +
+    `You are a ${kind} insurance policy analyst. Write a concise, factual summary ` +
+    `(2-3 sentences, max 500 characters) of the key findings from this ${kind} policy check. ` +
     'Only mention numbers that appear in the findings list. Do not give investment advice or ' +
     'tell the user to "switch" or "buy" a specific policy. Use plain language.';
 

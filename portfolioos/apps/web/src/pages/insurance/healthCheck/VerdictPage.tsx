@@ -66,7 +66,7 @@ export function VerdictPage({ checkId }: Props) {
   return (
     <div className="max-w-2xl mx-auto space-y-6 p-4">
       <div>
-        <h1 className="text-2xl font-semibold">Health Check Results</h1>
+        <h1 className="text-2xl font-semibold">Policy Check Results</h1>
         <p className="text-muted-foreground mt-1">
           Based on your policy documents
         </p>

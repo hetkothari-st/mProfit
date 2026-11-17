@@ -37,8 +37,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Link } from 'react-router-dom';
-import { getReport, listHealthChecks, simulate } from '@/api/policyCheckApi';
-import type { FinancialSimulatorInput, FinancialSimulatorOutput, InsurerMetricsDTO, Money, PolicyFindingDTO } from '@everypaisa/shared';
+import { getReport, listHealthChecks, simulate, simulateTermAdequacy } from '@/api/policyCheckApi';
+import { apiErrorMessage } from '@/api/client';
+import { FIELD_SPECS, REPORT_PARAMETERS } from './productFields';
+import type { FinancialSimulatorInput, FinancialSimulatorOutput, InsurerMetricsDTO, Money, PolicyFindingDTO, PolicyProductType, TermAdequacyOutput } from '@everypaisa/shared';
 
 interface Props {
   checkId: string;
@@ -55,16 +57,6 @@ type ExtractedField = {
   clauseHeading: string | null;
 };
 
-const PARAMETERS: Array<{ label: string; category: string; keys: string[] }> = [
-  { label: 'Co-payment', category: 'CO_PAYMENT', keys: ['copaymentPct'] },
-  { label: 'Room rent', category: 'ROOM_RENT', keys: ['roomRentLimitType', 'roomRentLimitInr', 'roomRentLimitPct', 'proportionateDeductionApplies'] },
-  { label: 'Disease sub-limits', category: 'SUB_LIMIT', keys: ['diseaseSubLimits'] },
-  { label: 'Waiting periods', category: 'WAITING_PERIOD', keys: ['initialWaitingDays', 'pedWaitingDays', 'specificDiseaseWaitingDays'] },
-  { label: 'No-claim bonus', category: 'NCB', keys: ['ncbAvailable', 'ncbIncrementPct', 'ncbMaxPct'] },
-  { label: 'Restoration', category: 'RESTORATION', keys: ['restorationAvailable', 'restorationCount', 'restorationForSameIllness'] },
-  { label: 'Exclusions', category: 'EXCLUSION', keys: ['permanentExclusions', 'specificExclusions'] },
-];
-
 function describeValue(v: unknown): string {
   if (v === null || v === undefined) return '';
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
@@ -75,7 +67,7 @@ function describeValue(v: unknown): string {
 
 const SEVERITY_ORDER = ['CRITICAL', 'WARNING', 'NOTICE', 'INFO'];
 
-function ParameterTable({ fields, findings }: { fields: Record<string, ExtractedField> | null; findings: PolicyFindingDTO[] }) {
+function ParameterTable({ fields, findings, productType }: { fields: Record<string, ExtractedField> | null; findings: PolicyFindingDTO[]; productType: PolicyProductType }) {
   if (!fields) return null;
   return (
     <div className="overflow-x-auto">
@@ -88,7 +80,7 @@ function ParameterTable({ fields, findings }: { fields: Record<string, Extracted
           </tr>
         </thead>
         <tbody>
-          {PARAMETERS.map((p) => {
+          {REPORT_PARAMETERS[productType].map((p) => {
             const found = p.keys
               .map((k) => ({ k, f: fields[k] }))
               .filter((x) => x.f && x.f.status !== 'NOT_FOUND' && x.f.value !== null && x.f.value !== undefined);
@@ -103,7 +95,7 @@ function ParameterTable({ fields, findings }: { fields: Record<string, Extracted
                     <span className="text-muted-foreground">Not found in the documents provided</span>
                   ) : (
                     <>
-                      {found.map((x) => describeValue(x.f!.value)).join(' · ')}
+                      {found.map((x) => `${(FIELD_SPECS[productType].labels[x.k] ?? x.k).replace(/ \(.*?\)$/, '')}: ${describeValue(x.f!.value)}`).join(' · ')}
                       {page ? <span className="text-xs text-muted-foreground"> (p.{page})</span> : null}
                     </>
                   )}
@@ -187,6 +179,80 @@ function FindingCard({ finding }: { finding: PolicyFindingDTO }) {
       >
         {expanded ? 'Show less' : 'Show details & evidence'}
       </button>
+    </div>
+  );
+}
+
+function TermAdequacySection({ checkId }: { checkId: string }) {
+  const [income, setIncome] = useState('');
+  const [years, setYears] = useState('15');
+  const [loans, setLoans] = useState('');
+  const [assets, setAssets] = useState('');
+  const [other, setOther] = useState('');
+  const [result, setResult] = useState<TermAdequacyOutput | null>(null);
+
+  const m = useMutation({
+    mutationFn: () =>
+      simulateTermAdequacy(checkId, {
+        annualIncomeInr: income as Money,
+        yearsOfIncomeToReplace: years ? Number(years) : null,
+        outstandingLoansInr: loans ? (loans as Money) : null,
+        liquidAssetsInr: assets ? (assets as Money) : null,
+        otherLifeCoverInr: other ? (other as Money) : null,
+      }),
+    onSuccess: setResult,
+  });
+
+  const field = (label: string, value: string, set: (v: string) => void, placeholder: string) => (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <Input type="number" placeholder={placeholder} value={value} onChange={(e) => set(e.target.value)} />
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        A simple check of whether this cover is enough for your situation. It uses your own numbers, not anything from the policy.
+      </p>
+      <div className="grid grid-cols-2 gap-4">
+        {field('Annual income (₹)', income, setIncome, 'e.g. 1200000')}
+        {field('Years of income to replace', years, setYears, '15')}
+        {field('Outstanding loans (₹)', loans, setLoans, 'e.g. 5000000')}
+        {field('Savings and investments you could draw on (₹)', assets, setAssets, 'e.g. 2000000')}
+        {field('Life cover under other policies (₹)', other, setOther, 'e.g. 0')}
+      </div>
+      <Button onClick={() => m.mutate()} disabled={!income || m.isPending} size="sm">
+        <Calculator className="w-4 h-4 mr-2" />
+        Check my cover
+      </Button>
+      {m.isError && <p className="text-sm text-destructive">{apiErrorMessage(m.error)}</p>}
+      {result && (
+        <div className="bg-muted/40 rounded-lg p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            {[
+              { label: 'Income to replace', value: result.incomeReplacementInr },
+              { label: 'Estimated total need', value: result.totalNeedInr },
+              { label: 'Total cover (this + other)', value: result.totalCoverInr },
+              { label: 'Estimated shortfall', value: result.shortfallInr, highlight: true },
+            ].map((row) => (
+              <div key={row.label} className={`flex justify-between p-2 rounded ${row.highlight ? 'bg-muted font-medium' : ''}`}>
+                <span className="text-muted-foreground">{row.label}</span>
+                <span>{formatINR(row.value)}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-sm font-medium">{result.summary}</p>
+          {result.missingInputs.length > 0 && (
+            <Badge variant="outline" className="text-xs text-amber-700 border-amber-300">
+              Partial — {result.missingInputs.join('; ')}
+            </Badge>
+          )}
+          <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
+            {result.assumptions.map((a) => <li key={a}>{a}</li>)}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -283,6 +349,7 @@ function SimulatorSection({ checkId }: { checkId: string }) {
 type ReportData = {
   checkId: string;
   policyId: string;
+  productType?: PolicyProductType;
   sections: {
     verdict: { verdict: string; score: string | null; prose: string | null; proseVerified: boolean } | null;
     scoreSnapshot: { overall: string | null; ratingCategory: string | null } | null;
@@ -322,7 +389,7 @@ export function HealthCheckReportPage({ checkId }: Props) {
             <Printer className="w-4 h-4 mr-1" /> Download / Print PDF
           </Button>
         </div>
-        <h1 className="text-2xl font-semibold">Policy Health Report</h1>
+        <h1 className="text-2xl font-semibold">{report.productType === 'TERM' ? 'Term Life Policy Report' : 'Policy Health Report'}</h1>
         <p className="text-sm text-muted-foreground">
           {totalFindings} finding{totalFindings !== 1 ? 's' : ''} across {sections.docs.length} document{sections.docs.length !== 1 ? 's' : ''}
         </p>
@@ -405,6 +472,7 @@ export function HealthCheckReportPage({ checkId }: Props) {
         </CardHeader>
         <CardContent>
           <ParameterTable
+            productType={report.productType ?? 'HEALTH'}
             fields={(sections.parameterAnalysis as Record<string, ExtractedField> | null) ?? null}
             findings={[...sections.whatsGood, ...sections.needsAttention, ...sections.criticalLimitations]}
           />
@@ -416,11 +484,11 @@ export function HealthCheckReportPage({ checkId }: Props) {
         <CardHeader>
           <CardTitle className="text-sm flex items-center gap-2">
             <Calculator className="w-4 h-4" />
-            Financial Simulator
+            {report.productType === 'TERM' ? 'Cover Calculator' : 'Financial Simulator'}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <SimulatorSection checkId={checkId} />
+          {report.productType === 'TERM' ? <TermAdequacySection checkId={checkId} /> : <SimulatorSection checkId={checkId} />}
         </CardContent>
       </Card>
 
@@ -439,6 +507,39 @@ export function HealthCheckReportPage({ checkId }: Props) {
               const exp = sections.insurerPerformance.explanations;
               const count = (n: number | null) => (n === null ? 'unavailable' : n.toLocaleString('en-IN'));
               const inr = (v: string | null) => (v === null ? 'unavailable' : formatINR(v));
+              if (m.segment === 'LIFE') {
+                return (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      {m.insurerName} · FY {m.financialYear} · insurer-wide figures, not a prediction for your claim
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wider text-muted-foreground">Claims settled (by number)</p>
+                        <p className="text-2xl font-bold">{m.claimSettlementRatio ? `${m.claimSettlementRatio}%` : 'unavailable'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wider text-muted-foreground">Claims settled (by amount)</p>
+                        <p className="text-2xl font-bold">{m.claimSettlementRatioByAmount ? `${m.claimSettlementRatioByAmount}%` : 'unavailable'}</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-amber-700">
+                      These are individual death claims across all of this insurer's individual life policies, not term plans alone.
+                    </p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                      <span className="text-muted-foreground">Death claims handled</span><span>{count(m.claimsTotal)}</span>
+                      <span className="text-muted-foreground">Claims paid</span><span>{count(m.claimsSettled)}</span>
+                      <span className="text-muted-foreground">Repudiated or rejected</span><span>{count(m.claimsRepudiated)}</span>
+                      <span className="text-muted-foreground">Pending at year end</span><span>{count(m.claimsPending)}</span>
+                      <span className="text-muted-foreground">Amount paid</span><span>{inr(m.claimsPaidInr)}</span>
+                    </div>
+                    {m.methodology && <p className="text-xs text-muted-foreground border-t pt-2">{m.methodology}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      Source: {m.source} (retrieved {new Date(m.retrievedAt).toLocaleDateString('en-IN')})
+                    </p>
+                  </>
+                );
+              }
               return (
                 <>
                   <p className="text-xs text-muted-foreground">

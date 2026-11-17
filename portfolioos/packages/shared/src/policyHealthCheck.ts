@@ -26,6 +26,9 @@ export type PolicyCheckStatus =
   | 'PARTIAL'
   | 'FAILED';
 
+/** What kind of policy a check is for. Decides the extraction schema, rules and score. */
+export type PolicyProductType = 'HEALTH' | 'TERM';
+
 /** How we classified a document the user uploaded. */
 export type PolicyDocClassification =
   | 'POLICY_WORDING'
@@ -53,6 +56,10 @@ export type PolicyFindingCategory =
   | 'EXCLUSION'
   | 'BENEFIT'
   | 'COVERAGE'
+  // Term life
+  | 'CLAIM_TERMS'
+  | 'PAYOUT'
+  | 'PREMIUM'
   | 'OTHER';
 
 /**
@@ -353,6 +360,12 @@ export interface PolicyHealthCheckDTO {
 /** IRDAI-sourced metrics for a specific insurer and financial year. */
 export interface InsurerMetricsDTO {
   id: string;
+  /** 'HEALTH' or 'LIFE' (life rows: INDIVIDUAL death claims, all individual life policies). */
+  segment: 'HEALTH' | 'LIFE';
+  /** LIFE rows: death claims paid, INR (Money string). */
+  claimsPaidInr: Money | null;
+  /** LIFE rows: settlement ratio by amount, %. */
+  claimSettlementRatioByAmount: string | null;
   insurerName: string;
   /** e.g. "2023-24". */
   financialYear: string;
@@ -484,4 +497,42 @@ export interface PolicyScoreSnapshot {
    * When true, `overall` is null and no rating is shown.
    */
   incompleteAnalysis: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Term life: cover adequacy calculator
+// ---------------------------------------------------------------------------
+
+/**
+ * Inputs the user supplies to size their cover. Nothing here comes from the
+ * policy documents — it is the user's own situation.
+ */
+export interface TermAdequacyInput {
+  /** Annual income the family relies on (Money string). */
+  annualIncomeInr: Money;
+  /** Years of income to replace. Default 15; the calculator accepts 5-30. */
+  yearsOfIncomeToReplace: number | null;
+  /** Outstanding loans the family would inherit (Money string). */
+  outstandingLoansInr: Money | null;
+  /** Liquid assets / investments that could be drawn on (Money string). */
+  liquidAssetsInr: Money | null;
+  /** Life cover held under OTHER policies (Money string). */
+  otherLifeCoverInr: Money | null;
+}
+
+export interface TermAdequacyOutput {
+  /** annual income x years to replace. */
+  incomeReplacementInr: Money;
+  /** replacement + loans - liquid assets. Never negative. */
+  totalNeedInr: Money;
+  /** This policy's sum assured plus other cover. */
+  totalCoverInr: Money;
+  /** max(0, need - cover). */
+  shortfallInr: Money;
+  /** Plain-language reading of the result. */
+  summary: string;
+  /** The exact assumptions used, so the number is reproducible. */
+  assumptions: string[];
+  /** Inputs that were missing and treated as zero, or the policy's sum assured if absent. */
+  missingInputs: string[];
 }

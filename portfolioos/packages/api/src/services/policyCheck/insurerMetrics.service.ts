@@ -49,6 +49,9 @@ type InsurerRow = {
   claimsTotal: number | null;
   claimsSettled: number | null;
   claimsPending: number | null;
+  segment: string;
+  claimsPaidInr: string | null;
+  claimSettlementRatioByAmount: string | null;
   claimsRepudiated: number | null;
   claimsIncurredInr: string | null;
   netEarnedPremiumInr: string | null;
@@ -88,7 +91,7 @@ export function matchInsurerRow<T extends { insurerName: string }>(
   // pass 2 drops them so "HDFC Ergo Health Insurance" still finds "HDFC ERGO General".
   for (const keepSegment of [true, false]) {
     const tok = (n: string) => {
-      const t = insurerCoreTokens(n);
+      const t = insurerCoreTokens(n.replace(/life insurance corporation( of india)?/i, 'LIC'));
       if (keepSegment) {
         const words = n.toLowerCase().split(/[^a-z]+/);
         for (const w of ['general', 'health']) if (words.includes(w)) t.add(w);
@@ -111,17 +114,20 @@ export function matchInsurerRow<T extends { insurerName: string }>(
   return null;
 }
 
-/** Latest-financial-year row per insurer. */
-export async function loadLatestInsurerRows(): Promise<InsurerRow[]> {
+/** Latest-financial-year row per insurer, for one segment ('HEALTH' or 'LIFE'). */
+export async function loadLatestInsurerRows(segment: 'HEALTH' | 'LIFE' = 'HEALTH'): Promise<InsurerRow[]> {
   return prisma.$queryRawUnsafe<InsurerRow[]>(
     `SELECT DISTINCT ON ("insurerName")
-            id, "insurerName", "financialYear", "claimSettlementRatio"::text,
+            id, "insurerName", "financialYear", segment, "claimSettlementRatio"::text,
+            "claimSettlementRatioByAmount"::text, "claimsPaidInr"::text,
             "incurredClaimRatio"::text, "claimsTotal", "claimsSettled",
             "claimsPending", "claimsRepudiated", "claimsIncurredInr"::text,
             "netEarnedPremiumInr"::text, "claimsScope", methodology,
             complaints, source, "retrievedAt"
        FROM "InsurerMetrics"
+      WHERE segment = $1
       ORDER BY "insurerName", "financialYear" DESC`,
+    segment,
   );
 }
 
@@ -132,13 +138,14 @@ export async function loadLatestInsurerRows(): Promise<InsurerRow[]> {
  */
 export async function getInsurerIntelligence(
   insurerName: string,
+  segment: 'HEALTH' | 'LIFE' = 'HEALTH',
 ): Promise<InsurerIntelligenceResult> {
   if (!insurerName || insurerName.trim().length === 0) {
     return { found: false, insurerName: '', reason: 'No insurer name provided' };
   }
 
   const normalised = insurerName.trim();
-  const rows = await loadLatestInsurerRows();
+  const rows = await loadLatestInsurerRows(segment);
 
   const row = matchInsurerRow(rows, normalised);
   if (!row) {
@@ -160,6 +167,9 @@ export async function getInsurerIntelligence(
       claimsTotal: row.claimsTotal,
       claimsSettled: row.claimsSettled,
       claimsPending: row.claimsPending,
+      segment: row.segment === 'LIFE' ? 'LIFE' : 'HEALTH',
+      claimsPaidInr: row.claimsPaidInr as Money | null,
+      claimSettlementRatioByAmount: row.claimSettlementRatioByAmount,
       claimsRepudiated: row.claimsRepudiated,
       claimsIncurredInr: row.claimsIncurredInr as Money | null,
       netEarnedPremiumInr: row.netEarnedPremiumInr as Money | null,

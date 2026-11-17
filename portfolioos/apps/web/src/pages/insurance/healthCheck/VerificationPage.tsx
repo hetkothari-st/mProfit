@@ -7,7 +7,7 @@
  *  - Source doc + page link
  *  - Editable input
  *
- * Blocks proceeding when critical fields (sum insured, policy type) are
+ * Blocks proceeding when critical fields (e.g. sum insured / sum assured) are
  * NOT_FOUND — names them explicitly.
  */
 
@@ -22,22 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { getExtraction, patchExtraction } from '@/api/policyCheckApi';
-import type { ExtractedPolicyDataDTO } from '@everypaisa/shared';
-
-const NUMERIC_FIELDS = new Set(['initialWaitingDays', 'pedWaitingDays', 'specificDiseaseWaitingDays']);
-const BOOLEAN_FIELDS = new Set(['proportionateDeductionApplies', 'ncbAvailable', 'restorationAvailable', 'opdCovered', 'healthCheckupCovered']);
-
-/** The server validates corrections against the extraction schema, so send real numbers / booleans. */
-function coerceInput(key: string, raw: string): unknown {
-  const t = raw.trim();
-  if (t === '') return null;
-  if (NUMERIC_FIELDS.has(key)) return /^\d+$/.test(t) ? Number(t) : t;
-  if (BOOLEAN_FIELDS.has(key)) {
-    if (/^(true|yes|y)$/i.test(t)) return true;
-    if (/^(false|no|n)$/i.test(t)) return false;
-  }
-  return t;
-}
+import { FIELD_SPECS, coerceInput, fieldTitle } from './productFields';
 
 interface Props {
   checkId: string;
@@ -60,61 +45,7 @@ function ConfidenceBadge({ confidence, status }: { confidence: number; status: s
   return <Badge className="text-xs bg-red-100 text-red-800">Low confidence — verify</Badge>;
 }
 
-function fieldTitle(key: string): string {
-  const base = key.split('.')[0]!;
-  const sub = key.includes('.') ? ` (${key.split('.').slice(1).join('.')})` : '';
-  const label = (FIELD_LABELS as Record<string, string | undefined>)[base] ?? base.replace(/([A-Z])/g, ' $1').toLowerCase();
-  return label + sub;
-}
-
 const kindOf = (c: string) => c.replace('_', ' ').toLowerCase();
-
-const CRITICAL_FIELDS: Array<keyof ExtractedPolicyDataDTO> = ['sumInsured', 'policyType'];
-
-const FIELD_LABELS: Partial<Record<keyof ExtractedPolicyDataDTO, string>> = {
-  insuredName: 'Insured Name',
-  policyNumber: 'Policy Number',
-  insurerName: 'Insurer',
-  planName: 'Plan Name',
-  policyType: 'Policy Type',
-  policyStartDate: 'Start Date',
-  policyEndDate: 'End Date',
-  sumInsured: 'Sum Insured (₹)',
-  premiumAmountInr: 'Annual Premium (₹)',
-  copaymentPct: 'Co-payment (%)',
-  roomRentLimitType: 'Room Rent Limit Type',
-  roomRentLimitInr: 'Room Rent Limit (₹/day)',
-  pedWaitingDays: 'PED Waiting Period (days)',
-  initialWaitingDays: 'Initial Waiting Period (days)',
-  ncbAvailable: 'No-Claim Bonus',
-  restorationAvailable: 'Restoration Benefit',
-  continuousCoverSince: 'Continuous cover since (date)',
-  continuityCreditNote: 'Continuity / portability credit wording',
-  specificDiseaseWaitingDays: 'Specific Disease Waiting (days)',
-};
-
-const FIELD_GROUPS: Array<{ title: string; fields: Array<keyof ExtractedPolicyDataDTO> }> = [
-  {
-    title: 'Basic Information',
-    fields: ['insuredName', 'policyNumber', 'insurerName', 'planName', 'policyType', 'policyStartDate', 'policyEndDate', 'sumInsured', 'premiumAmountInr'],
-  },
-  {
-    title: 'Financial Restrictions',
-    fields: ['copaymentPct', 'roomRentLimitType', 'roomRentLimitInr', 'proportionateDeductionApplies', 'deductibleInr'],
-  },
-  {
-    title: 'Waiting Periods',
-    fields: ['initialWaitingDays', 'pedWaitingDays', 'specificDiseaseWaitingDays'],
-  },
-  {
-    title: 'Continuity of Cover',
-    fields: ['continuousCoverSince', 'continuityCreditNote'],
-  },
-  {
-    title: 'Benefits',
-    fields: ['ncbAvailable', 'restorationAvailable', 'opdCovered', 'healthCheckupCovered'],
-  },
-];
 
 export function VerificationPage({ checkId }: Props) {
   const navigate = useNavigate();
@@ -125,15 +56,16 @@ export function VerificationPage({ checkId }: Props) {
     queryFn: () => getExtraction(checkId),
   });
 
-  const fields = data?.fields as Partial<ExtractedPolicyDataDTO> | undefined;
+  const spec = FIELD_SPECS[data?.productType ?? 'HEALTH'];
+  const fields = data?.fields as Record<string, FieldValue<unknown> | undefined> | undefined;
 
   const missingCritical = useMemo(() => {
-    if (!fields) return CRITICAL_FIELDS;
-    return CRITICAL_FIELDS.filter((key) => {
-      const f = fields[key] as FieldValue<unknown> | undefined;
+    if (!fields) return spec.critical;
+    return spec.critical.filter((key) => {
+      const f = fields[key];
       return !f || f.status === 'NOT_FOUND' || f.value === null;
     });
-  }, [fields]);
+  }, [fields, spec]);
 
   // One entry per field: an unresolved disagreement outranks a resolved override.
   const conflictByField = useMemo(() => {
@@ -173,7 +105,7 @@ export function VerificationPage({ checkId }: Props) {
             The following critical fields were not found and must be entered manually before analysis
             can proceed:{' '}
             <strong>
-              {missingCritical.map((k) => FIELD_LABELS[k] ?? k).join(', ')}
+              {missingCritical.map((k) => spec.labels[k] ?? k).join(', ')}
             </strong>
             . Please upload the policy schedule or enter the values below.
           </AlertDescription>
@@ -187,7 +119,7 @@ export function VerificationPage({ checkId }: Props) {
             <p className="font-medium">Your documents disagree — please confirm the right value</p>
             {(data?.conflicts ?? []).filter((c) => c.status === 'UNRESOLVED').map((c, i) => (
               <p key={i} className="text-xs">
-                <strong>{fieldTitle(c.field)}</strong>: "{c.chosen.value}" (p.{c.chosen.page ?? '?'}, {kindOf(c.chosen.classification)}) vs
+                <strong>{fieldTitle(spec, c.field)}</strong>: "{c.chosen.value}" (p.{c.chosen.page ?? '?'}, {kindOf(c.chosen.classification)}) vs
                 "{c.other.value}" (p.{c.other.page ?? '?'}, {kindOf(c.other.classification)}). Edit the field below to settle it.
               </p>
             ))}
@@ -202,7 +134,7 @@ export function VerificationPage({ checkId }: Props) {
             <p className="font-medium">Some values were changed by a later document</p>
             {(data?.conflicts ?? []).filter((c) => c.status === 'RESOLVED_BY_PRECEDENCE').map((c, i) => (
               <p key={i} className="text-xs">
-                <strong>{fieldTitle(c.field)}</strong>: using the {kindOf(c.chosen.classification)} value "{c.chosen.value}"
+                <strong>{fieldTitle(spec, c.field)}</strong>: using the {kindOf(c.chosen.classification)} value "{c.chosen.value}"
                 (p.{c.chosen.page ?? '?'}) instead of the {kindOf(c.other.classification)} value "{c.other.value}" (p.{c.other.page ?? '?'}).
               </p>
             ))}
@@ -210,8 +142,8 @@ export function VerificationPage({ checkId }: Props) {
         </Alert>
       )}
 
-      {FIELD_GROUPS.map((group) => {
-        const groupFields = group.fields.filter((k) => k in FIELD_LABELS);
+      {spec.groups.map((group) => {
+        const groupFields = group.fields.filter((k) => k in spec.labels);
         if (groupFields.length === 0) return null;
         return (
           <Card key={group.title}>
@@ -220,16 +152,16 @@ export function VerificationPage({ checkId }: Props) {
             </CardHeader>
             <CardContent className="space-y-4">
               {groupFields.map((fieldKey) => {
-                const field = fields[fieldKey] as FieldValue<unknown> | undefined;
-                const label = FIELD_LABELS[fieldKey] ?? fieldKey;
+                const field = fields[fieldKey];
+                const label = spec.labels[fieldKey] ?? fieldKey;
                 const currentValue = (corrections[fieldKey] as { value: unknown } | undefined)?.value
                   ?? field?.value;
-                const isCritical = CRITICAL_FIELDS.includes(fieldKey);
+                const isCritical = spec.critical.includes(fieldKey);
                 const isMissing = !field || field.status === 'NOT_FOUND' || field.value === null;
 
                 return (
                   <div key={fieldKey} className="space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Label className={isCritical && isMissing ? 'text-destructive' : ''}>
                         {label}
                         {isCritical && <span className="text-destructive ml-1">*</span>}
@@ -237,7 +169,7 @@ export function VerificationPage({ checkId }: Props) {
                       {field && (
                         <ConfidenceBadge confidence={field.confidence} status={field.status} />
                       )}
-                      {conflictByField.get(fieldKey as string) === 'UNRESOLVED' && !(fieldKey in corrections) && (
+                      {conflictByField.get(fieldKey) === 'UNRESOLVED' && !(fieldKey in corrections) && (
                         <>
                           <Badge className="text-xs bg-red-100 text-red-800">Documents disagree</Badge>
                           <button
@@ -251,10 +183,10 @@ export function VerificationPage({ checkId }: Props) {
                           </button>
                         </>
                       )}
-                      {conflictByField.get(fieldKey as string) === 'UNRESOLVED' && fieldKey in corrections && (
+                      {conflictByField.get(fieldKey) === 'UNRESOLVED' && fieldKey in corrections && (
                         <Badge variant="outline" className="text-xs text-green-700">You confirmed this</Badge>
                       )}
-                      {conflictByField.get(fieldKey as string) === 'RESOLVED_BY_PRECEDENCE' && (
+                      {conflictByField.get(fieldKey) === 'RESOLVED_BY_PRECEDENCE' && (
                         <Badge variant="outline" className="text-xs text-amber-700">Changed by a later document</Badge>
                       )}
                       {field?.sourcePage && (
@@ -271,7 +203,7 @@ export function VerificationPage({ checkId }: Props) {
                       onChange={(e) =>
                         setCorrections((prev) => ({
                           ...prev,
-                          [fieldKey]: { value: coerceInput(fieldKey, e.target.value) },
+                          [fieldKey]: { value: coerceInput(spec, fieldKey, e.target.value) },
                         }))
                       }
                     />

@@ -228,6 +228,11 @@ export interface InsurerMetricsRecord {
   claimsScope: Table53Row['scope'] | null;
   /** Insurer-wide grievances (all products). Null when not published. */
   complaints: Record<string, unknown> | null;
+  /** 'HEALTH' (default) or 'LIFE'. */
+  segment?: 'HEALTH' | 'LIFE';
+  /** LIFE rows: death claims paid (INR) and the ratio by amount. */
+  claimsPaidInr?: string | null;
+  claimSettlementRatioByAmount?: string | null;
 }
 
 const LAKH = new Decimal(100000);
