@@ -222,6 +222,23 @@ export async function runPolicyAnalysis(
     throw err;
   }
 
+  try {
+    return await evaluateAndCommit(checkId, userId, facts, rules);
+  } catch (err) {
+    // Never leave the check spinning forever in ANALYZING.
+    await runInTransaction((tx) =>
+      tx.policyHealthCheck.update({ where: { id: checkId }, data: { status: 'FAILED' } }),
+    ).catch((e) => logger.error({ err: e, checkId }, '[policyAnalysis] could not mark check FAILED'));
+    throw err;
+  }
+}
+
+async function evaluateAndCommit(
+  checkId: string,
+  userId: string,
+  facts: PolicyAnalysisFacts,
+  rules: PolicyRule[],
+): Promise<RunPolicyAnalysisResult> {
   const evaluation = evaluatePolicyRules(facts, rules);
   const scoreResult = computePolicyScore(facts, evaluation.findings);
   const verdictDecision = decidePolicyVerdict(evaluation.findings, scoreResult.scoreSnapshot);

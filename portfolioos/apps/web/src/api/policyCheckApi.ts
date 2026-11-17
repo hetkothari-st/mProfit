@@ -116,8 +116,10 @@ export async function patchExtraction(
 // ---------------------------------------------------------------------------
 
 /** Trigger the full rules + scoring + verdict analysis. */
-export async function triggerAnalysis(checkId: string): Promise<{ checkId: string; queued: boolean }> {
-  const r = await api.post<ApiResponse<{ checkId: string; queued: boolean }>>(
+export async function triggerAnalysis(
+  checkId: string,
+): Promise<{ checkId: string; status?: string; alreadyRunning?: boolean }> {
+  const r = await api.post<ApiResponse<{ checkId: string; status?: string; alreadyRunning?: boolean }>>(
     `/api/insurance/health-check/${checkId}/analyze`,
   );
   return unwrap(r.data);
