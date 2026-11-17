@@ -9,13 +9,8 @@
 import type { MarketRateWire, RateLoanType } from '@everypaisa/shared';
 import { logger } from '../lib/logger.js';
 import { runAsSystem, runAsUser } from '../lib/requestContext.js';
-<<<<<<< HEAD
 import { checkUserLoans, eligibleUserIds, findBenchmarkChanges } from '../services/loans/loanChecks/loanAlerts.service.js';
 import { bestMarketRate } from '../services/loans/loanChecks/marketCheck.service.js';
-=======
-import { checkUserLoans, eligibleUserIds, findBenchmarkChanges } from '../services/loanChecks/loanAlerts.service.js';
-import { bestMarketRate } from '../services/loanChecks/marketCheck.service.js';
->>>>>>> feat/emi-loan-checks
 
 export interface LoanChecksOptions {
   now?: Date;

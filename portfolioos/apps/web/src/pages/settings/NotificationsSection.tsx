@@ -7,11 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { notificationsApi } from '@/api/notifications.api';
-<<<<<<< HEAD
 import { gmailApi } from '@/api/gmail/gmail.api';
-=======
-import { gmailApi } from '@/api/gmail.api';
->>>>>>> feat/emi-loan-checks
 import { LoanRateAlertsCard } from './LoanRateAlertsCard';
 
 /**

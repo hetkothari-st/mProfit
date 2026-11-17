@@ -39,10 +39,7 @@ import { Input } from '@/components/ui/input';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
 import { MarketCheckCard } from './MarketCheckCard';
 import { LoanRateFields, rateFieldsFrom, rateFieldsPayload, type RateFieldsValue } from './LoanRateFields';
-<<<<<<< HEAD
 import { findEmiPayment } from './loanPayments';
-=======
->>>>>>> feat/emi-loan-checks
 import {
   loansApi,
   type LoanDTO,
@@ -329,10 +326,7 @@ export function EditLoanDialog({
       qc.invalidateQueries({ queryKey: ['loan-amortization', loan.id] });
       qc.invalidateQueries({ queryKey: ['loans'] });
       qc.invalidateQueries({ queryKey: ['loan-market-check', loan.id] });
-<<<<<<< HEAD
       qc.invalidateQueries({ queryKey: ['dashboard'] });
-=======
->>>>>>> feat/emi-loan-checks
       toast.success('Loan updated');
       onOpenChange(false);
     },

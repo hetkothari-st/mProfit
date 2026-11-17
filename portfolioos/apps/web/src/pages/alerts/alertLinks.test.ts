@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { alertLink, isInformationalAlert } from './alertLinks';
 
 describe('alertLink', () => {
-<<<<<<< HEAD
   it('advice alerts open Act on it', () => {
     expect(alertLink('ADVICE', { recommendationId: 'r1', kind: 'NEW' })).toBe('/act-on-it');
   });
@@ -12,8 +11,6 @@ describe('alertLink', () => {
     expect(isInformationalAlert('WILL_REVIEW_DUE')).toBe(false);
   });
 
-=======
->>>>>>> feat/emi-loan-checks
   it('loan-check alerts open their loan', () => {
     expect(alertLink('LOAN_REFINANCE', { key: 'k', loanId: 'abc' })).toBe('/loans/abc');
     expect(alertLink('LOAN_BENCHMARK_CHANGE', { loanId: 'x y' })).toBe('/loans/x%20y');
@@ -22,14 +19,11 @@ describe('alertLink', () => {
     expect(alertLink('LOAN_REFINANCE', null)).toBe('/loans');
     expect(alertLink('LOAN_REFINANCE', { loanId: 42 })).toBe('/loans');
   });
-<<<<<<< HEAD
   it('a fund rating change opens the held fund, or the analysis page without a scheme code', () => {
     expect(alertLink('MF_RATING_CHANGE', { key: 'k', schemeCode: '120503' })).toBe('/mutual-funds/120503');
     expect(alertLink('MF_RATING_CHANGE', {})).toBe('/mutual-funds/analysis');
     expect(isInformationalAlert('MF_RATING_CHANGE')).toBe(true);
   });
-=======
->>>>>>> feat/emi-loan-checks
   it('other alert types have no link and are not informational', () => {
     expect(alertLink('FD_MATURITY', { loanId: 'abc' })).toBeNull();
     expect(isInformationalAlert('CUSTOM')).toBe(false);
