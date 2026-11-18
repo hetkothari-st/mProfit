@@ -294,7 +294,7 @@ function InsurerSection({ metrics, explanations }: { metrics: InsurerMetricsDTO;
           </div>
         ))}
       </div>
-      {!isLife && cp && typeof cp.reported === 'number' && (
+      {cp && typeof cp.reported === 'number' && (
         <div className="rounded-lg border p-3">
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Customer complaints</p>
           <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
