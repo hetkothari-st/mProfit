@@ -619,3 +619,30 @@ export interface MotorIdvOutput {
   assumptions: string[];
   missingInputs: string[];
 }
+
+// ---------------------------------------------------------------------------
+// Term life: calculator prefill from the user's other records
+// ---------------------------------------------------------------------------
+
+export interface LinkedCoverPolicy {
+  policyId: string;
+  insurer: string;
+  planName: string | null;
+  type: string;
+  sumAssuredInr: Money;
+}
+
+export interface LinkedCoverLoan {
+  loanId: string;
+  lenderName: string;
+  loanType: string;
+  outstandingInr: Money;
+}
+
+export interface LinkedCover {
+  otherPolicies: LinkedCoverPolicy[];
+  otherLifeCoverInr: Money;
+  loans: LinkedCoverLoan[];
+  outstandingLoansInr: Money;
+}
+
