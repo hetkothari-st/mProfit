@@ -27,11 +27,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getReport, listHealthChecks, simulate, simulateSavings, simulateTermAdequacy } from '@/api/policyCheckApi';
+import { getReport, listHealthChecks, simulate, simulateMotorIdv, simulateSavings, simulateTermAdequacy } from '@/api/policyCheckApi';
 import { apiErrorMessage } from '@/api/client';
 import { FIELD_SPECS, REPORT_PARAMETERS } from './productFields';
 import { PillarBars, ScoreRing, SectionTitle, SEVERITY_STYLE, SeverityChip, StatTile, VerdictChip, asSeverity, type Severity } from './ReportParts';
-import type { FinancialSimulatorInput, FinancialSimulatorOutput, InsurerMetricsDTO, Money, PolicyFindingDTO, PolicyProductType, PolicyScoreSnapshot, SavingsReturnOutput, TermAdequacyOutput } from '@everypaisa/shared';
+import type { FinancialSimulatorInput, FinancialSimulatorOutput, InsurerMetricsDTO, Money, MotorIdvOutput, PolicyFindingDTO, PolicyProductType, PolicyScoreSnapshot, SavingsReturnOutput, TermAdequacyOutput } from '@everypaisa/shared';
 
 interface Props {
   checkId: string;
@@ -48,7 +48,7 @@ type ExtractedField = {
   clauseHeading: string | null;
 };
 
-const MONEY_KEYS = new Set(['sumAssured', 'sumInsured', 'roomRentLimitInr', 'deductibleInr', 'premiumAmountInr', 'criticalIllnessCoverInr', 'accidentalDeathBenefitInr', 'maturityBenefitGuaranteedInr', 'maturityBenefitIllustratedInr']);
+const MONEY_KEYS = new Set(['sumAssured', 'sumInsured', 'roomRentLimitInr', 'deductibleInr', 'premiumAmountInr', 'criticalIllnessCoverInr', 'accidentalDeathBenefitInr', 'maturityBenefitGuaranteedInr', 'maturityBenefitIllustratedInr', 'idvInr', 'ownerDriverPaInr', 'passengerPaInr', 'compulsoryDeductibleInr', 'voluntaryDeductibleInr']);
 
 function describeValue(v: unknown, key?: string): string {
   if (v === null || v === undefined) return '';
@@ -59,7 +59,7 @@ function describeValue(v: unknown, key?: string): string {
   }
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   if (key && (typeof v === 'number' || (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v)))) {
-    const unit = /Pct$/.test(key) ? '%' : /Years$|^ageAtEntry$|^coverEndsAtAge$/.test(key) ? ' years' : /Months$/.test(key) ? ' months' : /Days$/.test(key) ? ' days' : '';
+    const unit = /Pct$|Percent$/.test(key) ? '%' : /Years$|^ageAtEntry$|^coverEndsAtAge$/.test(key) ? ' years' : /Months$/.test(key) ? ' months' : /Days$/.test(key) ? ' days' : '';
     if (unit) return `${v}${unit}`;
   }
   if (Array.isArray(v)) return v.length + ' listed';
@@ -130,6 +130,8 @@ function Recommendations({ findings, productType }: { findings: PolicyFindingDTO
       <p className="text-xs text-muted-foreground">
         {productType === 'HEALTH'
           ? 'This report is informational and non-binding. Before switching or porting a policy, weigh waiting-period credits already earned, pre-existing disease cover, your age and health, claim history and any new underwriting.'
+          : productType === 'MOTOR'
+            ? 'This report is informational and non-binding. Before switching insurer, carry your no-claim bonus over, compare the IDV and add-ons like for like, and never let the policy lapse, even for a day.'
           : productType === 'SAVINGS'
             ? 'This report is informational and non-binding. Before surrendering or stopping premiums, get the surrender value in writing and weigh the life cover you give up, any charges, and the tax treatment of what you receive.'
             : 'This report is informational and non-binding. Before replacing a policy, weigh your age and health, any new underwriting, and the cover you would lose while the new policy starts.'}
@@ -388,6 +390,71 @@ function TermAdequacySection({ checkId }: { checkId: string }) {
   );
 }
 
+function MotorSection({ checkId }: { checkId: string }) {
+  const [market, setMarket] = useState('');
+  const [price, setPrice] = useState('');
+  const [result, setResult] = useState<MotorIdvOutput | null>(null);
+
+  const m = useMutation({
+    mutationFn: () =>
+      simulateMotorIdv(checkId, {
+        currentMarketValueInr: market ? (market as Money) : null,
+        exShowroomPriceInr: price ? (price as Money) : null,
+      }),
+    onSuccess: setResult,
+  });
+
+  const field = (label: string, value: string, set: (v: string) => void, placeholder: string, hint: string) => (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <Input type="number" placeholder={placeholder} value={value} onChange={(e) => set(e.target.value)} />
+      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        The IDV is what the insurer pays if the vehicle is stolen or written off. Compare it with what the vehicle would really sell for.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {field('What it would sell for today (₹)', market, setMarket, 'e.g. 800000', 'From a dealer quote or similar used-car listings.')}
+        {field('Original ex-showroom price (₹, optional)', price, setPrice, 'e.g. 1000000', 'Lets us show the IRDAI depreciation-schedule IDV for vehicles up to 5 years old.')}
+      </div>
+      <Button onClick={() => m.mutate()} disabled={(!market && !price) || m.isPending} size="sm">
+        <Calculator className="w-4 h-4 mr-2" />
+        Check my IDV
+      </Button>
+      {m.isError && <p className="text-sm text-destructive">{apiErrorMessage(m.error)}</p>}
+      {result && (
+        <div className="bg-muted/40 rounded-lg p-4 space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              { label: 'IDV on your policy', value: result.idvInr ? formatINR(result.idvInr) : '—' },
+              { label: 'What it would sell for', value: result.marketValueInr ? formatINR(result.marketValueInr) : '—' },
+              { label: 'Shortfall (market value − IDV)', value: result.gapInr ? formatINR(result.gapInr) : '—', highlight: true },
+              { label: 'As a share of market value', value: result.gapPct !== null ? `${result.gapPct}%` : '—' },
+              { label: 'Vehicle age at policy start', value: result.vehicleAgeYears !== null ? `${result.vehicleAgeYears} years` : '—' },
+              { label: 'IRDAI schedule IDV (estimate)', value: result.scheduleIdvInr ? formatINR(result.scheduleIdvInr) : '—' },
+            ].map((row) => (
+              <ResultRow key={row.label} label={row.label} value={row.value} highlight={'highlight' in row ? row.highlight : undefined} />
+            ))}
+          </div>
+          <p className="text-sm font-medium">{result.summary}</p>
+          {result.missingInputs.length > 0 && (
+            <Badge variant="outline" className="text-xs text-amber-700 border-amber-300">
+              Partial — {result.missingInputs.join('; ')}
+            </Badge>
+          )}
+          <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
+            {result.assumptions.map((a) => <li key={a}>{a}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SavingsSection({ checkId, isUlip }: { checkId: string; isUlip: boolean }) {
   const [years, setYears] = useState('');
   const [exitValue, setExitValue] = useState('');
@@ -587,6 +654,7 @@ export function HealthCheckReportPage({ checkId }: Props) {
   const productType: PolicyProductType = report.productType ?? 'HEALTH';
   const isTerm = productType === 'TERM';
   const isSavings = productType === 'SAVINGS';
+  const isMotor = productType === 'MOTOR';
   const isUlip = sections.policyOverview?.policy?.type === 'ULIP';
   const nGood = sections.whatsGood.length;
   const nAttention = sections.needsAttention.length;
@@ -604,8 +672,8 @@ export function HealthCheckReportPage({ checkId }: Props) {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{isSavings ? (isUlip ? 'Unit-linked insurance plan (ULIP)' : 'Savings-type life insurance') : isTerm ? 'Term life insurance' : 'Health insurance'}</p>
-          <h1 className="text-2xl font-semibold">{isSavings ? (isUlip ? 'ULIP Policy Report' : 'Savings Plan Report') : isTerm ? 'Term Life Policy Report' : 'Policy Health Report'}</h1>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{isMotor ? 'Motor insurance' : isSavings ? (isUlip ? 'Unit-linked insurance plan (ULIP)' : 'Savings-type life insurance') : isTerm ? 'Term life insurance' : 'Health insurance'}</p>
+          <h1 className="text-2xl font-semibold">{isMotor ? 'Motor Policy Report' : isSavings ? (isUlip ? 'ULIP Policy Report' : 'Savings Plan Report') : isTerm ? 'Term Life Policy Report' : 'Policy Health Report'}</h1>
           <p className="text-sm text-muted-foreground">
             {totalFindings} finding{totalFindings !== 1 ? 's' : ''} across {sections.docs.length} document{sections.docs.length !== 1 ? 's' : ''}
           </p>
@@ -688,10 +756,10 @@ export function HealthCheckReportPage({ checkId }: Props) {
 
       {/* Calculator */}
       <Panel>
-        <SectionTitle icon={<Calculator className="h-4 w-4" />}>{isSavings ? 'Keep or exit?' : isTerm ? 'Cover calculator' : 'Financial simulator'}</SectionTitle>
+        <SectionTitle icon={<Calculator className="h-4 w-4" />}>{isMotor ? 'Is your IDV right?' : isSavings ? 'Keep or exit?' : isTerm ? 'Cover calculator' : 'Financial simulator'}</SectionTitle>
         <Card className="print:hidden">
           <CardContent className="p-5">
-            {isSavings ? <SavingsSection checkId={checkId} isUlip={isUlip} /> : isTerm ? <TermAdequacySection checkId={checkId} /> : <SimulatorSection checkId={checkId} />}
+            {isMotor ? <MotorSection checkId={checkId} /> : isSavings ? <SavingsSection checkId={checkId} isUlip={isUlip} /> : isTerm ? <TermAdequacySection checkId={checkId} /> : <SimulatorSection checkId={checkId} />}
           </CardContent>
         </Card>
       </Panel>

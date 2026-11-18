@@ -119,7 +119,9 @@ async function narrateCheck(userId: string, checkId: string): Promise<void> {
         ? 'unit-linked (ULIP)'
         : check.policy.type === 'ENDOWMENT' || check.policy.type === 'WHOLE_LIFE'
           ? 'savings-type life'
-          : 'health';
+          : check.policy.type === 'MOTOR'
+            ? 'motor'
+            : 'health';
   const userMessage = [
     `Policy ${kind} check verdict: ${verdict.verdict}`,
     `Score: ${overall ?? 'N/A'}${ratingCategory ? ` (${ratingCategory})` : ''}`,

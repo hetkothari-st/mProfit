@@ -27,7 +27,7 @@ export type PolicyCheckStatus =
   | 'FAILED';
 
 /** What kind of policy a check is for. Decides the extraction schema, rules and score. */
-export type PolicyProductType = 'HEALTH' | 'TERM' | 'SAVINGS';
+export type PolicyProductType = 'HEALTH' | 'TERM' | 'SAVINGS' | 'MOTOR';
 
 /** How we classified a document the user uploaded. */
 export type PolicyDocClassification =
@@ -64,6 +64,9 @@ export type PolicyFindingCategory =
   | 'RETURNS'
   | 'CHARGES'
   | 'LIQUIDITY'
+  // Motor
+  | 'VALIDITY'
+  | 'DEDUCTIBLE'
   | 'OTHER';
 
 /**
@@ -579,6 +582,39 @@ export interface SavingsReturnOutput {
   returnIfExitNowPct: string | null;
   /** Annual return on the money left in: exit value today + remaining premiums -> maturity benefit (%, 2 dp). */
   returnOnStayingPct: string | null;
+  summary: string;
+  assumptions: string[];
+  missingInputs: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Motor
+// ---------------------------------------------------------------------------
+
+/**
+ * What the user knows about their vehicle today. The insured declared value
+ * (IDV) comes from the policy documents; none of these do.
+ */
+export interface MotorIdvInput {
+  /** What the same vehicle would sell for today (Money string), e.g. from a dealer or a used-car listing. */
+  currentMarketValueInr: Money | null;
+  /** The vehicle's original ex-showroom price (Money string). Used for the IRDAI depreciation schedule. */
+  exShowroomPriceInr: Money | null;
+}
+
+export interface MotorIdvOutput {
+  /** IDV stated in the policy. */
+  idvInr: Money | null;
+  /** Market value the user entered. */
+  marketValueInr: Money | null;
+  /** market value - IDV. Positive = you are insured for less than the vehicle is worth. */
+  gapInr: Money | null;
+  /** gap as a percent of market value (2 dp). */
+  gapPct: string | null;
+  /** Vehicle age in whole years at the policy start, if known. */
+  vehicleAgeYears: number | null;
+  /** IDV the IRDAI depreciation schedule gives for this age and price, if both are known and the vehicle is within 5 years. */
+  scheduleIdvInr: Money | null;
   summary: string;
   assumptions: string[];
   missingInputs: string[];

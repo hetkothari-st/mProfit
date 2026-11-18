@@ -31,6 +31,7 @@ import { toDecimal } from '@everypaisa/shared';
 import type { PolicyExtraction } from './extractionSchema.js';
 import type { TermExtraction } from './termExtractionSchema.js';
 import type { SavingsExtraction } from './savingsExtractionSchema.js';
+import type { MotorExtraction } from './motorExtractionSchema.js';
 
 // ---------------------------------------------------------------------------
 // Thresholds (passed through facts so tests can override without changing
@@ -374,4 +375,54 @@ export interface SavingsRule {
   category: PolicyFindingCategory;
   /** Pure, synchronous, no I/O. */
   evaluate(facts: SavingsAnalysisFacts): PolicyFindingDTO[];
+}
+
+// ---------------------------------------------------------------------------
+// Motor
+// ---------------------------------------------------------------------------
+
+export interface MotorRuleConstants {
+  /**
+   * The usual compulsory owner-driver personal accident cover, in INR
+   * (Rs 15 lakh for private cars and two-wheelers). A general summary, not
+   * legal advice; the finding tells the user to check it.
+   */
+  usualOwnerDriverPaInr: number;
+  /** Renewal reminder window, in days before expiry. */
+  renewalWindowDays: number;
+  /** Zero-depreciation and engine add-ons matter most up to this vehicle age. */
+  addOnRelevantAgeYears: number;
+  /** A voluntary deductible above this (INR) is a NOTICE. */
+  voluntaryDeductibleNoticeInr: number;
+  /** NCB at or above this percent, without protection, is worth protecting. */
+  ncbProtectFromPercent: number;
+}
+
+export const DEFAULT_MOTOR_RULE_CONSTANTS: MotorRuleConstants = {
+  usualOwnerDriverPaInr: 1_500_000,
+  renewalWindowDays: 30,
+  addOnRelevantAgeYears: 5,
+  voluntaryDeductibleNoticeInr: 5_000,
+  ncbProtectFromPercent: 35,
+};
+
+export interface MotorAnalysisFacts {
+  asOf: string;
+  userId: string;
+  policyId: string;
+  checkId: string;
+  productType: 'MOTOR';
+  constants: MotorRuleConstants;
+  extraction: MotorExtraction;
+  /** Always null: IRDAI motor claim data is not in the handbook tables we hold. */
+  insurer: InsurerMetricsFacts | null;
+  conflicts?: PolicyFieldConflict[];
+}
+
+export interface MotorRule {
+  id: string;
+  version: string;
+  category: PolicyFindingCategory;
+  /** Pure, synchronous, no I/O. */
+  evaluate(facts: MotorAnalysisFacts): PolicyFindingDTO[];
 }

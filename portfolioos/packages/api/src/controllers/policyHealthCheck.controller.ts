@@ -25,7 +25,8 @@ import { extractPolicyData } from '../services/policyCheck/extract.service.js';
 import { asProductType, getExtractionSpec, insurerKindOf } from '../services/policyCheck/extractionSpecs.js';
 import { calculateTermAdequacy } from '../services/policyCheck/termAdequacy.js';
 import { calculateSavingsReturn } from '../services/policyCheck/savingsReturn.js';
-import type { PolicyProductType, SavingsReturnInput, TermAdequacyInput } from '@everypaisa/shared';
+import { calculateMotorIdv } from '../services/policyCheck/motorIdv.js';
+import type { MotorIdvInput, PolicyProductType, SavingsReturnInput, TermAdequacyInput } from '@everypaisa/shared';
 import { runPolicyAnalysis } from '../services/policyCheck/analysisEngine.service.js';
 import { assertAnalysisCooldown } from '../jobs/policyCheckJob.js';
 import { enqueuePolicyProse } from '../jobs/policyCheckProseJob.js';
@@ -142,7 +143,7 @@ export async function createHealthCheckHandler(req: Request, res: Response) {
 
   if (!policy) throw new NotFoundError('Policy not found');
   if (!asProductType(policy.type)) {
-    throw new BadRequestError('Policy checks are supported for health, term life, endowment, whole life and ULIP policies');
+    throw new BadRequestError('Policy checks are supported for health, term life, endowment, whole life, ULIP and motor policies');
   }
 
   const check = await runInTransaction((tx) =>
@@ -494,9 +495,8 @@ export async function getReportHandler(req: Request, res: Response) {
       : policy?.insurer ?? null;
 
   const productType = asProductType(policy?.type ?? '') ?? 'HEALTH';
-  const insurerIntel = insurerName
-    ? await getInsurerIntelligence(insurerName, insurerKindOf(productType))
-    : null;
+  const insurerKind = insurerKindOf(productType);
+  const insurerIntel = insurerName && insurerKind ? await getInsurerIntelligence(insurerName, insurerKind) : null;
 
   ok(res, {
     checkId,
@@ -583,6 +583,16 @@ export async function simulateHandler(req: Request, res: Response) {
     select: { fields: true },
   });
   if (!data) throw new BadRequestError('No extracted data — run extraction first');
+
+  if (productType === 'MOTOR') {
+    const b = (req.body ?? {}) as Partial<MotorIdvInput>;
+    const input: MotorIdvInput = {
+      currentMarketValueInr: b.currentMarketValueInr ?? null,
+      exShowroomPriceInr: b.exShowroomPriceInr ?? null,
+    };
+    ok(res, calculateMotorIdv(input, data.fields as unknown as import('../services/policyCheck/motorExtractionSchema.js').MotorExtraction, new Date().toISOString()));
+    return;
+  }
 
   if (productType === 'SAVINGS') {
     const owner = await prisma.policyHealthCheck.findFirst({

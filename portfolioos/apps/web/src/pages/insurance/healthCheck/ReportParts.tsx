@@ -135,7 +135,7 @@ export function ScoreRing({ score, verdict, size = 148 }: { score: number | null
 }
 
 function pillarName(key: string): string {
-  const s = key.replace(/_/g, ' ');
+  const s = key.replace(/_/g, ' ').replace(/\bncb\b/g, 'NCB');
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
