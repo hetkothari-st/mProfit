@@ -62,7 +62,7 @@ describe('term extraction schema', () => {
   it('product type comes from the policy record and picks the right spec', () => {
     expect(asProductType('TERM')).toBe('TERM');
     expect(asProductType('HEALTH')).toBe('HEALTH');
-    expect(asProductType('MOTOR')).toBeNull();
+    expect(asProductType('HOME')).toBeNull();
     expect(getExtractionSpec('TERM').toolName).toBe('extract_term_policy_data');
     expect(getExtractionSpec('HEALTH').toolName).toBe('extract_policy_data');
   });

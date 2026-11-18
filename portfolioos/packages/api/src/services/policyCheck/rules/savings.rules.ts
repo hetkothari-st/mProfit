@@ -16,11 +16,14 @@
  *    heuristics, named as such in the finding text, not regulatory limits.
  */
 
-import { Decimal } from '@everypaisa/shared';
+import { Decimal, formatINR } from '@everypaisa/shared';
 import type { PolicyEvidence, PolicyFindingDTO } from '@everypaisa/shared';
 import { makePolicyFinding, type SavingsAnalysisFacts, type SavingsRule } from '../types.js';
 import { documentsConflictsRule } from './documents.conflicts.js';
 import { guaranteedReturn, planTerms } from '../savingsReturn.js';
+
+/** Indian-grouped rupees, no paise: 750000 becomes ₹7,50,000. */
+const inr = (v: string | number): string => formatINR(String(v), { fractionDigits: 0 });
 
 type F<T> =
   | { value: T | null; confidence: number; sourceDocId: string | null; sourcePage: number | null; clauseHeading: string | null; status: string }
@@ -91,8 +94,8 @@ const returnsRule: SavingsRule = {
           confidence: conf(maturity, premium),
           headline: `Guaranteed return is about ${p.toFixed(1)}% a year`,
           evidence: [
-            ev(maturity, `Guaranteed maturity benefit: ₹${maturity.value}`, 'Maturity benefit'),
-            ev(premium, `Annual premium: ₹${premium.value}`, 'Premium'),
+            ev(maturity, `Guaranteed maturity benefit: ${inr(String(maturity.value))}`, 'Maturity benefit'),
+            ev(premium, `Annual premium: ${inr(String(premium.value))}`, 'Premium'),
           ],
           whatWouldChangeThis:
             severity === 'INFO'
@@ -144,8 +147,8 @@ const coverRatioRule: SavingsRule = {
         category: 'COVERAGE', severity: low ? 'WARNING' : 'INFO', confidence: conf(saF, premF),
         headline: `Life cover is ${ratio.toDecimalPlaces(1).toString()}x the annual premium`,
         evidence: [
-          ev(saF, `Sum assured: ₹${sa.toFixed(0)}`, 'Sum assured'),
-          ev(premF, `Annual premium: ₹${prem.toFixed(0)}`, 'Premium'),
+          ev(saF, `Sum assured: ${inr(sa.toFixed(0))}`, 'Sum assured'),
+          ev(premF, `Annual premium: ${inr(prem.toFixed(0))}`, 'Premium'),
         ],
         whatWouldChangeThis: low
           ? `Cover under ${min}x the annual premium is low, and may mean the maturity proceeds are not tax-free under Section 10(10D) ` +
@@ -375,9 +378,9 @@ const commitmentRule: SavingsRule = {
     return [
       mk(facts, this.id, this.version, {
         code: 'PREMIUM_COMMITMENT', category: 'PREMIUM', severity: 'INFO', confidence: conf(premF, termF),
-        headline: `You commit about ₹${total.toFixed(0)} in premiums over ${t.premiumYears} years`,
+        headline: `You commit about ${inr(total.toFixed(0))} in premiums over ${t.premiumYears} years`,
         evidence: [
-          ev(premF, `Annual premium: ₹${t.premium.toFixed(0)}`, 'Premium'),
+          ev(premF, `Annual premium: ${inr(t.premium.toFixed(0))}`, 'Premium'),
           ev(termF, `Policy term: ${t.termYears} years; premiums for ${t.premiumYears}`, 'Policy term'),
         ],
         whatWouldChangeThis: 'Nothing to change. Stopping early usually costs you, so plan to keep paying for the full premium term.',

@@ -135,7 +135,7 @@ export function ScoreRing({ score, verdict, size = 148 }: { score: number | null
 }
 
 function pillarName(key: string): string {
-  const s = key.replace(/_/g, ' ');
+  const s = key.replace(/_/g, ' ').replace(/\bncb\b/g, 'NCB');
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
@@ -150,7 +150,7 @@ export function PillarBars({ pillars }: { pillars: PolicyScoreSnapshot['pillars'
             <div className="mb-1 flex items-baseline justify-between text-sm">
               <span>{pillarName(p.pillar)}</span>
               <span className="tabular-nums text-muted-foreground">
-                {n === null ? 'Not enough data' : `${Math.round(n)}`}
+                {n === null ? 'Not scored' : `${Math.round(n)}`}
                 <span className="ml-2 text-xs">weight {Math.round(parseFloat(p.appliedWeight) * 100)}%</span>
               </span>
             </div>

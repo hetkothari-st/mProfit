@@ -129,7 +129,47 @@ const SAVINGS: FieldSpec = {
   boolean: new Set(['participating', 'survivalBenefits', 'loanAvailable', 'policyAdminChargeStated', 'mortalityChargeStated', 'nomineePresent']),
 };
 
-export const FIELD_SPECS: Record<PolicyProductType, FieldSpec> = { HEALTH, TERM, SAVINGS };
+const MOTOR: FieldSpec = {
+  labels: {
+    insuredName: 'Policyholder',
+    policyNumber: 'Policy Number',
+    insurerName: 'Insurer',
+    planName: 'Plan Name',
+    policyStartDate: 'Start Date',
+    policyEndDate: 'Expiry Date',
+    vehicleMake: 'Vehicle make',
+    vehicleModel: 'Vehicle model',
+    manufacturingYear: 'Year of manufacture',
+    policyKind: 'Policy type (comprehensive / third party only / own damage only)',
+    idvInr: 'Insured Declared Value (IDV) (₹)',
+    premiumAmountInr: 'Total Premium (₹)',
+    ncbPercent: 'No-claim bonus (%)',
+    ncbProtect: 'No-claim bonus protection',
+    zeroDepreciation: 'Zero depreciation cover',
+    engineProtect: 'Engine protect',
+    returnToInvoice: 'Return to invoice',
+    consumablesCover: 'Consumables cover',
+    roadsideAssistance: 'Roadside assistance',
+    tyreProtect: 'Tyre protect',
+    keyReplacement: 'Key replacement',
+    ownerDriverPaInr: 'Owner-driver personal accident cover (₹)',
+    passengerPaInr: 'Passenger personal accident cover (₹)',
+    compulsoryDeductibleInr: 'Compulsory deductible (₹)',
+    voluntaryDeductibleInr: 'Voluntary deductible (₹)',
+  },
+  groups: [
+    { title: 'Basic Information', fields: ['insuredName', 'policyNumber', 'insurerName', 'planName', 'policyStartDate', 'policyEndDate', 'vehicleMake', 'vehicleModel', 'manufacturingYear'] },
+    { title: 'Cover and Premium', fields: ['policyKind', 'idvInr', 'premiumAmountInr'] },
+    { title: 'No-claim Bonus', fields: ['ncbPercent', 'ncbProtect'] },
+    { title: 'Add-ons', fields: ['zeroDepreciation', 'engineProtect', 'returnToInvoice', 'consumablesCover', 'roadsideAssistance', 'tyreProtect', 'keyReplacement'] },
+    { title: 'Personal Accident and Deductibles', fields: ['ownerDriverPaInr', 'passengerPaInr', 'compulsoryDeductibleInr', 'voluntaryDeductibleInr'] },
+  ],
+  critical: ['policyKind'],
+  numeric: new Set(['manufacturingYear', 'ncbPercent']),
+  boolean: new Set(['ncbProtect', 'zeroDepreciation', 'engineProtect', 'returnToInvoice', 'consumablesCover', 'roadsideAssistance', 'tyreProtect', 'keyReplacement']),
+};
+
+export const FIELD_SPECS: Record<PolicyProductType, FieldSpec> = { HEALTH, TERM, SAVINGS, MOTOR };
 
 /** The server validates corrections against the extraction schema, so send real numbers / booleans. */
 export function coerceInput(spec: FieldSpec, key: string, raw: string): unknown {
@@ -175,6 +215,14 @@ export const REPORT_PARAMETERS: Record<PolicyProductType, Array<{ label: string;
     { label: 'Getting money out', category: 'LIQUIDITY', keys: ['guaranteedSurrenderFromYear', 'lockInYears', 'loanAvailable', 'freeSwitchesPerYear'] },
     { label: 'ULIP charges', category: 'CHARGES', keys: ['premiumAllocationChargePct', 'fundManagementChargePct', 'ulipDeathBenefitBasis'] },
     { label: 'Claim terms', category: 'CLAIM_TERMS', keys: ['suicideExclusionMonths', 'gracePeriodDays', 'freeLookDays', 'nomineePresent'] },
+    { label: 'Exclusions', category: 'EXCLUSION', keys: ['exclusions'] },
+  ],
+  MOTOR: [
+    { label: 'Policy period', category: 'VALIDITY', keys: ['policyStartDate', 'policyEndDate'] },
+    { label: 'Cover', category: 'COVERAGE', keys: ['policyKind', 'idvInr', 'premiumAmountInr'] },
+    { label: 'No-claim bonus', category: 'NCB', keys: ['ncbPercent', 'ncbProtect'] },
+    { label: 'Add-ons and accident cover', category: 'BENEFIT', keys: ['zeroDepreciation', 'engineProtect', 'returnToInvoice', 'consumablesCover', 'roadsideAssistance', 'tyreProtect', 'keyReplacement', 'ownerDriverPaInr', 'passengerPaInr'] },
+    { label: 'Deductibles', category: 'DEDUCTIBLE', keys: ['compulsoryDeductibleInr', 'voluntaryDeductibleInr'] },
     { label: 'Exclusions', category: 'EXCLUSION', keys: ['exclusions'] },
   ],
 };

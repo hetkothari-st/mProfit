@@ -13,6 +13,8 @@ import type {
   PolicyExtractionDocDTO,
   PolicyFieldConflict,
   PolicyProductType,
+  MotorIdvInput,
+  MotorIdvOutput,
   SavingsReturnInput,
   SavingsReturnOutput,
   TermAdequacyInput,
@@ -175,6 +177,15 @@ export async function listHealthChecks(policyId: string): Promise<HealthCheckHis
     `/api/insurance/policies/${policyId}/health-checks`,
   );
   return unwrap(r.data).checks;
+}
+
+/** Motor: compare the policy's IDV with what the vehicle would sell for. */
+export async function simulateMotorIdv(checkId: string, input: MotorIdvInput): Promise<MotorIdvOutput> {
+  const r = await api.post<ApiResponse<MotorIdvOutput>>(
+    `/api/insurance/health-check/${checkId}/simulate`,
+    input,
+  );
+  return unwrap(r.data);
 }
 
 /** Savings plans: compare keeping the policy with exiting it. */

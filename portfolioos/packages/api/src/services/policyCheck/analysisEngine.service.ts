@@ -21,14 +21,15 @@ import type { PolicyFindingDTO, PolicyFindingCategory, PolicyFieldConflict } fro
 import { logger } from '../../lib/logger.js';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { loadLatestInsurerRows, matchInsurerRow } from './insurerMetrics.service.js';
-import { POLICY_RULES, SAVINGS_POLICY_RULES, TERM_POLICY_RULES } from './rules/registry.js';
+import { MOTOR_POLICY_RULES, POLICY_RULES, SAVINGS_POLICY_RULES, TERM_POLICY_RULES } from './rules/registry.js';
+import { computeMotorScore } from './scoring/motorScoreMath.js';
 import { computePolicyScore } from './scoring/policyScoreMath.js';
 import { computeSavingsScore } from './scoring/savingsScoreMath.js';
 import { computeTermScore } from './scoring/termScoreMath.js';
 import { asProductType, insurerKindOf } from './extractionSpecs.js';
 import { decidePolicyVerdict } from './verdict.js';
-import type { PolicyAnalysisFacts, PolicyRule, SavingsAnalysisFacts, TermAnalysisFacts, TermRule } from './types.js';
-import { DEFAULT_POLICY_RULE_CONSTANTS, DEFAULT_SAVINGS_RULE_CONSTANTS, DEFAULT_TERM_RULE_CONSTANTS } from './types.js';
+import type { MotorAnalysisFacts, PolicyAnalysisFacts, PolicyRule, SavingsAnalysisFacts, TermAnalysisFacts, TermRule } from './types.js';
+import { DEFAULT_MOTOR_RULE_CONSTANTS, DEFAULT_POLICY_RULE_CONSTANTS, DEFAULT_SAVINGS_RULE_CONSTANTS, DEFAULT_TERM_RULE_CONSTANTS } from './types.js';
 import type { PolicyProductType } from '@everypaisa/shared';
 
 // ---------------------------------------------------------------------------
@@ -140,7 +141,11 @@ export function evaluateRules<F>(facts: F, rules: Array<AnyRule<F>>): PolicyRule
 // Facts builder
 // ---------------------------------------------------------------------------
 
-type AnyFacts = PolicyAnalysisFacts | TermAnalysisFacts | SavingsAnalysisFacts;
+type AnyFacts = PolicyAnalysisFacts | TermAnalysisFacts | SavingsAnalysisFacts | MotorAnalysisFacts;
+
+function isMotor(f: AnyFacts): f is MotorAnalysisFacts {
+  return 'productType' in f && f.productType === 'MOTOR';
+}
 
 function isTerm(f: AnyFacts): f is TermAnalysisFacts {
   return 'productType' in f && f.productType === 'TERM';
@@ -177,8 +182,9 @@ async function buildFacts(checkId: string, userId: string): Promise<AnyFacts> {
       : null;
 
   let insurer: PolicyAnalysisFacts['insurer'] = null;
-  if (insurerName) {
-    const row = matchInsurerRow(await loadLatestInsurerRows(insurerKindOf(productType)), insurerName);
+  const insurerKind = insurerKindOf(productType);
+  if (insurerName && insurerKind) {
+    const row = matchInsurerRow(await loadLatestInsurerRows(insurerKind), insurerName);
     if (row) {
       insurer = {
         insurerName: row.insurerName,
@@ -202,6 +208,14 @@ async function buildFacts(checkId: string, userId: string): Promise<AnyFacts> {
     conflicts: (data.conflicts as unknown as PolicyFieldConflict[] | null) ?? [],
   };
 
+  if (productType === 'MOTOR') {
+    return {
+      ...base,
+      productType: 'MOTOR',
+      constants: DEFAULT_MOTOR_RULE_CONSTANTS,
+      extraction: data.fields as unknown as MotorAnalysisFacts['extraction'],
+    };
+  }
   if (productType === 'SAVINGS') {
     return {
       ...base,
@@ -286,16 +300,20 @@ async function evaluateAndCommit(
   facts: AnyFacts,
   healthRulesOverride?: PolicyRule[],
 ): Promise<RunPolicyAnalysisResult> {
-  const evaluation = isSavings(facts)
-    ? evaluateRules<SavingsAnalysisFacts>(facts, SAVINGS_POLICY_RULES)
-    : isTerm(facts)
-      ? evaluateRules<TermAnalysisFacts>(facts, TERM_POLICY_RULES)
-      : evaluatePolicyRules(facts, healthRulesOverride ?? POLICY_RULES);
-  const scoreResult = isSavings(facts)
-    ? computeSavingsScore(facts, evaluation.findings)
-    : isTerm(facts)
-      ? computeTermScore(facts, evaluation.findings)
-      : computePolicyScore(facts, evaluation.findings);
+  const evaluation = isMotor(facts)
+    ? evaluateRules<MotorAnalysisFacts>(facts, MOTOR_POLICY_RULES)
+    : isSavings(facts)
+      ? evaluateRules<SavingsAnalysisFacts>(facts, SAVINGS_POLICY_RULES)
+      : isTerm(facts)
+        ? evaluateRules<TermAnalysisFacts>(facts, TERM_POLICY_RULES)
+        : evaluatePolicyRules(facts, healthRulesOverride ?? POLICY_RULES);
+  const scoreResult = isMotor(facts)
+    ? computeMotorScore(facts, evaluation.findings)
+    : isSavings(facts)
+      ? computeSavingsScore(facts, evaluation.findings)
+      : isTerm(facts)
+        ? computeTermScore(facts, evaluation.findings)
+        : computePolicyScore(facts, evaluation.findings);
   const verdictDecision = decidePolicyVerdict(evaluation.findings, scoreResult.scoreSnapshot);
 
   let verdictId: string | null = null;

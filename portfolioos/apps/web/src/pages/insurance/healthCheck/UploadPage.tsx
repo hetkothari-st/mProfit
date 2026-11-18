@@ -37,6 +37,7 @@ export function UploadPage({ policyId }: Props) {
   });
   const isTerm = policy?.type === 'TERM';
   const isSavings = policy?.type === 'ENDOWMENT' || policy?.type === 'WHOLE_LIFE' || policy?.type === 'ULIP';
+  const isMotor = policy?.type === 'MOTOR';
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -73,9 +74,11 @@ export function UploadPage({ policyId }: Props) {
   return (
     <div className="max-w-2xl mx-auto space-y-6 p-4">
       <div>
-        <h1 className="text-2xl font-semibold">{isSavings ? 'Savings Plan Check' : isTerm ? 'Term Life Policy Check' : 'Policy Health Check'}</h1>
+        <h1 className="text-2xl font-semibold">{isMotor ? 'Motor Policy Check' : isSavings ? 'Savings Plan Check' : isTerm ? 'Term Life Policy Check' : 'Policy Health Check'}</h1>
         <p className="text-muted-foreground mt-1">
-          {isSavings
+          {isMotor
+            ? 'Upload your motor policy to check the cover type, the insured value, add-ons, no-claim bonus protection, and when it expires.'
+            : isSavings
             ? 'Upload your policy documents to see what the plan really returns, what it costs, how easily you can get your money out, and whether to keep it.'
             : isTerm
             ? 'Upload your policy documents to check how long the cover lasts, how the benefit is paid, the riders and exclusions, and the claim terms.'
@@ -94,7 +97,7 @@ export function UploadPage({ policyId }: Props) {
           </p>
           <p>
             <strong className="text-foreground">Policy schedule</strong> — the summary page with
-            your {isSavings ? 'sum assured, term, premium and maturity amount' : isTerm ? 'sum assured, term, premium and nominee' : 'sum insured, premium, and member details'}.
+            your {isMotor ? 'IDV, premium, add-ons and policy period' : isSavings ? 'sum assured, term, premium and maturity amount' : isTerm ? 'sum assured, term, premium and nominee' : 'sum insured, premium, and member details'}.
             {isSavings ? ' A benefit illustration, if you have one, helps.' : ''}
           </p>
           <p>

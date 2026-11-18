@@ -26,6 +26,12 @@ import {
   SAVINGS_TOOL_JSON_SCHEMA,
   SavingsExtractionSchema,
 } from './savingsExtractionSchema.js';
+import {
+  MOTOR_EXTRACTION_TOOL_DESCRIPTION,
+  MOTOR_EXTRACTION_TOOL_NAME,
+  MOTOR_TOOL_JSON_SCHEMA,
+  MotorExtractionSchema,
+} from './motorExtractionSchema.js';
 
 export interface ExtractionSpec {
   productType: PolicyProductType;
@@ -73,7 +79,27 @@ ${COMMON_RULES(SAVINGS_EXTRACTION_TOOL_NAME)}
 - guaranteedSurrenderFromYear: the policy year a guaranteed surrender value starts. Do not guess it from the term.
 - nomineePresent: true only if a nominee is named in the document.`;
 
+const MOTOR_PROMPT = `You are a document parser for an Indian motor insurance policy (private car or two-wheeler). Extract structured data from the policy text below.
+
+${COMMON_RULES(MOTOR_EXTRACTION_TOOL_NAME)}
+- Never extract the vehicle registration number, chassis number or engine number.
+- policyKind: COMPREHENSIVE if the policy covers damage to the insured vehicle as well as third-party liability; THIRD_PARTY_ONLY if only liability is covered; OWN_DAMAGE_ONLY for a standalone own-damage policy.
+- premiumAmountInr is the total premium payable including GST.
+- Add-on booleans (zeroDepreciation, engineProtect, returnToInvoice, consumablesCover, roadsideAssistance, tyreProtect, keyReplacement, ncbProtect): true only if the document says the add-on is included or opted; false only if it explicitly says it is not opted or not covered; otherwise NOT_FOUND.
+- ncbPercent: the no-claim bonus percentage applied to this policy year, as a whole number. Do not use the next-year entitlement.
+- idvInr: the Insured Declared Value. Null for a third-party-only policy.`;
+
 export function getExtractionSpec(productType: PolicyProductType): ExtractionSpec {
+  if (productType === 'MOTOR') {
+    return {
+      productType,
+      schema: MotorExtractionSchema,
+      jsonSchema: MOTOR_TOOL_JSON_SCHEMA,
+      toolName: MOTOR_EXTRACTION_TOOL_NAME,
+      toolDescription: MOTOR_EXTRACTION_TOOL_DESCRIPTION,
+      systemPrompt: MOTOR_PROMPT,
+    };
+  }
   if (productType === 'SAVINGS') {
     return {
       productType,
@@ -111,13 +137,19 @@ const POLICY_TYPE_TO_PRODUCT: Record<string, PolicyProductType> = {
   ENDOWMENT: 'SAVINGS',
   WHOLE_LIFE: 'SAVINGS',
   ULIP: 'SAVINGS',
+  MOTOR: 'MOTOR',
 };
 
 export function asProductType(policyType: string): PolicyProductType | null {
   return POLICY_TYPE_TO_PRODUCT[policyType] ?? null;
 }
 
-/** Which IRDAI insurer table applies: life insurers for everything except health. */
-export function insurerKindOf(productType: PolicyProductType): 'LIFE' | 'HEALTH' {
-  return productType === 'HEALTH' ? 'HEALTH' : 'LIFE';
+/**
+ * Which IRDAI insurer table applies: life insurers for term and savings plans,
+ * the health table for health. Null for motor: we hold no IRDAI motor claim data.
+ */
+export function insurerKindOf(productType: PolicyProductType): 'LIFE' | 'HEALTH' | null {
+  if (productType === 'HEALTH') return 'HEALTH';
+  if (productType === 'MOTOR') return null;
+  return 'LIFE';
 }
