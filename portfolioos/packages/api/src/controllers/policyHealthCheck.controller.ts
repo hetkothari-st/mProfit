@@ -24,6 +24,7 @@ import { createDocument } from '../services/documents/document.service.js';
 import { extractPolicyData } from '../services/policyCheck/extract.service.js';
 import { asProductType, getExtractionSpec, insurerKindOf } from '../services/policyCheck/extractionSpecs.js';
 import { calculateTermAdequacy } from '../services/policyCheck/termAdequacy.js';
+import { getLinkedCover } from '../services/policyCheck/linkedCover.js';
 import { calculateSavingsReturn } from '../services/policyCheck/savingsReturn.js';
 import { calculateMotorIdv } from '../services/policyCheck/motorIdv.js';
 import type { MotorIdvInput, PolicyProductType, SavingsReturnInput, TermAdequacyInput } from '@everypaisa/shared';
@@ -662,4 +663,19 @@ function toFindingDTO(f: {
     whatWouldChangeThis: f.whatWouldChangeThis,
     createdAt: f.createdAt.toISOString(),
   };
+}
+// ---------------------------------------------------------------------------
+// GET /api/insurance/health-check/:checkId/linked-cover
+// ---------------------------------------------------------------------------
+
+/** Term life: suggested calculator inputs from the user's other policies and loans. */
+export async function linkedCoverHandler(req: Request, res: Response) {
+  const userId = getUserId(req);
+  const checkId = req.params['checkId']!;
+  const row = await prisma.policyHealthCheck.findFirst({
+    where: { id: checkId, userId },
+    select: { policyId: true },
+  });
+  if (!row) throw new NotFoundError('Health check not found');
+  ok(res, await getLinkedCover(userId, row.policyId));
 }

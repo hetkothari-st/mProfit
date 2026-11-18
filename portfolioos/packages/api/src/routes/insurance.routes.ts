@@ -42,6 +42,7 @@ import {
   triggerAnalysisHandler,
   getReportHandler,
   simulateHandler,
+  linkedCoverHandler,
   listHealthChecksHandler,
   uploadPolicyDocuments,
 } from '../controllers/policyHealthCheck.controller.js';
@@ -157,4 +158,10 @@ insuranceRouter.post(
   '/health-check/:checkId/simulate',
   requireFeature('INSURANCE_HEALTH_CHECK'),
   asyncHandler(simulateHandler),
+);
+
+insuranceRouter.get(
+  '/health-check/:checkId/linked-cover',
+  requireFeature('INSURANCE_HEALTH_CHECK'),
+  asyncHandler(linkedCoverHandler),
 );

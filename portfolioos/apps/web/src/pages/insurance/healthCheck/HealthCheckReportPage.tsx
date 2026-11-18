@@ -27,7 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getReport, listHealthChecks, simulate, simulateMotorIdv, simulateSavings, simulateTermAdequacy } from '@/api/policyCheckApi';
+import { getLinkedCover, getReport, listHealthChecks, simulate, simulateMotorIdv, simulateSavings, simulateTermAdequacy } from '@/api/policyCheckApi';
 import { apiErrorMessage } from '@/api/client';
 import { FIELD_SPECS, REPORT_PARAMETERS } from './productFields';
 import { PillarBars, ScoreRing, SectionTitle, SEVERITY_STYLE, SeverityChip, StatTile, VerdictChip, asSeverity, type Severity } from './ReportParts';
@@ -327,6 +327,20 @@ function TermAdequacySection({ checkId }: { checkId: string }) {
   const [other, setOther] = useState('');
   const [result, setResult] = useState<TermAdequacyOutput | null>(null);
 
+  const linked = useQuery({
+    queryKey: ['policy-check-linked-cover', checkId],
+    queryFn: () => getLinkedCover(checkId),
+    staleTime: 60_000,
+  });
+  const hasLinked = !!linked.data && (linked.data.otherPolicies.length > 0 || linked.data.loans.length > 0);
+  const fillFromRecords = () => {
+    if (!linked.data) return;
+    // Drop the ".0000" the API serialises; the input is a plain rupee amount.
+    const whole = (v: string) => v.replace(/\.0+$/, '');
+    if (linked.data.otherPolicies.length > 0) setOther(whole(linked.data.otherLifeCoverInr));
+    if (linked.data.loans.length > 0) setLoans(whole(linked.data.outstandingLoansInr));
+  };
+
   const m = useMutation({
     mutationFn: () =>
       simulateTermAdequacy(checkId, {
@@ -351,6 +365,29 @@ function TermAdequacySection({ checkId }: { checkId: string }) {
       <p className="text-sm text-muted-foreground">
         A simple check of whether this cover is enough for your situation. It uses your own numbers, not anything from the policy.
       </p>
+      {hasLinked && linked.data && (
+        <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
+          <p className="font-medium">We found these in your other records</p>
+          <ul className="text-xs text-muted-foreground space-y-0.5">
+            {linked.data.otherPolicies.map((p) => (
+              <li key={p.policyId}>
+                {p.insurer}{p.planName ? ` · ${p.planName}` : ''} ({p.type.replace('_', ' ').toLowerCase()}): cover {formatINR(p.sumAssuredInr, { fractionDigits: 0 })}
+              </li>
+            ))}
+            {linked.data.loans.map((l) => (
+              <li key={l.loanId}>
+                {l.lenderName} ({l.loanType.toLowerCase()} loan): {formatINR(l.outstandingInr, { fractionDigits: 0 })} outstanding
+              </li>
+            ))}
+          </ul>
+          <Button type="button" variant="outline" size="sm" onClick={fillFromRecords}>
+            Use these numbers
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Only active policies and loans on this account are counted. You can still change the numbers below.
+          </p>
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-2">
         {field('Annual income (₹)', income, setIncome, 'e.g. 1200000')}
         {field('Years of income to replace', years, setYears, '15')}

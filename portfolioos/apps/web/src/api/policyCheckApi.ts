@@ -17,6 +17,7 @@ import type {
   MotorIdvOutput,
   SavingsReturnInput,
   SavingsReturnOutput,
+  LinkedCover,
   TermAdequacyInput,
   TermAdequacyOutput,
   FinancialSimulatorInput,
@@ -206,5 +207,11 @@ export async function simulateTermAdequacy(
     `/api/insurance/health-check/${checkId}/simulate`,
     input,
   );
+  return unwrap(r.data);
+}
+
+/** Term life: other life cover and loan balances the app already knows about. */
+export async function getLinkedCover(checkId: string): Promise<LinkedCover> {
+  const r = await api.get<ApiResponse<LinkedCover>>(`/api/insurance/health-check/${checkId}/linked-cover`);
   return unwrap(r.data);
 }
