@@ -24,7 +24,7 @@ import {
   parseTable62,
   type Row,
 } from '../src/services/policyCheck/irdaiHandbookParse.js';
-import { buildLifeRecords, LIFE_METHODOLOGY, parseTable15 } from '../src/services/policyCheck/irdaiLifeParse.js';
+import { buildLifeRecords, LIFE_METHODOLOGY, parseTable15, parseTable37 } from '../src/services/policyCheck/irdaiLifeParse.js';
 
 const DEFAULT_URL =
   'https://irdai.gov.in/documents/37343/825690/Handbook+on+Indian+Insurance+Statistics+2024-25.zip/c754826c-a24f-6adf-65d9-bba0e1bb8d2a?version=1.1&t=1770357151427&download=true';
@@ -59,6 +59,7 @@ async function main(): Promise<void> {
   const t62 = await sheetRows(zip, 'Part III.xlsx', '62');
   const t56 = await sheetRows(zip, 'Part II.xlsx', '56');
   const t15 = await sheetRows(zip, 'Part I.xlsx', '15');
+  const t37 = await sheetRows(zip, 'Part I.xlsx', '37');
 
   const source = `IRDAI ${EDITION}, Table 53 (claims by number) and Table 62 (health net earned premium and incurred claims)`;
   const retrievedAt = new Date();
@@ -81,15 +82,16 @@ async function main(): Promise<void> {
         logger.info({ fy, replaced: del.count, inserted: records.length }, '[irdaiHandbook] imported');
       });
 
-      const life = buildLifeRecords(parseTable15(t15, fy), fy);
+      const life = buildLifeRecords(parseTable15(t15, fy), fy, parseTable37(t37, fy));
       if (life.length < 15) throw new Error(`Only ${life.length} life insurers parsed for ${fy} — layout changed?`);
       await runInTransaction(async (tx) => {
         const del = await tx.insurerMetrics.deleteMany({ where: { financialYear: fy, segment: 'LIFE' } });
         await tx.insurerMetrics.createMany({
-          data: life.map(({ complaints: _c, segment: _s, ...r }) => ({
+          data: life.map(({ complaints, segment: _s, ...r }) => ({
             ...r,
+            complaints: (complaints ?? undefined) as Prisma.InputJsonValue | undefined,
             segment: 'LIFE',
-            source: `IRDAI ${EDITION}, Table 15 (individual death claims, insurer-wise)`,
+            source: `IRDAI ${EDITION}, Table 15 (individual death claims, insurer-wise); Table 37 (grievances)`,
             retrievedAt,
             methodology: LIFE_METHODOLOGY,
           })),
