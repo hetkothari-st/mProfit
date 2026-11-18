@@ -22,6 +22,7 @@ import { benefitsAdditionalRule } from './benefits.additional.js';
 import { waitingContinuityRule } from './waiting.continuity.js';
 import { documentsConflictsRule } from './documents.conflicts.js';
 import { TERM_RULES } from './term.rules.js';
+import { SAVINGS_RULES } from './savings.rules.js';
 
 export const POLICY_RULES: PolicyRule[] = [
   copayMandatoryRule,
@@ -39,6 +40,9 @@ export const POLICY_RULES: PolicyRule[] = [
 /** Term life rules (see term.rules.ts). Evaluated for TERM policies only. */
 export const TERM_POLICY_RULES = TERM_RULES;
 
+/** Savings-plan rules (see savings.rules.ts). Evaluated for ENDOWMENT / WHOLE_LIFE / ULIP policies. */
+export const SAVINGS_POLICY_RULES = SAVINGS_RULES;
+
 // Duplicate-id guard — catches copy-paste errors at module load, not at runtime
 // when two rules emit findings and one silently overwrites the other.
 (function checkDuplicateIds() {
@@ -47,6 +51,7 @@ export const TERM_POLICY_RULES = TERM_RULES;
     ...POLICY_RULES,
     // The cross-document conflicts rule is intentionally shared by both lists.
     ...TERM_POLICY_RULES.filter((r) => r.id !== documentsConflictsRule.id),
+    ...SAVINGS_POLICY_RULES.filter((r) => r.id !== documentsConflictsRule.id),
   ];
   for (const rule of all) {
     if (seen.has(rule.id)) {

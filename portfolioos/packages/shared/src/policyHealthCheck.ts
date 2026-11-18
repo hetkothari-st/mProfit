@@ -27,7 +27,7 @@ export type PolicyCheckStatus =
   | 'FAILED';
 
 /** What kind of policy a check is for. Decides the extraction schema, rules and score. */
-export type PolicyProductType = 'HEALTH' | 'TERM';
+export type PolicyProductType = 'HEALTH' | 'TERM' | 'SAVINGS';
 
 /** How we classified a document the user uploaded. */
 export type PolicyDocClassification =
@@ -60,6 +60,10 @@ export type PolicyFindingCategory =
   | 'CLAIM_TERMS'
   | 'PAYOUT'
   | 'PREMIUM'
+  // Savings plans (endowment, money-back, ULIP)
+  | 'RETURNS'
+  | 'CHARGES'
+  | 'LIQUIDITY'
   | 'OTHER';
 
 /**
@@ -534,5 +538,48 @@ export interface TermAdequacyOutput {
   /** The exact assumptions used, so the number is reproducible. */
   assumptions: string[];
   /** Inputs that were missing and treated as zero, or the policy's sum assured if absent. */
+  missingInputs: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Savings plans (endowment / money-back / whole life / ULIP)
+// ---------------------------------------------------------------------------
+
+/**
+ * What the user tells us about where they stand today. The policy terms come
+ * from the documents; none of these do.
+ */
+export interface SavingsReturnInput {
+  /** Whole years of premiums already paid. */
+  yearsPaid: number | null;
+  /** Surrender value the insurer quotes TODAY (Money string). Never estimated by us. */
+  surrenderValueNowInr: Money | null;
+  /** ULIP only: fund value shown on the latest statement (Money string). */
+  fundValueNowInr: Money | null;
+  /** Rate to compare against, % a year. Default 7. */
+  benchmarkRatePct: number | null;
+}
+
+export interface SavingsReturnOutput {
+  /** Total premiums over the premium paying term. */
+  totalPremiumsInr: Money | null;
+  /** Guaranteed maturity benefit the document states. */
+  guaranteedMaturityInr: Money | null;
+  /** Annual return if every premium is paid and only the guaranteed benefit is received (%, 2 dp). */
+  guaranteedReturnPct: string | null;
+  /** What the same premiums would reach at the benchmark rate by maturity. */
+  benchmarkValueAtMaturityInr: Money | null;
+  /** Premiums paid so far (premium x years paid). */
+  premiumsPaidSoFarInr: Money | null;
+  /** Value if the user exits today: the quoted surrender value, or the ULIP fund value. */
+  exitValueNowInr: Money | null;
+  /** exit value - premiums paid so far. Negative = a loss on exit. */
+  gainOrLossOnExitInr: Money | null;
+  /** Annual return earned so far if the user exits today (%, 2 dp). */
+  returnIfExitNowPct: string | null;
+  /** Annual return on the money left in: exit value today + remaining premiums -> maturity benefit (%, 2 dp). */
+  returnOnStayingPct: string | null;
+  summary: string;
+  assumptions: string[];
   missingInputs: string[];
 }

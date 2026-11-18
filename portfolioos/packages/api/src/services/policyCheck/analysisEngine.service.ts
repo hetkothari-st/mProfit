@@ -21,13 +21,14 @@ import type { PolicyFindingDTO, PolicyFindingCategory, PolicyFieldConflict } fro
 import { logger } from '../../lib/logger.js';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { loadLatestInsurerRows, matchInsurerRow } from './insurerMetrics.service.js';
-import { POLICY_RULES, TERM_POLICY_RULES } from './rules/registry.js';
+import { POLICY_RULES, SAVINGS_POLICY_RULES, TERM_POLICY_RULES } from './rules/registry.js';
 import { computePolicyScore } from './scoring/policyScoreMath.js';
+import { computeSavingsScore } from './scoring/savingsScoreMath.js';
 import { computeTermScore } from './scoring/termScoreMath.js';
-import { asProductType } from './extractionSpecs.js';
+import { asProductType, insurerKindOf } from './extractionSpecs.js';
 import { decidePolicyVerdict } from './verdict.js';
-import type { PolicyAnalysisFacts, PolicyRule, TermAnalysisFacts, TermRule } from './types.js';
-import { DEFAULT_POLICY_RULE_CONSTANTS, DEFAULT_TERM_RULE_CONSTANTS } from './types.js';
+import type { PolicyAnalysisFacts, PolicyRule, SavingsAnalysisFacts, TermAnalysisFacts, TermRule } from './types.js';
+import { DEFAULT_POLICY_RULE_CONSTANTS, DEFAULT_SAVINGS_RULE_CONSTANTS, DEFAULT_TERM_RULE_CONSTANTS } from './types.js';
 import type { PolicyProductType } from '@everypaisa/shared';
 
 // ---------------------------------------------------------------------------
@@ -139,10 +140,14 @@ export function evaluateRules<F>(facts: F, rules: Array<AnyRule<F>>): PolicyRule
 // Facts builder
 // ---------------------------------------------------------------------------
 
-type AnyFacts = PolicyAnalysisFacts | TermAnalysisFacts;
+type AnyFacts = PolicyAnalysisFacts | TermAnalysisFacts | SavingsAnalysisFacts;
 
 function isTerm(f: AnyFacts): f is TermAnalysisFacts {
   return 'productType' in f && f.productType === 'TERM';
+}
+
+function isSavings(f: AnyFacts): f is SavingsAnalysisFacts {
+  return 'productType' in f && f.productType === 'SAVINGS';
 }
 
 async function buildFacts(checkId: string, userId: string): Promise<AnyFacts> {
@@ -173,7 +178,7 @@ async function buildFacts(checkId: string, userId: string): Promise<AnyFacts> {
 
   let insurer: PolicyAnalysisFacts['insurer'] = null;
   if (insurerName) {
-    const row = matchInsurerRow(await loadLatestInsurerRows(productType === 'TERM' ? 'LIFE' : 'HEALTH'), insurerName);
+    const row = matchInsurerRow(await loadLatestInsurerRows(insurerKindOf(productType)), insurerName);
     if (row) {
       insurer = {
         insurerName: row.insurerName,
@@ -197,6 +202,16 @@ async function buildFacts(checkId: string, userId: string): Promise<AnyFacts> {
     conflicts: (data.conflicts as unknown as PolicyFieldConflict[] | null) ?? [],
   };
 
+  if (productType === 'SAVINGS') {
+    return {
+      ...base,
+      productType: 'SAVINGS',
+      // From the insurance record, never from anything extracted.
+      planKind: check.policy.type === 'ULIP' ? 'ULIP' : 'TRADITIONAL',
+      constants: DEFAULT_SAVINGS_RULE_CONSTANTS,
+      extraction: data.fields as unknown as SavingsAnalysisFacts['extraction'],
+    };
+  }
   if (productType === 'TERM') {
     return {
       ...base,
@@ -271,10 +286,16 @@ async function evaluateAndCommit(
   facts: AnyFacts,
   healthRulesOverride?: PolicyRule[],
 ): Promise<RunPolicyAnalysisResult> {
-  const evaluation = isTerm(facts)
-    ? evaluateRules<TermAnalysisFacts>(facts, TERM_POLICY_RULES)
-    : evaluatePolicyRules(facts, healthRulesOverride ?? POLICY_RULES);
-  const scoreResult = isTerm(facts) ? computeTermScore(facts, evaluation.findings) : computePolicyScore(facts, evaluation.findings);
+  const evaluation = isSavings(facts)
+    ? evaluateRules<SavingsAnalysisFacts>(facts, SAVINGS_POLICY_RULES)
+    : isTerm(facts)
+      ? evaluateRules<TermAnalysisFacts>(facts, TERM_POLICY_RULES)
+      : evaluatePolicyRules(facts, healthRulesOverride ?? POLICY_RULES);
+  const scoreResult = isSavings(facts)
+    ? computeSavingsScore(facts, evaluation.findings)
+    : isTerm(facts)
+      ? computeTermScore(facts, evaluation.findings)
+      : computePolicyScore(facts, evaluation.findings);
   const verdictDecision = decidePolicyVerdict(evaluation.findings, scoreResult.scoreSnapshot);
 
   let verdictId: string | null = null;

@@ -27,11 +27,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getReport, listHealthChecks, simulate, simulateTermAdequacy } from '@/api/policyCheckApi';
+import { getReport, listHealthChecks, simulate, simulateSavings, simulateTermAdequacy } from '@/api/policyCheckApi';
 import { apiErrorMessage } from '@/api/client';
 import { FIELD_SPECS, REPORT_PARAMETERS } from './productFields';
 import { PillarBars, ScoreRing, SectionTitle, SEVERITY_STYLE, SeverityChip, StatTile, VerdictChip, asSeverity, type Severity } from './ReportParts';
-import type { FinancialSimulatorInput, FinancialSimulatorOutput, InsurerMetricsDTO, Money, PolicyFindingDTO, PolicyProductType, PolicyScoreSnapshot, TermAdequacyOutput } from '@everypaisa/shared';
+import type { FinancialSimulatorInput, FinancialSimulatorOutput, InsurerMetricsDTO, Money, PolicyFindingDTO, PolicyProductType, PolicyScoreSnapshot, SavingsReturnOutput, TermAdequacyOutput } from '@everypaisa/shared';
 
 interface Props {
   checkId: string;
@@ -48,7 +48,7 @@ type ExtractedField = {
   clauseHeading: string | null;
 };
 
-const MONEY_KEYS = new Set(['sumAssured', 'sumInsured', 'roomRentLimitInr', 'deductibleInr', 'premiumAmountInr', 'criticalIllnessCoverInr', 'accidentalDeathBenefitInr']);
+const MONEY_KEYS = new Set(['sumAssured', 'sumInsured', 'roomRentLimitInr', 'deductibleInr', 'premiumAmountInr', 'criticalIllnessCoverInr', 'accidentalDeathBenefitInr', 'maturityBenefitGuaranteedInr', 'maturityBenefitIllustratedInr']);
 
 function describeValue(v: unknown, key?: string): string {
   if (v === null || v === undefined) return '';
@@ -377,6 +377,82 @@ function TermAdequacySection({ checkId }: { checkId: string }) {
   );
 }
 
+function SavingsSection({ checkId, isUlip }: { checkId: string; isUlip: boolean }) {
+  const [years, setYears] = useState('');
+  const [exitValue, setExitValue] = useState('');
+  const [rate, setRate] = useState('7');
+  const [result, setResult] = useState<SavingsReturnOutput | null>(null);
+
+  const m = useMutation({
+    mutationFn: () =>
+      simulateSavings(checkId, {
+        yearsPaid: years ? Number(years) : null,
+        surrenderValueNowInr: !isUlip && exitValue ? (exitValue as Money) : null,
+        fundValueNowInr: isUlip && exitValue ? (exitValue as Money) : null,
+        benchmarkRatePct: rate ? Number(rate) : null,
+      }),
+    onSuccess: setResult,
+  });
+
+  const field = (label: string, value: string, set: (v: string) => void, placeholder: string, hint?: string) => (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <Input type="number" placeholder={placeholder} value={value} onChange={(e) => set(e.target.value)} />
+      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+    </div>
+  );
+
+  const pct = (v: string | null) => (v === null ? '—' : `${v}%`);
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Compare keeping this policy with exiting it. The premiums and the guaranteed amounts come from your policy; the rest is what you tell us below.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-3">
+        {field('Years of premiums paid', years, setYears, 'e.g. 5')}
+        {isUlip
+          ? field('Fund value today (₹)', exitValue, setExitValue, 'e.g. 300000', 'From your latest ULIP statement.')
+          : field('Surrender value today (₹)', exitValue, setExitValue, 'e.g. 150000', 'Ask the insurer for a written quote. We do not estimate it.')}
+        {field('Compare against (% a year)', rate, setRate, '7', 'A fixed deposit rate is a fair yardstick.')}
+      </div>
+      <Button onClick={() => m.mutate()} disabled={m.isPending} size="sm">
+        <Calculator className="w-4 h-4 mr-2" />
+        Compare keep vs exit
+      </Button>
+      {m.isError && <p className="text-sm text-destructive">{apiErrorMessage(m.error)}</p>}
+      {result && (
+        <div className="bg-muted/40 rounded-lg p-4 space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              { label: 'Total premiums over the policy', value: result.totalPremiumsInr ? formatINR(result.totalPremiumsInr) : '—' },
+              { label: 'Guaranteed maturity amount', value: result.guaranteedMaturityInr ? formatINR(result.guaranteedMaturityInr) : 'Not guaranteed' },
+              { label: 'Guaranteed return a year', value: pct(result.guaranteedReturnPct) },
+              { label: 'Same premiums at your comparison rate', value: result.benchmarkValueAtMaturityInr ? formatINR(result.benchmarkValueAtMaturityInr) : '—' },
+              { label: 'Premiums paid so far', value: result.premiumsPaidSoFarInr ? formatINR(result.premiumsPaidSoFarInr) : '—' },
+              { label: 'Value if you exit today', value: result.exitValueNowInr ? formatINR(result.exitValueNowInr) : '—' },
+              { label: 'Gain or loss on exit', value: result.gainOrLossOnExitInr ? formatINR(result.gainOrLossOnExitInr) : '—' },
+              { label: 'Return if you exit today', value: pct(result.returnIfExitNowPct) },
+              { label: 'Return on staying in', value: pct(result.returnOnStayingPct), highlight: true },
+            ].map((row) => (
+              <ResultRow key={row.label} label={row.label} value={row.value} highlight={'highlight' in row ? row.highlight : undefined} />
+            ))}
+          </div>
+          <p className="text-sm font-medium">{result.summary}</p>
+          {result.missingInputs.length > 0 && (
+            <Badge variant="outline" className="text-xs text-amber-700 border-amber-300">
+              Partial — {result.missingInputs.join('; ')}
+            </Badge>
+          )}
+          <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
+            {result.assumptions.map((a) => <li key={a}>{a}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SimulatorSection({ checkId }: { checkId: string }) {
   const [inputs, setInputs] = useState<Partial<FinancialSimulatorInput>>({
     totalBillInr: '' as Money,
@@ -465,6 +541,7 @@ type ReportData = {
   policyId: string;
   productType?: PolicyProductType;
   sections: {
+    policyOverview?: { policy: { type?: string } | null } | null;
     verdict: { verdict: string; score: string | null; prose: string | null; proseVerified: boolean } | null;
     scoreSnapshot: PolicyScoreSnapshot | null;
     whatsGood: PolicyFindingDTO[];
@@ -498,6 +575,8 @@ export function HealthCheckReportPage({ checkId }: Props) {
   const { sections } = report;
   const productType: PolicyProductType = report.productType ?? 'HEALTH';
   const isTerm = productType === 'TERM';
+  const isSavings = productType === 'SAVINGS';
+  const isUlip = sections.policyOverview?.policy?.type === 'ULIP';
   const nGood = sections.whatsGood.length;
   const nAttention = sections.needsAttention.length;
   const nCritical = sections.criticalLimitations.length;
@@ -514,8 +593,8 @@ export function HealthCheckReportPage({ checkId }: Props) {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{isTerm ? 'Term life insurance' : 'Health insurance'}</p>
-          <h1 className="text-2xl font-semibold">{isTerm ? 'Term Life Policy Report' : 'Policy Health Report'}</h1>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{isSavings ? (isUlip ? 'Unit-linked insurance plan (ULIP)' : 'Savings-type life insurance') : isTerm ? 'Term life insurance' : 'Health insurance'}</p>
+          <h1 className="text-2xl font-semibold">{isSavings ? (isUlip ? 'ULIP Policy Report' : 'Savings Plan Report') : isTerm ? 'Term Life Policy Report' : 'Policy Health Report'}</h1>
           <p className="text-sm text-muted-foreground">
             {totalFindings} finding{totalFindings !== 1 ? 's' : ''} across {sections.docs.length} document{sections.docs.length !== 1 ? 's' : ''}
           </p>
@@ -598,9 +677,11 @@ export function HealthCheckReportPage({ checkId }: Props) {
 
       {/* Calculator */}
       <Panel>
-        <SectionTitle icon={<Calculator className="h-4 w-4" />}>{isTerm ? 'Cover calculator' : 'Financial simulator'}</SectionTitle>
+        <SectionTitle icon={<Calculator className="h-4 w-4" />}>{isSavings ? 'Keep or exit?' : isTerm ? 'Cover calculator' : 'Financial simulator'}</SectionTitle>
         <Card className="print:hidden">
-          <CardContent className="p-5">{isTerm ? <TermAdequacySection checkId={checkId} /> : <SimulatorSection checkId={checkId} />}</CardContent>
+          <CardContent className="p-5">
+            {isSavings ? <SavingsSection checkId={checkId} isUlip={isUlip} /> : isTerm ? <TermAdequacySection checkId={checkId} /> : <SimulatorSection checkId={checkId} />}
+          </CardContent>
         </Card>
       </Panel>
 

@@ -13,6 +13,8 @@ import type {
   PolicyExtractionDocDTO,
   PolicyFieldConflict,
   PolicyProductType,
+  SavingsReturnInput,
+  SavingsReturnOutput,
   TermAdequacyInput,
   TermAdequacyOutput,
   FinancialSimulatorInput,
@@ -173,6 +175,15 @@ export async function listHealthChecks(policyId: string): Promise<HealthCheckHis
     `/api/insurance/policies/${policyId}/health-checks`,
   );
   return unwrap(r.data).checks;
+}
+
+/** Savings plans: compare keeping the policy with exiting it. */
+export async function simulateSavings(checkId: string, input: SavingsReturnInput): Promise<SavingsReturnOutput> {
+  const r = await api.post<ApiResponse<SavingsReturnOutput>>(
+    `/api/insurance/health-check/${checkId}/simulate`,
+    input,
+  );
+  return unwrap(r.data);
 }
 
 /** Term life: size the cover against the user's own income and liabilities. */

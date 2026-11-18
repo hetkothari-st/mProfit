@@ -20,6 +20,13 @@ import {
   TermExtractionSchema,
 } from './termExtractionSchema.js';
 
+import {
+  SAVINGS_EXTRACTION_TOOL_DESCRIPTION,
+  SAVINGS_EXTRACTION_TOOL_NAME,
+  SAVINGS_TOOL_JSON_SCHEMA,
+  SavingsExtractionSchema,
+} from './savingsExtractionSchema.js';
+
 export interface ExtractionSpec {
   productType: PolicyProductType;
   schema: z.ZodTypeAny;
@@ -56,7 +63,27 @@ ${COMMON_RULES(TERM_EXTRACTION_TOOL_NAME)}
 - nomineePresent: true only if a nominee is named in the document.
 - deathBenefitOption: use LUMP_SUM unless the document says the benefit is paid as income or increases/decreases.`;
 
+const SAVINGS_PROMPT = `You are a document parser for an Indian life insurance savings policy (endowment, money-back, whole life or unit-linked ULIP). Extract structured data from the policy text below.
+
+${COMMON_RULES(SAVINGS_EXTRACTION_TOOL_NAME)}
+- maturityBenefitGuaranteedInr: only an amount the document says is GUARANTEED. Never use a bonus-based or illustrated figure here. If the maturity amount depends on bonuses, set null.
+- maturityBenefitIllustratedInr: the amount in a benefit illustration at an assumed rate (often shown as 4% / 8%). Use the figure for the higher scenario only if one is clearly labelled; otherwise null.
+- Charges are percentages: "1.35%" becomes "1.35". Use the FIRST-year premium allocation charge, and the highest annual fund management charge.
+- ULIP-only fields (charges, lock-in, switches, fund options, ulipDeathBenefitBasis) stay NOT_FOUND for traditional plans.
+- guaranteedSurrenderFromYear: the policy year a guaranteed surrender value starts. Do not guess it from the term.
+- nomineePresent: true only if a nominee is named in the document.`;
+
 export function getExtractionSpec(productType: PolicyProductType): ExtractionSpec {
+  if (productType === 'SAVINGS') {
+    return {
+      productType,
+      schema: SavingsExtractionSchema,
+      jsonSchema: SAVINGS_TOOL_JSON_SCHEMA,
+      toolName: SAVINGS_EXTRACTION_TOOL_NAME,
+      toolDescription: SAVINGS_EXTRACTION_TOOL_DESCRIPTION,
+      systemPrompt: SAVINGS_PROMPT,
+    };
+  }
   if (productType === 'TERM') {
     return {
       productType,
@@ -77,9 +104,20 @@ export function getExtractionSpec(productType: PolicyProductType): ExtractionSpe
   };
 }
 
-/** Policy types this feature supports, as stored on InsurancePolicy.type. */
-export const SUPPORTED_PRODUCT_TYPES: readonly PolicyProductType[] = ['HEALTH', 'TERM'];
+/** InsurancePolicy.type values this feature supports, mapped to the product type that decides schema, rules and score. */
+const POLICY_TYPE_TO_PRODUCT: Record<string, PolicyProductType> = {
+  HEALTH: 'HEALTH',
+  TERM: 'TERM',
+  ENDOWMENT: 'SAVINGS',
+  WHOLE_LIFE: 'SAVINGS',
+  ULIP: 'SAVINGS',
+};
 
 export function asProductType(policyType: string): PolicyProductType | null {
-  return (SUPPORTED_PRODUCT_TYPES as readonly string[]).includes(policyType) ? (policyType as PolicyProductType) : null;
+  return POLICY_TYPE_TO_PRODUCT[policyType] ?? null;
+}
+
+/** Which IRDAI insurer table applies: life insurers for everything except health. */
+export function insurerKindOf(productType: PolicyProductType): 'LIFE' | 'HEALTH' {
+  return productType === 'HEALTH' ? 'HEALTH' : 'LIFE';
 }

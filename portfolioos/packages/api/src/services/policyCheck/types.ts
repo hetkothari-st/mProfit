@@ -30,6 +30,7 @@ import type {
 import { toDecimal } from '@everypaisa/shared';
 import type { PolicyExtraction } from './extractionSchema.js';
 import type { TermExtraction } from './termExtractionSchema.js';
+import type { SavingsExtraction } from './savingsExtractionSchema.js';
 
 // ---------------------------------------------------------------------------
 // Thresholds (passed through facts so tests can override without changing
@@ -300,4 +301,77 @@ export interface TermRule {
   category: PolicyFindingCategory;
   /** Pure, synchronous, no I/O. */
   evaluate(facts: TermAnalysisFacts): PolicyFindingDTO[];
+}
+
+// ---------------------------------------------------------------------------
+// Savings plans (endowment / money-back / whole life / ULIP)
+// ---------------------------------------------------------------------------
+
+export interface SavingsRuleConstants {
+  /**
+   * Guaranteed annual return below this is a WARNING. Display heuristic, not a
+   * regulatory figure: roughly what a bank fixed deposit or small-savings
+   * scheme has paid recently.
+   */
+  lowReturnPct: number;
+  /** Guaranteed return below this (but above lowReturnPct) is a NOTICE. */
+  okReturnPct: number;
+  /**
+   * Sum assured under this multiple of the annual premium may not qualify for
+   * tax-free maturity proceeds under Section 10(10D) (10x for policies issued
+   * on or after 1 April 2012). A general summary, not tax advice.
+   */
+  minCoverMultiple: number;
+  /** IRDAI cap on the annual fund management charge of a ULIP, in percent. */
+  ulipFmcCapPct: number;
+  /** First-year allocation charge above this is a WARNING. Heuristic. */
+  allocationWarnPct: number;
+  /** First-year allocation charge above this is a NOTICE. Heuristic. */
+  allocationNoticePct: number;
+  /** IRDAI minimum ULIP lock-in in years. */
+  ulipLockInYears: number;
+  /** A guaranteed surrender value starting after this policy year is a NOTICE. */
+  lateSurrenderYear: number;
+  standardSuicideMonths: number;
+  minGraceDays: number;
+  minGraceMonthlyDays: number;
+}
+
+export const DEFAULT_SAVINGS_RULE_CONSTANTS: SavingsRuleConstants = {
+  lowReturnPct: 4,
+  okReturnPct: 6.5,
+  minCoverMultiple: 10,
+  ulipFmcCapPct: 1.35,
+  allocationWarnPct: 5,
+  allocationNoticePct: 3,
+  ulipLockInYears: 5,
+  lateSurrenderYear: 3,
+  standardSuicideMonths: 12,
+  minGraceDays: 30,
+  minGraceMonthlyDays: 15,
+};
+
+/**
+ * The input to every savings rule. planKind comes from the insurance record
+ * (ULIP vs ENDOWMENT / WHOLE_LIFE), never from anything extracted.
+ */
+export interface SavingsAnalysisFacts {
+  asOf: string;
+  userId: string;
+  policyId: string;
+  checkId: string;
+  productType: 'SAVINGS';
+  planKind: 'ULIP' | 'TRADITIONAL';
+  constants: SavingsRuleConstants;
+  extraction: SavingsExtraction;
+  insurer: InsurerMetricsFacts | null;
+  conflicts?: PolicyFieldConflict[];
+}
+
+export interface SavingsRule {
+  id: string;
+  version: string;
+  category: PolicyFindingCategory;
+  /** Pure, synchronous, no I/O. */
+  evaluate(facts: SavingsAnalysisFacts): PolicyFindingDTO[];
 }

@@ -36,6 +36,7 @@ export function UploadPage({ policyId }: Props) {
     queryFn: () => insuranceApi.getPolicy(policyId),
   });
   const isTerm = policy?.type === 'TERM';
+  const isSavings = policy?.type === 'ENDOWMENT' || policy?.type === 'WHOLE_LIFE' || policy?.type === 'ULIP';
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -72,11 +73,13 @@ export function UploadPage({ policyId }: Props) {
   return (
     <div className="max-w-2xl mx-auto space-y-6 p-4">
       <div>
-        <h1 className="text-2xl font-semibold">{isTerm ? 'Term Life Policy Check' : 'Policy Health Check'}</h1>
+        <h1 className="text-2xl font-semibold">{isSavings ? 'Savings Plan Check' : isTerm ? 'Term Life Policy Check' : 'Policy Health Check'}</h1>
         <p className="text-muted-foreground mt-1">
-          {isTerm
+          {isSavings
+            ? 'Upload your policy documents to see what the plan really returns, what it costs, how easily you can get your money out, and whether to keep it.'
+            : isTerm
             ? 'Upload your policy documents to check how long the cover lasts, how the benefit is paid, the riders and exclusions, and the claim terms.'
-            : 'Upload your policy documents to get a detailed analysis of your coverage, restrictions, and recommendations.'}
+            :'Upload your policy documents to get a detailed analysis of your coverage, restrictions, and recommendations.'}
         </p>
       </div>
 
@@ -91,7 +94,8 @@ export function UploadPage({ policyId }: Props) {
           </p>
           <p>
             <strong className="text-foreground">Policy schedule</strong> — the summary page with
-            your {isTerm ? 'sum assured, term, premium and nominee' : 'sum insured, premium, and member details'}.
+            your {isSavings ? 'sum assured, term, premium and maturity amount' : isTerm ? 'sum assured, term, premium and nominee' : 'sum insured, premium, and member details'}.
+            {isSavings ? ' A benefit illustration, if you have one, helps.' : ''}
           </p>
           <p>
             <strong className="text-foreground">Endorsements</strong> — any changes or additions

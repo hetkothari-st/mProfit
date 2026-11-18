@@ -248,18 +248,18 @@ export function InsuranceDetailPage() {
           </Link>
         </Button>
         <div className="flex gap-2">
-          {/* Policy check - health and term life policies; PLUS and above */}
-          {(policy.type === 'HEALTH' || policy.type === 'TERM') && (
+          {/* Policy check - health, term life, endowment, whole life and ULIP policies; PLUS and above */}
+          {['HEALTH', 'TERM', 'ENDOWMENT', 'WHOLE_LIFE', 'ULIP'].includes(policy.type) && (
             healthCheckEntitlement.allowed ? (
               <Button asChild variant="outline" size="sm">
                 <Link to={`/insurance/${id}/health-check`}>
-                  <Shield className="h-4 w-4" /> {policy.type === 'TERM' ? 'Run Policy Check' : 'Run Health Check'}
+                  <Shield className="h-4 w-4" /> {policy.type === 'HEALTH' ? 'Run Health Check' : 'Run Policy Check'}
                 </Link>
               </Button>
             ) : (
               <LockedFeature requiredTier="PLUS" featureName="Insurance Health Check" compact>
                 <Button variant="outline" size="sm" disabled>
-                  <Shield className="h-4 w-4" /> {policy.type === 'TERM' ? 'Run Policy Check' : 'Run Health Check'}
+                  <Shield className="h-4 w-4" /> {policy.type === 'HEALTH' ? 'Run Health Check' : 'Run Policy Check'}
                 </Button>
               </LockedFeature>
             )
