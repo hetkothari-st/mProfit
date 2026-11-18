@@ -104,3 +104,28 @@ export function requiredMonthlySip(
 
   return remaining.times(r).dividedBy(denominator);
 }
+
+/**
+ * Monthly SIP a goal needs: the shortfall against the inflation-adjusted
+ * target (the money that must exist on the date) when there is one, else
+ * against the plain target. `expectedReturnFraction` is how Goal.expectedReturn
+ * is stored (0.12 = 12%); requiredMonthlySip wants a percentage, so it is
+ * scaled here, in one place. Null when nothing is left to fund or the date has passed.
+ */
+export function goalMonthlySip(args: {
+  target: Decimal;
+  inflationAdjustedTarget: Decimal | null;
+  current: Decimal;
+  years: number;
+  expectedReturnFraction: number | null;
+}): Decimal | null {
+  const goal = args.inflationAdjustedTarget ?? args.target;
+  const shortfall = goal.minus(args.current);
+  const pct = args.expectedReturnFraction == null ? null : args.expectedReturnFraction * 100;
+  return requiredMonthlySip(shortfall, args.years, pct);
+}
+
+/** The target date is behind us and the goal is still short of its target. */
+export function isTargetDatePassed(years: number, target: Decimal, current: Decimal): boolean {
+  return years <= 0 && current.lessThan(target);
+}

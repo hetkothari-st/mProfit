@@ -44,7 +44,14 @@ installZodV3Messages();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      // One retry for a network blip or a 5xx. Never for a 4xx: a 429 (rate
+      // limited) retried at once just spends more of the same budget, and a
+      // 400/403/404 will not change on a second try.
+      retry: (failureCount, error) => {
+        const status = (error as { response?: { status?: number } } | null)?.response?.status;
+        if (status !== undefined && status >= 400 && status < 500) return false;
+        return failureCount < 1;
+      },
       refetchOnWindowFocus: false,
       staleTime: 30_000,
       queryKeyHashFn: (queryKey) =>

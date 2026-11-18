@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileDown, Loader2, Receipt } from 'lucide-react';
+import { AlertTriangle, FileDown, Loader2, Receipt } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { toDecimal } from '@everypaisa/shared';
@@ -126,6 +126,22 @@ export function DashboardTaxStrip() {
             {fmtINR(totalTax)}
           </span>
         </span>
+
+        {/* Sales with no recorded purchase are counted as 100% profit — say so
+            here too, not only on the Tax page, or this strip overstates tax. */}
+        {summary.unmatchedSales.count > 0 && (
+          <>
+            <span className="text-border shrink-0">·</span>
+            <Link
+              to="/tax"
+              title={`${summary.unmatchedSales.count} sale(s) have no purchase recorded, so their full value is counted as profit. Add the purchase to correct the figure.`}
+              className="flex shrink-0 items-center gap-1 font-medium text-amber-600 dark:text-amber-400 hover:underline"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              {summary.unmatchedSales.count} sale{summary.unmatchedSales.count === 1 ? '' : 's'} unverified
+            </Link>
+          </>
+        )}
 
         {/* LTCG exemption used — only show if any LTCG exists */}
         {ltcgGain.gt(0) && (

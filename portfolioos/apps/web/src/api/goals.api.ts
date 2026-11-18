@@ -44,6 +44,10 @@ export interface GoalDTO {
   yearsRemaining: number;
   inflationAdjustedTarget: string | null;
   requiredCagr: number | null;
+  /** Monthly saving needed to still reach the goal; null when funded or the date has passed. */
+  requiredMonthlySip: string | null;
+  /** The target date is behind us and the goal is still short. */
+  targetDatePassed: boolean;
   isOnTrack: boolean | null;
 }
 

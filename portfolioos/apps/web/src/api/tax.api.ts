@@ -37,7 +37,9 @@ export interface TaxSummary {
   /** True when slab-rate figures use a stand-in rate because no income-tax slab is on file. */
   slabIsEstimate: boolean;
   fnoBusinessIncome: { netPnl: string; turnover: string; tax: string; auditApplicable: boolean };
-  otherIncome: { dividend: string; interest: string; maturity: string };
+  otherIncome: { dividend: string; interest: string; maturity: string; accruedDepositInterest: string };
+  /** Sales with no recorded purchase: counted at nil cost, so the gain is an upper bound. */
+  unmatchedSales: { count: number; proceeds: string; assets: string[] };
   totalRealisedGain: string;
   totalEstimatedTax: string;
   availableFys: string[];
@@ -67,6 +69,8 @@ export interface TaxCapitalGainRow {
   // (`taxableGain` above is the non-indexed, possibly overstated, fallback).
   needsReview: boolean;
   reviewReason: string | null;
+  /** A sale with no recorded purchase behind it (shown at nil cost). */
+  unmatchedSale?: boolean;
 }
 
 export interface TaxGainsReport {

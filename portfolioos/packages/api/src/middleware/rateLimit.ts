@@ -146,9 +146,16 @@ function userOrIp(req: { user?: { id: string }; ip?: string }): string {
   return req.user?.id ?? req.ip ?? 'unknown';
 }
 
+// A dashboard load alone makes ~15 calls (3 per portfolio plus shared ones), so
+// 100/min per IP was spent after about six page views — and this limiter runs
+// before authentication, so it counts per IP, which on Indian mobile carriers
+// (CGNAT) and offices is many users at once. Throttled calls came back as 429,
+// the dashboard rendered "0 holdings", and the client retried each one, doubling
+// the load. 600/min still stops scripted abuse; the costly, auth, PII, import and
+// scrape endpoints keep their own tight limiters below.
 export const standardLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 100,
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   passOnStoreError: true,

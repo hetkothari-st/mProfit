@@ -1,3 +1,4 @@
+import { userAccruedDepositInterest } from '../income/depositInterestAccrual.js';
 import { Decimal } from 'decimal.js';
 import { ltcg112aExemptionForDate } from '@everypaisa/shared';
 import type { AssetClass, TransactionType } from '@prisma/client';
@@ -11,6 +12,7 @@ import {
   financialYearOf,
   loadFundCategoryMap,
   lotTaxStatus,
+  summarizeUnmatchedSales,
   type CapitalGainRow,
 } from './capitalGains.service.js';
 import { buildSchedule43Report } from '../reports/schedule43.report.js';
@@ -236,7 +238,9 @@ export interface TaxSummary {
   /** True when slab-rate figures use the stand-in rate because the user's slab isn't on file. */
   slabIsEstimate: boolean;
   fnoBusinessIncome: { netPnl: string; turnover: string; tax: string; auditApplicable: boolean };
-  otherIncome: { dividend: string; interest: string; maturity: string };
+  otherIncome: { dividend: string; interest: string; maturity: string; accruedDepositInterest: string };
+  /** Sales with no recorded purchase: counted at nil cost, so the gain is an upper bound. */
+  unmatchedSales: { count: number; proceeds: string; assets: string[] };
   totalRealisedGain: string;
   totalEstimatedTax: string;
   availableFys: string[];
@@ -287,6 +291,10 @@ export async function buildTaxSummary(
 
   // Other income (informational; taxed at slab outside this estimate)
   const income = await userIncomeReport(userId, fy, portfolioIds);
+  const accruedDepositInterest = await userAccruedDepositInterest(
+    { userId, ...(portfolioIds?.length ? { id: { in: portfolioIds } } : {}) },
+    fy,
+  );
 
   const totalRealisedGain = s111AGain
     .plus(s112AGain)
@@ -341,7 +349,9 @@ export async function buildTaxSummary(
       dividend: income.dividend,
       interest: income.interest,
       maturity: income.maturity,
+      accruedDepositInterest,
     },
+    unmatchedSales: summarizeUnmatchedSales(rows, fy),
     totalRealisedGain: totalRealisedGain.toString(),
     totalEstimatedTax: totalEstimatedTax.toString(),
     availableFys: fyOptionsFromRows(rows),
@@ -684,5 +694,6 @@ function rowToJson(r: CapitalGainRow) {
     financialYear: r.financialYear,
     needsReview: r.needsReview,
     reviewReason: r.reviewReason,
+    unmatchedSale: r.unmatchedSale === true,
   };
 }

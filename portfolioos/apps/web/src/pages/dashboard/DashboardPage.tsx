@@ -435,7 +435,11 @@ export function DashboardPage() {
     const priorValueD = currentValueD.minus(todaysChangeD);
     const todaysChangePct = priorValueD.greaterThan(0)
       ? todaysChangeD.dividedBy(priorValueD).times(100).toNumber() : null;
-    const xirrVals = filtered.map((s) => s.xirr).filter((x): x is number => x != null);
+    // One portfolio's XIRR is that portfolio's. Several portfolios are NOT averaged:
+    // an unweighted mean lets a tiny portfolio with a wild XIRR outvote the big
+    // ones, so a −15% book read as +2.8%. The pooled all-portfolio XIRR (from the
+    // user-level report) is used for the combined view instead.
+    const singleXirr = filtered.length === 1 ? filtered[0]!.xirr : null;
     return {
       currentValue: currentValueD.toFixed(4),
       totalInvestment: totalInvestmentD.toFixed(4),
@@ -446,7 +450,7 @@ export function DashboardPage() {
       todaysChangeD,
       todaysChangePct,
       holdingCount: filtered.reduce((a, s) => a + (s.holdingCount ?? 0), 0),
-      xirr: xirrVals.length ? xirrVals.reduce((a, b) => a + b, 0) / xirrVals.length : null,
+      xirr: singleXirr ?? null,
     };
   }, [summariesQuery.data, selectedId]);
 
@@ -500,6 +504,28 @@ export function DashboardPage() {
           </div>
         }
       />
+
+      {/* A failed fetch used to leave zeros ("0 holdings") with no sign anything
+          was wrong. Say so, and let the user retry. */}
+      {(summariesQuery.isError || holdingsQuery.isError || valuationQuery.isError || netWorthQuery.isError) && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span className="flex-1 min-w-[200px]">
+            Some of your figures could not be loaded just now, so the numbers below may be missing or zero.
+            This usually clears in a few seconds.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+              void queryClient.invalidateQueries({ queryKey: ['portfolios'] });
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* Net Worth Hero — editorial */}
       {nw && (
@@ -583,7 +609,7 @@ export function DashboardPage() {
                 { label: 'Bank balances', value: nw.bankAccounts.totalValue, color: 'hsl(190 70% 60%)', show: toDecimal(nw.bankAccounts.totalValue).greaterThan(0) },
                 { label: 'Real Estate', value: nw.realEstate.totalValue, color: 'hsl(25 80% 60%)', show: toDecimal(nw.realEstate.totalValue).greaterThan(0) },
                 { label: 'Vehicles', value: nw.vehicles.totalValue, color: 'hsl(40 90% 62%)', show: toDecimal(nw.vehicles.totalValue).greaterThan(0) },
-                { label: 'Sum Assured', value: nw.insurance.totalSumAssured, color: 'hsl(330 70% 68%)', show: nw.insurance.activePoliciesCount > 0 },
+                { label: 'Insurance cover', hint: 'Total sum assured on active policies. Cover is protection, not an asset, so it is not added to your net worth.', value: nw.insurance.totalSumAssured, color: 'hsl(330 70% 68%)', show: nw.insurance.activePoliciesCount > 0 },
               ]
                 .filter((item) => item.show)
                 .map((item, i, arr) => (
@@ -593,7 +619,12 @@ export function DashboardPage() {
                   >
                     <div className="flex items-center gap-2 mb-1.5">
                       <span className="inline-block h-2 w-2 rounded-[1px] rotate-45 flex-shrink-0" style={{ background: item.color }} />
-                      <span className="text-[10px] uppercase tracking-kerned text-muted-foreground">{item.label}</span>
+                      <span
+                        className={`text-[10px] uppercase tracking-kerned text-muted-foreground ${'hint' in item && item.hint ? 'cursor-help' : ''}`}
+                        title={'hint' in item ? item.hint : undefined}
+                      >
+                        {item.label}
+                      </span>
                     </div>
                     <AutoFitText className="mt-0.5">
                       <Money className="numeric-display text-[19px] text-foreground">{formatINR(item.value)}</Money>
@@ -855,7 +886,10 @@ export function DashboardPage() {
             value={formatINR(totals.totalInvestment)}
             icon={TrendingUp}
             hint={(() => {
-              const x = totals.xirr;
+              const pooled = userXirrQuery.data;
+              const x =
+                totals.xirr ??
+                (selectedId === 'ALL' && pooled && pooled.reliable !== false ? pooled.xirr : null);
               const t = userXirrQuery.data?.twr;
               const parts: string[] = [];
               if (x != null) parts.push(`XIRR ${formatPercent(x * 100, 1)}`);
@@ -1352,7 +1386,12 @@ export function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-2 sm:space-y-3">
               {nw.insurance.activePoliciesCount === 0 ? (
-                <p className="text-sm text-muted-foreground">No policies added yet.</p>
+                <p className="text-sm text-muted-foreground">
+                  {nw.insurance.lapsedPoliciesCount > 0
+                    ? `No active cover — ${nw.insurance.lapsedPoliciesCount} ${nw.insurance.lapsedPoliciesCount === 1 ? 'policy' : 'policies'} may have lapsed.`
+                    : 'No policies added yet.'}{' '}
+                  {nw.insurance.lapsedPoliciesCount > 0 && <Link to="/insurance" className="underline">Review</Link>}
+                </p>
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
@@ -1371,6 +1410,12 @@ export function DashboardPage() {
                       <p className="text-xs text-muted-foreground">per year total</p>
                     </div>
                   </div>
+                  {nw.insurance.lapsedPoliciesCount > 0 && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      {nw.insurance.lapsedPoliciesCount} more {nw.insurance.lapsedPoliciesCount === 1 ? 'policy' : 'policies'} may have lapsed (premium unpaid past grace) and {nw.insurance.lapsedPoliciesCount === 1 ? 'is' : 'are'} not counted here.{' '}
+                      <Link to="/insurance" className="underline">Review</Link>
+                    </p>
+                  )}
                   {nw.insurance.upcomingRenewals.length > 0 ? (
                     <div className="space-y-1.5">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Upcoming premiums</p>

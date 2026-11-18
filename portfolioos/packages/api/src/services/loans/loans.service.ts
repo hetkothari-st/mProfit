@@ -263,6 +263,8 @@ export type StoredLoan = {
   firstEmiDate: Date;
   prepaymentOption: string;
   taxBenefitSection?: string | null;
+  /** When the loan was added to the app; EMIs due before this are history, not "overdue". */
+  createdAt?: Date;
   payments: StoredPayment[];
 };
 
@@ -429,6 +431,14 @@ export interface LoanPosition {
   /** Opening balance of the first unpaid EMI; principal if the schedule cannot be built. */
   outstanding: Decimal;
   firstUnpaid: AmortizationRow | null;
+  /**
+   * The latest EMI that is genuinely overdue: due after the loan was added to
+   * the app and at most OVERDUE_WINDOW_DAYS late. Earlier unmarked EMIs are
+   * assumed paid (the balance already assumes so), so they never show as overdue.
+   */
+  missedEmi: AmortizationRow | null;
+  /** The next unpaid EMI that is still ahead (due today or later). */
+  nextDue: AmortizationRow | null;
   scheduleFailed: boolean;
 }
 
@@ -472,7 +482,7 @@ export function loanPosition(loan: StoredLoan, asOf: Date = new Date()): LoanPos
       { loanId: loan.id, errName: err instanceof Error ? err.name : 'unknown' },
       '[loans] schedule failed; principal used as outstanding',
     );
-    return { outstanding: new Decimal(loan.principalAmount.toString()), firstUnpaid: null, scheduleFailed: true };
+    return { outstanding: new Decimal(loan.principalAmount.toString()), firstUnpaid: null, missedEmi: null, nextDue: null, scheduleFailed: true };
   }
   const today = new Date(asOf.getTime());
   today.setUTCHours(0, 0, 0, 0);
@@ -481,6 +491,8 @@ export function loanPosition(loan: StoredLoan, asOf: Date = new Date()): LoanPos
     // The earliest unmarked EMI, past ones included: the dashboard's
     // upcoming/overdue EMI list reads it. It no longer drives the balance.
     firstUnpaid: schedule.find((r) => !r.isPaid) ?? null,
+    missedEmi: missedEmiInWindow(schedule, today, loan.createdAt ?? null),
+    nextDue: schedule.find((r) => !r.isPaid && r.date >= dateToIso(today)) ?? null,
     scheduleFailed: false,
   };
 }
@@ -548,7 +560,10 @@ export function computeLoanSummary(loan: StoredLoan, asOf: Date = new Date()): L
       const firstUnpaid = unpaidRows[0]!;
       nextEmiDate = firstUnpaid.date;
       nextEmiAmount = new Decimal(firstUnpaid.emiAmount);
-      remainingEmiCount = unpaidRows.length;
+      // Rounding can leave a few-rupee row past the tenure; it is not an EMI, so
+      // "EMIs left" never exceeds the tenure minus the rows already behind us.
+      const rowsBehind = schedule.length - unpaidRows.length;
+      remainingEmiCount = Math.min(unpaidRows.length, Math.max(0, loan.tenureMonths - rowsBehind));
       totalInterestPayable = unpaidRows.reduce(
         (s, r) => s.plus(new Decimal(r.interestPart)),
         ZERO,
@@ -581,7 +596,12 @@ export function computeLoanSummary(loan: StoredLoan, asOf: Date = new Date()): L
     totalInterestPaid: serializeMoney(totalInterestPaid),
     nextEmiDate,
     nextEmiAmount: serializeMoney(nextEmiAmount),
-    paidEmiCount: schedule.filter((r) => r.isPaid).length,
+    // EMIs that are behind us count as done whether or not someone marked them:
+    // the outstanding balance assumes so, and "paid + left" must equal the tenure.
+    paidEmiCount: Math.max(
+      schedule.filter((r) => r.isPaid).length,
+      Math.min(schedule.length, loan.tenureMonths) - remainingEmiCount,
+    ),
     // Rounding can leave a last few-rupee row past the tenure; it is not an EMI.
     scheduledEmiCount: Math.min(schedule.length, loan.tenureMonths),
     remainingEmiCount,
@@ -956,6 +976,30 @@ export async function getAmortization(
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * The latest unpaid EMI that fell due after the loan was added to the app and
+ * is at most OVERDUE_WINDOW_DAYS late — the one rule for "overdue", shared by
+ * the alert job, the dashboard and the family view so they can never disagree.
+ * `addedOn` null means unknown: only the window applies.
+ */
+export function missedEmiInWindow(
+  schedule: AmortizationRow[],
+  today: Date,
+  addedOn: Date | null,
+): AmortizationRow | null {
+  const day = new Date(today.getTime());
+  day.setUTCHours(0, 0, 0, 0);
+  const todayStr = dateToIso(day);
+  const addedStr = addedOn ? dateToIso(addedOn) : null;
+  const lateDays = (row: AmortizationRow) =>
+    Math.round((day.getTime() - new Date(`${row.date}T00:00:00Z`).getTime()) / DAY_MS);
+  return (
+    schedule
+      .filter((r) => !r.isPaid && r.date < todayStr && (addedStr === null || r.date >= addedStr) && lateDays(r) <= OVERDUE_WINDOW_DAYS)
+      .pop() ?? null
+  );
+}
+
+/**
  * Which EMI, if any, deserves an alert today. A missed EMI comes first: the
  * latest one that fell due after the loan was added to the app and is at most
  * OVERDUE_WINDOW_DAYS late. Otherwise the next unpaid EMI, when today is one
@@ -969,13 +1013,10 @@ export function pickEmiAlert(
   const day = new Date(today.getTime());
   day.setUTCHours(0, 0, 0, 0);
   const todayStr = dateToIso(day);
-  const addedStr = dateToIso(addedOn);
   const daysUntil = (row: AmortizationRow) =>
     Math.round((new Date(`${row.date}T00:00:00Z`).getTime() - day.getTime()) / DAY_MS);
 
-  const missed = schedule
-    .filter((r) => !r.isPaid && r.date < todayStr && r.date >= addedStr && -daysUntil(r) <= OVERDUE_WINDOW_DAYS)
-    .pop();
+  const missed = missedEmiInWindow(schedule, day, addedOn);
   if (missed) return { row: missed, daysLeft: daysUntil(missed), isOverdue: true };
 
   const next = schedule.find((r) => !r.isPaid && r.date >= todayStr);

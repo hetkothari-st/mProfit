@@ -99,6 +99,8 @@ export interface NetWorthResponse {
   };
   insurance: {
     activePoliciesCount: number;
+    /** Policies whose premium is past due and past grace: probably lapsed, not counted above. */
+    lapsedPoliciesCount: number;
     totalSumAssured: string;
     annualPremiumTotal: string;
     upcomingRenewals: InsuranceRenewal[];
