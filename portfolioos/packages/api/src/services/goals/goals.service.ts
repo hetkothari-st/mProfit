@@ -25,6 +25,8 @@ import {
   progressPct as calcProgressPct,
   inflationAdjustedTarget as calcInflationTarget,
   requiredCagr as calcRequiredCagr,
+  goalMonthlySip,
+  isTargetDatePassed,
   eligibleClassesForGoal,
 } from './goalMath.js';
 import type { Prisma } from '@prisma/client';
@@ -244,6 +246,19 @@ async function withProgress(userId: string, goal: RawGoal) {
       ? serializeMoney(inflationAdjustedTarget)
       : null,
     requiredCagr,
+    // What to put aside each month to still make it — the figure people act on;
+    // "need 456% CAGR" tells them only that it is out of reach.
+    requiredMonthlySip: (() => {
+      const sip = goalMonthlySip({
+        target,
+        inflationAdjustedTarget,
+        current: currentValue,
+        years,
+        expectedReturnFraction: goal.expectedReturn ? d(goal.expectedReturn).toNumber() : null,
+      });
+      return sip ? serializeMoney(sip) : null;
+    })(),
+    targetDatePassed: isTargetDatePassed(years, target, currentValue),
     isOnTrack:
       requiredCagr != null && goal.expectedReturn
         ? requiredCagr <= d(goal.expectedReturn).toNumber()

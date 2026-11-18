@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { HScroll } from '@/components/ui/h-scroll';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { FileDown, Loader2, Info, Pencil, RotateCcw, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -418,6 +419,24 @@ function SummaryView({
         </CardContent>
       </Card>
 
+      {data.unmatchedSales.count > 0 && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 p-3 rounded-md border border-amber-300 bg-amber-50 text-sm text-amber-800"
+        >
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>
+            {data.unmatchedSales.count} sale{data.unmatchedSales.count === 1 ? '' : 's'}
+            {data.unmatchedSales.assets.length > 0 && <> ({data.unmatchedSales.assets.slice(0, 3).join(', ')}
+            {data.unmatchedSales.assets.length > 3 ? ' …' : ''})</>} in this year ha
+            {data.unmatchedSales.count === 1 ? 's' : 've'} no purchase recorded. The full sale value
+            (₹{fmt(data.unmatchedSales.proceeds)}) is counted as profit, so the gain and tax below
+            are higher than they will be. Add the missing purchase in{' '}
+            <Link to="/transactions" className="underline font-medium">Transactions</Link> to correct it.
+          </span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader>
@@ -597,7 +616,7 @@ function SummaryView({
           <CardTitle className="text-sm">Other Income (taxed at slab — outside this estimate)</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             <div>
               <div className="text-xs text-muted-foreground">Dividends</div>
               <div className="font-medium">₹{fmt(data.otherIncome.dividend)}</div>
@@ -605,6 +624,12 @@ function SummaryView({
             <div>
               <div className="text-xs text-muted-foreground">Interest</div>
               <div className="font-medium">₹{fmt(data.otherIncome.interest)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground" title="Interest built up inside your FDs, RDs, NSC and post-office deposits this year, counted up to today even if nothing was paid out. Taxable at slab rate for most investors; an estimate.">
+                Deposit interest accrued (FD/RD/NSC)
+              </div>
+              <div className="font-medium">₹{fmt(data.otherIncome.accruedDepositInterest)}</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Maturity Proceeds</div>
@@ -677,9 +702,10 @@ function GainsView({
         <div className="flex items-start gap-2 p-3 rounded-md border border-amber-300 bg-amber-50 text-sm text-amber-800">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
           <span>
-            {data.rowsNeedingReview} row(s) qualify for indexation but the CII table has no
-            entry for that financial year — the gain shown is a non-indexed (possibly
-            overstated) fallback, not a final figure. Hover the row for details.
+            {data.rowsNeedingReview} row(s) need a check before you rely on the figure — for
+            example a sale with no recorded purchase (counted at nil cost), or an asset whose
+            indexation or fund category could not be resolved. Hover the Review tag on a row
+            for the exact reason.
           </span>
         </div>
       )}

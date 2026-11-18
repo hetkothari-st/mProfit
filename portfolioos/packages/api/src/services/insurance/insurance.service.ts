@@ -376,6 +376,19 @@ function graceDaysOf(p: Pick<ScheduleFields, 'type' | 'premiumFrequency' | 'grac
   return p.gracePeriodDays ?? defaultGraceDays(p.type, p.premiumFrequency);
 }
 
+/**
+ * True when the stored next-premium date is past due AND past the policy's grace
+ * period — the policy may no longer be in force even though its status still
+ * reads ACTIVE (nothing flips it automatically). Callers that total "active
+ * cover" or "premiums a year" use this so a lapsed policy isn't counted.
+ */
+export function isLapseRisk(
+  p: Pick<ScheduleFields, 'type' | 'premiumFrequency' | 'gracePeriodDays'> & { nextPremiumDue?: Date | null },
+  today: string = todayIso(),
+): boolean {
+  return premiumDueOn(isoOf(p.nextPremiumDue), { today, graceDays: graceDaysOf(p) }).state === 'LAPSE_RISK';
+}
+
 /** The next unpaid premium for a policy, from the shared schedule. */
 function nextDueFor(p: ScheduleFields, payments: StoredPayment[]): NextPremiumDue {
   const today = todayIso();

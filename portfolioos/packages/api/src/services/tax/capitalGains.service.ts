@@ -351,6 +351,24 @@ export interface CapitalGainRow {
   // final; `reviewReason` explains why.
   needsReview: boolean;
   reviewReason: string | null;
+  /**
+   * True for a sale (or the part of one) with no recorded purchase behind it.
+   * Its whole proceeds are counted as gain at nil cost, so the tax figure is
+   * an upper bound until the purchase is added. Not stored: derived on every
+   * compute.
+   */
+  unmatchedSale?: boolean;
+}
+
+/** The nil-cost sales in one financial year, for the "unverified gain" warning. */
+export function summarizeUnmatchedSales(
+  rows: CapitalGainRow[],
+  fy: string,
+): { count: number; proceeds: string; assets: string[] } {
+  const hit = rows.filter((r) => r.unmatchedSale && r.financialYear === fy);
+  const proceeds = hit.reduce((s, r) => s.plus(r.sellAmount), new Decimal(0));
+  const assets = [...new Set(hit.map((r) => r.assetName).filter(Boolean))];
+  return { count: hit.length, proceeds: proceeds.toString(), assets };
 }
 
 export interface CapitalGainsResult {
@@ -803,6 +821,7 @@ function runFifo(
         financialYear: financialYearOf(tx.tradeDate),
         isEquityOriented: treatment.equityOriented,
         needsReview: true,
+        unmatchedSale: true,
         reviewReason: joinNotes([
           fxNote,
           `Sold ${remaining.toString()} more units than the recorded purchases — shown at nil cost and short-term; add the purchase to compute the real cost and holding period.`,

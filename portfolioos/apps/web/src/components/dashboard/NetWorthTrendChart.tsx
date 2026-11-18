@@ -63,6 +63,21 @@ export function NetWorthTrendChart() {
   const isPositive = changeAbsolute ? !changeAbsolute.isNegative() : true;
   const isFlat = changeAbsolute ? changeAbsolute.isZero() : true;
   const periodLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label ?? period;
+  // "this 1Y" over a 5-month history is a lie: the change is measured from the
+  // first snapshot we actually have. Say "since <date>" whenever the data is
+  // shorter than the chosen window (and always for All).
+  const PERIOD_DAYS: Partial<Record<NetWorthHistoryPeriod, number>> = { '1M': 30, '3M': 90, '6M': 182, '1Y': 365 };
+  const firstAsOf = points[0]?.asOf ?? null;
+  const lastAsOf = points[points.length - 1]?.asOf ?? null;
+  const spanDays =
+    firstAsOf && lastAsOf
+      ? Math.round((new Date(lastAsOf).getTime() - new Date(firstAsOf).getTime()) / 86_400_000)
+      : 0;
+  const windowDays = PERIOD_DAYS[period];
+  const changeLabel =
+    firstAsOf && (windowDays === undefined || spanDays < windowDays * 0.9)
+      ? `since ${formatDateIST(firstAsOf)}`
+      : `this ${periodLabel}`;
 
   return (
     <Card className="reveal">
@@ -112,7 +127,12 @@ export function NetWorthTrendChart() {
                 {changePct.toFixed(1)}%)
               </span>
             )}
-            <span className="text-muted-foreground">this {periodLabel}</span>
+            <span
+              className="text-muted-foreground cursor-help"
+              title="This is the change in your total net worth. It includes money you added and assets you recorded, so it is not the same as investment returns."
+            >
+              {changeLabel}
+            </span>
             {/* The change is measured between the two ends of the window, so
                 an estimate at either end makes the change an estimate too. */}
             {changeIsEstimated && <EstimatedChip />}

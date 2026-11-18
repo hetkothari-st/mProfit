@@ -238,6 +238,11 @@ function GoalCard({ goal, portfolios, onEdit, onDelete }: CardProps) {
               <Badge variant="outline" className={`text-[10px] ${PRIORITY_TONE[goal.priority]}`}>
                 {goal.priority}
               </Badge>
+              {goal.targetDatePassed && (
+                <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700">
+                  Target date passed
+                </Badge>
+              )}
               {goal.status !== 'ACTIVE' && (
                 <Badge variant="outline" className="text-[10px]">
                   {goal.status}
@@ -283,16 +288,28 @@ function GoalCard({ goal, portfolios, onEdit, onDelete }: CardProps) {
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground border-t border-border/60 pt-2">
           <span className="inline-flex items-center gap-1">
             <CalendarClock className="h-3 w-3" />
-            {goal.yearsRemaining.toFixed(1)}y left
+            {goal.targetDatePassed ? 'Date passed' : `${goal.yearsRemaining.toFixed(1)}y left`}
           </span>
+          {goal.requiredMonthlySip != null && (
+            <span className="inline-flex items-center gap-1" title="What to put aside every month, from today, to reach the target on the target date (at the expected return you set, or with no growth if none).">
+              <TrendingUp className="h-3 w-3" />
+              Save {formatINR(goal.requiredMonthlySip)}/month
+            </span>
+          )}
           {goal.requiredCagr != null && (
             <span
               className={`inline-flex items-center gap-1 ${
                 goal.isOnTrack === false ? 'text-negative' : ''
               }`}
+              title="The yearly return your current savings alone would need to grow to the target by the target date."
             >
-              <TrendingUp className="h-3 w-3" />
-              Need {(goal.requiredCagr * 100).toFixed(1)}% CAGR
+              Needs {(goal.requiredCagr * 100).toFixed(1)}%/yr on current savings
+            </span>
+          )}
+          {goal.targetDatePassed && (
+            <span className="inline-flex items-center gap-1 text-amber-700">
+              <AlertTriangle className="h-3 w-3" />
+              Extend the date or top up — {formatINR(goal.remaining)} still short
             </span>
           )}
           {goal.isOnTrack === false && (

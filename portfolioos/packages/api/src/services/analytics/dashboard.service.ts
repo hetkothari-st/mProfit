@@ -3,6 +3,7 @@ import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { financialYearOf, financialYearRange } from '@everypaisa/shared';
 import { serializeMoney, financialYearFromDate, toDecimal, premiumToAnnual } from '@everypaisa/shared';
+import { isLapseRisk } from '../insurance/insurance.service.js';
 import { loanPosition, OUTSTANDING_LOAN_STATUSES, type StoredLoan } from '../loans/loans.service.js';
 import { outstandingLoansGiven } from '../loans/loansGiven.service.js';
 import { computeCardSummary } from '../banking/creditCards.service.js';
@@ -276,10 +277,15 @@ export async function getDashboardNetWorth(
   const rentalExpenseYTD = expenses.reduce((s, e) => s.plus(d(e.amount)), ZERO);
 
   // ── 4. Insurance ─────────────────────────────────────────────────────
-  const policies = await prisma.insurancePolicy.findMany({
+  const storedPolicies = await prisma.insurancePolicy.findMany({
     where: { userId, status: 'ACTIVE', ...(canSee('INSURANCE') ? {} : { id: { in: [] } }) },
     orderBy: { nextPremiumDue: 'asc' },
   });
+  // A policy whose premium is past due AND past grace has probably lapsed, though
+  // its status still says ACTIVE. Counting it inflated "active policies", cover
+  // and premiums; it is reported separately instead.
+  const policies = storedPolicies.filter((p) => !isLapseRisk(p));
+  const lapsedPoliciesCount = storedPolicies.length - policies.length;
 
   const totalSumAssured = policies.reduce((s, p) => s.plus(d(p.sumAssured)), ZERO);
   const annualPremium = policies.reduce(
@@ -337,26 +343,30 @@ export async function getDashboardNetWorth(
     // debt, but not towards monthly EMIs or EMI reminders.
     if (loan.status !== 'ACTIVE') continue;
     monthlyEmiTotal = monthlyEmiTotal.plus(d(loan.emiAmount));
-    const firstUnpaid = position.firstUnpaid;
-    if (!firstUnpaid) continue;
-
-    const emiDateMs = new Date(firstUnpaid.date + 'T00:00:00Z').getTime();
-    const daysDiff = Math.ceil((emiDateMs - today.getTime()) / 86_400_000);
-
-    if (daysDiff < 0) {
+    // "Overdue" is the loans module's one rule (missed after the loan was added,
+    // at most 30 days late); earlier unmarked EMIs are assumed paid, as the
+    // outstanding balance already does. The old code reported the earliest
+    // unmarked EMI however old, so a loan added mid-tenure read "140 days overdue".
+    if (position.missedEmi) {
+      const lateMs = today.getTime() - new Date(position.missedEmi.date + 'T00:00:00Z').getTime();
       overdueEmis.push({
         loanId: loan.id,
         lenderName: loan.lenderName,
-        daysOverdue: Math.abs(daysDiff),
+        daysOverdue: Math.max(1, Math.round(lateMs / 86_400_000)),
       });
-    } else if (daysDiff <= 30) {
-      upcomingEmis.push({
-        loanId: loan.id,
-        lenderName: loan.lenderName,
-        emiDate: firstUnpaid.date,
-        emiAmount: firstUnpaid.emiAmount,
-        daysUntil: daysDiff,
-      });
+    }
+    const next = position.nextDue;
+    if (next) {
+      const daysDiff = Math.ceil((new Date(next.date + 'T00:00:00Z').getTime() - today.getTime()) / 86_400_000);
+      if (daysDiff <= 30) {
+        upcomingEmis.push({
+          loanId: loan.id,
+          lenderName: loan.lenderName,
+          emiDate: next.date,
+          emiAmount: next.emiAmount,
+          daysUntil: daysDiff,
+        });
+      }
     }
   }
 
@@ -591,6 +601,7 @@ export async function getDashboardNetWorth(
 
     insurance: {
       activePoliciesCount: policies.length,
+      lapsedPoliciesCount,
       totalSumAssured: serializeMoney(totalSumAssured),
       annualPremiumTotal: serializeMoney(annualPremium),
       upcomingRenewals,
@@ -729,6 +740,7 @@ function mergeNetWorthResults(results: DashboardNetWorth[]): DashboardNetWorth {
 
     insurance: {
       activePoliciesCount: sumInt(results.map((r) => r.insurance.activePoliciesCount)),
+      lapsedPoliciesCount: sumInt(results.map((r) => r.insurance.lapsedPoliciesCount)),
       totalSumAssured: sumMoney(results.map((r) => r.insurance.totalSumAssured)),
       annualPremiumTotal: sumMoney(results.map((r) => r.insurance.annualPremiumTotal)),
       upcomingRenewals: results.flatMap((r) => r.insurance.upcomingRenewals),

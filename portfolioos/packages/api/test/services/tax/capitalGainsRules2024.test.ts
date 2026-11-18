@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Decimal } from 'decimal.js';
 import type { MFCategory, Transaction } from '@prisma/client';
-import { computeFIFOGains, type CapitalGainRow } from '../../../src/services/tax/capitalGains.service.js';
+import { computeFIFOGains, summarizeUnmatchedSales, type CapitalGainRow } from '../../../src/services/tax/capitalGains.service.js';
 
 /**
  * Capital gains engine against the holding-period, 23-Jul-2024, sec 50AA,
@@ -232,6 +232,35 @@ describe('matching', () => {
     expect(row.buyAmount.toString()).toBe('0');
     expect(row.needsReview).toBe(true);
     expect(row.reviewReason).toContain('more units than the recorded purchases');
+    // Tagged so the Summary tab and dashboard can warn that the gain is unverified.
+    expect(row.unmatchedSale).toBe(true);
+  });
+
+  it('a sale that does find its purchase is not tagged as unmatched', () => {
+    const row = one(
+      computeFIFOGains([
+        tx({ transactionType: 'BUY', tradeDate: '2024-01-01', quantity: '10', netAmount: '1000' }),
+        tx({ transactionType: 'SELL', tradeDate: '2024-09-01', quantity: '10', netAmount: '1500' }),
+      ]),
+    );
+    expect(row.unmatchedSale).toBeFalsy();
+  });
+
+  it('summarizeUnmatchedSales totals only the nil-cost rows of the chosen FY', () => {
+    const rows = computeFIFOGains([
+      // FY 2024-25: one orphan sale, one normal round trip
+      tx({ assetName: 'ORPHANCO', assetKey: 'stock:W', transactionType: 'SELL', tradeDate: '2024-09-01', quantity: '50', netAmount: '20000' }),
+      tx({ assetName: 'TCS', assetKey: 'stock:T', transactionType: 'BUY', tradeDate: '2024-01-01', quantity: '10', netAmount: '1000' }),
+      tx({ assetName: 'TCS', assetKey: 'stock:T', transactionType: 'SELL', tradeDate: '2024-09-02', quantity: '10', netAmount: '1500' }),
+      // FY 2025-26: another orphan
+      tx({ assetName: 'LATERCO', assetKey: 'stock:I', transactionType: 'SELL', tradeDate: '2025-11-04', quantity: '100', netAmount: '40000' }),
+    ]);
+    const fy2425 = summarizeUnmatchedSales(rows, '2024-25');
+    expect(fy2425.count).toBe(1);
+    expect(fy2425.proceeds).toBe('20000');
+    expect(fy2425.assets).toEqual(['ORPHANCO']);
+    expect(summarizeUnmatchedSales(rows, '2025-26').count).toBe(1);
+    expect(summarizeUnmatchedSales(rows, '2023-24').count).toBe(0);
   });
 
   it('groups by assetKey: two name-only gold items are separate, and an ISIN-less buy meets its ISIN sell', () => {

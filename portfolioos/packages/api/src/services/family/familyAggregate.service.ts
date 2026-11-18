@@ -54,7 +54,7 @@ import {
   requiredLifeCover,
   isLifePolicyType,
 } from '../analytics/healthScoreMath.js';
-import { buildAmortizationSchedule, computeLoanSummary, OUTSTANDING_LOAN_STATUSES, type StoredLoan } from '../loans/loans.service.js';
+import { buildAmortizationSchedule, computeLoanSummary, missedEmiInWindow, OUTSTANDING_LOAN_STATUSES, type StoredLoan } from '../loans/loans.service.js';
 import { computeCardSummary } from '../banking/creditCards.service.js';
 import { activeMonthlyIncomeTotal } from '../income/income.service.js';
 import { isPriceStale } from '../holdings/priceStaleness.js';
@@ -998,12 +998,13 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
     } catch {
       continue;
     }
-    const firstUnpaid = schedule.find((r) => !r.isPaid);
-    if (!firstUnpaid) continue;
-
-    const emiDate = new Date(`${firstUnpaid.date}T00:00:00Z`);
-    const days = daysUntil(emiDate, today);
-    if (days < 0) {
+    // Same rule as the dashboard and the alert job: only an EMI missed after the
+    // loan was added, within 30 days, is "overdue"; earlier unmarked EMIs are
+    // assumed paid. The old code took the earliest unmarked EMI however old.
+    const todayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+    const missed = missedEmiInWindow(schedule, new Date(todayMs), (loan as { createdAt?: Date }).createdAt ?? null);
+    if (missed) {
+      const days = daysUntil(new Date(`${missed.date}T00:00:00Z`), today);
       items.push({
         id: `LOAN_EMI_OVERDUE:${loan.id}`,
         type: 'LOAN_EMI_OVERDUE',
@@ -1011,22 +1012,28 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
         description: `EMI is ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} overdue`,
         urgency: 'HIGH',
         daysUntil: days,
-        dueDate: firstUnpaid.date,
-        amountInr: serializeMoney(toDecimal(firstUnpaid.emiAmount)),
+        dueDate: missed.date,
+        amountInr: serializeMoney(toDecimal(missed.emiAmount)),
         member: ref,
       });
-    } else if (days <= EMI_HORIZON_DAYS) {
-      items.push({
-        id: `LOAN_EMI_DUE:${loan.id}`,
-        type: 'LOAN_EMI_DUE',
-        title: `${loan.lenderName} EMI due in ${days} day${days === 1 ? '' : 's'}`,
-        description: `EMI due on ${firstUnpaid.date}`,
-        urgency: urgencyForDays(days),
-        daysUntil: days,
-        dueDate: firstUnpaid.date,
-        amountInr: serializeMoney(toDecimal(firstUnpaid.emiAmount)),
-        member: ref,
-      });
+    }
+    const todayIso = new Date(todayMs).toISOString().slice(0, 10);
+    const nextDue = schedule.find((r) => !r.isPaid && r.date >= todayIso);
+    if (nextDue) {
+      const days = daysUntil(new Date(`${nextDue.date}T00:00:00Z`), today);
+      if (days <= EMI_HORIZON_DAYS) {
+        items.push({
+          id: `LOAN_EMI_DUE:${loan.id}`,
+          type: 'LOAN_EMI_DUE',
+          title: `${loan.lenderName} EMI due in ${days} day${days === 1 ? '' : 's'}`,
+          description: `EMI due on ${nextDue.date}`,
+          urgency: urgencyForDays(days),
+          daysUntil: days,
+          dueDate: nextDue.date,
+          amountInr: serializeMoney(toDecimal(nextDue.emiAmount)),
+          member: ref,
+        });
+      }
     }
   }
 

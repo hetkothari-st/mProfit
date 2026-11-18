@@ -3,6 +3,7 @@ import { Decimal } from 'decimal.js';
 import {
   progressPct, inflationAdjustedTarget, requiredCagr,
   isLiquidForEmergencyFund, eligibleClassesForGoal, requiredMonthlySip,
+  goalMonthlySip, isTargetDatePassed,
 } from './goalMath.js';
 
 const D = (n: number | string) => new Decimal(n);
@@ -114,5 +115,33 @@ describe('requiredMonthlySip', () => {
     const sip = requiredMonthlySip(D(1_000_000), 10, -2)!;
     expect(sip.greaterThan(0)).toBe(true);
     expect(sip.greaterThan(requiredMonthlySip(D(1_000_000), 10, null)!)).toBe(true);
+  });
+});
+
+describe('goalMonthlySip', () => {
+  it('funds the inflation-adjusted shortfall when an adjusted target exists', () => {
+    // target 10L, adjusted 12L, have 2L -> fund 10L (not 8L) over 5y at 12%
+    const withInfl = goalMonthlySip({ target: D(1_000_000), inflationAdjustedTarget: D(1_200_000), current: D(200_000), years: 5, expectedReturnFraction: 0.12 })!;
+    const plain = goalMonthlySip({ target: D(1_000_000), inflationAdjustedTarget: null, current: D(200_000), years: 5, expectedReturnFraction: 0.12 })!;
+    expect(withInfl.greaterThan(plain)).toBe(true);
+    expect(withInfl.toNumber()).toBeCloseTo(requiredMonthlySip(D(1_000_000), 5, 12)!.toNumber(), 6);
+  });
+
+  it('reads the expected return as a fraction (0.12 = 12%), not a percent', () => {
+    const a = goalMonthlySip({ target: D(1_000_000), inflationAdjustedTarget: null, current: D(0), years: 10, expectedReturnFraction: 0.12 })!;
+    expect(a.toNumber()).toBeCloseTo(requiredMonthlySip(D(1_000_000), 10, 12)!.toNumber(), 6);
+  });
+
+  it('is null when already funded or when the date has passed', () => {
+    expect(goalMonthlySip({ target: D(1_000_000), inflationAdjustedTarget: null, current: D(1_000_000), years: 5, expectedReturnFraction: 0.1 })).toBeNull();
+    expect(goalMonthlySip({ target: D(1_000_000), inflationAdjustedTarget: null, current: D(0), years: -1, expectedReturnFraction: 0.1 })).toBeNull();
+  });
+});
+
+describe('isTargetDatePassed', () => {
+  it('is true only when the date is behind us and the goal is not yet funded', () => {
+    expect(isTargetDatePassed(-0.3, D(1_000_000), D(800_000))).toBe(true);
+    expect(isTargetDatePassed(-0.3, D(1_000_000), D(1_000_000))).toBe(false);
+    expect(isTargetDatePassed(2, D(1_000_000), D(800_000))).toBe(false);
   });
 });
