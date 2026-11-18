@@ -22,9 +22,10 @@ import { getPolicyCheckQueue } from '../lib/queue.js';
 import { env } from '../config/env.js';
 import { createDocument } from '../services/documents/document.service.js';
 import { extractPolicyData } from '../services/policyCheck/extract.service.js';
-import { asProductType, getExtractionSpec } from '../services/policyCheck/extractionSpecs.js';
+import { asProductType, getExtractionSpec, insurerKindOf } from '../services/policyCheck/extractionSpecs.js';
 import { calculateTermAdequacy } from '../services/policyCheck/termAdequacy.js';
-import type { PolicyProductType, TermAdequacyInput } from '@everypaisa/shared';
+import { calculateSavingsReturn } from '../services/policyCheck/savingsReturn.js';
+import type { PolicyProductType, SavingsReturnInput, TermAdequacyInput } from '@everypaisa/shared';
 import { runPolicyAnalysis } from '../services/policyCheck/analysisEngine.service.js';
 import { assertAnalysisCooldown } from '../jobs/policyCheckJob.js';
 import { enqueuePolicyProse } from '../jobs/policyCheckProseJob.js';
@@ -141,7 +142,7 @@ export async function createHealthCheckHandler(req: Request, res: Response) {
 
   if (!policy) throw new NotFoundError('Policy not found');
   if (!asProductType(policy.type)) {
-    throw new BadRequestError('Policy checks are supported for health and term life policies');
+    throw new BadRequestError('Policy checks are supported for health, term life, endowment, whole life and ULIP policies');
   }
 
   const check = await runInTransaction((tx) =>
@@ -494,7 +495,7 @@ export async function getReportHandler(req: Request, res: Response) {
 
   const productType = asProductType(policy?.type ?? '') ?? 'HEALTH';
   const insurerIntel = insurerName
-    ? await getInsurerIntelligence(insurerName, productType === 'TERM' ? 'LIFE' : 'HEALTH')
+    ? await getInsurerIntelligence(insurerName, insurerKindOf(productType))
     : null;
 
   ok(res, {
@@ -582,6 +583,23 @@ export async function simulateHandler(req: Request, res: Response) {
     select: { fields: true },
   });
   if (!data) throw new BadRequestError('No extracted data — run extraction first');
+
+  if (productType === 'SAVINGS') {
+    const owner = await prisma.policyHealthCheck.findFirst({
+      where: { id: checkId, userId },
+      select: { policy: { select: { type: true } } },
+    });
+    const planKind = owner?.policy.type === 'ULIP' ? 'ULIP' : 'TRADITIONAL';
+    const b = (req.body ?? {}) as Partial<SavingsReturnInput>;
+    const input: SavingsReturnInput = {
+      yearsPaid: typeof b.yearsPaid === 'number' ? b.yearsPaid : null,
+      surrenderValueNowInr: b.surrenderValueNowInr ?? null,
+      fundValueNowInr: b.fundValueNowInr ?? null,
+      benchmarkRatePct: typeof b.benchmarkRatePct === 'number' ? b.benchmarkRatePct : null,
+    };
+    ok(res, calculateSavingsReturn(input, data.fields as unknown as import('../services/policyCheck/savingsExtractionSchema.js').SavingsExtraction, planKind));
+    return;
+  }
 
   if (productType === 'TERM') {
     const input = req.body as TermAdequacyInput;

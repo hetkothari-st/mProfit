@@ -84,7 +84,52 @@ const TERM: FieldSpec = {
   boolean: new Set(['criticalIllnessCover', 'accidentalDeathBenefit', 'waiverOfPremium', 'terminalIllnessBenefit', 'returnOfPremium', 'nomineePresent', 'coverIncreasesWithTime']),
 };
 
-export const FIELD_SPECS: Record<PolicyProductType, FieldSpec> = { HEALTH, TERM };
+const SAVINGS: FieldSpec = {
+  labels: {
+    insuredName: 'Life Insured',
+    policyNumber: 'Policy Number',
+    insurerName: 'Insurer',
+    planName: 'Plan Name',
+    policyStartDate: 'Start Date',
+    ageAtEntry: 'Age at entry',
+    sumAssured: 'Sum Assured (₹)',
+    policyTermYears: 'Policy term (years)',
+    premiumPayingTermYears: 'Premium paying term (years)',
+    premiumAmountInr: 'Annual Premium (₹)',
+    premiumFrequency: 'Premium frequency',
+    premiumType: 'Premium type (regular / limited / single)',
+    maturityBenefitGuaranteedInr: 'Guaranteed maturity amount (₹)',
+    maturityBenefitIllustratedInr: 'Illustrated maturity amount (₹, not guaranteed)',
+    participating: 'Shares in insurer profits (bonuses)',
+    survivalBenefits: 'Money-back / survival benefits',
+    guaranteedSurrenderFromYear: 'Guaranteed surrender value from year',
+    loanAvailable: 'Loan against policy',
+    premiumAllocationChargePct: 'First-year premium allocation charge (%)',
+    fundManagementChargePct: 'Fund management charge (% a year)',
+    policyAdminChargeStated: 'Policy administration charge stated',
+    mortalityChargeStated: 'Mortality charge stated',
+    lockInYears: 'Lock-in (years)',
+    freeSwitchesPerYear: 'Free fund switches per year',
+    ulipDeathBenefitBasis: 'ULIP death benefit basis',
+    fundOptions: 'Fund options',
+    suicideExclusionMonths: 'Suicide exclusion (months)',
+    gracePeriodDays: 'Grace period (days)',
+    freeLookDays: 'Free-look period (days)',
+    nomineePresent: 'Nominee recorded',
+  },
+  groups: [
+    { title: 'Basic Information', fields: ['insuredName', 'policyNumber', 'insurerName', 'planName', 'policyStartDate', 'ageAtEntry'] },
+    { title: 'Cover and Premium', fields: ['sumAssured', 'policyTermYears', 'premiumPayingTermYears', 'premiumAmountInr', 'premiumFrequency', 'premiumType'] },
+    { title: 'What You Get Back', fields: ['maturityBenefitGuaranteedInr', 'maturityBenefitIllustratedInr', 'participating', 'survivalBenefits', 'guaranteedSurrenderFromYear', 'loanAvailable'] },
+    { title: 'ULIP Charges and Lock-in', fields: ['premiumAllocationChargePct', 'fundManagementChargePct', 'policyAdminChargeStated', 'mortalityChargeStated', 'lockInYears', 'freeSwitchesPerYear', 'ulipDeathBenefitBasis'] },
+    { title: 'Claim Terms', fields: ['suicideExclusionMonths', 'gracePeriodDays', 'freeLookDays', 'nomineePresent'] },
+  ],
+  critical: ['sumAssured'],
+  numeric: new Set(['ageAtEntry', 'policyTermYears', 'premiumPayingTermYears', 'guaranteedSurrenderFromYear', 'lockInYears', 'freeSwitchesPerYear', 'suicideExclusionMonths', 'gracePeriodDays', 'freeLookDays']),
+  boolean: new Set(['participating', 'survivalBenefits', 'loanAvailable', 'policyAdminChargeStated', 'mortalityChargeStated', 'nomineePresent']),
+};
+
+export const FIELD_SPECS: Record<PolicyProductType, FieldSpec> = { HEALTH, TERM, SAVINGS };
 
 /** The server validates corrections against the extraction schema, so send real numbers / booleans. */
 export function coerceInput(spec: FieldSpec, key: string, raw: string): unknown {
@@ -121,6 +166,15 @@ export const REPORT_PARAMETERS: Record<PolicyProductType, Array<{ label: string;
     { label: 'Claim terms', category: 'CLAIM_TERMS', keys: ['suicideExclusionMonths', 'gracePeriodDays', 'nomineePresent'] },
     { label: 'Riders and benefits', category: 'BENEFIT', keys: ['criticalIllnessCover', 'accidentalDeathBenefit', 'waiverOfPremium', 'terminalIllnessBenefit'] },
     { label: 'Premium structure', category: 'PREMIUM', keys: ['premiumType', 'premiumFrequency', 'premiumPayingTermYears', 'returnOfPremium'] },
+    { label: 'Exclusions', category: 'EXCLUSION', keys: ['exclusions'] },
+  ],
+  SAVINGS: [
+    { label: 'Cover and term', category: 'COVERAGE', keys: ['sumAssured', 'policyTermYears', 'ageAtEntry'] },
+    { label: 'Premium commitment', category: 'PREMIUM', keys: ['premiumAmountInr', 'premiumPayingTermYears', 'premiumFrequency', 'premiumType'] },
+    { label: 'What you get back', category: 'RETURNS', keys: ['maturityBenefitGuaranteedInr', 'maturityBenefitIllustratedInr', 'participating', 'survivalBenefits'] },
+    { label: 'Getting money out', category: 'LIQUIDITY', keys: ['guaranteedSurrenderFromYear', 'lockInYears', 'loanAvailable', 'freeSwitchesPerYear'] },
+    { label: 'ULIP charges', category: 'CHARGES', keys: ['premiumAllocationChargePct', 'fundManagementChargePct', 'ulipDeathBenefitBasis'] },
+    { label: 'Claim terms', category: 'CLAIM_TERMS', keys: ['suicideExclusionMonths', 'gracePeriodDays', 'freeLookDays', 'nomineePresent'] },
     { label: 'Exclusions', category: 'EXCLUSION', keys: ['exclusions'] },
   ],
 };

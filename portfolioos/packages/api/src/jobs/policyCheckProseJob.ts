@@ -112,7 +112,14 @@ async function narrateCheck(userId: string, checkId: string): Promise<void> {
   const ratingCategory = scoreSnapshot?.['ratingCategory'] as string | null;
   const overall = verdict.score?.toString() ?? null;
 
-  const kind = check.policy.type === 'TERM' ? 'term life' : 'health';
+  const kind =
+    check.policy.type === 'TERM'
+      ? 'term life'
+      : check.policy.type === 'ULIP'
+        ? 'unit-linked (ULIP)'
+        : check.policy.type === 'ENDOWMENT' || check.policy.type === 'WHOLE_LIFE'
+          ? 'savings-type life'
+          : 'health';
   const userMessage = [
     `Policy ${kind} check verdict: ${verdict.verdict}`,
     `Score: ${overall ?? 'N/A'}${ratingCategory ? ` (${ratingCategory})` : ''}`,
