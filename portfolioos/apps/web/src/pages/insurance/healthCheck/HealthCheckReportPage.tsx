@@ -58,6 +58,10 @@ function describeValue(v: unknown, key?: string): string {
     return t.charAt(0).toUpperCase() + t.slice(1);
   }
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (key && (typeof v === 'number' || (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v)))) {
+    const unit = /Pct$/.test(key) ? '%' : /Years$|^ageAtEntry$|^coverEndsAtAge$/.test(key) ? ' years' : /Months$/.test(key) ? ' months' : /Days$/.test(key) ? ' days' : '';
+    if (unit) return `${v}${unit}`;
+  }
   if (Array.isArray(v)) return v.length + ' listed';
   if (typeof v === 'object') return Object.entries(v as Record<string, unknown>).map(([k, x]) => k + ': ' + String(x)).join('; ');
   return String(v);
@@ -65,11 +69,15 @@ function describeValue(v: unknown, key?: string): string {
 
 const SEVERITY_ORDER = ['CRITICAL', 'WARNING', 'NOTICE', 'INFO'];
 
-function ParameterTable({ fields, findings, productType }: { fields: Record<string, ExtractedField> | null; findings: PolicyFindingDTO[]; productType: PolicyProductType }) {
+function ParameterTable({ fields, findings, productType, isUlip }: { fields: Record<string, ExtractedField> | null; findings: PolicyFindingDTO[]; productType: PolicyProductType; isUlip: boolean }) {
   if (!fields) return null;
+  // A savings plan is either traditional or unit-linked: hide the rows that cannot apply.
+  const rows = REPORT_PARAMETERS[productType].filter(
+    (p) => productType !== 'SAVINGS' || (isUlip ? p.category !== 'RETURNS' : p.category !== 'CHARGES'),
+  );
   return (
     <div className="divide-y rounded-lg border">
-      {REPORT_PARAMETERS[productType].map((p) => {
+      {rows.map((p) => {
         const found = p.keys
           .map((k) => ({ k, f: fields[k] }))
           .filter((x) => x.f && x.f.status !== 'NOT_FOUND' && x.f.value !== null && x.f.value !== undefined);
@@ -104,7 +112,7 @@ function ParameterTable({ fields, findings, productType }: { fields: Record<stri
   );
 }
 
-function Recommendations({ findings }: { findings: PolicyFindingDTO[] }) {
+function Recommendations({ findings, productType }: { findings: PolicyFindingDTO[]; productType: PolicyProductType }) {
   const actionable = findings.filter((f) => f.severity !== 'INFO' && f.whatWouldChangeThis);
   if (actionable.length === 0) return null;
   const seen = new Set<string>();
@@ -120,8 +128,11 @@ function Recommendations({ findings }: { findings: PolicyFindingDTO[] }) {
         ))}
       </ol>
       <p className="text-xs text-muted-foreground">
-        This report is informational and non-binding. Before switching or porting a policy, weigh waiting-period
-        credits already earned, pre-existing disease cover, your age and health, claim history and any new underwriting.
+        {productType === 'HEALTH'
+          ? 'This report is informational and non-binding. Before switching or porting a policy, weigh waiting-period credits already earned, pre-existing disease cover, your age and health, claim history and any new underwriting.'
+          : productType === 'SAVINGS'
+            ? 'This report is informational and non-binding. Before surrendering or stopping premiums, get the surrender value in writing and weigh the life cover you give up, any charges, and the tax treatment of what you receive.'
+            : 'This report is informational and non-binding. Before replacing a policy, weigh your age and health, any new underwriting, and the cover you would lose while the new policy starts.'}
       </p>
     </div>
   );
@@ -665,14 +676,14 @@ export function HealthCheckReportPage({ checkId }: Props) {
       {[...sections.needsAttention, ...sections.criticalLimitations].some((f) => f.severity !== 'INFO' && f.whatWouldChangeThis) && (
         <Panel>
           <SectionTitle icon={<Lightbulb className="h-4 w-4" />}>What to look into</SectionTitle>
-          <Recommendations findings={[...sections.criticalLimitations, ...sections.needsAttention]} />
+          <Recommendations productType={productType} findings={[...sections.criticalLimitations, ...sections.needsAttention]} />
         </Panel>
       )}
 
       {/* Parameters */}
       <Panel>
         <SectionTitle icon={<Table2 className="h-4 w-4" />}>Policy terms at a glance</SectionTitle>
-        <ParameterTable productType={productType} fields={(sections.parameterAnalysis as Record<string, ExtractedField> | null) ?? null} findings={allFindings} />
+        <ParameterTable productType={productType} isUlip={isUlip}fields={(sections.parameterAnalysis as Record<string, ExtractedField> | null) ?? null} findings={allFindings} />
       </Panel>
 
       {/* Calculator */}
