@@ -364,7 +364,7 @@ export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardP
                       // Format the original decimal string, not the float the
                       // chart plots — the tooltip must agree with the table.
                       `${formatINR(p.payload?.netWorth ?? '0')}${p.payload?.restricted ? ' (partial)' : ''}`,
-                      'Net worth',
+                      'Assets',
                     ]}
                   />
                   <Bar dataKey="value" radius={[0, 3, 3, 0]} barSize={14}>
@@ -377,14 +377,16 @@ export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardP
 
               {/* The chart shows shape; the ledger carries the numbers. */}
               <HScroll className="-mx-1 overflow-x-auto">
-                <table className="w-full min-w-[520px] border-collapse text-[13px]">
+                <table className="w-full min-w-[680px] border-collapse text-[13px]">
                   <thead>
                     <tr className="border-b border-border/70">
                       <Th align="left">Member</Th>
+                      <Th align="right">Assets</Th>
+                      <Th align="right">Loans</Th>
                       <Th align="right">Net worth</Th>
                       <Th align="right">Invested</Th>
                       <Th align="right">Unrealised P&amp;L</Th>
-                      <Th align="right">Share</Th>
+                      <Th align="right">Share of assets</Th>
                     </tr>
                   </thead>
                   <tbody>
@@ -401,7 +403,13 @@ export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardP
                           </span>
                         </td>
                         <td className="px-1 py-2 text-right">
-                          <Money className="font-medium">{formatINR(m.netWorth)}</Money>
+                          <Money>{formatINR(m.netWorth)}</Money>
+                        </td>
+                        <td className="px-1 py-2 text-right text-muted-foreground">
+                          <Money>{formatINR(m.totalLiabilities)}</Money>
+                        </td>
+                        <td className="px-1 py-2 text-right">
+                          <Money className="font-medium">{formatINR(m.netWorthAfterLiabilities)}</Money>
                         </td>
                         <td className="px-1 py-2 text-right text-muted-foreground">
                           <Money>{formatINR(m.invested)}</Money>
@@ -426,7 +434,7 @@ export function FamilyWealthCard({ data, isLoading, isError }: FamilyWealthCardP
                     {hiddenMembers > 0 && (
                       <tr className="border-t border-dashed border-amber-400/50">
                         <td
-                          colSpan={5}
+                          colSpan={7}
                           className="px-1 py-2 text-[12px] text-amber-700 dark:text-amber-300"
                         >
                           {pluralMembers(hiddenMembers)}

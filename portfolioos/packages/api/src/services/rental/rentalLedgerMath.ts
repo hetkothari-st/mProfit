@@ -177,3 +177,29 @@ export function deriveReceiptStatus(args: {
   cutoff.setUTCHours(0, 0, 0, 0);
   return args.dueDate <= cutoff ? 'OVERDUE' : 'EXPECTED';
 }
+
+/**
+ * How far back we keep chasing an unpaid month. A lease added to the app months after it began (the
+ * common case) arrives with its whole backlog marked OVERDUE, on purpose, so the landlord can record
+ * what was actually received. But emailing a tenant about rent from 16 months ago, or raising an alert
+ * for each of those months, is noise. Reminders and alerts stop at this age; the receipts stay OVERDUE
+ * and visible on the property page and in the overdue count until they are recorded or skipped.
+ */
+export const RENT_CHASE_WINDOW_DAYS = 90;
+
+/** Receipts due before this day are too old to chase. `today` is a UTC-midnight date. */
+export function rentChaseCutoff(today: Date): Date {
+  const d = new Date(today.getTime());
+  d.setUTCDate(d.getUTCDate() - RENT_CHASE_WINDOW_DAYS);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "2025-09" -> "Sep 2025" (the Indian locale's own "Sept" is the odd one out). */
+export function formatRentMonth(forMonth: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(forMonth);
+  const name = m ? MONTH_ABBR[Number(m[2]) - 1] : undefined;
+  return m && name ? `${name} ${m[1]}` : forMonth;
+}
