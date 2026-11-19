@@ -32,6 +32,12 @@ import {
   MOTOR_TOOL_JSON_SCHEMA,
   MotorExtractionSchema,
 } from './motorExtractionSchema.js';
+import {
+  HOME_EXTRACTION_TOOL_DESCRIPTION,
+  HOME_EXTRACTION_TOOL_NAME,
+  HOME_TOOL_JSON_SCHEMA,
+  HomeExtractionSchema,
+} from './homeExtractionSchema.js';
 
 export interface ExtractionSpec {
   productType: PolicyProductType;
@@ -89,7 +95,28 @@ ${COMMON_RULES(MOTOR_EXTRACTION_TOOL_NAME)}
 - ncbPercent: the no-claim bonus percentage applied to this policy year, as a whole number. Do not use the next-year entitlement.
 - idvInr: the Insured Declared Value. Null for a third-party-only policy.`;
 
+const HOME_PROMPT = `You are a document parser for an Indian home insurance policy (householder's policy for a house or flat). Extract structured data from the policy text below.
+
+${COMMON_RULES(HOME_EXTRACTION_TOOL_NAME)}
+- Never extract the property address.
+- coverScope: STRUCTURE_AND_CONTENTS if both the building and its contents are insured; STRUCTURE_ONLY if only the building; CONTENTS_ONLY if only the belongings.
+- sumInsuredStructureInr and sumInsuredContentsInr are separate sums. Use null for one that is not insured. Do not add them together.
+- valuationBasis: REINSTATEMENT if claims are paid at the cost to rebuild or replace new; DEPRECIATED if wear and tear or depreciation is deducted; MARKET_VALUE if claims are paid at market value. Use the claim settlement wording.
+- averageClause: true only if the policy mentions an average or under-insurance condition that reduces a claim proportionally.
+- Peril and extra booleans (floodCovered, earthquakeCovered, burglaryCovered, waterDamageCovered, electronicsCovered, valuablesCovered): true only if the document says the peril is covered; false only if it explicitly says it is excluded or not covered; otherwise NOT_FOUND.
+- premiumAmountInr is the total premium payable including GST.`;
+
 export function getExtractionSpec(productType: PolicyProductType): ExtractionSpec {
+  if (productType === 'HOME') {
+    return {
+      productType,
+      schema: HomeExtractionSchema,
+      jsonSchema: HOME_TOOL_JSON_SCHEMA,
+      toolName: HOME_EXTRACTION_TOOL_NAME,
+      toolDescription: HOME_EXTRACTION_TOOL_DESCRIPTION,
+      systemPrompt: HOME_PROMPT,
+    };
+  }
   if (productType === 'MOTOR') {
     return {
       productType,
@@ -138,6 +165,7 @@ const POLICY_TYPE_TO_PRODUCT: Record<string, PolicyProductType> = {
   WHOLE_LIFE: 'SAVINGS',
   ULIP: 'SAVINGS',
   MOTOR: 'MOTOR',
+  HOME: 'HOME',
 };
 
 export function asProductType(policyType: string): PolicyProductType | null {
@@ -146,10 +174,10 @@ export function asProductType(policyType: string): PolicyProductType | null {
 
 /**
  * Which IRDAI insurer table applies: life insurers for term and savings plans,
- * the health table for health. Null for motor: we hold no IRDAI motor claim data.
+ * the health table for health. Null for motor and home: we hold no IRDAI claim data for them.
  */
 export function insurerKindOf(productType: PolicyProductType): 'LIFE' | 'HEALTH' | null {
   if (productType === 'HEALTH') return 'HEALTH';
-  if (productType === 'MOTOR') return null;
+  if (productType === 'MOTOR' || productType === 'HOME') return null;
   return 'LIFE';
 }

@@ -169,7 +169,46 @@ const MOTOR: FieldSpec = {
   boolean: new Set(['ncbProtect', 'zeroDepreciation', 'engineProtect', 'returnToInvoice', 'consumablesCover', 'roadsideAssistance', 'tyreProtect', 'keyReplacement']),
 };
 
-export const FIELD_SPECS: Record<PolicyProductType, FieldSpec> = { HEALTH, TERM, SAVINGS, MOTOR };
+const HOME: FieldSpec = {
+  labels: {
+    insuredName: 'Policyholder',
+    policyNumber: 'Policy Number',
+    insurerName: 'Insurer',
+    planName: 'Plan Name',
+    policyStartDate: 'Start Date',
+    policyEndDate: 'Expiry Date',
+    policyTermYears: 'Policy term (years)',
+    coverScope: 'What is covered (building / contents / both)',
+    sumInsuredStructureInr: 'Building sum insured (₹)',
+    sumInsuredContentsInr: 'Contents sum insured (₹)',
+    valuationBasis: 'How a claim is valued (rebuild or replace new / market value / depreciated)',
+    averageClause: 'Under-insurance (average) clause',
+    premiumAmountInr: 'Total Premium (₹)',
+    floodCovered: 'Flood and storm covered',
+    earthquakeCovered: 'Earthquake covered',
+    burglaryCovered: 'Burglary and theft covered',
+    waterDamageCovered: 'Burst or leaking pipes covered',
+    electronicsCovered: 'Appliance breakdown covered',
+    valuablesCovered: 'Jewellery and valuables covered',
+    valuablesLimitInr: 'Jewellery and valuables limit (₹)',
+    alternateAccommodationInr: 'Rent / alternate accommodation cover (₹)',
+    publicLiabilityInr: 'Public liability cover (₹)',
+    personalAccidentInr: 'Personal accident cover (₹)',
+    deductibleInr: 'Deductible per claim (₹)',
+  },
+  groups: [
+    { title: 'Basic Information', fields: ['insuredName', 'policyNumber', 'insurerName', 'planName', 'policyStartDate', 'policyEndDate', 'policyTermYears'] },
+    { title: 'Cover and Premium', fields: ['coverScope', 'sumInsuredStructureInr', 'sumInsuredContentsInr', 'valuationBasis', 'averageClause', 'premiumAmountInr'] },
+    { title: 'Perils', fields: ['floodCovered', 'earthquakeCovered', 'burglaryCovered', 'waterDamageCovered'] },
+    { title: 'Extras', fields: ['electronicsCovered', 'valuablesCovered', 'valuablesLimitInr', 'alternateAccommodationInr', 'publicLiabilityInr', 'personalAccidentInr'] },
+    { title: 'Deductible', fields: ['deductibleInr'] },
+  ],
+  critical: ['coverScope', 'sumInsuredStructureInr'],
+  numeric: new Set(['policyTermYears']),
+  boolean: new Set(['averageClause', 'floodCovered', 'earthquakeCovered', 'burglaryCovered', 'waterDamageCovered', 'electronicsCovered', 'valuablesCovered']),
+};
+
+export const FIELD_SPECS: Record<PolicyProductType, FieldSpec> = { HEALTH, TERM, SAVINGS, MOTOR, HOME };
 
 /** The server validates corrections against the extraction schema, so send real numbers / booleans. */
 export function coerceInput(spec: FieldSpec, key: string, raw: string): unknown {
@@ -215,6 +254,14 @@ export const REPORT_PARAMETERS: Record<PolicyProductType, Array<{ label: string;
     { label: 'Getting money out', category: 'LIQUIDITY', keys: ['guaranteedSurrenderFromYear', 'lockInYears', 'loanAvailable', 'freeSwitchesPerYear'] },
     { label: 'ULIP charges', category: 'CHARGES', keys: ['premiumAllocationChargePct', 'fundManagementChargePct', 'ulipDeathBenefitBasis'] },
     { label: 'Claim terms', category: 'CLAIM_TERMS', keys: ['suicideExclusionMonths', 'gracePeriodDays', 'freeLookDays', 'nomineePresent'] },
+    { label: 'Exclusions', category: 'EXCLUSION', keys: ['exclusions'] },
+  ],
+  HOME: [
+    { label: 'Policy period', category: 'VALIDITY', keys: ['policyStartDate', 'policyEndDate', 'policyTermYears'] },
+    { label: 'Cover and sums insured', category: 'COVERAGE', keys: ['coverScope', 'sumInsuredStructureInr', 'sumInsuredContentsInr', 'averageClause', 'floodCovered', 'earthquakeCovered', 'burglaryCovered', 'waterDamageCovered', 'premiumAmountInr'] },
+    { label: 'How claims are paid', category: 'CLAIM_TERMS', keys: ['valuationBasis'] },
+    { label: 'Extras', category: 'BENEFIT', keys: ['electronicsCovered', 'valuablesCovered', 'valuablesLimitInr', 'alternateAccommodationInr', 'publicLiabilityInr', 'personalAccidentInr'] },
+    { label: 'Deductible', category: 'DEDUCTIBLE', keys: ['deductibleInr'] },
     { label: 'Exclusions', category: 'EXCLUSION', keys: ['exclusions'] },
   ],
   MOTOR: [

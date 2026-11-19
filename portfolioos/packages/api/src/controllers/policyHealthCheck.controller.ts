@@ -27,7 +27,8 @@ import { calculateTermAdequacy } from '../services/policyCheck/termAdequacy.js';
 import { getLinkedCover } from '../services/policyCheck/linkedCover.js';
 import { calculateSavingsReturn } from '../services/policyCheck/savingsReturn.js';
 import { calculateMotorIdv } from '../services/policyCheck/motorIdv.js';
-import type { MotorIdvInput, PolicyProductType, SavingsReturnInput, TermAdequacyInput } from '@everypaisa/shared';
+import { calculateHomeCover } from '../services/policyCheck/homeCover.js';
+import type { HomeCoverInput, MotorIdvInput, PolicyProductType, SavingsReturnInput, TermAdequacyInput } from '@everypaisa/shared';
 import { runPolicyAnalysis } from '../services/policyCheck/analysisEngine.service.js';
 import { assertAnalysisCooldown } from '../jobs/policyCheckJob.js';
 import { enqueuePolicyProse } from '../jobs/policyCheckProseJob.js';
@@ -144,7 +145,7 @@ export async function createHealthCheckHandler(req: Request, res: Response) {
 
   if (!policy) throw new NotFoundError('Policy not found');
   if (!asProductType(policy.type)) {
-    throw new BadRequestError('Policy checks are supported for health, term life, endowment, whole life, ULIP and motor policies');
+    throw new BadRequestError('Policy checks are supported for health, term life, endowment, whole life, ULIP, motor and home policies');
   }
 
   const check = await runInTransaction((tx) =>
@@ -584,6 +585,17 @@ export async function simulateHandler(req: Request, res: Response) {
     select: { fields: true },
   });
   if (!data) throw new BadRequestError('No extracted data — run extraction first');
+
+  if (productType === 'HOME') {
+    const b = (req.body ?? {}) as Partial<HomeCoverInput>;
+    const input: HomeCoverInput = {
+      builtUpAreaSqft: typeof b.builtUpAreaSqft === 'number' && b.builtUpAreaSqft > 0 ? b.builtUpAreaSqft : null,
+      rebuildCostPerSqftInr: b.rebuildCostPerSqftInr ?? null,
+      contentsReplacementValueInr: b.contentsReplacementValueInr ?? null,
+    };
+    ok(res, calculateHomeCover(input, data.fields as unknown as import('../services/policyCheck/homeExtractionSchema.js').HomeExtraction));
+    return;
+  }
 
   if (productType === 'MOTOR') {
     const b = (req.body ?? {}) as Partial<MotorIdvInput>;

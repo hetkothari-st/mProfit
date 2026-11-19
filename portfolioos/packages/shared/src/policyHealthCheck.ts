@@ -27,7 +27,7 @@ export type PolicyCheckStatus =
   | 'FAILED';
 
 /** What kind of policy a check is for. Decides the extraction schema, rules and score. */
-export type PolicyProductType = 'HEALTH' | 'TERM' | 'SAVINGS' | 'MOTOR';
+export type PolicyProductType = 'HEALTH' | 'TERM' | 'SAVINGS' | 'MOTOR' | 'HOME';
 
 /** How we classified a document the user uploaded. */
 export type PolicyDocClassification =
@@ -646,3 +646,45 @@ export interface LinkedCover {
   outstandingLoansInr: Money;
 }
 
+
+// ---------------------------------------------------------------------------
+// Home
+// ---------------------------------------------------------------------------
+
+/**
+ * What the user knows about their home today. The sums insured come from the
+ * policy documents; none of these do.
+ */
+export interface HomeCoverInput {
+  /** Built-up area in square feet. */
+  builtUpAreaSqft: number | null;
+  /** What it would cost to rebuild, per square foot, in INR (Money string). Construction only: no land. */
+  rebuildCostPerSqftInr: Money | null;
+  /** What it would cost to replace everything inside the home today (Money string). */
+  contentsReplacementValueInr: Money | null;
+}
+
+export interface HomeCoverOutput {
+  /** Building sum insured stated in the policy. */
+  structureSumInsuredInr: Money | null;
+  /** Built-up area x rebuild cost per square foot. */
+  rebuildCostInr: Money | null;
+  /** rebuild cost - sum insured. Positive = insured for less than it would cost to rebuild. */
+  structureShortfallInr: Money | null;
+  /** Sum insured as a percent of the rebuild cost (2 dp). */
+  structureCoveredPct: string | null;
+  /** Contents sum insured stated in the policy. */
+  contentsSumInsuredInr: Money | null;
+  contentsReplacementValueInr: Money | null;
+  contentsShortfallInr: Money | null;
+  contentsCoveredPct: string | null;
+  /** Whether the policy says it cuts part-claims in proportion to under-insurance. */
+  averageClause: 'APPLIES' | 'DOES_NOT_APPLY' | 'UNKNOWN';
+  /** A worked example: a loss of this size ... */
+  exampleLossInr: Money | null;
+  /** ... would be paid about this much on the least-covered item (null when no proportional cut applies). */
+  exampleClaimInr: Money | null;
+  summary: string;
+  assumptions: string[];
+  missingInputs: string[];
+}
