@@ -3,6 +3,7 @@ import {
   create,
   detail,
   duplicates,
+  exportCsv,
   list,
   remove,
   removeDuplicateRows,
@@ -25,6 +26,7 @@ transactionsRouter.get('/', asyncHandler(list));
 transactionsRouter.post('/', asyncHandler(create));
 
 // Ahead of '/:id' — otherwise "duplicates" reads as a transaction id.
+transactionsRouter.get('/export', asyncHandler(exportCsv));
 transactionsRouter.get('/duplicates', asyncHandler(duplicates));
 transactionsRouter.post('/duplicates/remove', asyncHandler(removeDuplicateRows));
 

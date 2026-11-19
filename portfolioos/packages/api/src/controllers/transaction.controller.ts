@@ -6,8 +6,13 @@ import {
   deleteTransaction,
   getTransaction,
   listTransactions,
+  listTransactionsForExport,
+  TRANSACTION_SORT_KEYS,
   updateTransaction,
 } from '../services/holdings/transaction.service.js';
+import { transactionsToCsv } from '../services/holdings/transactionExport.js';
+import { prisma } from '../lib/prisma.js';
+import { writeAuditLog } from '../lib/audit.js';
 import { removeDuplicates, scanDuplicates } from '../services/imports/duplicates.service.js';
 import { created, noContent, ok } from '../lib/response.js';
 import { UnauthorizedError } from '../lib/errors.js';
@@ -77,6 +82,9 @@ const listQuerySchema = z.object({
   transactionType: z.nativeEnum(TransactionType).optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
+  q: z.string().trim().max(100).optional(),
+  sort: z.enum(TRANSACTION_SORT_KEYS).optional(),
+  dir: z.enum(['asc', 'desc']).optional(),
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().max(1000).optional(),
 });
@@ -127,4 +135,27 @@ export async function detail(req: Request, res: Response) {
 export async function list(req: Request, res: Response) {
   const q = listQuerySchema.parse(req.query);
   ok(res, await listTransactions(userId(req), q, parseFamilyId(req)));
+}
+
+/** The filtered list as a CSV download (no paging): same filters, search and order as the page. */
+export async function exportCsv(req: Request, res: Response) {
+  const { page: _page, pageSize: _pageSize, ...q } = listQuerySchema.parse(req.query);
+  const uid = userId(req);
+  const rows = await listTransactionsForExport(uid, q, parseFamilyId(req));
+  const ids = [...new Set(rows.map((r) => r.portfolioId))];
+  const portfolios = ids.length
+    ? await prisma.portfolio.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
+    : [];
+  const csv = transactionsToCsv(rows, new Map(portfolios.map((p) => [p.id, p.name])));
+  await writeAuditLog({
+    userId: uid,
+    action: 'data_export',
+    resource: 'transactions',
+    metadata: { rows: rows.length, filtered: Boolean(q.q || q.assetClass || q.transactionType || q.portfolioId || q.from || q.to) },
+    req,
+  });
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="transactions-${stamp}.csv"`);
+  res.send(csv);
 }
