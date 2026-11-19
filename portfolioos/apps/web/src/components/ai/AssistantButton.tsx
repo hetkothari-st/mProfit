@@ -31,9 +31,6 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 const DISMISS_KEY = 'everypaisa.ai-teaser-seen.v2';
 const ROTATE_MS = 12_000;
 const FIRST_VISIT_HOLD_MS = 6_000;
-// The rotating "Try asking" bubble sits over page content, so it does not rotate forever: after this many
-// questions it retires for the session (the launcher button stays).
-export const TEASER_QUESTION_LIMIT = 3;
 
 // Fallback questions if the API is slow / rate-limited / user has no
 // data yet. Keeps the bubble useful for demo-mode accounts.
@@ -126,14 +123,6 @@ export function AssistantButton() {
     const t = setInterval(() => setIdx((i) => i + 1), ROTATE_MS);
     return () => clearInterval(t);
   }, [open, dismissed, phase]);
-
-  // Retire the bubble once it has shown its quota of questions.
-  useEffect(() => {
-    if (phase === 'suggested' && idx >= TEASER_QUESTION_LIMIT && !dismissed) {
-      setDismissed(true);
-      window.sessionStorage.setItem(DISMISS_KEY, '1');
-    }
-  }, [phase, idx, dismissed]);
 
   const dismiss = () => {
     setDismissed(true);

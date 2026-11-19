@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, waitFor, act, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AssistantButton, TEASER_QUESTION_LIMIT } from './AssistantButton';
+import { AssistantButton } from './AssistantButton';
 
 // The AI feature is off by default on the server. The launcher used to show
 // regardless, and every tap ended in an error.
@@ -59,16 +59,23 @@ describe('AssistantButton', () => {
       await screen.findByRole('button', { name: /open ai assistant/i });
     }
 
-    it('retires after a few questions instead of rotating forever, keeping the launcher', async () => {
-      await enabledWithFakeTimers();
-      expect(screen.getByText(/meet your portfolio assistant/i)).toBeTruthy();
+    it('keeps rotating a new question every 12s so users keep discovering the feature', async () => {
+      api.status.mockResolvedValue({ enabled: true });
+      api.suggested.mockResolvedValue([{ question: 'First question?' }, { question: 'Second question?' }] as never);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      renderButton();
+      await screen.findByRole('button', { name: /open ai assistant/i });
 
       await act(async () => { await vi.advanceTimersByTimeAsync(6_500); });
       expect(screen.getByText(/try asking/i)).toBeTruthy();
+      expect(screen.getByText(/First question\?/)).toBeTruthy();
 
-      await act(async () => { await vi.advanceTimersByTimeAsync(12_000 * TEASER_QUESTION_LIMIT + 500); });
-      expect(screen.queryByText(/try asking/i)).toBeNull();
-      expect(screen.getByRole('button', { name: /open ai assistant/i })).toBeTruthy();
+      await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+      expect(screen.getByText(/Second question\?/)).toBeTruthy();
+
+      // Many rotations later it is still there, not retired.
+      await act(async () => { await vi.advanceTimersByTimeAsync(12_000 * 10); });
+      expect(screen.getByText(/try asking/i)).toBeTruthy();
     });
 
     it('steps aside while the page is scrolled down, on desktop too, and returns on scroll up', async () => {
