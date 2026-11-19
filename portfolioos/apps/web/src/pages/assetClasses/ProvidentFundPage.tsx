@@ -386,10 +386,36 @@ function AddPfAccountDialog({ onClose }: AddPfAccountDialogProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Empty-state copy
+// ---------------------------------------------------------------------------
+
+/**
+ * "No provident fund yet - add a transaction" is wrong when the member has already linked an EPF/PPF
+ * account whose balance simply has not been fetched: the page then contradicted the "Auto-fetch accounts"
+ * card sitting right under it. Say what is actually true.
+ */
+export function providentFundEmptyOverride(
+  accounts: ReadonlyArray<Pick<PfAccount, 'type' | 'identifierLast4'>> | undefined,
+): { title: string; description: string } | undefined {
+  if (!accounts || accounts.length === 0) return undefined;
+  const label =
+    accounts.length === 1
+      ? `Your ${accounts[0]!.type} account ending ${accounts[0]!.identifierLast4} is linked`
+      : `Your ${accounts.length} provident fund accounts are linked`;
+  return {
+    title: `${label}, but no balance has been fetched yet`,
+    description:
+      'Use Refresh or Passbook on the account below to bring in the balance. You can also add an entry by hand.',
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 export function ProvidentFundPage() {
+  // Same query key as AutoFetchSection, so this is one request shared from the cache.
+  const { data: accounts } = useQuery({ queryKey: ['pf-accounts'], queryFn: () => pfApi.list(), retry: 1 });
   return (
     <>
       <SimpleAssetPage
@@ -398,6 +424,7 @@ export function ProvidentFundPage() {
         icon={Wallet}
         assetClasses={['PPF', 'EPF']}
         defaultAssetClass="PPF"
+        emptyOverride={providentFundEmptyOverride(accounts)}
         formOptions={[
           { label: 'PPF entry', assetClass: 'PPF', FormComponent: PPFFormDialog },
           { label: 'EPF entry', assetClass: 'EPF', FormComponent: EPFFormDialog },

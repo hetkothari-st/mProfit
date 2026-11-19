@@ -56,6 +56,8 @@ interface Props {
    *  the title) and before the summary cards. Use for asset-class-specific
    *  banners like the live commodity rate bar on the Gold & Silver page. */
   topSlot?: React.ReactNode;
+  /** Overrides the empty-state copy when "nothing yet" would mislead (e.g. an account is linked but unfetched). */
+  emptyOverride?: { title: string; description: string };
 }
 
 const ASSET_CLASS_LABELS: Partial<Record<AssetClass, string>> = {
@@ -95,6 +97,7 @@ export function SimpleAssetPage({
   onHoldingClick,
   groupHoldingsByClass,
   topSlot,
+  emptyOverride,
 }: Props) {
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
@@ -306,8 +309,8 @@ export function SimpleAssetPage({
         <EmptyState
           icon={Icon}
           // Acronym titles (NPS) stay as written; "No nps yet" read as a typo.
-          title={`No ${title === title.toUpperCase() ? title : title.toLowerCase()} yet`}
-          description="Add a transaction to start tracking this asset class."
+          title={emptyOverride?.title ?? `No ${title === title.toUpperCase() ? title : title.toLowerCase()} yet`}
+          description={emptyOverride?.description ?? 'Add a transaction to start tracking this asset class.'}
           action={
             <Button onClick={() => openAdd()}>
               <Plus className="h-4 w-4" /> Add first entry
