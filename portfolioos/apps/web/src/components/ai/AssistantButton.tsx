@@ -83,27 +83,25 @@ export function AssistantButton() {
   // once per session and then gets out of the way instead of rotating.
   const isPhone = useMediaQuery('(max-width: 767px)');
 
-  // On phones the FAB floats over page content (row actions, right-aligned
-  // values, toggles). Tuck it away while the user scrolls down and bring it
-  // back on any scroll up, so nothing stays covered.
-  const [tucked, setTucked] = useState(false);
+  // The launcher and its bubble float over page content (row actions, right-aligned values, toggles). Tuck
+  // them away while the user scrolls down and bring them back on any scroll up, so nothing stays covered.
+  // Phones tuck both; larger screens tuck only the bubble, which is the wider of the two.
+  const [scrolledDown, setScrolledDown] = useState(false);
   useEffect(() => {
-    if (!isPhone) {
-      setTucked(false);
-      return;
-    }
     const main = document.querySelector('main');
     if (!main) return;
     let last = main.scrollTop;
     const onScroll = () => {
       const y = main.scrollTop;
       if (Math.abs(y - last) < 8) return;
-      setTucked(y > last && y > 40);
+      setScrolledDown(y > last && y > 40);
       last = y;
     };
     main.addEventListener('scroll', onScroll, { passive: true });
     return () => main.removeEventListener('scroll', onScroll);
-  }, [isPhone]);
+  }, []);
+  const tucked = isPhone && scrolledDown;
+  const bubbleTucked = scrolledDown;
 
   // Move welcome → suggested rotation after a short hold (phones: hide).
   useEffect(() => {
@@ -149,7 +147,7 @@ export function AssistantButton() {
 
   return (
     <>
-      {!open && !dismissed && !tucked && (
+      {!open && !dismissed && !bubbleTucked && (
         <div className="fixed z-30 bottom-[calc(7.25rem+env(safe-area-inset-bottom))] md:bottom-[5rem] right-4 sm:right-6 flex flex-col items-end gap-2 pointer-events-none">
           <TeaserBubble
             phase={phase}
