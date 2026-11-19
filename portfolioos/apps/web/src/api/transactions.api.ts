@@ -20,8 +20,23 @@ export interface ListTransactionsParams {
   transactionType?: string;
   from?: string;
   to?: string;
+  /** Free text; every word must match the asset name, symbol, scheme, AMC, ISIN or broker. */
+  q?: string;
+  sort?: 'date' | 'amount' | 'asset' | 'type' | 'quantity';
+  dir?: 'asc' | 'desc';
   page?: number;
   pageSize?: number;
+}
+
+function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 export const transactionsApi = {
@@ -30,6 +45,11 @@ export const transactionsApi = {
       params,
     });
     return unwrap(data);
+  },
+  /** Downloads every transaction matching the filters (not just the visible page) as a CSV. */
+  async exportCsv(params: Omit<ListTransactionsParams, 'page' | 'pageSize'> = {}): Promise<void> {
+    const res = await api.get('/api/transactions/export', { params, responseType: 'blob' });
+    saveBlob(res.data as Blob, `transactions-${new Date().toISOString().slice(0, 10)}.csv`);
   },
   async get(id: string): Promise<TransactionDTO> {
     const { data } = await api.get<ApiResponse<TransactionDTO>>(`/api/transactions/${id}`);

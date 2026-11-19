@@ -594,14 +594,91 @@ export async function getTransaction(userId: string, id: string) {
   return toTransactionDTO(tx);
 }
 
+export const TRANSACTION_SORT_KEYS = ['date', 'amount', 'asset', 'type', 'quantity'] as const;
+export type TransactionSortKey = (typeof TRANSACTION_SORT_KEYS)[number];
+
 export interface ListTransactionsQuery {
   portfolioId?: string;
   assetClass?: AssetClass;
   transactionType?: TransactionType;
   from?: string;
   to?: string;
+  /** Free text: every word must match the asset name, symbol, scheme, AMC, ISIN or broker. */
+  q?: string;
+  sort?: TransactionSortKey;
+  dir?: 'asc' | 'desc';
   page?: number;
   pageSize?: number;
+}
+
+const MAX_SEARCH_TERMS = 5;
+
+/**
+ * "reliance ltd" -> each word must appear somewhere in the row (AND across words, OR across fields), so
+ * word order does not matter and "hdfc bluechip" finds "HDFC Top 100 ... Bluechip". Prisma parameterises
+ * `contains`, so user text is never interpolated into SQL.
+ */
+export function searchWhere(q: string | undefined): Prisma.TransactionWhereInput | null {
+  const terms = (q ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, MAX_SEARCH_TERMS);
+  if (terms.length === 0) return null;
+  const has = (t: string) => ({ contains: t, mode: 'insensitive' as const });
+  return {
+    AND: terms.map((t) => ({
+      OR: [
+        { assetName: has(t) },
+        { isin: has(t) },
+        { broker: has(t) },
+        { stock: { is: { OR: [{ symbol: has(t) }, { name: has(t) }] } } },
+        { fund: { is: { OR: [{ schemeName: has(t) }, { schemeCode: has(t) }, { amcName: has(t) }] } } },
+      ],
+    })),
+  };
+}
+
+type SortableRow = {
+  tradeDate: Date;
+  createdAt: Date;
+  transactionType: string;
+  netAmount: Prisma.Decimal;
+  quantity: Prisma.Decimal;
+  assetName: string | null;
+  stock?: { name: string } | null;
+  fund?: { schemeName: string } | null;
+};
+
+const displayName = (r: SortableRow): string => r.stock?.name ?? r.fund?.schemeName ?? r.assetName ?? '';
+
+/** Orders rows by the chosen column; ties fall back to newest-first so paging is stable. */
+export function sortTransactionRows<T extends SortableRow>(
+  rows: T[],
+  sort: TransactionSortKey = 'date',
+  dir: 'asc' | 'desc' = 'desc',
+): T[] {
+  const sign = dir === 'asc' ? 1 : -1;
+  const primary = (a: T, b: T): number => {
+    switch (sort) {
+      case 'amount':
+        return a.netAmount.comparedTo(b.netAmount);
+      case 'quantity':
+        return a.quantity.comparedTo(b.quantity);
+      case 'type':
+        return a.transactionType.localeCompare(b.transactionType);
+      case 'asset':
+        return displayName(a).localeCompare(displayName(b), 'en', { sensitivity: 'base' });
+      default:
+        return a.tradeDate.getTime() - b.tradeDate.getTime();
+    }
+  };
+  return [...rows].sort(
+    (a, b) =>
+      sign * primary(a, b) ||
+      b.tradeDate.getTime() - a.tradeDate.getTime() ||
+      b.createdAt.getTime() - a.createdAt.getTime(),
+  );
 }
 
 /**
@@ -617,11 +694,8 @@ export function resolvePageSize(requested: number | null | undefined): number {
   return requested && requested > 0 ? Math.min(requested, MAX_TRANSACTION_PAGE_SIZE) : 50;
 }
 
-export async function listTransactions(
-  userId: string,
-  q: ListTransactionsQuery,
-  familyId?: string,
-) {
+/** Every row matching the filters, in the requested order (no paging). */
+async function loadFilteredTransactions(userId: string, q: ListTransactionsQuery, familyId?: string) {
   const scope = await getEffectiveScope(userId, familyId ? { familyId } : {});
 
   // A CONTRIBUTOR/VIEWER whose visibility excludes the requested asset
@@ -632,8 +706,7 @@ export async function listTransactions(
     scope.allowedAssetClasses !== null &&
     !scope.allowedAssetClasses.includes(q.assetClass)
   ) {
-    const pageSize = resolvePageSize(q.pageSize);
-    return { items: [], pagination: { page: 1, pageSize, total: 0, totalPages: 1 } };
+    return [];
   }
 
   const where: Prisma.TransactionWhereInput = {};
@@ -646,6 +719,8 @@ export async function listTransactions(
     if (q.from) (where.tradeDate as any).gte = toDateOnly(q.from);
     if (q.to) (where.tradeDate as any).lte = toDateOnly(q.to);
   }
+  const search = searchWhere(q.q);
+  if (search) where.AND = [search];
 
   const include = {
     stock: { select: { symbol: true, name: true, isin: true, exchange: true } },
@@ -675,11 +750,15 @@ export async function listTransactions(
     ),
   ]);
 
-  const allRows = [...ownRows, ...perMemberRows.flat()].sort(
-    (a, b) =>
-      b.tradeDate.getTime() - a.tradeDate.getTime() ||
-      b.createdAt.getTime() - a.createdAt.getTime(),
-  );
+  return sortTransactionRows([...ownRows, ...perMemberRows.flat()], q.sort, q.dir);
+}
+
+export async function listTransactions(
+  userId: string,
+  q: ListTransactionsQuery,
+  familyId?: string,
+) {
+  const allRows = await loadFilteredTransactions(userId, q, familyId);
 
   const page = q.page && q.page > 0 ? q.page : 1;
   const pageSize = resolvePageSize(q.pageSize);
@@ -695,6 +774,12 @@ export async function listTransactions(
       totalPages: Math.max(1, Math.ceil(allRows.length / pageSize)),
     },
   };
+}
+
+/** All rows matching the filters, for export. Same filters, search and order as the list. */
+export async function listTransactionsForExport(userId: string, q: ListTransactionsQuery, familyId?: string) {
+  const rows = await loadFilteredTransactions(userId, q, familyId);
+  return rows.map(toTransactionDTO);
 }
 
 type TransactionWithRefs = Prisma.TransactionGetPayload<{
