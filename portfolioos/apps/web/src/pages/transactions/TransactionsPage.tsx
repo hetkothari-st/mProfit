@@ -25,7 +25,7 @@ import {
   type TransactionFilters,
 } from './transactionFilters';
 import type { TransactionDTO } from '@everypaisa/shared';
-import { ASSET_CLASS_LABELS, formatINR, formatQuantity, formatDateOnly, transactionTypeLabel } from '@everypaisa/shared';
+import { ASSET_CLASS_LABELS, formatINR, formatQuantity, formatDateOnly, transactionTypeLabel, assetClassLabel } from '@everypaisa/shared';
 
 export function TransactionsPage() {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('');
@@ -321,7 +321,7 @@ export function TransactionsPage() {
                       <td data-label="Asset" className="py-2 pr-4">
                         <div className="font-medium truncate max-w-xs">{r.assetName}</div>
                         <div className="text-xs text-muted-foreground">
-                          {r.symbol ?? r.schemeCode ?? r.isin ?? r.assetClass}
+                          {r.symbol ?? r.schemeCode ?? r.isin ?? assetClassLabel(r.assetClass)}
                         </div>
                       </td>
                       <td data-label="Qty" className="py-2 pr-4 text-right tabular-nums">{formatQuantity(r.quantity)}</td>
