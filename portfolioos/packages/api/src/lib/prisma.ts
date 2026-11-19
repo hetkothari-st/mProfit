@@ -268,6 +268,8 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'ExtractedPolicyData',
   'PolicyFinding',
   'PolicyVerdict',
+  // In-app support (20261119140000_support_tickets).
+  'SupportTicket',
 ]);
 
 /**

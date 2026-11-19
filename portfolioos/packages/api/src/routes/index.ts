@@ -29,6 +29,7 @@ import { mfAnalyticsRouter } from './mfAnalytics.routes.js';
 import { mfPortfolioRouter } from './mfPortfolio.routes.js';
 import { mfQualitativeFactsRouter } from './mfQualitativeFacts.routes.js';
 import { adminLoanRatesRouter } from './adminLoanRates.routes.js';
+import { supportRouter, adminSupportRouter } from './support.routes.js';
 import { foRouter } from './fo.routes.js';
 import { catalogRouter, valuationRouter } from './valuation.routes.js';
 import { documentsRouter } from './documents.routes.js';
@@ -109,6 +110,8 @@ export function registerRoutes(app: Express): void {
   // gates must not be conflated.
   app.use('/api/admin/mf-qualitative-facts', mfQualitativeFactsRouter);
   app.use('/api/admin/loan-rates', adminLoanRatesRouter);
+  app.use('/api/support', supportRouter);
+  app.use('/api/admin/support', adminSupportRouter);
   app.use('/api/fo', foRouter);
   app.use('/api/catalog', catalogRouter);
   app.use('/api/valuations', valuationRouter);

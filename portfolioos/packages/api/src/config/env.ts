@@ -35,6 +35,8 @@ const EnvSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().default('EveryPaisa <no-reply@portfolioos.in>'),
+  // Where new Help & support messages are emailed.
+  SUPPORT_EMAIL: z.string().email().default('admin.everypaisa@gmail.com'),
   // Secure flag: true (port 465 with TLS) vs false (587 with STARTTLS).
   SMTP_SECURE: z.enum(['true', 'false']).default('false'),
 

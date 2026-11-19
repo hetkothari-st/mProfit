@@ -24,6 +24,8 @@ import { AcceptProfessionalInvitePage } from './pages/ca/AcceptProfessionalInvit
 import { ProfessionalAccessPage } from './pages/settings/ProfessionalAccessPage';
 import { AiConnectorsPage } from './pages/settings/AiConnectorsPage';
 import { LoanRatesAdminPage } from './pages/settings/LoanRatesAdminPage';
+import { SupportPage } from './pages/support/SupportPage';
+import { SupportAdminPage } from './pages/settings/SupportAdminPage';
 import { FamilyMemberPage } from './pages/family/FamilyMemberPage';
 import { TransactionsPage } from './pages/transactions/TransactionsPage';
 import { StocksPage } from './pages/assetClasses/StocksPage';
@@ -195,6 +197,8 @@ export function App() {
         <Route path="/settings/professional-access" element={<ProfessionalAccessPage />} />
         <Route path="/settings/ai-connectors" element={<AiConnectorsPage />} />
         <Route path="/settings/loan-rates" element={<LoanRatesAdminPage />} />
+        <Route path="/settings/support" element={<SupportAdminPage />} />
+        <Route path="/support" element={<SupportPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/stocks" element={<StocksPage />} />
         <Route path="/mutual-funds" element={<MutualFundsPage />} />
