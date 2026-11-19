@@ -738,7 +738,7 @@ async function raiseAlert(input: {
   const existing = await prisma.alert.findFirst({
     where: {
       userId: input.opsUserId,
-      type: 'CUSTOM',
+      type: 'SYSTEM',
       title: input.title,
       triggerDate: input.triggerDate,
     },
@@ -749,7 +749,7 @@ async function raiseAlert(input: {
   await prisma.alert.create({
     data: {
       userId: input.opsUserId,
-      type: 'CUSTOM',
+      type: 'SYSTEM',
       title: input.title,
       description: input.description,
       triggerDate: input.triggerDate,

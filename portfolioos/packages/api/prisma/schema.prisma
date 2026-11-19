@@ -1674,6 +1674,9 @@ enum AlertType {
   ADVICE
   /// A held fund's rating moved to another form band (Leading/Steady/Lagging/Weak) on the monthly re-rate.
   MF_RATING_CHANGE
+  /// Operator alerts from fleet-wide jobs (loan rates stale, data drift, MF reference data). Raised for the
+  /// oldest ADMIN; kept out of the normal inbox, bell and overdue counts (see alerts.service).
+  SYSTEM
   CUSTOM
 }
 

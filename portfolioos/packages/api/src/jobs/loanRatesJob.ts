@@ -177,6 +177,7 @@ async function runInner(options: LoanRatesRunOptions): Promise<LoanRatesRunResul
   const fresh = await prisma.loanRateSource.findMany({ where: { mode: 'AUTO' }, orderBy: { id: 'asc' } });
   const staleSources = fresh.filter((s) => isSourceStale(s, now)).map((s) => s.id);
   const alerted = staleSources.length > 0 ? await raiseStaleAlert(opsUserId, staleSources, now) : false;
+  if (staleSources.length === 0 && opsUserId !== null) await resolveStaleAlert(opsUserId);
   return { pages, staleSources, dlqRows, alerted };
 }
 
@@ -310,10 +311,26 @@ async function resolveOpsUserId(): Promise<string | null> {
   return admin?.id ?? null;
 }
 
-/** One alert per IST day: dedupe key (userId, CUSTOM, title, triggerDate), as the other ops alerts use. */
+/** Every source reads fresh again: close the open stale alert. */
+async function resolveStaleAlert(opsUserId: string): Promise<void> {
+  await prisma.alert.updateMany({
+    where: {
+      userId: opsUserId,
+      type: 'SYSTEM',
+      isActive: true,
+      metadata: { path: ['source'], equals: LOAN_RATES_ALERT_SOURCE },
+    },
+    data: { isActive: false },
+  });
+}
+
+/**
+ * One open alert while any source is stale, refreshed in place on each run. It used to be one alert per IST
+ * day (the date was in the title), so a source that stayed stale for a month left thirty alerts behind.
+ */
 async function raiseStaleAlert(opsUserId: string | null, staleSources: string[], now: Date): Promise<boolean> {
   const day = istDate(now);
-  const title = `Loan rates stale: ${day}`;
+  const title = 'Loan rates stale';
   const description =
     `${staleSources.length} loan-rate source(s) have had no successful reading for more than ${STALE_AFTER_DAYS} days: ` +
     `${staleSources.join(', ')}. Users still see the last good rate, marked stale. Check Settings - Loan rates and the ` +
@@ -322,21 +339,24 @@ async function raiseStaleAlert(opsUserId: string | null, staleSources: string[],
     logger.error({ staleSources }, `[loanRates] ${description} (no ADMIN user to alert)`);
     return false;
   }
-  const triggerDate = dateOnly(day);
   const existing = await prisma.alert.findFirst({
-    where: { userId: opsUserId, type: 'CUSTOM', title, triggerDate },
+    where: {
+      userId: opsUserId,
+      type: 'SYSTEM',
+      isActive: true,
+      metadata: { path: ['source'], equals: LOAN_RATES_ALERT_SOURCE },
+    },
     select: { id: true },
   });
+  const metadata = { source: LOAN_RATES_ALERT_SOURCE, staleSources };
   if (existing === null) {
     await prisma.alert.create({
-      data: {
-        userId: opsUserId,
-        type: 'CUSTOM',
-        title,
-        description,
-        triggerDate,
-        metadata: { source: LOAN_RATES_ALERT_SOURCE, staleSources },
-      },
+      data: { userId: opsUserId, type: 'SYSTEM', title, description, triggerDate: dateOnly(day), metadata },
+    });
+  } else {
+    await prisma.alert.update({
+      where: { id: existing.id },
+      data: { title, description, triggerDate: dateOnly(day), metadata },
     });
   }
   logger.warn({ staleSources }, '[loanRates] stale sources');

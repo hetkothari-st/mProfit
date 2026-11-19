@@ -135,7 +135,7 @@ async function raiseCoverageAlert(summary: MfMetricsRunSummary): Promise<boolean
   await prisma.alert.createMany({
     data: admins.map((a) => ({
       userId: a.id,
-      type: 'CUSTOM' as const,
+      type: 'SYSTEM' as const,
       title: 'MF metrics coverage below 90%',
       description: message,
       triggerDate: summary.asOf,

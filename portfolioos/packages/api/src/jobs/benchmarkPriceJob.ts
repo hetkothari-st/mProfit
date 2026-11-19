@@ -704,7 +704,7 @@ async function raiseStaleAlert(input: {
 
   const title = `Benchmark index stale: ${input.code}`;
   const existing = await prisma.alert.findFirst({
-    where: { userId: input.opsUserId, type: 'CUSTOM', title, triggerDate: input.today },
+    where: { userId: input.opsUserId, type: 'SYSTEM', title, triggerDate: input.today },
     select: { id: true },
   });
   if (existing) return true;
@@ -717,7 +717,7 @@ async function raiseStaleAlert(input: {
   await prisma.alert.create({
     data: {
       userId: input.opsUserId,
-      type: 'CUSTOM',
+      type: 'SYSTEM',
       title,
       description,
       triggerDate: input.today,

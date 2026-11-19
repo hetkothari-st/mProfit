@@ -154,7 +154,7 @@ async function raiseAdminAlert(
     await prisma.alert.create({
       data: {
         userId: admin.id,
-        type: 'CUSTOM',
+        type: 'SYSTEM',
         title: 'Data integrity: stored figures drifted',
         description:
           `${parts.join('; ')}. ${s.portfoliosRepaired} portfolio(s) were rebuilt from their transactions. ` +

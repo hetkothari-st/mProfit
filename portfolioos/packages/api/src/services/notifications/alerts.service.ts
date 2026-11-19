@@ -59,7 +59,8 @@ export async function listAlerts(
   const base: Prisma.AlertWhereInput = {
     userId,
     isActive: true,
-    ...(params?.type ? { type: params.type } : {}),
+    // Operator alerts (SYSTEM) are not inbox items: they appear only when asked for by type.
+    type: params?.type ?? { not: 'SYSTEM' },
   };
   const lens: AlertLens = params?.unreadOnly ? 'unread' : (params?.lens ?? 'all');
   const where: Prisma.AlertWhereInput = { AND: [base, lensWhere(lens, now)] };
@@ -76,7 +77,7 @@ export async function listAlerts(
       take: limit,
     }),
     prisma.alert.count({ where }),
-    prisma.alert.count({ where: { userId, isActive: true, isRead: false } }),
+    prisma.alert.count({ where: { userId, isActive: true, isRead: false, type: { not: 'SYSTEM' } } }),
     countLens('all'),
     countLens('overdue'),
     countLens('soon'),
@@ -94,7 +95,7 @@ export async function listAlerts(
 }
 
 export async function getUnreadCount(userId: string): Promise<number> {
-  return prisma.alert.count({ where: { userId, isActive: true, isRead: false } });
+  return prisma.alert.count({ where: { userId, isActive: true, isRead: false, type: { not: 'SYSTEM' } } });
 }
 
 export async function markRead(userId: string, alertId: string) {
@@ -105,7 +106,7 @@ export async function markRead(userId: string, alertId: string) {
 
 export async function markAllRead(userId: string) {
   const { count } = await prisma.alert.updateMany({
-    where: { userId, isRead: false, isActive: true },
+    where: { userId, isRead: false, isActive: true, type: { not: 'SYSTEM' } },
     data: { isRead: true },
   });
   return count;

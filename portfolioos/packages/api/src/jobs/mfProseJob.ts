@@ -986,14 +986,14 @@ export async function checkMfProseVerificationFailureRate(opts: {
     }
 
     const existing = await prisma.alert.findFirst({
-      where: { userId: opsUserId, type: 'CUSTOM', title, triggerDate: start },
+      where: { userId: opsUserId, type: 'SYSTEM', title, triggerDate: start },
       select: { id: true },
     });
     if (existing === null) {
       await prisma.alert.create({
         data: {
           userId: opsUserId,
-          type: 'CUSTOM',
+          type: 'SYSTEM',
           title,
           description,
           triggerDate: start,
