@@ -1,5 +1,6 @@
 import { api } from './client';
 import { getApiBaseUrl } from './baseUrl';
+import type { PriceCheckResult } from '@/pages/transactions/priceSanity';
 import type {
   ApiResponse,
   CreateTransactionRequest,
@@ -44,6 +45,21 @@ export const transactionsApi = {
     const { data } = await api.get<ApiResponse<TransactionListResponse>>('/api/transactions', {
       params,
     });
+    return unwrap(data);
+  },
+  /**
+   * Advisory sanity check of a typed price against that instrument's close/NAV on the trade date.
+   * Never blocks saving; "unknown" and "ok" both mean there is nothing to say.
+   */
+  async priceCheck(params: {
+    assetClass: string;
+    stockSymbol?: string;
+    schemeCode?: string;
+    isin?: string;
+    tradeDate: string;
+    price: string;
+  }): Promise<PriceCheckResult> {
+    const { data } = await api.get<ApiResponse<PriceCheckResult>>('/api/transactions/price-check', { params });
     return unwrap(data);
   },
   /** Downloads every transaction matching the filters (not just the visible page) as a CSV. */

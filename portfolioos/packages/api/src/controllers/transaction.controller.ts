@@ -11,6 +11,7 @@ import {
   updateTransaction,
 } from '../services/holdings/transaction.service.js';
 import { transactionsToCsv } from '../services/holdings/transactionExport.js';
+import { checkTradePrice, toPriceCheckDTO } from '../services/holdings/priceCheck.service.js';
 import { prisma } from '../lib/prisma.js';
 import { writeAuditLog } from '../lib/audit.js';
 import { removeDuplicates, scanDuplicates } from '../services/imports/duplicates.service.js';
@@ -135,6 +136,21 @@ export async function detail(req: Request, res: Response) {
 export async function list(req: Request, res: Response) {
   const q = listQuerySchema.parse(req.query);
   ok(res, await listTransactions(userId(req), q, parseFamilyId(req)));
+}
+
+const priceCheckQuerySchema = z.object({
+  assetClass: z.string().trim().min(1).max(40),
+  stockSymbol: z.string().trim().max(40).optional(),
+  schemeCode: z.string().trim().max(40).optional(),
+  isin: z.string().trim().max(20).optional(),
+  tradeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  price: z.string().trim().min(1).max(30),
+});
+
+/** Advisory only: is the typed price plausible for that instrument on that date? */
+export async function priceCheck(req: Request, res: Response) {
+  const q = priceCheckQuerySchema.parse(req.query);
+  ok(res, toPriceCheckDTO(await checkTradePrice(q)));
 }
 
 /** The filtered list as a CSV download (no paging): same filters, search and order as the page. */
