@@ -31,6 +31,9 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 const DISMISS_KEY = 'everypaisa.ai-teaser-seen.v2';
 const ROTATE_MS = 12_000;
 const FIRST_VISIT_HOLD_MS = 6_000;
+// The rotating "Try asking" bubble sits over page content, so it does not rotate forever: after this many
+// questions it retires for the session (the launcher button stays).
+export const TEASER_QUESTION_LIMIT = 3;
 
 // Fallback questions if the API is slow / rate-limited / user has no
 // data yet. Keeps the bubble useful for demo-mode accounts.
@@ -83,27 +86,25 @@ export function AssistantButton() {
   // once per session and then gets out of the way instead of rotating.
   const isPhone = useMediaQuery('(max-width: 767px)');
 
-  // On phones the FAB floats over page content (row actions, right-aligned
-  // values, toggles). Tuck it away while the user scrolls down and bring it
-  // back on any scroll up, so nothing stays covered.
-  const [tucked, setTucked] = useState(false);
+  // The launcher and its bubble float over page content (row actions, right-aligned values, toggles). Tuck
+  // them away while the user scrolls down and bring them back on any scroll up, so nothing stays covered.
+  // Phones tuck both; larger screens tuck only the bubble, which is the wider of the two.
+  const [scrolledDown, setScrolledDown] = useState(false);
   useEffect(() => {
-    if (!isPhone) {
-      setTucked(false);
-      return;
-    }
     const main = document.querySelector('main');
     if (!main) return;
     let last = main.scrollTop;
     const onScroll = () => {
       const y = main.scrollTop;
       if (Math.abs(y - last) < 8) return;
-      setTucked(y > last && y > 40);
+      setScrolledDown(y > last && y > 40);
       last = y;
     };
     main.addEventListener('scroll', onScroll, { passive: true });
     return () => main.removeEventListener('scroll', onScroll);
-  }, [isPhone]);
+  }, []);
+  const tucked = isPhone && scrolledDown;
+  const bubbleTucked = scrolledDown;
 
   // Move welcome → suggested rotation after a short hold (phones: hide).
   useEffect(() => {
@@ -125,6 +126,14 @@ export function AssistantButton() {
     const t = setInterval(() => setIdx((i) => i + 1), ROTATE_MS);
     return () => clearInterval(t);
   }, [open, dismissed, phase]);
+
+  // Retire the bubble once it has shown its quota of questions.
+  useEffect(() => {
+    if (phase === 'suggested' && idx >= TEASER_QUESTION_LIMIT && !dismissed) {
+      setDismissed(true);
+      window.sessionStorage.setItem(DISMISS_KEY, '1');
+    }
+  }, [phase, idx, dismissed]);
 
   const dismiss = () => {
     setDismissed(true);
@@ -149,7 +158,7 @@ export function AssistantButton() {
 
   return (
     <>
-      {!open && !dismissed && !tucked && (
+      {!open && !dismissed && !bubbleTucked && (
         <div className="fixed z-30 bottom-[calc(7.25rem+env(safe-area-inset-bottom))] md:bottom-[5rem] right-4 sm:right-6 flex flex-col items-end gap-2 pointer-events-none">
           <TeaserBubble
             phase={phase}
