@@ -27,7 +27,7 @@ export type PolicyCheckStatus =
   | 'FAILED';
 
 /** What kind of policy a check is for. Decides the extraction schema, rules and score. */
-export type PolicyProductType = 'HEALTH' | 'TERM' | 'SAVINGS' | 'MOTOR' | 'HOME';
+export type PolicyProductType = 'HEALTH' | 'TERM' | 'SAVINGS' | 'MOTOR' | 'HOME' | 'PERSONAL_ACCIDENT';
 
 /** How we classified a document the user uploaded. */
 export type PolicyDocClassification =
@@ -684,6 +684,51 @@ export interface HomeCoverOutput {
   exampleLossInr: Money | null;
   /** ... would be paid about this much on the least-covered item (null when no proportional cut applies). */
   exampleClaimInr: Money | null;
+  summary: string;
+  assumptions: string[];
+  missingInputs: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Personal accident
+// ---------------------------------------------------------------------------
+
+/**
+ * What the user tells us about their own situation. The sums insured come from
+ * the policy documents; none of these do.
+ */
+export interface PaCoverInput {
+  /** Annual income the family relies on (Money string). */
+  annualIncomeInr: Money | null;
+  /** Years of income to replace. Default 10; the calculator accepts 5-30. */
+  yearsOfIncomeToReplace: number | null;
+  /** Outstanding loans the family would inherit (Money string). */
+  outstandingLoansInr: Money | null;
+  /** Accident cover under OTHER policies (Money string). */
+  otherAccidentCoverInr: Money | null;
+  /** Monthly household expenses, to size the recovery benefit (Money string). */
+  monthlyExpensesInr: Money | null;
+}
+
+export interface PaCoverOutput {
+  /** annual income x years to replace. */
+  incomeReplacementInr: Money | null;
+  /** income replacement + outstanding loans. */
+  totalNeedInr: Money | null;
+  /** This policy's accidental death sum plus other accident cover. */
+  deathCoverInr: Money | null;
+  /** max(0, need - death cover). */
+  deathShortfallInr: Money | null;
+  /** This policy's permanent total disability sum plus other accident cover. */
+  disabilityCoverInr: Money | null;
+  /** max(0, need - disability cover). */
+  disabilityShortfallInr: Money | null;
+  /** Weekly recovery benefit x 52 / 12. */
+  recoveryMonthlyBenefitInr: Money | null;
+  /** Monthly recovery benefit as a percent of monthly expenses (2 dp). */
+  recoveryExpensesCoveredPct: string | null;
+  /** Maximum weeks the recovery benefit is paid, if the policy states it. */
+  recoveryMaxWeeks: number | null;
   summary: string;
   assumptions: string[];
   missingInputs: string[];

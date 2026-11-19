@@ -25,6 +25,7 @@ import { TERM_RULES } from './term.rules.js';
 import { SAVINGS_RULES } from './savings.rules.js';
 import { MOTOR_RULES } from './motor.rules.js';
 import { HOME_RULES } from './home.rules.js';
+import { PA_RULES } from './pa.rules.js';
 
 export const POLICY_RULES: PolicyRule[] = [
   copayMandatoryRule,
@@ -51,6 +52,9 @@ export const MOTOR_POLICY_RULES = MOTOR_RULES;
 /** Home rules (see home.rules.ts). Evaluated for HOME policies. */
 export const HOME_POLICY_RULES = HOME_RULES;
 
+/** Personal accident rules (see pa.rules.ts). Evaluated for PERSONAL_ACCIDENT policies. */
+export const PA_POLICY_RULES = PA_RULES;
+
 // Duplicate-id guard — catches copy-paste errors at module load, not at runtime
 // when two rules emit findings and one silently overwrites the other.
 (function checkDuplicateIds() {
@@ -62,6 +66,7 @@ export const HOME_POLICY_RULES = HOME_RULES;
     ...SAVINGS_POLICY_RULES.filter((r) => r.id !== documentsConflictsRule.id),
     ...MOTOR_POLICY_RULES.filter((r) => r.id !== documentsConflictsRule.id),
     ...HOME_POLICY_RULES.filter((r) => r.id !== documentsConflictsRule.id),
+    ...PA_POLICY_RULES.filter((r) => r.id !== documentsConflictsRule.id),
   ];
   for (const rule of all) {
     if (seen.has(rule.id)) {

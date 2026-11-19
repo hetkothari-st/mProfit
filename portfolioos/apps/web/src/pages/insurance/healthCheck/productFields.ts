@@ -208,7 +208,42 @@ const HOME: FieldSpec = {
   boolean: new Set(['averageClause', 'floodCovered', 'earthquakeCovered', 'burglaryCovered', 'waterDamageCovered', 'electronicsCovered', 'valuablesCovered']),
 };
 
-export const FIELD_SPECS: Record<PolicyProductType, FieldSpec> = { HEALTH, TERM, SAVINGS, MOTOR, HOME };
+const PERSONAL_ACCIDENT: FieldSpec = {
+  labels: {
+    insuredName: 'Insured person',
+    policyNumber: 'Policy Number',
+    insurerName: 'Insurer',
+    planName: 'Plan Name',
+    policyStartDate: 'Start Date',
+    policyEndDate: 'Expiry Date',
+    coverBasis: 'Who is covered (individual / family floater)',
+    coverTerritory: 'Where it covers (worldwide / India only)',
+    premiumAmountInr: 'Total Premium (₹)',
+    accidentalDeathInr: 'Accidental death benefit (₹)',
+    permanentTotalDisabilityInr: 'Permanent total disability benefit (₹)',
+    permanentPartialDisabilityCovered: 'Permanent partial disability paid as a share',
+    temporaryDisabilityCovered: 'Pay while recovering (temporary disablement)',
+    temporaryDisabilityWeeklyInr: 'Weekly recovery benefit (₹)',
+    temporaryDisabilityMaxWeeks: 'Recovery benefit paid for up to (weeks)',
+    medicalExpensesCovered: 'Accident medical expenses covered',
+    medicalExpensesLimitInr: 'Accident medical expenses limit (₹)',
+    hospitalCashDailyInr: 'Hospital cash per day (₹)',
+    childEducationBenefit: 'Child education benefit',
+    loanEmiCover: 'Loan EMI cover',
+    ambulanceCover: 'Ambulance charges covered',
+  },
+  groups: [
+    { title: 'Basic Information', fields: ['insuredName', 'policyNumber', 'insurerName', 'planName', 'policyStartDate', 'policyEndDate', 'coverBasis', 'coverTerritory', 'premiumAmountInr'] },
+    { title: 'Lump-sum Benefits', fields: ['accidentalDeathInr', 'permanentTotalDisabilityInr', 'permanentPartialDisabilityCovered'] },
+    { title: 'While You Recover', fields: ['temporaryDisabilityCovered', 'temporaryDisabilityWeeklyInr', 'temporaryDisabilityMaxWeeks', 'medicalExpensesCovered', 'medicalExpensesLimitInr', 'hospitalCashDailyInr'] },
+    { title: 'Extras', fields: ['childEducationBenefit', 'loanEmiCover', 'ambulanceCover'] },
+  ],
+  critical: ['accidentalDeathInr', 'permanentTotalDisabilityInr'],
+  numeric: new Set(['temporaryDisabilityMaxWeeks']),
+  boolean: new Set(['permanentPartialDisabilityCovered', 'temporaryDisabilityCovered', 'medicalExpensesCovered', 'childEducationBenefit', 'loanEmiCover', 'ambulanceCover']),
+};
+
+export const FIELD_SPECS: Record<PolicyProductType, FieldSpec> = { HEALTH, TERM, SAVINGS, MOTOR, HOME, PERSONAL_ACCIDENT };
 
 /** The server validates corrections against the extraction schema, so send real numbers / booleans. */
 export function coerceInput(spec: FieldSpec, key: string, raw: string): unknown {
@@ -254,6 +289,13 @@ export const REPORT_PARAMETERS: Record<PolicyProductType, Array<{ label: string;
     { label: 'Getting money out', category: 'LIQUIDITY', keys: ['guaranteedSurrenderFromYear', 'lockInYears', 'loanAvailable', 'freeSwitchesPerYear'] },
     { label: 'ULIP charges', category: 'CHARGES', keys: ['premiumAllocationChargePct', 'fundManagementChargePct', 'ulipDeathBenefitBasis'] },
     { label: 'Claim terms', category: 'CLAIM_TERMS', keys: ['suicideExclusionMonths', 'gracePeriodDays', 'freeLookDays', 'nomineePresent'] },
+    { label: 'Exclusions', category: 'EXCLUSION', keys: ['exclusions'] },
+  ],
+  PERSONAL_ACCIDENT: [
+    { label: 'Policy period', category: 'VALIDITY', keys: ['policyStartDate', 'policyEndDate'] },
+    { label: 'Who and where', category: 'COVERAGE', keys: ['coverBasis', 'coverTerritory', 'premiumAmountInr'] },
+    { label: 'Lump-sum benefits', category: 'PAYOUT', keys: ['accidentalDeathInr', 'permanentTotalDisabilityInr'] },
+    { label: 'Partial disability, recovery and medical', category: 'BENEFIT', keys: ['permanentPartialDisabilityCovered', 'temporaryDisabilityCovered', 'temporaryDisabilityWeeklyInr', 'temporaryDisabilityMaxWeeks', 'medicalExpensesCovered', 'medicalExpensesLimitInr', 'hospitalCashDailyInr', 'childEducationBenefit', 'loanEmiCover', 'ambulanceCover'] },
     { label: 'Exclusions', category: 'EXCLUSION', keys: ['exclusions'] },
   ],
   HOME: [

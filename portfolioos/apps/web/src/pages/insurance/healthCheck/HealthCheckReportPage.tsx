@@ -27,11 +27,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getLinkedCover, getReport, listHealthChecks, simulate, simulateHomeCover, simulateMotorIdv, simulateSavings, simulateTermAdequacy } from '@/api/policyCheckApi';
+import { getLinkedCover, getReport, listHealthChecks, simulate, simulateHomeCover, simulateMotorIdv, simulatePaCover, simulateSavings, simulateTermAdequacy } from '@/api/policyCheckApi';
 import { apiErrorMessage } from '@/api/client';
 import { FIELD_SPECS, REPORT_PARAMETERS } from './productFields';
 import { PillarBars, ScoreRing, SectionTitle, SEVERITY_STYLE, SeverityChip, StatTile, VerdictChip, asSeverity, type Severity } from './ReportParts';
-import type { FinancialSimulatorInput, FinancialSimulatorOutput, HomeCoverOutput, InsurerMetricsDTO, Money, MotorIdvOutput, PolicyFindingDTO, PolicyProductType, PolicyScoreSnapshot, SavingsReturnOutput, TermAdequacyOutput } from '@everypaisa/shared';
+import type { FinancialSimulatorInput, FinancialSimulatorOutput, HomeCoverOutput, InsurerMetricsDTO, Money, MotorIdvOutput, PaCoverOutput, PolicyFindingDTO, PolicyProductType, PolicyScoreSnapshot, SavingsReturnOutput, TermAdequacyOutput } from '@everypaisa/shared';
 
 interface Props {
   checkId: string;
@@ -48,7 +48,7 @@ type ExtractedField = {
   clauseHeading: string | null;
 };
 
-const MONEY_KEYS = new Set(['sumAssured', 'sumInsured', 'roomRentLimitInr', 'deductibleInr', 'premiumAmountInr', 'criticalIllnessCoverInr', 'accidentalDeathBenefitInr', 'maturityBenefitGuaranteedInr', 'maturityBenefitIllustratedInr', 'idvInr', 'ownerDriverPaInr', 'passengerPaInr', 'compulsoryDeductibleInr', 'voluntaryDeductibleInr', 'sumInsuredStructureInr', 'sumInsuredContentsInr', 'valuablesLimitInr', 'alternateAccommodationInr', 'publicLiabilityInr', 'personalAccidentInr']);
+const MONEY_KEYS = new Set(['sumAssured', 'sumInsured', 'roomRentLimitInr', 'deductibleInr', 'premiumAmountInr', 'criticalIllnessCoverInr', 'accidentalDeathBenefitInr', 'maturityBenefitGuaranteedInr', 'maturityBenefitIllustratedInr', 'idvInr', 'ownerDriverPaInr', 'passengerPaInr', 'compulsoryDeductibleInr', 'voluntaryDeductibleInr', 'sumInsuredStructureInr', 'sumInsuredContentsInr', 'valuablesLimitInr', 'alternateAccommodationInr', 'publicLiabilityInr', 'personalAccidentInr', 'accidentalDeathInr', 'permanentTotalDisabilityInr', 'temporaryDisabilityWeeklyInr', 'medicalExpensesLimitInr', 'hospitalCashDailyInr']);
 
 function describeValue(v: unknown, key?: string): string {
   if (v === null || v === undefined) return '';
@@ -59,7 +59,7 @@ function describeValue(v: unknown, key?: string): string {
   }
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   if (key && (typeof v === 'number' || (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v)))) {
-    const unit = /Pct$|Percent$/.test(key) ? '%' : /Years$|^ageAtEntry$|^coverEndsAtAge$/.test(key) ? ' years' : /Months$/.test(key) ? ' months' : /Days$/.test(key) ? ' days' : '';
+    const unit = /Pct$|Percent$/.test(key) ? '%' : /Years$|^ageAtEntry$|^coverEndsAtAge$/.test(key) ? ' years' : /Months$/.test(key) ? ' months' : /Days$/.test(key) ? ' days' : /Weeks$/.test(key) ? ' weeks' : '';
     if (unit) return `${v}${unit}`;
   }
   if (Array.isArray(v)) return v.length + ' listed';
@@ -130,6 +130,8 @@ function Recommendations({ findings, productType }: { findings: PolicyFindingDTO
       <p className="text-xs text-muted-foreground">
         {productType === 'HEALTH'
           ? 'This report is informational and non-binding. Before switching or porting a policy, weigh waiting-period credits already earned, pre-existing disease cover, your age and health, claim history and any new underwriting.'
+          : productType === 'PERSONAL_ACCIDENT'
+            ? 'This report is informational and non-binding. Before renewing or switching, compare the death, disability and recovery benefits like for like, check where the cover applies and which activities are excluded, and keep the cover in force without a gap.'
           : productType === 'HOME'
             ? 'This report is informational and non-binding. Before renewing or switching, update the sums insured to today’s rebuild and replacement costs, compare the claim basis and covered perils like for like, and never let the policy lapse.'
           : productType === 'MOTOR'
@@ -412,6 +414,83 @@ function TermAdequacySection({ checkId }: { checkId: string }) {
               { label: 'Estimated shortfall', value: result.shortfallInr, highlight: true },
             ].map((row) => (
               <ResultRow key={row.label} label={row.label} value={formatINR(row.value)} highlight={row.highlight} />
+            ))}
+          </div>
+          <p className="text-sm font-medium">{result.summary}</p>
+          {result.missingInputs.length > 0 && (
+            <Badge variant="outline" className="text-xs text-amber-700 border-amber-300">
+              Partial — {result.missingInputs.join('; ')}
+            </Badge>
+          )}
+          <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
+            {result.assumptions.map((a) => <li key={a}>{a}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PaSection({ checkId }: { checkId: string }) {
+  const [income, setIncome] = useState('');
+  const [years, setYears] = useState('10');
+  const [loans, setLoans] = useState('');
+  const [other, setOther] = useState('');
+  const [expenses, setExpenses] = useState('');
+  const [result, setResult] = useState<PaCoverOutput | null>(null);
+
+  const m = useMutation({
+    mutationFn: () =>
+      simulatePaCover(checkId, {
+        annualIncomeInr: income ? (income as Money) : null,
+        yearsOfIncomeToReplace: years ? Number(years) : null,
+        outstandingLoansInr: loans ? (loans as Money) : null,
+        otherAccidentCoverInr: other ? (other as Money) : null,
+        monthlyExpensesInr: expenses ? (expenses as Money) : null,
+      }),
+    onSuccess: setResult,
+  });
+
+  const field = (label: string, value: string, set: (v: string) => void, placeholder: string) => (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <Input type="number" placeholder={placeholder} value={value} onChange={(e) => set(e.target.value)} />
+    </div>
+  );
+
+  const amt = (v: string | null) => (v ? formatINR(v, { fractionDigits: 0 }) : '—');
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Accident cover has two jobs: a lump sum if you can no longer earn, and weekly pay while you recover. Compare both with your own situation.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {field('Annual income (₹)', income, setIncome, 'e.g. 1200000')}
+        {field('Years of income to replace', years, setYears, '10')}
+        {field('Outstanding loans (₹)', loans, setLoans, 'e.g. 2000000')}
+        {field('Accident cover under other policies (₹)', other, setOther, 'e.g. 0')}
+        {field('Monthly household expenses (₹)', expenses, setExpenses, 'e.g. 50000')}
+      </div>
+      <Button onClick={() => m.mutate()} disabled={(!income && !expenses) || m.isPending} size="sm">
+        <Calculator className="w-4 h-4 mr-2" />
+        Check my accident cover
+      </Button>
+      {m.isError && <p className="text-sm text-destructive">{apiErrorMessage(m.error)}</p>}
+      {result && (
+        <div className="bg-muted/40 rounded-lg p-4 space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              { label: 'Income to replace', value: amt(result.incomeReplacementInr) },
+              { label: 'Estimated need (with loans)', value: amt(result.totalNeedInr) },
+              { label: 'Death cover (this + other)', value: amt(result.deathCoverInr) },
+              { label: 'Death shortfall', value: amt(result.deathShortfallInr), highlight: true },
+              { label: 'Disability cover (this + other)', value: amt(result.disabilityCoverInr) },
+              { label: 'Disability shortfall', value: amt(result.disabilityShortfallInr), highlight: true },
+              { label: 'Recovery pay per month', value: amt(result.recoveryMonthlyBenefitInr) },
+              { label: 'Share of your expenses', value: result.recoveryExpensesCoveredPct !== null ? `${result.recoveryExpensesCoveredPct}%` : '—' },
+            ].map((row) => (
+              <ResultRow key={row.label} label={row.label} value={row.value} highlight={'highlight' in row ? row.highlight : undefined} />
             ))}
           </div>
           <p className="text-sm font-medium">{result.summary}</p>
@@ -768,6 +847,7 @@ export function HealthCheckReportPage({ checkId }: Props) {
   const isSavings = productType === 'SAVINGS';
   const isMotor = productType === 'MOTOR';
   const isHome = productType === 'HOME';
+  const isPa = productType === 'PERSONAL_ACCIDENT';
   const isUlip = sections.policyOverview?.policy?.type === 'ULIP';
   const nGood = sections.whatsGood.length;
   const nAttention = sections.needsAttention.length;
@@ -785,8 +865,8 @@ export function HealthCheckReportPage({ checkId }: Props) {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{isHome ? 'Home insurance' : isMotor ? 'Motor insurance' : isSavings ? (isUlip ? 'Unit-linked insurance plan (ULIP)' : 'Savings-type life insurance') : isTerm ? 'Term life insurance' : 'Health insurance'}</p>
-          <h1 className="text-2xl font-semibold">{isHome ? 'Home Policy Report' : isMotor ? 'Motor Policy Report' : isSavings ? (isUlip ? 'ULIP Policy Report' : 'Savings Plan Report') : isTerm ? 'Term Life Policy Report' : 'Policy Health Report'}</h1>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{isPa ? 'Personal accident insurance' : isHome ? 'Home insurance' : isMotor ? 'Motor insurance' : isSavings ? (isUlip ? 'Unit-linked insurance plan (ULIP)' : 'Savings-type life insurance') : isTerm ? 'Term life insurance' : 'Health insurance'}</p>
+          <h1 className="text-2xl font-semibold">{isPa ? 'Personal Accident Report' : isHome ? 'Home Policy Report' : isMotor ? 'Motor Policy Report' : isSavings ? (isUlip ? 'ULIP Policy Report' : 'Savings Plan Report') : isTerm ? 'Term Life Policy Report' : 'Policy Health Report'}</h1>
           <p className="text-sm text-muted-foreground">
             {totalFindings} finding{totalFindings !== 1 ? 's' : ''} across {sections.docs.length} document{sections.docs.length !== 1 ? 's' : ''}
           </p>
@@ -869,10 +949,10 @@ export function HealthCheckReportPage({ checkId }: Props) {
 
       {/* Calculator */}
       <Panel>
-        <SectionTitle icon={<Calculator className="h-4 w-4" />}>{isHome ? 'Is your home insured enough?' : isMotor ? 'Is your IDV right?' : isSavings ? 'Keep or exit?' : isTerm ? 'Cover calculator' : 'Financial simulator'}</SectionTitle>
+        <SectionTitle icon={<Calculator className="h-4 w-4" />}>{isPa ? 'Is your accident cover enough?' : isHome ? 'Is your home insured enough?' : isMotor ? 'Is your IDV right?' : isSavings ? 'Keep or exit?' : isTerm ? 'Cover calculator' : 'Financial simulator'}</SectionTitle>
         <Card className="print:hidden">
           <CardContent className="p-5">
-            {isHome ? <HomeSection checkId={checkId} /> : isMotor ? <MotorSection checkId={checkId} /> : isSavings ? <SavingsSection checkId={checkId} isUlip={isUlip} /> : isTerm ? <TermAdequacySection checkId={checkId} /> : <SimulatorSection checkId={checkId} />}
+            {isPa ? <PaSection checkId={checkId} /> : isHome ? <HomeSection checkId={checkId} /> : isMotor ? <MotorSection checkId={checkId} /> : isSavings ? <SavingsSection checkId={checkId} isUlip={isUlip} /> : isTerm ? <TermAdequacySection checkId={checkId} /> : <SimulatorSection checkId={checkId} />}
           </CardContent>
         </Card>
       </Panel>

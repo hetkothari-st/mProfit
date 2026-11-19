@@ -16,6 +16,8 @@ import type {
   HomeCoverInput,
   HomeCoverOutput,
   MotorIdvInput,
+  PaCoverInput,
+  PaCoverOutput,
   MotorIdvOutput,
   SavingsReturnInput,
   SavingsReturnOutput,
@@ -180,6 +182,15 @@ export async function listHealthChecks(policyId: string): Promise<HealthCheckHis
     `/api/insurance/policies/${policyId}/health-checks`,
   );
   return unwrap(r.data).checks;
+}
+
+/** Personal accident: size the accident cover against the user's income, loans and expenses. */
+export async function simulatePaCover(checkId: string, input: PaCoverInput): Promise<PaCoverOutput> {
+  const r = await api.post<ApiResponse<PaCoverOutput>>(
+    `/api/insurance/health-check/${checkId}/simulate`,
+    input,
+  );
+  return unwrap(r.data);
 }
 
 /** Home: compare the sums insured with what rebuilding and replacing would cost. */
