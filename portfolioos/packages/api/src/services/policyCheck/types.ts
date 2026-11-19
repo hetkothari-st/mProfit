@@ -32,6 +32,7 @@ import type { PolicyExtraction } from './extractionSchema.js';
 import type { TermExtraction } from './termExtractionSchema.js';
 import type { SavingsExtraction } from './savingsExtractionSchema.js';
 import type { MotorExtraction } from './motorExtractionSchema.js';
+import type { HomeExtraction } from './homeExtractionSchema.js';
 
 // ---------------------------------------------------------------------------
 // Thresholds (passed through facts so tests can override without changing
@@ -425,4 +426,41 @@ export interface MotorRule {
   category: PolicyFindingCategory;
   /** Pure, synchronous, no I/O. */
   evaluate(facts: MotorAnalysisFacts): PolicyFindingDTO[];
+}
+
+// ---------------------------------------------------------------------------
+// Home
+// ---------------------------------------------------------------------------
+
+export interface HomeRuleConstants {
+  /** Renewal reminder window, in days before expiry. */
+  renewalWindowDays: number;
+  /** A deductible above this (INR) is a NOTICE: small losses may not be worth claiming. */
+  deductibleNoticeInr: number;
+}
+
+export const DEFAULT_HOME_RULE_CONSTANTS: HomeRuleConstants = {
+  renewalWindowDays: 30,
+  deductibleNoticeInr: 25_000,
+};
+
+export interface HomeAnalysisFacts {
+  asOf: string;
+  userId: string;
+  policyId: string;
+  checkId: string;
+  productType: 'HOME';
+  constants: HomeRuleConstants;
+  extraction: HomeExtraction;
+  /** Always null: IRDAI general-insurer claim data is not broken out by home policies. */
+  insurer: InsurerMetricsFacts | null;
+  conflicts?: PolicyFieldConflict[];
+}
+
+export interface HomeRule {
+  id: string;
+  version: string;
+  category: PolicyFindingCategory;
+  /** Pure, synchronous, no I/O. */
+  evaluate(facts: HomeAnalysisFacts): PolicyFindingDTO[];
 }

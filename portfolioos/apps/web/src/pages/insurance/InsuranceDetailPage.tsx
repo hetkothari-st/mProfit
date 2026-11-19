@@ -248,8 +248,8 @@ export function InsuranceDetailPage() {
           </Link>
         </Button>
         <div className="flex gap-2">
-          {/* Policy check - health, term life, endowment, whole life, ULIP and motor policies; PLUS and above */}
-          {['HEALTH', 'TERM', 'ENDOWMENT', 'WHOLE_LIFE', 'ULIP', 'MOTOR'].includes(policy.type) && (
+          {/* Policy check - health, term life, endowment, whole life, ULIP, motor and home policies; PLUS and above */}
+          {['HEALTH', 'TERM', 'ENDOWMENT', 'WHOLE_LIFE', 'ULIP', 'MOTOR', 'HOME'].includes(policy.type) && (
             healthCheckEntitlement.allowed ? (
               <Button asChild variant="outline" size="sm">
                 <Link to={`/insurance/${id}/health-check`}>

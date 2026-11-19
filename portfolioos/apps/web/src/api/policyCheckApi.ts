@@ -13,6 +13,8 @@ import type {
   PolicyExtractionDocDTO,
   PolicyFieldConflict,
   PolicyProductType,
+  HomeCoverInput,
+  HomeCoverOutput,
   MotorIdvInput,
   MotorIdvOutput,
   SavingsReturnInput,
@@ -178,6 +180,15 @@ export async function listHealthChecks(policyId: string): Promise<HealthCheckHis
     `/api/insurance/policies/${policyId}/health-checks`,
   );
   return unwrap(r.data).checks;
+}
+
+/** Home: compare the sums insured with what rebuilding and replacing would cost. */
+export async function simulateHomeCover(checkId: string, input: HomeCoverInput): Promise<HomeCoverOutput> {
+  const r = await api.post<ApiResponse<HomeCoverOutput>>(
+    `/api/insurance/health-check/${checkId}/simulate`,
+    input,
+  );
+  return unwrap(r.data);
 }
 
 /** Motor: compare the policy's IDV with what the vehicle would sell for. */

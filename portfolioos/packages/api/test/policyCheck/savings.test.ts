@@ -63,7 +63,7 @@ describe('policy-type routing', () => {
     expect(asProductType('ULIP')).toBe('SAVINGS');
     expect(asProductType('TERM')).toBe('TERM');
     expect(asProductType('HEALTH')).toBe('HEALTH');
-    expect(asProductType('HOME')).toBeNull();
+    expect(asProductType('TRAVEL')).toBeNull();
   });
   it('uses the life insurer table for savings plans', () => {
     expect(insurerKindOf('SAVINGS')).toBe('LIFE');

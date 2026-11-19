@@ -121,7 +121,9 @@ async function narrateCheck(userId: string, checkId: string): Promise<void> {
           ? 'savings-type life'
           : check.policy.type === 'MOTOR'
             ? 'motor'
-            : 'health';
+            : check.policy.type === 'HOME'
+              ? 'home'
+              : 'health';
   const userMessage = [
     `Policy ${kind} check verdict: ${verdict.verdict}`,
     `Score: ${overall ?? 'N/A'}${ratingCategory ? ` (${ratingCategory})` : ''}`,
