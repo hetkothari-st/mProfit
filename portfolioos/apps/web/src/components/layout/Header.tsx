@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { LogOut, User, ChevronDown, Sun, Moon, Bell, Eye, EyeOff, Menu, Sparkles, UserCog, ArrowLeftRight, Bot } from 'lucide-react';
+import { LogOut, User, ChevronDown, Sun, Moon, Bell, Eye, EyeOff, Menu, Sparkles, UserCog, ArrowLeftRight, Bot, LifeBuoy } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
@@ -219,6 +219,13 @@ export function Header({ onOpenMenu = () => {} }: { onOpenMenu?: () => void }) {
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/70"
                 >
                   <Bot className="h-4 w-4" strokeWidth={1.7} /> AI connectors
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setOpen(false); navigate('/support', { state: { from: location.pathname } }); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/70"
+                >
+                  <LifeBuoy className="h-4 w-4" strokeWidth={1.7} /> Help & support
                 </button>
                 {acting && (
                   <button

@@ -201,6 +201,20 @@ export function SettingsPage() {
             </CardContent>
           </Card>
         )}
+
+        {user?.role === 'ADMIN' && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Support requests</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Messages users sent from Help & support.{' '}
+              <Link to="/settings/support" className="underline underline-offset-2 hover:text-foreground">
+                Open support requests
+              </Link>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="mt-6">

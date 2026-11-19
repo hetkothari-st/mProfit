@@ -264,6 +264,7 @@ model User {
   @@index([deletionScheduledFor])
   @@index([managedById])
   advicePrompts AdvicePrompt[]
+  supportTickets SupportTicket[]
 }
 
 model UserNotificationConfig {
@@ -6397,4 +6398,45 @@ model InsurerMetrics {
 
   @@index([insurerName, financialYear])
   @@index([segment, financialYear])
+}
+
+// ─── In-app support ─────────────────────────────────────────────
+
+enum SupportTopic {
+  QUESTION
+  BUG
+  ACCOUNT
+  BILLING
+  FEATURE
+  OTHER
+}
+
+enum SupportStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+/// A message a signed-in user sent from Help & support. Owner-scoped by RLS; the team reads them through
+/// the ADMIN-only support endpoints (system context), and is also emailed each new one.
+model SupportTicket {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic     SupportTopic
+  subject   String
+  message   String
+  status    SupportStatus @default(OPEN)
+  /// The screen the user was on, e.g. "/loans". Path only, never a query string.
+  pagePath  String?
+  /// Team-only. Never returned to the user.
+  adminNote String?
+  /// Whether the notification email to the support inbox was accepted by SMTP.
+  emailDelivered Boolean  @default(false)
+  resolvedAt DateTime?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
 }
