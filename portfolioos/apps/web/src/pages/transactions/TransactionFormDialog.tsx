@@ -22,17 +22,7 @@ import { AssetSearch } from '@/components/common/AssetSearch';
 import { transactionsApi } from '@/api/transactions.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorCode, apiErrorMessage } from '@/api/client';
-import {
-  AssetClass,
-  TransactionType,
-  type AssetSearchHit,
-  type TransactionDTO,
-  type CreateTransactionRequest,
-  Exchange,
-  Decimal,
-  toDecimal,
-  formatINR,
-} from '@everypaisa/shared';
+import { AssetClass, TransactionType, type AssetSearchHit, type TransactionDTO, type CreateTransactionRequest, Exchange, Decimal, toDecimal, formatINR, assetClassLabel, transactionTypeLabel } from '@everypaisa/shared';
 
 const isDuplicateError = (err: unknown) => apiErrorCode(err) === 'DUPLICATE_TRANSACTION';
 
@@ -440,7 +430,7 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
               <Label htmlFor="transactionType">Type</Label>
               <Select id="transactionType" className="mt-1" {...register('transactionType')}>
                 {typeOptions.map((t) => (
-                  <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                  <option key={t} value={t}>{transactionTypeLabel(t)}</option>
                 ))}
               </Select>
             </div>
@@ -451,7 +441,7 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
               <Label htmlFor="assetClass">Asset class</Label>
               <Select id="assetClass" className="mt-1" {...register('assetClass')}>
                 {ASSET_CLASS_OPTIONS.map((ac) => (
-                  <option key={ac} value={ac}>{ac.replace(/_/g, ' ')}</option>
+                  <option key={ac} value={ac}>{assetClassLabel(ac)}</option>
                 ))}
               </Select>
             </div>

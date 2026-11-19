@@ -64,6 +64,8 @@ describe('generateLoanEmiAlerts — retires alerts that are no longer true', () 
     expect(now).toHaveLength(1);
     expect(now[0]!.title).toMatch(/Test Bank EMI overdue by 10 days/);
     expect((now[0]!.metadata as { loanId: string }).loanId).toBe(loanId);
+    // Dates in alert text follow the app-wide dd/mm/yyyy, never a raw ISO date.
+    expect(now[0]!.description).toMatch(/was due on \d{2}\/\d{2}\/\d{4}$/);
   });
 
   it('is idempotent: a second scan creates nothing and closes nothing', async () => {

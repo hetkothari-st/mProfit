@@ -11,6 +11,7 @@
 
 import type { Prisma, TransactionType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
+import { formatDateOnly } from '@everypaisa/shared';
 
 /** A row that could be one half of a duplicate pair. */
 export interface DuplicateTxnRow {
@@ -175,7 +176,7 @@ export function groupTransactionDuplicates(rows: DuplicateTxnRow[]): DuplicateGr
     groups.push({
       kind: 'TRANSACTION',
       fingerprint,
-      label: `${sorted.length} × ${keep.transactionType} ${keep.quantity} ${keep.assetName} on ${keep.tradeDate} (${keep.portfolioName})`,
+      label: `${sorted.length} × ${keep.transactionType} ${keep.quantity} ${keep.assetName} on ${formatDateOnly(keep.tradeDate)} (${keep.portfolioName})`,
       rows: sorted.map((r) => ({ kind: 'TRANSACTION' as const, ...r })),
       keepId: keep.id,
       suggestedRemovalIds: confidence === 'high' ? sorted.slice(1).map((r) => r.id) : [],
@@ -203,7 +204,7 @@ export function groupRentDuplicates(rows: DuplicateRentRow[]): DuplicateGroup[] 
     groups.push({
       kind: 'RENT_ENTRY',
       fingerprint,
-      label: `${sorted.length} × ${keep.entryType.toLowerCase()} of ${keep.amount} on ${keep.entryDate} — ${keep.property} / ${keep.tenant}`,
+      label: `${sorted.length} × ${keep.entryType.toLowerCase()} of ${keep.amount} on ${formatDateOnly(keep.entryDate)} — ${keep.property} / ${keep.tenant}`,
       rows: sorted.map((r) => ({ kind: 'RENT_ENTRY' as const, ...r })),
       keepId: keep.id,
       suggestedRemovalIds: sorted.slice(1).map((r) => r.id),

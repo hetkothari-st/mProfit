@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
 import { caApi, type CaTransactionRow } from '@/api/ca.api';
+import { assetClassLabel, transactionTypeLabel } from '@everypaisa/shared';
 
 /**
  * Correct one of the client's transactions.
@@ -105,7 +106,7 @@ export function CorrectTransactionDialog({
         <div className="space-y-3">
           <p className="text-[11.5px] leading-relaxed text-muted-foreground">
             <span className="text-foreground">
-              {transaction.transactionType} · {transaction.assetClass}
+              {transactionTypeLabel(transaction.transactionType)} · {assetClassLabel(transaction.assetClass)}
             </span>{' '}
             — these cannot be changed here. Correcting what a trade was, rather than what was
             recorded about it, means entering a different transaction.

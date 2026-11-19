@@ -44,7 +44,7 @@ import { usePrivacyStore } from '@/stores/privacy.store';
 import { useThemeStore } from '@/stores/theme.store';
 import { useAssetSectionsStore } from '@/stores/assetSections.store';
 import { assetClassSidebarKey, allocationSliceSidebarKey, topHoldingsViewAllHref } from './dashboardLinks';
-import { formatINR, formatPercent, ASSET_CLASS_LABELS, Decimal, toDecimal, valuationMethodFor, formatDateIST, formatDateOnly } from '@everypaisa/shared';
+import { formatINR, formatPercent, ASSET_CLASS_LABELS, Decimal, toDecimal, valuationMethodFor, formatDateIST, formatDateOnly, assetClassLabel, transactionTypeLabel } from '@everypaisa/shared';
 import { invalidatePriceViews } from '@/lib/priceQueries';
 
 const PERIOD_OPTIONS = [
@@ -143,7 +143,7 @@ function UrgencyIcon({ urgency, dark }: { urgency: 'HIGH' | 'MEDIUM' | 'LOW'; da
 }
 
 function labelForKey(key: string): string {
-  return ASSET_CLASS_LABELS[key as keyof typeof ASSET_CLASS_LABELS] ?? key.replace(/_/g, ' ');
+  return assetClassLabel(key);
 }
 
 // CRED-style palette per asset class — paired with PIE_COLORS for visual coherence.
@@ -1118,7 +1118,7 @@ export function DashboardPage() {
                                 ? `${pos ? '+' : ''}${h.unrealisedPnLPct.toFixed(2)}%`
                                 : (h.unrealisedPnL ? formatINR(h.unrealisedPnL, { showSign: true }) : '—')}
                               {method !== 'MARKET' && (
-                                <span className="text-[9px] uppercase tracking-wide text-muted-foreground/65">{method === 'ACCRUAL' ? 'accr' : 'cost'}</span>
+                                <span className="text-[9px] uppercase tracking-wide text-muted-foreground/65">{method === 'ACCRUAL' ? 'accrued' : 'cost'}</span>
                               )}
                             </span>
                           ) : (
@@ -1481,7 +1481,7 @@ export function DashboardPage() {
                   <div className="min-w-0 flex-1">
                     <div className="font-medium truncate">{t.assetName}</div>
                     <div className="text-xs text-muted-foreground">
-                      {formatDateOnly(t.tradeDate)} · {t.transactionType.replace(/_/g, ' ')}
+                      {formatDateOnly(t.tradeDate)} · {transactionTypeLabel(t.transactionType)}
                     </div>
                   </div>
                   <div className="text-right tabular-nums ml-3 flex-shrink-0">

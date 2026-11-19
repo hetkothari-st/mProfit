@@ -1026,7 +1026,7 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
           id: `LOAN_EMI_DUE:${loan.id}`,
           type: 'LOAN_EMI_DUE',
           title: `${loan.lenderName} EMI due in ${days} day${days === 1 ? '' : 's'}`,
-          description: `EMI due on ${nextDue.date}`,
+          description: `EMI due on ${formatDateOnly(nextDue.date)}`,
           urgency: urgencyForDays(days),
           daysUntil: days,
           dueDate: nextDue.date,

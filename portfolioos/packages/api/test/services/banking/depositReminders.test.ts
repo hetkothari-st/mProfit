@@ -69,7 +69,7 @@ describe('generateDepositReminderAlerts', () => {
         userId: 'u1',
         type: 'FD_MATURITY',
         title: 'Kotak FD matures in 7 days',
-        description: '₹1,00,000.00 deposit matures on 2026-09-17',
+        description: '₹1,00,000.00 deposit matures on 17/09/2026',
       }),
     ]);
   });

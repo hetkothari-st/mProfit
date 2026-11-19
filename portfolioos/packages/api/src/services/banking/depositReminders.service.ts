@@ -140,8 +140,8 @@ export async function generateDepositReminderAlerts(userId?: string): Promise<nu
       created += await createOnce(ownerId, 'FD_MATURITY', `deposit_maturity:${depositKey}:${maturityIso}:${toMaturity}d`, {
         title: `${label} matures in ${days(toMaturity)}`,
         description: principal
-          ? `₹${inr(principal)} deposit matures on ${maturityIso}`
-          : `Matures on ${maturityIso}`,
+          ? `₹${inr(principal)} deposit matures on ${formatDateOnly(maturityIso)}`
+          : `Matures on ${formatDateOnly(maturityIso)}`,
         metadata: { depositKey, maturityDate: maturityIso, daysLeft: toMaturity },
       });
     }

@@ -12,7 +12,7 @@ import { importsApi } from '@/api/imports/imports.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
 import type { ImportJobDTO, ImportStatus } from '@everypaisa/shared';
-import { IMPORT_STATUS_LABELS, formatDateTimeIST } from '@everypaisa/shared';
+import { IMPORT_STATUS_LABELS, formatDateTimeIST, humanizeEnum } from '@everypaisa/shared';
 import { ImportErrorDialog } from './ImportErrorDialog';
 import { importIssueLabel } from './importIssues';
 import { ImportDropzone } from './ImportDropzone';
@@ -273,7 +273,7 @@ export function ImportPage() {
                           </div>
                         </td>
                         <td data-label="Type" className="px-4 py-2 text-xs text-muted-foreground">
-                          {j.type.replace(/_/g, ' ')}
+                          {humanizeEnum(j.type)}
                         </td>
                         <td data-label="Status" className="px-4 py-2">
                           {pwErr ? (

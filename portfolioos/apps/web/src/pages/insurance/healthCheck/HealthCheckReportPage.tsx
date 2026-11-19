@@ -18,7 +18,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { formatINR } from '@everypaisa/shared';
+import { formatDateIST, formatINR } from '@everypaisa/shared';
 import { Decimal } from '@everypaisa/shared';
 import { Calculator, BarChart3, FileText, Printer, ChevronDown, ListChecks, Table2, Lightbulb } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -313,7 +313,7 @@ function InsurerSection({ metrics, explanations }: { metrics: InsurerMetricsDTO;
       <div className="space-y-1 border-t pt-2 text-xs text-muted-foreground">
         {m.methodology ? <p>{m.methodology}</p> : explanations ? <p><strong>Settlement ratio:</strong> {explanations.claimSettlementRatio}</p> : null}
         {!isLife && explanations ? <p><strong>Incurred claim ratio:</strong> {explanations.incurredClaimRatio}</p> : null}
-        <p>Source: {m.source} (retrieved {new Date(m.retrievedAt).toLocaleDateString('en-IN')})</p>
+        <p>Source: {m.source} (retrieved {formatDateIST(m.retrievedAt)})</p>
       </div>
     </div>
   );
@@ -820,7 +820,7 @@ export function HealthCheckReportPage({ checkId }: Props) {
           <div className="divide-y rounded-lg border text-sm">
             {pastChecks.slice(0, 6).map((h) => (
               <div key={h.checkId} className="flex items-center justify-between gap-3 p-3">
-                <span className="text-muted-foreground">{new Date(h.completedAt ?? h.asOf).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                <span className="text-muted-foreground">{formatDateIST(h.completedAt ?? h.asOf)}</span>
                 <span className="flex items-center gap-2">
                   {h.verdict ? <VerdictChip verdict={h.verdict} /> : null}
                   {h.score ? <span className="tabular-nums font-medium">{Math.round(parseFloat(h.score))}/100</span> : null}

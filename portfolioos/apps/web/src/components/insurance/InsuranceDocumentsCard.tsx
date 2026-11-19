@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { AlertTriangle, FileText, Lock, Plus, X } from 'lucide-react';
-import { formatINR } from '@everypaisa/shared';
+import { formatINR, formatDateIST } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,7 +23,7 @@ const KIND_LABELS: Record<string, string> = {
 const DESCRIBES_POLICY = new Set(['POLICY_DOCUMENT', 'RENEWAL_NOTICE']);
 
 function received(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  return iso ? formatDateIST(iso) : '';
 }
 
 function title(d: InsuranceDocumentDTO): string {

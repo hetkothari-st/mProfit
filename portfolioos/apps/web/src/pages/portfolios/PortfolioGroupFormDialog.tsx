@@ -21,6 +21,7 @@ import { portfolioGroupsApi } from '@/api/portfolioGroups.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
 import type { PortfolioGroupListItem } from '@everypaisa/shared';
+import { humanizeEnum } from '@everypaisa/shared';
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -182,7 +183,7 @@ export function PortfolioGroupFormDialog({ open, onOpenChange, initial }: Props)
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{p.name}</div>
                       <div className="text-xs text-muted-foreground">
-                        {p.currency} · {p.type} · {p.holdingCount} holdings
+                        {p.currency} · {humanizeEnum(p.type)} · {p.holdingCount} holdings
                       </div>
                     </div>
                   </label>

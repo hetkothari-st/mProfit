@@ -1,4 +1,4 @@
-import { formatINR, type AdviceHistoryRow } from '@everypaisa/shared';
+import { formatINR, type AdviceHistoryRow, formatDateIST } from '@everypaisa/shared';
 import { cn } from '@/lib/cn';
 import { CATEGORY_LABEL, outcomeLabel, stateLabel } from './actOnItView';
 
@@ -30,7 +30,7 @@ export function AdviceList({ rows, empty, onOpen }: { rows: AdviceHistoryRow[]; 
               <span className="flex items-center gap-2 text-[12px]">
                 <span className="rounded-full bg-accent/15 px-2.5 py-0.5 font-medium text-accent-ink">{CATEGORY_LABEL[h.category] ?? 'Advice'}</span>
                 <time className="text-muted-foreground" dateTime={h.date}>
-                  {new Date(h.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  {formatDateIST(h.date)}
                 </time>
               </span>
               <b className="mt-3 line-clamp-2 font-display text-[19px] font-semibold leading-snug">{h.headline}</b>

@@ -20,7 +20,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
-import { formatINR, toDecimal, Decimal, formatDateOnly } from '@everypaisa/shared';
+import { formatINR, toDecimal, Decimal, formatDateOnly, transactionTypeLabel } from '@everypaisa/shared';
 import { foApi, brokerApi, type FoPosition, type FoTrade, type BrokerStatus } from '@/api/fo.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
@@ -799,7 +799,7 @@ function ContractTrades({ trades }: { trades: FoTrade[] }) {
                       : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
                   }`}
                 >
-                  {t.transactionType}
+                  {transactionTypeLabel(t.transactionType)}
                 </span>
               </td>
               <td data-label="Qty" className="px-2.5 py-1.5 text-right tabular-nums">{t.quantity}</td>

@@ -5,7 +5,7 @@ import { encryptSecret, decryptSecret } from '../../lib/secrets.js';
 import { logger } from '../../lib/logger.js';
 import { env } from '../../config/env.js';
 import { sendEmail } from '../notifications/email.service.js';
-import { LEGACY_STAGE_DAYS } from '@everypaisa/shared';
+import { LEGACY_STAGE_DAYS, formatDateIST, formatDateTimeIST } from '@everypaisa/shared';
 import { renderLegacyEmail, type OutboxKind } from './emails.js';
 
 /**
@@ -51,10 +51,8 @@ export async function enqueue(
   });
 }
 
-const fmtDateTime = (d: Date) =>
-  d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
-const fmtDate = (d: Date) =>
-  d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+const fmtDateTime = (d: Date) => formatDateTimeIST(d);
+const fmtDate = (d: Date) => formatDateIST(d);
 
 export async function flushOutbox(
   send: typeof sendEmail = sendEmail, now: Date = new Date(), only?: { planId: string },

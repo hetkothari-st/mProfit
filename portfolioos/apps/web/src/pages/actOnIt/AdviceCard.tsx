@@ -1,4 +1,4 @@
-import { Decimal, formatINR, type AdviceCardView } from '@everypaisa/shared';
+import { Decimal, formatINR, type AdviceCardView, formatDateIST } from '@everypaisa/shared';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
@@ -95,7 +95,7 @@ export function AdviceCard({
         )}
         <p className="text-[12.5px] text-muted-foreground">
           Confidence: {card.confidence === 'HIGH' ? 'high' : 'medium'}. Built from your own data.
-          {card.expiresAt && <> Stands until {new Date(card.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}.</>}
+          {card.expiresAt && <> Stands until {formatDateIST(card.expiresAt)}.</>}
         </p>
       </aside>
     </article>

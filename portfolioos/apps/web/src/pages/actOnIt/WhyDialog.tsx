@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CircleSlash, Loader2, Target } from 'lucide-react';
-import { formatINR, type AdviceCardView, type AdviceHistoryRow } from '@everypaisa/shared';
+import { formatINR, type AdviceCardView, type AdviceHistoryRow, formatDateIST } from '@everypaisa/shared';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/cn';
 import { actOnItApi } from '@/api/actOnIt.api';
@@ -29,7 +29,7 @@ export function WhyDialog({
   onClose: () => void;
 }) {
   const { data, isLoading } = useQuery({ queryKey: ['act-on-it', 'why', id], queryFn: () => actOnItApi.why(id!), enabled: id !== null });
-  const given = data ? new Date(data.givenAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+  const given = data ? formatDateIST(data.givenAt) : null;
 
   return (
     <Dialog open={id !== null} onOpenChange={(o) => !o && onClose()}>

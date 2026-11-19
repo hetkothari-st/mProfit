@@ -2,16 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Check, Landmark, Loader2, X } from 'lucide-react';
-import {
-  BASKET_CATEGORIES,
-  EXCLUDED_CATEGORIES,
-  SPEND_CATEGORY_LABELS,
-  Decimal,
-  formatINR,
-  type PersonalInflationSummary,
-  type PirBankView,
-  type SpendCategory,
-} from '@everypaisa/shared';
+import { BASKET_CATEGORIES, EXCLUDED_CATEGORIES, SPEND_CATEGORY_LABELS, Decimal, formatINR, type PersonalInflationSummary, type PirBankView, type SpendCategory, formatDateIST } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { apiErrorMessage } from '@/api/client';
@@ -209,7 +200,7 @@ function BankPicture({ data, bank, onFresh }: { data: PersonalInflationSummary; 
           </>
         ) : (
           <>
-            <span>You agreed {data.spendingConsent.givenAt ? new Date(data.spendingConsent.givenAt).toLocaleDateString('en-IN') : ''}.</span>
+            <span>You agreed {data.spendingConsent.givenAt ? formatDateIST(data.spendingConsent.givenAt) : ''}.</span>
             <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => setConfirmOff(true)}>
               Turn off
             </button>

@@ -18,7 +18,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { goalsApi, type GoalDTO, type GoalCategory, type GoalPriority } from '@/api/goals.api';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorMessage } from '@/api/client';
-import { formatINR, formatDateIST, Decimal } from '@everypaisa/shared';
+import { formatINR, formatDateIST, Decimal, humanizeEnum } from '@everypaisa/shared';
 import { LockedFeature } from '@/components/common/LockedFeature';
 import { GoalDialog } from './GoalDialog';
 
@@ -245,7 +245,7 @@ function GoalCard({ goal, portfolios, onEdit, onDelete }: CardProps) {
               )}
               {goal.status !== 'ACTIVE' && (
                 <Badge variant="outline" className="text-[10px]">
-                  {goal.status}
+                  {humanizeEnum(goal.status)}
                 </Badge>
               )}
             </div>
