@@ -38,6 +38,12 @@ import {
   HOME_TOOL_JSON_SCHEMA,
   HomeExtractionSchema,
 } from './homeExtractionSchema.js';
+import {
+  PA_EXTRACTION_TOOL_DESCRIPTION,
+  PA_EXTRACTION_TOOL_NAME,
+  PA_TOOL_JSON_SCHEMA,
+  PaExtractionSchema,
+} from './paExtractionSchema.js';
 
 export interface ExtractionSpec {
   productType: PolicyProductType;
@@ -106,7 +112,29 @@ ${COMMON_RULES(HOME_EXTRACTION_TOOL_NAME)}
 - Peril and extra booleans (floodCovered, earthquakeCovered, burglaryCovered, waterDamageCovered, electronicsCovered, valuablesCovered): true only if the document says the peril is covered; false only if it explicitly says it is excluded or not covered; otherwise NOT_FOUND.
 - premiumAmountInr is the total premium payable including GST.`;
 
+const PA_PROMPT = `You are a document parser for an Indian personal accident insurance policy. Extract structured data from the policy text below.
+
+${COMMON_RULES(PA_EXTRACTION_TOOL_NAME)}
+- Never extract occupation, health details or the nominee.
+- coverBasis: FAMILY_FLOATER if one sum insured is shared by several people; INDIVIDUAL if it covers one person.
+- coverTerritory: WORLDWIDE if the policy covers accidents anywhere in the world; INDIA_ONLY if only accidents in India.
+- accidentalDeathInr and permanentTotalDisabilityInr are separate benefits and may differ. If the policy states them as a percentage of the sum insured, convert to rupees using the stated sum; otherwise use NOT_FOUND. Do not guess.
+- permanentPartialDisabilityCovered: true only if the policy pays a share of the sum insured for partial loss (a limb, an eye, hearing).
+- temporaryDisabilityCovered is for temporary total disablement (weekly income benefit while recovering). temporaryDisabilityWeeklyInr is the weekly amount; temporaryDisabilityMaxWeeks the maximum weeks it is paid.
+- Add-on booleans (medicalExpensesCovered, childEducationBenefit, loanEmiCover, ambulanceCover): true only if the document says the benefit is included; false only if it explicitly says it is not; otherwise NOT_FOUND.
+- premiumAmountInr is the total premium payable including GST.`;
+
 export function getExtractionSpec(productType: PolicyProductType): ExtractionSpec {
+  if (productType === 'PERSONAL_ACCIDENT') {
+    return {
+      productType,
+      schema: PaExtractionSchema,
+      jsonSchema: PA_TOOL_JSON_SCHEMA,
+      toolName: PA_EXTRACTION_TOOL_NAME,
+      toolDescription: PA_EXTRACTION_TOOL_DESCRIPTION,
+      systemPrompt: PA_PROMPT,
+    };
+  }
   if (productType === 'HOME') {
     return {
       productType,
@@ -166,6 +194,7 @@ const POLICY_TYPE_TO_PRODUCT: Record<string, PolicyProductType> = {
   ULIP: 'SAVINGS',
   MOTOR: 'MOTOR',
   HOME: 'HOME',
+  PERSONAL_ACCIDENT: 'PERSONAL_ACCIDENT',
 };
 
 export function asProductType(policyType: string): PolicyProductType | null {
@@ -178,6 +207,6 @@ export function asProductType(policyType: string): PolicyProductType | null {
  */
 export function insurerKindOf(productType: PolicyProductType): 'LIFE' | 'HEALTH' | null {
   if (productType === 'HEALTH') return 'HEALTH';
-  if (productType === 'MOTOR' || productType === 'HOME') return null;
+  if (productType === 'MOTOR' || productType === 'HOME' || productType === 'PERSONAL_ACCIDENT') return null;
   return 'LIFE';
 }

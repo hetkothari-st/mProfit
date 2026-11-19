@@ -33,6 +33,7 @@ import type { TermExtraction } from './termExtractionSchema.js';
 import type { SavingsExtraction } from './savingsExtractionSchema.js';
 import type { MotorExtraction } from './motorExtractionSchema.js';
 import type { HomeExtraction } from './homeExtractionSchema.js';
+import type { PaExtraction } from './paExtractionSchema.js';
 
 // ---------------------------------------------------------------------------
 // Thresholds (passed through facts so tests can override without changing
@@ -463,4 +464,41 @@ export interface HomeRule {
   category: PolicyFindingCategory;
   /** Pure, synchronous, no I/O. */
   evaluate(facts: HomeAnalysisFacts): PolicyFindingDTO[];
+}
+
+// ---------------------------------------------------------------------------
+// Personal accident
+// ---------------------------------------------------------------------------
+
+export interface PaRuleConstants {
+  /** Renewal reminder window, in days before expiry. */
+  renewalWindowDays: number;
+  /** A recovery benefit that stops after this many weeks or fewer is a NOTICE (a rough guide, not a regulation). */
+  shortRecoveryWeeks: number;
+}
+
+export const DEFAULT_PA_RULE_CONSTANTS: PaRuleConstants = {
+  renewalWindowDays: 30,
+  shortRecoveryWeeks: 26,
+};
+
+export interface PaAnalysisFacts {
+  asOf: string;
+  userId: string;
+  policyId: string;
+  checkId: string;
+  productType: 'PERSONAL_ACCIDENT';
+  constants: PaRuleConstants;
+  extraction: PaExtraction;
+  /** Always null: IRDAI general-insurer claim data is not broken out by accident policies. */
+  insurer: InsurerMetricsFacts | null;
+  conflicts?: PolicyFieldConflict[];
+}
+
+export interface PaRule {
+  id: string;
+  version: string;
+  category: PolicyFindingCategory;
+  /** Pure, synchronous, no I/O. */
+  evaluate(facts: PaAnalysisFacts): PolicyFindingDTO[];
 }

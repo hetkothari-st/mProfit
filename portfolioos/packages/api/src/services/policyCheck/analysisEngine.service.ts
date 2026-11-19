@@ -21,16 +21,17 @@ import type { PolicyFindingDTO, PolicyFindingCategory, PolicyFieldConflict } fro
 import { logger } from '../../lib/logger.js';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { loadLatestInsurerRows, matchInsurerRow } from './insurerMetrics.service.js';
-import { HOME_POLICY_RULES, MOTOR_POLICY_RULES, POLICY_RULES, SAVINGS_POLICY_RULES, TERM_POLICY_RULES } from './rules/registry.js';
+import { HOME_POLICY_RULES, MOTOR_POLICY_RULES, PA_POLICY_RULES, POLICY_RULES, SAVINGS_POLICY_RULES, TERM_POLICY_RULES } from './rules/registry.js';
 import { computeHomeScore } from './scoring/homeScoreMath.js';
 import { computeMotorScore } from './scoring/motorScoreMath.js';
+import { computePaScore } from './scoring/paScoreMath.js';
 import { computePolicyScore } from './scoring/policyScoreMath.js';
 import { computeSavingsScore } from './scoring/savingsScoreMath.js';
 import { computeTermScore } from './scoring/termScoreMath.js';
 import { asProductType, insurerKindOf } from './extractionSpecs.js';
 import { decidePolicyVerdict } from './verdict.js';
-import type { HomeAnalysisFacts, MotorAnalysisFacts, PolicyAnalysisFacts, PolicyRule, SavingsAnalysisFacts, TermAnalysisFacts, TermRule } from './types.js';
-import { DEFAULT_HOME_RULE_CONSTANTS, DEFAULT_MOTOR_RULE_CONSTANTS, DEFAULT_POLICY_RULE_CONSTANTS, DEFAULT_SAVINGS_RULE_CONSTANTS, DEFAULT_TERM_RULE_CONSTANTS } from './types.js';
+import type { HomeAnalysisFacts, MotorAnalysisFacts, PaAnalysisFacts, PolicyAnalysisFacts, PolicyRule, SavingsAnalysisFacts, TermAnalysisFacts, TermRule } from './types.js';
+import { DEFAULT_HOME_RULE_CONSTANTS, DEFAULT_MOTOR_RULE_CONSTANTS, DEFAULT_PA_RULE_CONSTANTS, DEFAULT_POLICY_RULE_CONSTANTS, DEFAULT_SAVINGS_RULE_CONSTANTS, DEFAULT_TERM_RULE_CONSTANTS } from './types.js';
 import type { PolicyProductType } from '@everypaisa/shared';
 
 // ---------------------------------------------------------------------------
@@ -142,7 +143,11 @@ export function evaluateRules<F>(facts: F, rules: Array<AnyRule<F>>): PolicyRule
 // Facts builder
 // ---------------------------------------------------------------------------
 
-type AnyFacts = PolicyAnalysisFacts | TermAnalysisFacts | SavingsAnalysisFacts | MotorAnalysisFacts | HomeAnalysisFacts;
+type AnyFacts = PolicyAnalysisFacts | TermAnalysisFacts | SavingsAnalysisFacts | MotorAnalysisFacts | HomeAnalysisFacts | PaAnalysisFacts;
+
+function isPa(f: AnyFacts): f is PaAnalysisFacts {
+  return 'productType' in f && f.productType === 'PERSONAL_ACCIDENT';
+}
 
 function isHome(f: AnyFacts): f is HomeAnalysisFacts {
   return 'productType' in f && f.productType === 'HOME';
@@ -213,6 +218,14 @@ async function buildFacts(checkId: string, userId: string): Promise<AnyFacts> {
     conflicts: (data.conflicts as unknown as PolicyFieldConflict[] | null) ?? [],
   };
 
+  if (productType === 'PERSONAL_ACCIDENT') {
+    return {
+      ...base,
+      productType: 'PERSONAL_ACCIDENT',
+      constants: DEFAULT_PA_RULE_CONSTANTS,
+      extraction: data.fields as unknown as PaAnalysisFacts['extraction'],
+    };
+  }
   if (productType === 'HOME') {
     return {
       ...base,
@@ -313,7 +326,9 @@ async function evaluateAndCommit(
   facts: AnyFacts,
   healthRulesOverride?: PolicyRule[],
 ): Promise<RunPolicyAnalysisResult> {
-  const evaluation = isHome(facts)
+  const evaluation = isPa(facts)
+    ? evaluateRules<PaAnalysisFacts>(facts, PA_POLICY_RULES)
+    : isHome(facts)
     ? evaluateRules<HomeAnalysisFacts>(facts, HOME_POLICY_RULES)
     : isMotor(facts)
     ? evaluateRules<MotorAnalysisFacts>(facts, MOTOR_POLICY_RULES)
@@ -322,7 +337,9 @@ async function evaluateAndCommit(
       : isTerm(facts)
         ? evaluateRules<TermAnalysisFacts>(facts, TERM_POLICY_RULES)
         : evaluatePolicyRules(facts, healthRulesOverride ?? POLICY_RULES);
-  const scoreResult = isHome(facts)
+  const scoreResult = isPa(facts)
+    ? computePaScore(facts, evaluation.findings)
+    : isHome(facts)
     ? computeHomeScore(facts, evaluation.findings)
     : isMotor(facts)
     ? computeMotorScore(facts, evaluation.findings)

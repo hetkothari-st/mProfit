@@ -39,6 +39,7 @@ export function UploadPage({ policyId }: Props) {
   const isSavings = policy?.type === 'ENDOWMENT' || policy?.type === 'WHOLE_LIFE' || policy?.type === 'ULIP';
   const isMotor = policy?.type === 'MOTOR';
   const isHome = policy?.type === 'HOME';
+  const isPa = policy?.type === 'PERSONAL_ACCIDENT';
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -75,9 +76,11 @@ export function UploadPage({ policyId }: Props) {
   return (
     <div className="max-w-2xl mx-auto space-y-6 p-4">
       <div>
-        <h1 className="text-2xl font-semibold">{isHome ? 'Home Policy Check' : isMotor ? 'Motor Policy Check' : isSavings ? 'Savings Plan Check' : isTerm ? 'Term Life Policy Check' : 'Policy Health Check'}</h1>
+        <h1 className="text-2xl font-semibold">{isPa ? 'Personal Accident Check' : isHome ? 'Home Policy Check' : isMotor ? 'Motor Policy Check' : isSavings ? 'Savings Plan Check' : isTerm ? 'Term Life Policy Check' : 'Policy Health Check'}</h1>
         <p className="text-muted-foreground mt-1">
-          {isHome
+          {isPa
+            ? 'Upload your personal accident policy to check the death and disability benefits, pay while you recover, where it covers you, and whether the sums are enough.'
+            : isHome
             ? 'Upload your home policy to check what is covered, how a claim is valued, which perils are missing, and whether the sums insured look right.'
             : isMotor
             ? 'Upload your motor policy to check the cover type, the insured value, add-ons, no-claim bonus protection, and when it expires.'
@@ -100,7 +103,7 @@ export function UploadPage({ policyId }: Props) {
           </p>
           <p>
             <strong className="text-foreground">Policy schedule</strong> — the summary page with
-            your {isHome ? 'sums insured, premium, covered perils and policy period' : isMotor ? 'IDV, premium, add-ons and policy period' : isSavings ? 'sum assured, term, premium and maturity amount' : isTerm ? 'sum assured, term, premium and nominee' : 'sum insured, premium, and member details'}.
+            your {isPa ? 'sums insured, premium, benefits and policy period' : isHome ? 'sums insured, premium, covered perils and policy period' : isMotor ? 'IDV, premium, add-ons and policy period' : isSavings ? 'sum assured, term, premium and maturity amount' : isTerm ? 'sum assured, term, premium and nominee' : 'sum insured, premium, and member details'}.
             {isSavings ? ' A benefit illustration, if you have one, helps.' : ''}
           </p>
           <p>
