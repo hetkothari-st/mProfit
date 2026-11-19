@@ -14,7 +14,7 @@ import { apiErrorMessage } from '@/api/client';
 import type { ImportJobDTO, ImportStatus } from '@everypaisa/shared';
 import { IMPORT_STATUS_LABELS, formatDateTimeIST, humanizeEnum } from '@everypaisa/shared';
 import { ImportErrorDialog } from './ImportErrorDialog';
-import { importIssueLabel } from './importIssues';
+import { importIssueLabel, importHeadline, importSkippedCount } from './importIssues';
 import { ImportDropzone } from './ImportDropzone';
 import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
 import { useUploadWithPasswordRetry } from '@/hooks/useUploadWithPasswordRetry';
@@ -243,6 +243,7 @@ export function ImportPage() {
                     <th className="text-left font-medium px-4 py-2">Status</th>
                     <th className="text-right font-medium px-4 py-2">Rows</th>
                     <th className="text-right font-medium px-4 py-2">Success</th>
+                    <th className="text-right font-medium px-4 py-2" title="Rows already imported earlier, left alone">Skipped</th>
                     <th className="text-right font-medium px-4 py-2">Failed</th>
                     <th className="text-left font-medium px-4 py-2">Uploaded</th>
                     <th className="text-right font-medium px-4 py-2">Actions</th>
@@ -255,6 +256,7 @@ export function ImportPage() {
                     const Icon = STATUS_ICONS[status];
                     const isRunning = status === 'PROCESSING' || status === 'PENDING';
                     const issueLabel = importIssueLabel(j);
+                    const headline = importHeadline(j);
                     return (
                       <tr key={j.id} className={`hover:bg-muted/30 ${selected.has(j.id) ? 'bg-accent/20' : ''}`}>
                         <td data-label="" className="px-4 py-2 w-8">
@@ -293,10 +295,16 @@ export function ImportPage() {
                               {IMPORT_STATUS_LABELS[status]}
                             </span>
                           )}
+                          {headline && (
+                            <div className="mt-1 max-w-[16rem] text-[11px] leading-snug text-muted-foreground">{headline}</div>
+                          )}
                         </td>
                         <td data-label="Rows" className="px-4 py-2 text-right tabular-nums">{j.totalRows ?? '—'}</td>
                         <td data-label="Success" className="px-4 py-2 text-right tabular-nums text-positive">
                           {j.successRows ?? '—'}
+                        </td>
+                        <td data-label="Skipped" className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                          {j.totalRows == null ? '—' : importSkippedCount(j)}
                         </td>
                         <td data-label="Failed" className="px-4 py-2 text-right tabular-nums text-negative">
                           {j.failedRows ?? '—'}

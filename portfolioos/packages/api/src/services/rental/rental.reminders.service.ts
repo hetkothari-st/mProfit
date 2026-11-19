@@ -31,6 +31,7 @@ import {
 } from '../notifications/config.service.js';
 import { sendViaGmailApi, getGmailSendAccount } from '../notifications/gmailSender.service.js';
 import { markOverdueReceipts } from './rental.service.js';
+import { rentChaseCutoff } from './rentalLedgerMath.js';
 import { openText, revealTenancy, tenantContactColumns } from '../security/piiAtRest.service.js';
 
 import { formatDateIST } from '@everypaisa/shared';
@@ -391,9 +392,21 @@ export async function enqueuePendingReminders(userId?: string): Promise<number> 
   }
 
   // ── 2. Overdue receipts (one reminder per receipt, sentinel -1) ──
+  // Only months still worth chasing. Older ones stay OVERDUE on the property page, but no tenant email is
+  // drafted for them, and drafts already waiting for approval are withdrawn (nothing is sent either way).
+  const chaseCutoff = rentChaseCutoff(today);
+  await prisma.rentReminder.updateMany({
+    where: {
+      status: REMINDER_STATUS.PENDING_APPROVAL,
+      receipt: { dueDate: { lt: chaseCutoff }, status: { not: 'EXPECTED' } },
+      ...(userId ? { tenancy: { property: { userId } } } : {}),
+    },
+    data: { status: REMINDER_STATUS.SUPERSEDED },
+  });
   const overdueReceipts: ReceiptWithContext[] = (await prisma.rentReceipt.findMany({
     where: {
       status: 'OVERDUE',
+      dueDate: { gte: chaseCutoff },
       tenancy: {
         ...(userId ? { property: { userId } } : {}),
         isActive: true,

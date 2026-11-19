@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma.js';
 import {
   formatDateOnly,
+  formatINR,
   istCalendarDate,
   ALERT_SOON_DAYS,
   INFORMATIONAL_ALERT_TYPES,
@@ -15,6 +16,9 @@ import { generateRealEstateAlerts } from '../realEstate/realEstateAlerts.js';
 import { generateDepositReminderAlerts } from '../banking/depositReminders.service.js';
 import { generateClaimAlerts, generateRenewalAlerts } from '../insurance/insurance.service.js';
 import { PLATE_SELECT, plateOf } from '../security/piiAtRest.service.js';
+import { formatRentMonth, rentChaseCutoff } from '../rental/rentalLedgerMath.js';
+
+const startOfUtcDay = (d: Date): Date => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 
 const EXPIRY_THRESHOLDS = [30, 15, 7, 1] as const;
 
@@ -235,13 +239,27 @@ async function resolveSettledRentAlerts(userId?: string): Promise<number> {
 
   const receipts = await prisma.rentReceipt.findMany({
     where: { id: { in: withReceipt.map((r) => r.receiptId) } },
-    select: { id: true, status: true },
+    select: { id: true, status: true, dueDate: true },
   });
-  const stillOverdueIds = new Set(receipts.filter((r) => r.status === 'OVERDUE').map((r) => r.id));
+  const chaseCutoff = rentChaseCutoff(startOfUtcDay(new Date()));
+  // Overdue, but so old that nobody is being chased any more: close the alert (the month stays overdue on
+  // the property page). Settled ones are deleted below, as before.
+  const agedIds = new Set(
+    receipts.filter((r) => r.status === 'OVERDUE' && r.dueDate < chaseCutoff).map((r) => r.id),
+  );
+  if (agedIds.size > 0) {
+    await prisma.alert.updateMany({
+      where: { id: { in: withReceipt.filter((r) => agedIds.has(r.receiptId)).map((r) => r.alertId) } },
+      data: { isActive: false },
+    });
+  }
+  const stillOverdueIds = new Set(
+    receipts.filter((r) => r.status === 'OVERDUE' && r.dueDate >= chaseCutoff).map((r) => r.id),
+  );
   // A receiptId with no matching row anymore (deleted tenancy/property) is
   // just as settled as one that flipped status — resolve it too.
   const toDelete = withReceipt
-    .filter((r) => !stillOverdueIds.has(r.receiptId))
+    .filter((r) => !stillOverdueIds.has(r.receiptId) && !agedIds.has(r.receiptId))
     .map((r) => r.alertId);
   if (toDelete.length === 0) return 0;
 
@@ -261,7 +279,8 @@ export async function generateRentOverdueAlerts(userId?: string): Promise<number
     where: {
       status: 'OVERDUE',
       tenancy: { property: { ...(userId ? { userId } : {}) } },
-      dueDate: { lte: overdueThreshold },
+      // Overdue for a week or more, but not so old that nobody is chasing it (see RENT_CHASE_WINDOW_DAYS).
+      dueDate: { lte: overdueThreshold, gte: rentChaseCutoff(startOfUtcDay(new Date())) },
     },
     include: {
       tenancy: {
@@ -286,7 +305,7 @@ export async function generateRentOverdueAlerts(userId?: string): Promise<number
         userId: ownerId,
         type: 'CUSTOM',
         title: `Rent overdue — ${receipt.tenancy.property.name}`,
-        description: `${receipt.forMonth} rent of ₹${receipt.expectedAmount} is overdue`,
+        description: `${formatRentMonth(receipt.forMonth)} rent of ${formatINR(receipt.expectedAmount.toString())} is overdue`,
         triggerDate: new Date(),
         metadata: { key: metaKey, receiptId: receipt.id, forMonth: receipt.forMonth },
       },
