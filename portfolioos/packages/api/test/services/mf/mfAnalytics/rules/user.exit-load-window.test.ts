@@ -72,7 +72,7 @@ describe('mf.user.exit-load-window', () => {
     const counterfactual = evaluate()[0]!.whatWouldChangeThis;
 
     expect(counterfactual.length).toBeGreaterThan(0);
-    expect(counterfactual).toMatch(/^Clears on \d{1,2} [A-Z][a-z]{2} \d{4},/);
+    expect(counterfactual).toMatch(/^Clears on \d{2}\/\d{2}\/\d{4},/);
     expect(counterfactual).toContain('365-day');
   });
 

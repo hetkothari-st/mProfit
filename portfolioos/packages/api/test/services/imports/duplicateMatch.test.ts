@@ -130,7 +130,7 @@ describe('groupTransactionDuplicates', () => {
     expect(groups).toHaveLength(1);
     expect(groups[0]!.keepId).toBe('a');
     expect(groups[0]!.suggestedRemovalIds).toEqual(['b', 'c']);
-    expect(groups[0]!.label).toContain('3 × BUY 10 Infosys Ltd on 2025-11-04');
+    expect(groups[0]!.label).toContain('3 × BUY 10 Infosys Ltd on 04/11/2025');
   });
 
   it('shows a deliberate-looking repeat but ticks nothing', () => {

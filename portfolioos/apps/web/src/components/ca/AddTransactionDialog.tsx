@@ -20,6 +20,7 @@ import {
   CA_TRANSACTION_TYPES,
   type CaTransactionInput,
 } from '@/api/ca.api';
+import { assetClassLabel, transactionTypeLabel } from '@everypaisa/shared';
 
 /**
  * Record a transaction directly in a client's books.
@@ -130,7 +131,7 @@ export function AddTransactionDialog({
               >
                 {CA_TRANSACTION_TYPES.map((t) => (
                   <option key={t} value={t}>
-                    {t.replace(/_/g, ' ')}
+                    {transactionTypeLabel(t)}
                   </option>
                 ))}
               </Select>
@@ -140,7 +141,7 @@ export function AddTransactionDialog({
               <Select value={form.assetClass} onChange={(e) => set('assetClass', e.target.value)}>
                 {CA_ASSET_CLASSES.map((ac) => (
                   <option key={ac} value={ac}>
-                    {ac.replace(/_/g, ' ')}
+                    {assetClassLabel(ac)}
                   </option>
                 ))}
               </Select>

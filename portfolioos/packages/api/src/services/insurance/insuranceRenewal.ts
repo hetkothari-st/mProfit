@@ -17,7 +17,7 @@
  * either way it is recorded on the document (renewalAction).
  */
 
-import { Decimal, formatINR } from '@everypaisa/shared';
+import { Decimal, formatINR, formatDateOnly } from '@everypaisa/shared';
 import { prisma } from '../../lib/prisma.js';
 import { BadRequestError, NotFoundError } from '../../lib/errors.js';
 import type { InsuranceDocExtract } from '../../ingestion/insurance/insuranceDocReader.js';
@@ -47,12 +47,7 @@ interface RenewalPolicy {
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 
 function fmtDay(isoDay: string): string {
-  return new Date(`${isoDay}T00:00:00Z`).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
+  return formatDateOnly(isoDay);
 }
 
 const sameMoney = (a: string, b: string) => new Decimal(a).equals(new Decimal(b));

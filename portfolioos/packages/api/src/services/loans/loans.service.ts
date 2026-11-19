@@ -13,15 +13,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
-import {
-  Decimal as SharedDecimal,
-  indianFy,
-  loanTaxBenefit,
-  serializeMoney,
-  type LoanRateBenchmark,
-  type LoanRateType,
-  type ScheduleRow,
-} from '@everypaisa/shared';
+import { Decimal as SharedDecimal, indianFy, loanTaxBenefit, serializeMoney, type LoanRateBenchmark, type LoanRateType, type ScheduleRow, formatDateOnly } from '@everypaisa/shared';
 import { loanAccountNumberColumns, PLATE_SELECT, readLoanAccountNumber, revealVehicle } from '../security/piiAtRest.service.js';
 import { last4 } from '../pf/pfCredentials.service.js';
 import { isRealDate } from './loanRates/sanity.js';
@@ -1119,7 +1111,7 @@ export async function generateLoanEmiAlerts(userId?: string): Promise<number> {
         : `${loan.lenderName} EMI due in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
 
     const emiDisplay = new Decimal(nextUnpaid.emiAmount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    const description = `EMI of ₹${emiDisplay} ${isOverdue ? 'was due on' : 'due on'} ${nextUnpaid.date}`;
+    const description = `EMI of ₹${emiDisplay} ${isOverdue ? 'was due on' : 'due on'} ${formatDateOnly(nextUnpaid.date)}`;
 
     await prisma.alert.create({
       data: {

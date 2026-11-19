@@ -25,7 +25,7 @@ import { connectorsApi } from '@/api/connectors.api';
 import { apiErrorMessage } from '@/api/client';
 import { readBrokerOauthMessage } from '@/lib/brokerOauthMessage';
 
-import { formatDateTimeIST } from '@everypaisa/shared';
+import { formatDateTimeIST, humanizeEnum } from '@everypaisa/shared';
 interface BrokerMeta {
   id: BrokerId;
   name: string;
@@ -376,7 +376,7 @@ export function ConnectorsPage() {
                                 : 'text-muted-foreground'
                           }
                         >
-                          {a.status}
+                          {humanizeEnum(a.status)}
                         </span>
                       </div>
                       <div className="text-xs text-muted-foreground">

@@ -60,7 +60,7 @@ describe('mf.user.ltcg-approaching', () => {
   it('names the flip date in the counterfactual', () => {
     const counterfactual = evaluate()[0]!.whatWouldChangeThis;
     expect(counterfactual.length).toBeGreaterThan(0);
-    expect(counterfactual).toMatch(/^Clears on \d{1,2} [A-Z][a-z]{2} \d{4},/);
+    expect(counterfactual).toMatch(/^Clears on \d{2}\/\d{2}\/\d{4},/);
   });
 
   it('is silent when the input is missing or the lot is already long-term', () => {

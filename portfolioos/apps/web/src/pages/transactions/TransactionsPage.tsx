@@ -25,7 +25,7 @@ import {
   type TransactionFilters,
 } from './transactionFilters';
 import type { TransactionDTO } from '@everypaisa/shared';
-import { ASSET_CLASS_LABELS, formatINR, formatQuantity, formatDateOnly } from '@everypaisa/shared';
+import { ASSET_CLASS_LABELS, formatINR, formatQuantity, formatDateOnly, transactionTypeLabel } from '@everypaisa/shared';
 
 export function TransactionsPage() {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('');
@@ -278,7 +278,7 @@ export function TransactionsPage() {
                     <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
                       <span className="flex min-w-0 items-center gap-1.5">
                         <span className={`shrink-0 rounded px-1.5 py-px text-[10.5px] font-medium ${txTypeTone(r.transactionType)}`}>
-                          {r.transactionType.replace(/_/g, ' ')}
+                          {transactionTypeLabel(r.transactionType)}
                         </span>
                         <span className="shrink-0 tabular-nums">{formatDateOnly(r.tradeDate)}</span>
                         <span className="truncate">· {r.symbol ?? r.schemeCode ?? r.isin ?? ASSET_CLASS_LABELS[r.assetClass] ?? r.assetClass}</span>
@@ -315,7 +315,7 @@ export function TransactionsPage() {
                       <td data-label="Date" className="py-2 pr-4 tabular-nums">{formatDateOnly(r.tradeDate)}</td>
                       <td data-label="Type" className="py-2 pr-4">
                         <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${txTypeTone(r.transactionType)}`}>
-                          {r.transactionType.replace(/_/g, ' ')}
+                          {transactionTypeLabel(r.transactionType)}
                         </span>
                       </td>
                       <td data-label="Asset" className="py-2 pr-4">

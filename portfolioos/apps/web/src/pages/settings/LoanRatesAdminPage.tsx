@@ -2,11 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
-import {
-  MCLR_TENORS, MCLR_TENOR_LABELS, RATE_BASES, RATE_BASIS_LABELS, RATE_LOAN_TYPE_LABELS, formatDateOnly, formatDateTimeIST,
-  isRateLoanType,
-  type AdminLoanRateSourceWire, type AdminRateKeyWire, type LoanRateReadingWire, type ManualRateInputWire, type MclrTenor, type RateBasis,
-} from '@everypaisa/shared';
+import { MCLR_TENORS, MCLR_TENOR_LABELS, RATE_BASES, RATE_BASIS_LABELS, RATE_LOAN_TYPE_LABELS, formatDateOnly, formatDateTimeIST, isRateLoanType, type AdminLoanRateSourceWire, type AdminRateKeyWire, type LoanRateReadingWire, type ManualRateInputWire, type MclrTenor, type RateBasis, humanizeEnum } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -186,7 +182,7 @@ function SourceCard(props: {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-base">{source.lender} - {typeLabel(source.loanType)}</CardTitle>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{source.mode}</Badge>
+            <Badge variant="outline">{humanizeEnum(source.mode)}</Badge>
             {source.stale && <Badge variant="destructive">Stale</Badge>}
             {source.mode === 'AUTO' && (
               <Button type="button" size="sm" variant="outline" disabled={props.running} onClick={props.onRun}>Run now</Button>

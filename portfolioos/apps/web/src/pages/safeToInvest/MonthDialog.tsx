@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Loader2, RotateCcw } from 'lucide-react';
-import { Decimal, type SafeToInvestMonthView, type SafeToInvestSummary } from '@everypaisa/shared';
+import { Decimal, type SafeToInvestMonthView, type SafeToInvestSummary, formatDateOnly } from '@everypaisa/shared';
 import {
   Dialog,
   DialogContent,
@@ -100,7 +100,7 @@ export function MonthDialog({ month, onClose, onFresh }: Props) {
                     <span className={cn('numeric shrink-0', !c.included && 'text-muted-foreground')}>{rupees(c.amount)}</span>
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    {c.date}
+                    {formatDateOnly(c.date)}
                     {c.decision === null && c.autoReason && <> · {c.autoReason}</>}
                     {c.decision !== null && (
                       <>

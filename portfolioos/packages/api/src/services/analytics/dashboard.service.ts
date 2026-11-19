@@ -1,7 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
-import { financialYearOf, financialYearRange } from '@everypaisa/shared';
+import { financialYearOf, financialYearRange, formatDateOnly } from '@everypaisa/shared';
 import { serializeMoney, financialYearFromDate, toDecimal, premiumToAnnual } from '@everypaisa/shared';
 import { isLapseRisk } from '../insurance/insurance.service.js';
 import { loanPosition, OUTSTANDING_LOAN_STATUSES, type StoredLoan } from '../loans/loans.service.js';
@@ -499,7 +499,7 @@ export async function getDashboardNetWorth(
     alerts.push({
       type: 'INSURANCE_RENEWAL',
       title: `${r.insurer} ${r.type} premium due`,
-      description: `₹${new Decimal(r.amount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} due ${r.nextPremiumDue}`,
+      description: `₹${new Decimal(r.amount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} due ${formatDateOnly(r.nextPremiumDue)}`,
       urgency: r.daysUntil <= 7 ? 'HIGH' : r.daysUntil <= 15 ? 'MEDIUM' : 'LOW',
       daysUntil: r.daysUntil,
     });
@@ -540,7 +540,7 @@ export async function getDashboardNetWorth(
     alerts.push({
       type: 'LOAN_EMI_DUE',
       title: `${emi.lenderName} EMI due in ${emi.daysUntil} day${emi.daysUntil !== 1 ? 's' : ''}`,
-      description: `EMI of ₹${new Decimal(emi.emiAmount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} due on ${emi.emiDate}`,
+      description: `EMI of ₹${new Decimal(emi.emiAmount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} due on ${formatDateOnly(emi.emiDate)}`,
       urgency: emi.daysUntil <= 7 ? 'HIGH' : emi.daysUntil <= 15 ? 'MEDIUM' : 'LOW',
       daysUntil: emi.daysUntil,
     });

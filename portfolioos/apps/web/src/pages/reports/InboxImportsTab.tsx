@@ -13,7 +13,7 @@ import { InboxImportPreviewSheet } from '@/components/upload/InboxImportPreviewS
 import { SenderDecisionDialog } from '@/components/upload/SenderDecisionDialog';
 import { applyInboxDecision, otherPendingFromSender, type InboxDecision } from './inboxDecision';
 import type { GmailDiscoveredDocDTO, GmailDocStatus } from '@everypaisa/shared';
-import { GmailDocStatus as STATUS, INBOX_DOC_TYPES } from '@everypaisa/shared';
+import { GmailDocStatus as STATUS, INBOX_DOC_TYPES, humanizeEnum } from '@everypaisa/shared';
 
 const STATUS_OPTIONS: Array<{ value: GmailDocStatus | 'ALL'; label: string }> = [
   { value: 'ALL', label: 'All' },
@@ -225,7 +225,7 @@ export function InboxImportsTab() {
           >
             <option value="">All doc types</option>
             {INBOX_DOC_TYPES.filter((t) => t !== 'NOT_FINANCIAL').map((t) => (
-              <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+              <option key={t} value={t}>{humanizeEnum(t)}</option>
             ))}
           </Select>
           <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-2">

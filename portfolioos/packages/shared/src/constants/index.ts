@@ -41,6 +41,16 @@ export const ASSET_CLASS_LABELS: Record<string, string> = {
   ART_COLLECTIBLES: 'Art / Collectibles',
   CASH: 'Cash',
   OTHER: 'Other',
+  NSC: 'NSC',
+  KVP: 'Kisan Vikas Patra',
+  SCSS: 'Senior Citizens Savings Scheme',
+  SSY: 'Sukanya Samriddhi',
+  POST_OFFICE_MIS: 'Post Office MIS',
+  POST_OFFICE_RD: 'Post Office RD',
+  POST_OFFICE_TD: 'Post Office Term Deposit',
+  POST_OFFICE_SAVINGS: 'Post Office Savings',
+  FOREIGN_EQUITY: 'Foreign Equity',
+  FOREX_PAIR: 'Forex Pair',
 };
 
 export const CII_TABLE: Record<string, number> = {

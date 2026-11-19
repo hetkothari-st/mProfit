@@ -14,6 +14,7 @@ import { updateStockPricesFromYahoo } from '../../priceFeeds/yahoo.service.js';
 import { refreshAllHoldingPrices } from './holdings.service.js';
 import { getEffectiveScope, portfolioChildReadableWhere, assetClassWhere } from '../family/familyScope.service.js';
 import { runAsUser } from '../../lib/requestContext.js';
+import { formatDateOnly } from '@everypaisa/shared';
 
 export interface CreateTransactionInput {
   portfolioId: string;
@@ -298,7 +299,7 @@ export async function createTransaction(
         }
       } else {
         throw new AppError(
-          `A ${input.transactionType} of ${qty.toString()} ${refs.assetName ?? input.assetName ?? 'this asset'} at ${price.toString()} on ${input.tradeDate} is already recorded. Record it again only if this is a second, genuine trade.`,
+          `A ${input.transactionType} of ${qty.toString()} ${refs.assetName ?? input.assetName ?? 'this asset'} at ${price.toString()} on ${formatDateOnly(input.tradeDate)} is already recorded. Record it again only if this is a second, genuine trade.`,
           409,
           'DUPLICATE_TRANSACTION',
           { existingTransactionId: dupe.id },
@@ -487,7 +488,7 @@ export async function updateTransaction(
     );
     if (dupe) {
       throw new AppError(
-        `Saving this would match a ${merged.transactionType} of ${qty.toString()} ${refs.assetName ?? merged.assetName ?? 'this asset'} at ${price.toString()} already recorded on ${merged.tradeDate}. Save it only if both are genuine.`,
+        `Saving this would match a ${merged.transactionType} of ${qty.toString()} ${refs.assetName ?? merged.assetName ?? 'this asset'} at ${price.toString()} already recorded on ${formatDateOnly(merged.tradeDate)}. Save it only if both are genuine.`,
         409,
         'DUPLICATE_TRANSACTION',
         { existingTransactionId: dupe.id },

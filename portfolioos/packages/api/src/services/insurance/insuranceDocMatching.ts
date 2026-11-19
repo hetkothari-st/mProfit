@@ -26,7 +26,7 @@
  */
 
 import { Prisma, type InsuranceDocument, type InsuranceDocStatus } from '@prisma/client';
-import { addMonthsIso, daysBetweenIso, formatINR, PREMIUM_FREQUENCY_MONTHS } from '@everypaisa/shared';
+import { addMonthsIso, daysBetweenIso, formatINR, PREMIUM_FREQUENCY_MONTHS, formatDateOnly } from '@everypaisa/shared';
 import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.js';
@@ -73,12 +73,7 @@ interface MatchPolicy {
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 
 function fmtDay(isoDay: string): string {
-  return new Date(`${isoDay}T00:00:00Z`).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
+  return formatDateOnly(isoDay);
 }
 
 /** The scheduled premium a payment on `paidOn` most likely settled. */

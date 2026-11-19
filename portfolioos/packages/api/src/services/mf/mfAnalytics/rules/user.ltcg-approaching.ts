@@ -47,11 +47,6 @@ const RULE_VERSION = '1.0.0';
 
 const ZERO = new Decimal(0);
 
-const MONTH_NAMES = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
 /**
  * Pure civil-date arithmetic (Howard Hinnant), duplicated from
  * `user.exit-load-window.ts`.
@@ -98,10 +93,7 @@ function addDaysIso(iso: string, days: number): string | null {
 
 function humanDate(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  if (!m) return iso;
-  const month = MONTH_NAMES[Number.parseInt(m[2]!, 10) - 1];
-  if (!month) return iso;
-  return `${Number.parseInt(m[3]!, 10)} ${month} ${m[1]}`;
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 }
 
 /** STCG, flipping within the window, and actually in profit. */

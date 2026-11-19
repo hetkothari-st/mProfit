@@ -1,7 +1,4 @@
-import {
-  LEGACY_SCHEDULE_REMINDER_DAYS, LEGACY_STAGE_DAYS,
-  type LegacyStatusValue, type LegacyTriggerValue,
-} from '@everypaisa/shared';
+import { LEGACY_SCHEDULE_REMINDER_DAYS, LEGACY_STAGE_DAYS, type LegacyStatusValue, type LegacyTriggerValue, formatDateIST } from '@everypaisa/shared';
 
 /**
  * Legacy Transfer plan state machine (design §6). Pure: given a plan's clock
@@ -93,8 +90,7 @@ export function planSteps(p: PlanClock, now: Date): Step[] {
   return steps;
 }
 
-const fmt = (d: Date) =>
-  d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+const fmt = (d: Date) => formatDateIST(d);
 const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY_MS);
 
 /** One sentence for the owner's status card. */
