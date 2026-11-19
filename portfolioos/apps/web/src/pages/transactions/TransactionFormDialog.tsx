@@ -24,7 +24,7 @@ import { useDebounced } from '@/pages/emi/useDebounced';
 import { canCheckPrice, describePriceCheck } from './priceSanity';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorCode, apiErrorMessage } from '@/api/client';
-import { AssetClass, TransactionType, type AssetSearchHit, type TransactionDTO, type CreateTransactionRequest, Exchange, Decimal, toDecimal, formatINR, assetClassLabel, transactionTypeLabel } from '@everypaisa/shared';
+import { AssetClass, TransactionType, type AssetSearchHit, type TransactionDTO, type CreateTransactionRequest, Exchange, Decimal, toDecimal, formatINR, assetClassLabel, transactionTypeLabel, estimateEquityCharges, CHARGE_RATES_AS_OF } from '@everypaisa/shared';
 
 const isDuplicateError = (err: unknown) => apiErrorCode(err) === 'DUPLICATE_TRANSACTION';
 
@@ -379,6 +379,40 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
   });
   const priceNotice = priceCheckEnabled ? describePriceCheck(priceCheck) : null;
 
+  // Fill the statutory charges from the standard rates, for a share trade added by hand. Brokerage and
+  // depository charges depend on the broker, so they are left to the user.
+  const [intraday, setIntraday] = useState(false);
+  const [chargesNote, setChargesNote] = useState<string | null>(null);
+  const exchangeValue = watch('exchange');
+  const canEstimateCharges =
+    watch('assetClass') === 'EQUITY' &&
+    (watch('transactionType') === 'BUY' || watch('transactionType') === 'SELL') &&
+    (exchangeValue === 'NSE' || exchangeValue === 'BSE');
+  const estimateCharges = () => {
+    const est = estimateEquityCharges({
+      side: watch('transactionType') === 'SELL' ? 'SELL' : 'BUY',
+      quantity: String(watch('quantity') ?? ''),
+      price: String(watch('price') ?? ''),
+      exchange: exchangeValue === 'BSE' ? 'BSE' : 'NSE',
+      intraday,
+      brokerage: String(watch('brokerage') ?? 0) || '0',
+    });
+    if (!est) {
+      setChargesNote('Enter the quantity and price first.');
+      return;
+    }
+    const opts = { shouldDirty: true } as const;
+    setValue('stt', Number(est.stt), opts);
+    setValue('stampDuty', Number(est.stampDuty), opts);
+    setValue('exchangeCharges', Number(est.exchangeCharges), opts);
+    setValue('sebiCharges', Number(est.sebiCharges), opts);
+    setValue('gst', Number(est.gst), opts);
+    setChargesNote(
+      `Estimated at standard ${intraday ? 'intraday' : 'delivery'} rates (reviewed ${CHARGE_RATES_AS_OF}). ` +
+        'Brokerage and DP charges are not included; check the amounts against your contract note.',
+    );
+  };
+
   const qtyD = d(watch('quantity'));
   const priceD = d(watch('price'));
   const grossD = qtyD.times(priceD);
@@ -595,6 +629,22 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
 
           <details className="rounded-md border px-3 py-2 text-sm">
             <summary className="cursor-pointer font-medium">Charges (optional)</summary>
+            {canEstimateCharges && (
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <Button type="button" variant="outline" size="sm" onClick={estimateCharges}>
+                  Estimate charges
+                </Button>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={intraday}
+                    onChange={(e) => setIntraday(e.target.checked)}
+                  />
+                  Intraday (squared off the same day)
+                </label>
+                {chargesNote && <p className="basis-full text-xs text-muted-foreground" role="status">{chargesNote}</p>}
+              </div>
+            )}
             <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
                 <Label htmlFor="brokerage" className="text-xs">Brokerage</Label>
