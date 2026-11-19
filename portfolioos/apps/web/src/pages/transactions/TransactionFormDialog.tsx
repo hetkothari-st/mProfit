@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Loader2, Trash2 } from 'lucide-react';
+import { AlertTriangle, Loader2, Trash2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,8 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { AssetSearch } from '@/components/common/AssetSearch';
 import { transactionsApi } from '@/api/transactions.api';
+import { useDebounced } from '@/pages/emi/useDebounced';
+import { canCheckPrice, describePriceCheck } from './priceSanity';
 import { portfoliosApi } from '@/api/portfolios.api';
 import { apiErrorCode, apiErrorMessage } from '@/api/client';
 import { AssetClass, TransactionType, type AssetSearchHit, type TransactionDTO, type CreateTransactionRequest, Exchange, Decimal, toDecimal, formatINR, assetClassLabel, transactionTypeLabel } from '@everypaisa/shared';
@@ -347,6 +349,36 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
       return new Decimal(0);
     }
   };
+  // Heads-up when the price looks wrong for that instrument on that date (a stray zero, paise, the total
+  // typed as the price). Advisory only: it never disables Save.
+  const checkInput = {
+    assetClass: watch('assetClass'),
+    transactionType: watch('transactionType'),
+    stockSymbol: watch('stockSymbol') || undefined,
+    schemeCode: watch('schemeCode') || undefined,
+    tradeDate: watch('tradeDate'),
+    price: String(watch('price') ?? ''),
+  };
+  // Debounce on a string key: the object above is new every render and would restart the timer forever.
+  const debouncedKey = useDebounced(JSON.stringify(checkInput), 600);
+  const debouncedCheck = useMemo(() => JSON.parse(debouncedKey) as typeof checkInput, [debouncedKey]);
+  const priceCheckEnabled = open && canCheckPrice(debouncedCheck);
+  const { data: priceCheck } = useQuery({
+    queryKey: ['price-check', debouncedCheck],
+    queryFn: () =>
+      transactionsApi.priceCheck({
+        assetClass: debouncedCheck.assetClass,
+        stockSymbol: debouncedCheck.stockSymbol,
+        schemeCode: debouncedCheck.schemeCode,
+        tradeDate: debouncedCheck.tradeDate,
+        price: debouncedCheck.price,
+      }),
+    enabled: priceCheckEnabled,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  const priceNotice = priceCheckEnabled ? describePriceCheck(priceCheck) : null;
+
   const qtyD = d(watch('quantity'));
   const priceD = d(watch('price'));
   const grossD = qtyD.times(priceD);
@@ -542,6 +574,21 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
               <Input id="price" type="number" step="0.0001" className="mt-1 tabular-nums" {...register('price')} />
               {formState.errors.price && (
                 <p className="text-xs text-negative mt-1">{formState.errors.price.message}</p>
+              )}
+              {priceNotice && (
+                <div
+                  role="status"
+                  className="mt-1.5 flex gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-900 dark:text-amber-200"
+                >
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <div>
+                    <p>{priceNotice.text}</p>
+                    {priceNotice.hint && <p className="mt-0.5">{priceNotice.hint}</p>}
+                    <p className="mt-0.5 text-amber-800/80 dark:text-amber-300/80">
+                      Enter the price per unit, not the total. You can still save if it is right.
+                    </p>
+                  </div>
+                </div>
               )}
             </div>
           </div>
