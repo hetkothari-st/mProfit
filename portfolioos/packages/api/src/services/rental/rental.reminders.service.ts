@@ -395,6 +395,18 @@ export async function enqueuePendingReminders(userId?: string): Promise<number> 
   // Only months still worth chasing. Older ones stay OVERDUE on the property page, but no tenant email is
   // drafted for them, and drafts already waiting for approval are withdrawn (nothing is sent either way).
   const chaseCutoff = rentChaseCutoff(today);
+  // A "rent is due in N days / today" draft is only true until the due date. Once it has passed the draft
+  // is wrong (it would tell the tenant September's rent "is due today" in November) and the overdue draft
+  // below is the right one, so withdraw it. Nothing is sent either way.
+  await prisma.rentReminder.updateMany({
+    where: {
+      status: REMINDER_STATUS.PENDING_APPROVAL,
+      leadDays: { gte: 0 },
+      receipt: { dueDate: { lt: today } },
+      ...(userId ? { tenancy: { property: { userId } } } : {}),
+    },
+    data: { status: REMINDER_STATUS.SUPERSEDED },
+  });
   await prisma.rentReminder.updateMany({
     where: {
       status: REMINDER_STATUS.PENDING_APPROVAL,
@@ -569,6 +581,14 @@ export async function approveAndSendReminder(
   const existing = await getReminderOwned(userId, id);
   if (existing.status !== REMINDER_STATUS.PENDING_APPROVAL) {
     throw new BadRequestError('Only PENDING_APPROVAL reminders can be approved');
+  }
+  // The scan withdraws these once the due date passes, but a draft can still be open on screen (or the
+  // scan not yet run). Never send "rent is due in N days" for a date that is behind us.
+  if (existing.leadDays >= 0 && existing.receipt.dueDate < startOfDayUtc(new Date())) {
+    await prisma.rentReminder.update({ where: { id }, data: { status: REMINDER_STATUS.SUPERSEDED } });
+    throw new BadRequestError(
+      'This reminder is out of date: the rent is now overdue. Run a scan to draft an overdue reminder instead.',
+    );
   }
   const storedChannels = (existing.channels ?? {}) as { email?: boolean; sms?: boolean };
   const channels: { email?: boolean; sms?: boolean } = channelOverride
