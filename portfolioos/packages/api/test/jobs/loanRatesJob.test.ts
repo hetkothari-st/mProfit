@@ -294,16 +294,22 @@ describe('runLoanRates', () => {
     expect(await prisma.loanRate.count({ where: { sourceId: 'axis.home', status: 'ACTIVE' } })).toBe(1);
   });
 
-  it('a source with no success for 7 days is stale and raises one ops alert per IST day', async () => {
+  it('a stale source keeps ONE open ops alert across days, refreshed in place, and closes it once fresh', async () => {
     await sys(() => prisma.loanRateSource.update({ where: { id: 'lic.home' }, data: { lastSuccessAt: new Date(NOW.getTime() - 8 * 86_400_000) } }));
     const first = await runLoanRates({ readerIds: [], now: NOW, opsUserId: ops.userId });
     expect(first.staleSources).toContain('lic.home');
     expect(first.alerted).toBe(true);
-    await runLoanRates({ readerIds: [], now: later(3), opsUserId: ops.userId });
-    const alerts = await sys(() => prisma.alert.findMany({ where: { userId: ops.userId, title: 'Loan rates stale: 2026-10-12' } }));
+    await runLoanRates({ readerIds: [], now: later(30), opsUserId: ops.userId });
+    const open = () => sys(() => prisma.alert.findMany({ where: { userId: ops.userId, type: 'SYSTEM', isActive: true } }));
+    const alerts = await open();
     expect(alerts).toHaveLength(1);
-    expect(alerts[0]).toMatchObject({ type: 'CUSTOM' });
+    expect(alerts[0]).toMatchObject({ title: 'Loan rates stale' });
     expect((alerts[0]!.metadata as unknown as { source: string }).source).toBe('loan-rates');
+
+    // The source recovers: the next run closes the alert.
+    await sys(() => prisma.loanRateSource.update({ where: { id: 'lic.home' }, data: { lastSuccessAt: later(30) } }));
+    await runLoanRates({ readerIds: [], now: later(30), opsUserId: ops.userId });
+    expect(await open()).toHaveLength(0);
   });
 
   it('with no ADMIN to own them, failures are logged, not written', async () => {

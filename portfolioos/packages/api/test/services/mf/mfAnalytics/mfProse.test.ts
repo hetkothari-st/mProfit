@@ -579,7 +579,7 @@ describe('prose verification failure rate alert (06 §7)', () => {
     expect(result.alerted).toBe(true);
 
     const alert = await runAsSystem(() =>
-      prisma.alert.findFirstOrThrow({ where: { userId: scope.userId, type: 'CUSTOM' } }),
+      prisma.alert.findFirstOrThrow({ where: { userId: scope.userId, type: 'SYSTEM' } }),
     );
     expect(alert.title).toContain('MF prose verification failures');
     expect(alert.description).toContain('prompt regression');
@@ -591,7 +591,7 @@ describe('prose verification failure rate alert (06 §7)', () => {
     await checkMfProseVerificationFailureRate({ day: DAY, opsUserId: scope.userId });
 
     const count = await runAsSystem(() =>
-      prisma.alert.count({ where: { userId: scope.userId, type: 'CUSTOM' } }),
+      prisma.alert.count({ where: { userId: scope.userId, type: 'SYSTEM' } }),
     );
     expect(count).toBe(1);
   });

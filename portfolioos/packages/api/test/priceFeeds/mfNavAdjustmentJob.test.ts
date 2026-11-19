@@ -272,7 +272,7 @@ describe('mfNavAdjustmentJob', () => {
     expect(second.alertRaised).toBe(true);
 
     const alerts = await runAsSystem(() =>
-      prisma.alert.findMany({ where: { userId: scope.userId, type: 'CUSTOM' } }),
+      prisma.alert.findMany({ where: { userId: scope.userId, type: 'SYSTEM' } }),
     );
     expect(alerts).toHaveLength(1);
     expect(alerts[0]?.title).toBe('MF NAV quarantine rate above threshold');

@@ -585,7 +585,7 @@ async function maybeRaiseQuarantineAlert(input: {
 
   // Idempotent: one alert per ops user per day, however many times the job runs.
   const existing = await prisma.alert.findFirst({
-    where: { userId: input.opsUserId, type: 'CUSTOM', title, triggerDate },
+    where: { userId: input.opsUserId, type: 'SYSTEM', title, triggerDate },
     select: { id: true },
   });
   if (existing) return true;
@@ -593,7 +593,7 @@ async function maybeRaiseQuarantineAlert(input: {
   await prisma.alert.create({
     data: {
       userId: input.opsUserId,
-      type: 'CUSTOM',
+      type: 'SYSTEM',
       title,
       description:
         `${input.rowsQuarantined} of ${input.rowsSeen} NAV rows (${rate.times(100).toFixed(2)}%) ` +

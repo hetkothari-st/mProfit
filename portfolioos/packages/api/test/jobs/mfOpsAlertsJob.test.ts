@@ -136,7 +136,7 @@ async function seedProseSpend(
 function alertsFor(opsUserId: string): Promise<Array<{ title: string; description: string | null }>> {
   return runAsSystem(() =>
     prisma.alert.findMany({
-      where: { userId: opsUserId, type: 'CUSTOM', triggerDate: DAY_START },
+      where: { userId: opsUserId, type: 'SYSTEM', triggerDate: DAY_START },
       select: { title: true, description: true },
     }),
   );

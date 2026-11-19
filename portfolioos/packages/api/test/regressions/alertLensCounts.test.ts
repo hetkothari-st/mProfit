@@ -16,13 +16,16 @@ let scope: TestScope;
 
 beforeAll(async () => {
   scope = await createTestScope('alert-lens');
-  const rows: Array<{ type: 'CUSTOM' | 'LOAN_REFINANCE' | 'INSURANCE_PREMIUM'; offset: number; isRead: boolean }> = [
+  const rows: Array<{ type: 'CUSTOM' | 'LOAN_REFINANCE' | 'INSURANCE_PREMIUM' | 'SYSTEM'; offset: number; isRead: boolean }> = [
     // 35 overdue custom reminders: more than one page.
     ...Array.from({ length: 35 }, (_, i) => ({ type: 'CUSTOM' as const, offset: -1 - i, isRead: i % 5 === 0 })),
     { type: 'LOAN_REFINANCE', offset: -3, isRead: false }, // news: "this week", never overdue
     { type: 'INSURANCE_PREMIUM', offset: 0, isRead: false }, // today: due soon
     { type: 'INSURANCE_PREMIUM', offset: 7, isRead: true }, // 7 days out: due soon
     { type: 'INSURANCE_PREMIUM', offset: 8, isRead: false }, // 8 days out: not soon
+    // Operator alerts (an admin's ops feed): never part of the inbox, the bell or any lens count.
+    { type: 'SYSTEM', offset: -5, isRead: false },
+    { type: 'SYSTEM', offset: -9, isRead: false },
   ];
   await runAsSystem(() =>
     prisma.alert.createMany({
@@ -69,5 +72,14 @@ describe('alert lenses', () => {
   it('keeps lens counts within a type filter', async () => {
     const res = await scope.runAs(() => listAlerts(scope.userId, { type: 'INSURANCE_PREMIUM' }, NOW));
     expect(res.counts).toEqual({ all: 3, overdue: 0, soon: 2, unread: 2 });
+  });
+
+  it('keeps operator (SYSTEM) alerts out of the inbox, bell and overdue count unless asked for by type', async () => {
+    const all = await scope.runAs(() => listAlerts(scope.userId, { limit: 200 }, NOW));
+    expect(all.alerts.some((a) => a.type === 'SYSTEM')).toBe(false);
+
+    const sys = await scope.runAs(() => listAlerts(scope.userId, { type: 'SYSTEM' }, NOW));
+    expect(sys.total).toBe(2);
+    expect(sys.counts.overdue).toBe(0); // operator alerts are never "overdue"
   });
 });

@@ -1036,6 +1036,33 @@ export function emiDueDayFrom(firstEmiDate: string): number {
  * for approaching EMIs. Follows the same pattern as generateRenewalAlerts()
  * in insurance.service.ts.
  */
+/**
+ * An EMI alert's key carries the day-count ("due in 5 days", "due today", "overdue"), so every day makes a new
+ * key and the earlier alerts were never retired: "EMI due today" kept showing weeks later and each missed EMI
+ * stacked up as overdue. Once the scan has decided what is true now, every other open EMI alert is closed
+ * (a paid EMI, a moved due date, a closed loan or a deleted loan all fall out the same way).
+ */
+async function retireStaleLoanEmiAlerts(
+  currentKeys: Set<string>,
+  unscannable: Set<string>,
+  userId?: string,
+): Promise<void> {
+  const open = await prisma.alert.findMany({
+    where: { type: 'LOAN_EMI_DUE', isActive: true, ...(userId ? { userId } : {}) },
+    select: { id: true, metadata: true },
+  });
+  const stale = open
+    .filter((a) => {
+      const m = a.metadata as { key?: string; loanId?: string } | null;
+      if (m?.loanId && unscannable.has(m.loanId)) return false;
+      return !(m?.key && currentKeys.has(m.key));
+    })
+    .map((a) => a.id);
+  if (stale.length > 0) {
+    await prisma.alert.updateMany({ where: { id: { in: stale } }, data: { isActive: false } });
+  }
+}
+
 export async function generateLoanEmiAlerts(userId?: string): Promise<number> {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
@@ -1051,6 +1078,9 @@ export async function generateLoanEmiAlerts(userId?: string): Promise<number> {
   });
 
   let created = 0;
+  // Keys of the alerts that still describe a loan's current situation; every other open EMI alert is stale.
+  const currentKeys = new Set<string>();
+  const unscannable = new Set<string>(); // schedule failed to build: leave their alerts alone
 
   for (const loan of loans) {
     let schedule: AmortizationRow[];
@@ -1061,6 +1091,7 @@ export async function generateLoanEmiAlerts(userId?: string): Promise<number> {
         { loanId: loan.id, err: err instanceof Error ? err.message : String(err) },
         '[loans] failed to build schedule for alert scan — skipping',
       );
+      unscannable.add(loan.id);
       continue;
     }
 
@@ -1070,6 +1101,7 @@ export async function generateLoanEmiAlerts(userId?: string): Promise<number> {
     const daysLabel = Math.abs(daysLeft);
 
     const metaKey = `loan_emi:${loan.id}:${nextUnpaid.date}:${isOverdue ? 'overdue' : `${daysLeft}d`}`;
+    currentKeys.add(metaKey);
 
     const existing = await prisma.alert.findFirst({
       where: {
@@ -1109,6 +1141,8 @@ export async function generateLoanEmiAlerts(userId?: string): Promise<number> {
     });
     created++;
   }
+
+  await retireStaleLoanEmiAlerts(currentKeys, unscannable, userId);
 
   return created;
 }
