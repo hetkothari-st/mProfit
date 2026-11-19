@@ -140,7 +140,7 @@ function MarkReceivedDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Mark as received — {receipt.forMonth}</DialogTitle>
+          <DialogTitle>Mark as received — {formatRentMonth(receipt.forMonth)}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>
@@ -262,9 +262,6 @@ function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
       <tr className={`group transition-colors ${ROW_TONES[receipt.status]} hover:bg-muted/40`}>
         <td data-label="Month" className="px-4 py-3 whitespace-nowrap">
           <div className="text-sm font-medium text-foreground">{monthLabel}</div>
-          <div className="text-[10.5px] text-muted-foreground tabular-nums">
-            {receipt.forMonth}
-          </div>
         </td>
         <td data-label="Expected" className="px-4 py-3 text-sm tabular-nums text-right font-medium">
           {formatINR(expectedAmt.toString())}

@@ -13,6 +13,10 @@ describe('humanizeEnum', () => {
     expect(humanizeEnum('NPS')).toBe('NPS');
     expect(humanizeEnum('POST_OFFICE_RD')).toBe('Post Office RD');
     expect(humanizeEnum('INVIT')).toBe('InvIT');
+    // Import file types: file-format and fund words stay as people write them.
+    expect(humanizeEnum('MF_CAS_PDF')).toBe('MF CAS PDF');
+    expect(humanizeEnum('CONTRACT_NOTE_PDF')).toBe('Contract Note PDF');
+    expect(humanizeEnum('GENERIC_XLSX')).toBe('Generic XLSX');
   });
 
   it('is empty for missing input', () => {

@@ -5,7 +5,7 @@ import { ASSET_CLASS_LABELS } from '../constants/index.js';
  * ("MUTUAL_FUND" -> "Mutual Fund", but "NPS_TIER_1" -> "NPS Tier 1").
  */
 const ACRONYMS: ReadonlySet<string> = new Set([
-  'AIF', 'AMC', 'CAS', 'EMI', 'EPF', 'EPFO', 'ETF', 'GST', 'HUF', 'ID', 'IPO', 'ISIN', 'KVP', 'KYC',
+  'AIF', 'AMC', 'CAS', 'CSV', 'EMI', 'MF', 'PDF', 'TSV', 'XLS', 'XLSX', 'EPF', 'EPFO', 'ETF', 'GST', 'HUF', 'ID', 'IPO', 'ISIN', 'KVP', 'KYC',
   'LTCG', 'MIS', 'NAV', 'NPS', 'NSC', 'NRI', 'OTP', 'PAN', 'PF', 'PMS', 'PPF', 'RD', 'REIT', 'SCSS', 'SEBI',
   'SIP', 'SSY', 'STCG', 'STT', 'TD', 'TDS', 'ULIP', 'UPI', 'XIRR', 'FD', 'AI', 'CA',
 ]);
