@@ -81,6 +81,34 @@ describe('client list: open to everyone, gated once there are clients', () => {
   });
 });
 
+describe('client count: what the sidebar polls', () => {
+  const call = async (userId: string, handler: 'countClientsHandler' | 'listClientsHandler') => {
+    const mod = await import('../../src/controllers/ca.controller.js');
+    let body: unknown;
+    const res = { status: () => res, json: (b: unknown) => (body = b) } as never;
+    await runAsUser(userId, () => mod[handler]({ user: { id: userId } } as never, res));
+    return body;
+  };
+
+  it('is 0 for a user with no clients, and answers without two-factor for one who has some', async () => {
+    const owner = await createTestScope('pro-mfa-count');
+    try {
+      expect(await call(owner.userId, 'countClientsHandler')).toMatchObject({ data: { count: 0 } });
+
+      await runAsSystem(() =>
+        prisma.client.create({ data: { advisorId: owner.userId, name: 'A client', kind: 'SHADOW', status: 'PENDING' } }),
+      );
+      // The sidebar can ask without a verified session...
+      expect(await call(owner.userId, 'countClientsHandler')).toMatchObject({ data: { count: 1 } });
+      // ...while the list itself still needs one.
+      await expect(call(owner.userId, 'listClientsHandler')).rejects.toMatchObject({ code: 'TWO_FACTOR_REQUIRED' });
+    } finally {
+      await runAsSystem(() => prisma.client.deleteMany({ where: { advisorId: owner.userId } }));
+      await owner.cleanup();
+    }
+  });
+});
+
 describe('admin tools need two-factor sign-in too', () => {
   it('refuses an unverified session and lets a verified one through', async () => {
     const { requireSecondFactor } = await import('../../src/lib/professionalMfa.js');
