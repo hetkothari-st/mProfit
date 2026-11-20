@@ -160,6 +160,12 @@ export const caApi = {
     return unwrap(data);
   },
 
+  /** Ungated by two-factor, so the sidebar can poll it without a 403. */
+  async countClients(): Promise<number> {
+    const { data } = await api.get<ApiResponse<{ count: number }>>('/api/ca/clients/count');
+    return unwrap(data).count;
+  },
+
   async createManagedClient(payload: {
     name: string;
     email?: string;
