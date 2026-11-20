@@ -67,6 +67,16 @@ export async function listClientsHandler(req: Request, res: Response) {
   ok(res, clients);
 }
 
+/**
+ * How many clients the caller has, with no second-factor gate: the sidebar asks this on every page and
+ * every 30s to decide whether to show "Client books". Answering it through the gated list meant a
+ * professional signed in without 2FA got a 403 on each poll. A count reveals nothing the list's 403
+ * did not already, and the list itself stays gated.
+ */
+export async function countClientsHandler(req: Request, res: Response) {
+  ok(res, { count: (await listClients(req.user!.id)).length });
+}
+
 export async function createManagedClientHandler(req: Request, res: Response) {
   const parsed = managedClientSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]!.message);

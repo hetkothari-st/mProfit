@@ -12,7 +12,6 @@ import { Briefcase, ShieldCheck } from 'lucide-react';
 import { LIVE_QUERY } from '@/lib/liveQuery';
 import { useQuery } from '@tanstack/react-query';
 import { caApi } from '@/api/ca.api';
-import { apiErrorCode } from '@/api/client';
 
 /**
  * Where each nav list was scrolled to, keyed by `scrollKey`.
@@ -53,16 +52,9 @@ export function SidebarNav({
   // Cheap, cached, and returns an empty list for everyone else.
   const { data: clientCount } = useQuery({
     queryKey: ['ca', 'clients', 'count'],
-    queryFn: async () => {
-      try {
-        return (await caApi.listClients()).length;
-      } catch (err) {
-        // Has clients, but this session can't open them yet: keep the entry,
-        // which leads to the page explaining two-factor sign-in.
-        if (apiErrorCode(err) === 'TWO_FACTOR_REQUIRED') return 1;
-        throw err;
-      }
-    },
+    // A count, not the list: the list needs a two-factor session and answered 403 on every poll for a
+    // professional who had not verified yet. The entry still leads to the page explaining two-factor.
+    queryFn: () => caApi.countClients(),
     // Follows a grant appearing or being withdrawn in someone else's session.
     // Refetched on focus like the other live views; polled more slowly because
     // it only decides whether a sidebar entry exists.

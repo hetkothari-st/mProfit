@@ -1,4 +1,4 @@
-import type { ImportJobDTO } from '@everypaisa/shared';
+import { humanizeEnum, type ImportJobDTO } from '@everypaisa/shared';
 
 /** Rows the import recognised as already imported and left alone. */
 export function importSkippedCount(job: ImportJobDTO): number {
@@ -52,4 +52,18 @@ export function importHeadline(job: ImportJobDTO): string | null {
     return skipped === 1 ? 'Already imported' : `All ${skipped} rows were already imported`;
   }
   return null;
+}
+
+/**
+ * The Type column. Depository (NSDL/CDSL/Zerodha holding) statements share the MF_CAS_* import type because
+ * the same parser reads them, which made an NSDL statement show as "MF CAS PDF". The stored type stays (it
+ * routes the parser); only the label looks at the file name, using the same hints the Gmail fetch uses.
+ */
+export function importTypeLabel(type: string, fileName: string | null | undefined): string {
+  const kind = type === 'MF_CAS_PDF' ? 'PDF' : type === 'MF_CAS_EXCEL' ? 'Excel' : null;
+  if (!kind) return humanizeEnum(type);
+  const name = (fileName ?? '').toLowerCase();
+  const depository =
+    /\b(nsdl|cdsl)\b|nsdl|cdsl|depository|transaction[-_\s]?(with|cum)[-_\s]?holding|_txn\./.test(name);
+  return depository ? `Depository statement (${kind})` : `Mutual fund CAS (${kind})`;
 }

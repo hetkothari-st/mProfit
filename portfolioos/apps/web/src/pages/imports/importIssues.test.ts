@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ImportJobDTO } from '@everypaisa/shared';
-import { importHeadline, importIssueLabel, importSkippedCount } from './importIssues';
+import { importHeadline, importIssueLabel, importSkippedCount, importTypeLabel } from './importIssues';
 
 const job = (over: Partial<ImportJobDTO> = {}): ImportJobDTO =>
   ({
@@ -51,5 +51,19 @@ describe('importHeadline', () => {
 
   it('does not repeat a warning on a job that did import rows', () => {
     expect(importHeadline(job({ errorLog: { parserWarnings: ['Some pages were skipped'] } }))).toBeNull();
+  });
+});
+
+describe('importTypeLabel', () => {
+  it('names depository statements for what they are, not "MF CAS"', () => {
+    expect(importTypeLabel('MF_CAS_PDF', 'NSDL_Statement_Oct2026.pdf')).toBe('Depository statement (PDF)');
+    expect(importTypeLabel('MF_CAS_PDF', 'CDSL_TXN.pdf')).toBe('Depository statement (PDF)');
+    expect(importTypeLabel('MF_CAS_PDF', 'transaction-with-holding-statement.pdf')).toBe('Depository statement (PDF)');
+  });
+  it('keeps real fund statements as CAS, and other types as before', () => {
+    expect(importTypeLabel('MF_CAS_PDF', 'CAS_Oct2026.pdf')).toBe('Mutual fund CAS (PDF)');
+    expect(importTypeLabel('MF_CAS_EXCEL', 'cas.xlsx')).toBe('Mutual fund CAS (Excel)');
+    expect(importTypeLabel('CONTRACT_NOTE_PDF', 'x.pdf')).toBe('Contract Note PDF');
+    expect(importTypeLabel('MF_CAS_PDF', null)).toBe('Mutual fund CAS (PDF)');
   });
 });

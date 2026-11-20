@@ -6,6 +6,7 @@ import { uploadImportFile } from '../middleware/upload.js';
 import { rebindUserContext } from '../middleware/rebindUserContext.js';
 import {
   listClientsHandler,
+  countClientsHandler,
   createManagedClientHandler,
   inviteClientHandler,
   acceptInvitationHandler,
@@ -71,6 +72,7 @@ caRouter.use(authenticate);
 // it whether to show the workspace at all. It applies the gate itself once
 // there is something to show (listClientsHandler).
 caRouter.get('/clients', asyncHandler(listClientsHandler));
+caRouter.get('/clients/count', asyncHandler(countClientsHandler));
 // Two-factor sign-in, used for this session, for anything else in the workspace.
 caRouter.use(requireProfessionalSecondFactor);
 
