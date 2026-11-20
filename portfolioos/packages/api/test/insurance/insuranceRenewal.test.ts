@@ -53,7 +53,7 @@ describe('proposeRenewal', () => {
     expect(proposeRenewal(policy, NOTICE).map((c) => [c.field, c.from, c.to])).toEqual([
       ['premiumAmount', '₹24,000.00', '₹26,000.00'],
       ['sumAssured', '₹5,00,000.00', '₹5,50,000.00'],
-      ['maturityDate', '9 Apr 2025', '9 Apr 2026'],
+      ['maturityDate', '09/04/2025', '09/04/2026'],
     ]);
   });
 
