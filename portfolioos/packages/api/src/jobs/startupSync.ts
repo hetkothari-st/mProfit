@@ -8,10 +8,6 @@ import { syncCryptoPrices } from '../priceFeeds/crypto.service.js';
 import { syncFxRates } from '../priceFeeds/fx.service.js';
 import { refreshAllHoldingPrices } from '../services/holdings/holdings.service.js';
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
-import { startPfFetchWorker } from './pfFetchWorker.js';
-import { startPfNudgeJob } from './pfNudgeJob.js';
-import { startSplitShareLinkReconcileJob } from './splitShareLinkReconcileJob.js';
-import { startSplitDigestJobs } from './splitDigestJobs.js';
 // Self-registering PF adapters — import side-effects call registerPfAdapter()
 import '../ingestion/pf/epf/epfo.v1.js';
 import '../ingestion/pf/ppf/sbi.v1.js';
@@ -102,12 +98,8 @@ async function runStartupSyncInner(): Promise<void> {
   } catch (err) {
     logger.warn({ err }, '[startup] holdings refresh failed');
   }
-  // Start PF headless fetch worker (SSE-driven Playwright scrape for EPFO)
-  startPfFetchWorker();
-  // Daily nudge: alert users with stale PF balances (Plan E, Track 5)
-  startPfNudgeJob();
-  startSplitShareLinkReconcileJob();
-  startSplitDigestJobs();
+  // The PF worker, PF nudge, split reconcile and split digest jobs start from index.ts, not here: a start
+  // here ran them a second time (duplicate crons, so duplicate digests) and tied them to this sync succeeding.
 
   logger.info('[startup] initial data sync complete');
 }
