@@ -216,12 +216,14 @@ function OverviewBody() {
       </div>
 
       <div className="min-w-0 space-y-4">
-        <Card tone="muted" className="space-y-2 p-4 text-sm">
-          <h2 className="font-semibold text-foreground">Key things to prepare</h2>
-          <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-            {PREPARE.map((t) => <li key={t}>{t}</li>)}
-          </ul>
-        </Card>
+        {!executed && (
+          <Card tone="muted" className="space-y-2 p-4 text-sm">
+            <h2 className="font-semibold text-foreground">Key things to prepare</h2>
+            <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+              {PREPARE.map((t) => <li key={t}>{t}</li>)}
+            </ul>
+          </Card>
+        )}
         <Card tone="muted" className="flex gap-2 p-4 text-sm">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
           <p className="text-foreground">{WILL_DISCLAIMER}</p>

@@ -51,6 +51,7 @@ export const ASSET_CLASS_LABELS: Record<string, string> = {
   POST_OFFICE_SAVINGS: 'Post Office Savings',
   FOREIGN_EQUITY: 'Foreign Equity',
   FOREX_PAIR: 'Forex Pair',
+  LOAN_GIVEN: 'Loans given',
 };
 
 export const CII_TABLE: Record<string, number> = {

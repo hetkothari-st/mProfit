@@ -20,7 +20,8 @@ export function formatDateIST(
     const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
     return `${get('day')}/${get('month')}/${get('year')}`;
   }
-  return new Intl.DateTimeFormat(IST_LOCALE, { ...opts, timeZone: IST_TZ }).format(d);
+  // en-IN spells September "Sept"; every other month is three letters, so use "Sep" like the rest.
+  return new Intl.DateTimeFormat(IST_LOCALE, { ...opts, timeZone: IST_TZ }).format(d).replace(/Sept/g, 'Sep');
 }
 
 /** dd/mm/yyyy, hh:mm am/pm in Asia/Kolkata. */

@@ -217,7 +217,7 @@ function formatRentMonth(forMonth: string): string {
   if (!y || !m) return forMonth;
   const d = new Date(Number(y), Number(m) - 1, 1);
   if (Number.isNaN(d.getTime())) return forMonth;
-  return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+  return formatDateIST(d, { month: 'short', year: 'numeric' });
 }
 
 function ReceiptRow({ receipt }: { receipt: RentReceiptDTO }) {
@@ -460,12 +460,12 @@ function TenancyCard({ tenancy }: { tenancy: TenancyDTO }) {
               <span className="text-muted-foreground">/mo</span>
               <span>·</span>
               <span>
-                {new Date(tenancy.startDate).toLocaleDateString('en-IN', {
+                {formatDateIST(new Date(tenancy.startDate), {
                   month: 'short',
                   year: 'numeric',
                 })}
                 {tenancy.endDate &&
-                  ` → ${new Date(tenancy.endDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`}
+                  ` → ${formatDateIST(new Date(tenancy.endDate), { month: 'short', year: 'numeric' })}`}
               </span>
               {receipts.length > 0 && (
                 <>

@@ -788,7 +788,7 @@ const INR_COMPACT = (v: number): string => {
 
 function shortMonthLabel(date: string): string {
   const d = new Date(date);
-  return d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+  return formatDateIST(d, { month: 'short', year: '2-digit' });
 }
 
 const TOOLTIP_STYLE = {

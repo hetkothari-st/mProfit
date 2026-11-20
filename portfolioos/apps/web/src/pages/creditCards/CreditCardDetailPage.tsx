@@ -60,7 +60,7 @@ function formatMonth(ym: string) {
   try {
     const [y, m] = ym.split('-');
     const date = new Date(Number(y), Number(m) - 1, 1);
-    return date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+    return formatDateIST(date, { month: 'short', year: 'numeric' });
   } catch {
     return ym;
   }

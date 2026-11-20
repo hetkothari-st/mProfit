@@ -185,7 +185,7 @@ function formatMonthLabel(key: string): string {
   const [y, m] = key.split('-');
   // eslint-disable-next-line everypaisa/no-money-coercion -- YYYY-MM split; not money
   const date = new Date(Number.parseInt(y ?? '0', 10), Number.parseInt(m ?? '1', 10) - 1, 1);
-  return date.toLocaleDateString('en-IN', { month: 'short' });
+  return formatDateIST(date, { month: 'short' });
 }
 
 function compactInr(v: number): string {

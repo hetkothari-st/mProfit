@@ -578,7 +578,9 @@ function SeatLine({ seats }: { seats: SeatUsage }) {
   const full = seats.used >= seats.includedSeats;
   return (
     <p className={`mb-1 text-[11.5px] ${full ? 'text-warning' : 'text-muted-foreground'}`}>
-      {seats.used} of {seats.includedSeats} seats used — {parts.join(', ')}
+      {seats.used > seats.includedSeats
+        ? `${seats.used} seats in use, ${seats.includedSeats} included — ${parts.join(', ')}`
+        : `${seats.used} of ${seats.includedSeats} seats used — ${parts.join(', ')}`}
       {full && seats.openInvitations > 0 && '. Cancel an invitation to free one.'}
     </p>
   );

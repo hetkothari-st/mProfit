@@ -41,7 +41,7 @@ export function addMonthsIso(iso: string, months: number): string {
 
 export function shortMonth(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
-  return d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+  return formatDateIST(d, { month: 'short', year: '2-digit' });
 }
 
 export function formatDate(iso: string | null | undefined): string {
