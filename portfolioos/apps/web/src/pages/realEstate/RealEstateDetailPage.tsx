@@ -228,7 +228,10 @@ export function RealEstateDetailPage() {
             </p>
             {property.currentValueAsOf && (
               <p className="text-xs text-muted-foreground">
-                Updated {daysSince(property.currentValueAsOf)} day(s) ago
+                {(() => {
+                  const n = daysSince(property.currentValueAsOf);
+                  return n <= 0 ? 'Updated today' : `Updated ${n} day${n === 1 ? '' : 's'} ago`;
+                })()}
               </p>
             )}
           </CardContent>

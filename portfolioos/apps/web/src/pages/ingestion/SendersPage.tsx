@@ -69,7 +69,7 @@ export function SendersPage() {
     <div>
       <PageHeader
         title="Monitored senders"
-        description="The email addresses we scan for financial events. Only senders listed here are polled — everything else is ignored."
+        description="Email addresses we read for transaction alerts and turn into events for your review. Statements and policy documents are fetched from your inbox separately, so they do not need to be listed here."
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6">

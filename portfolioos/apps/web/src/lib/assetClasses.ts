@@ -80,7 +80,7 @@ export const ASSET_CLASS_LABEL: Record<AssetClassToken, string> = {
   INSURANCE: 'Insurance',
   REAL_ESTATE: 'Real Estate',
   PRIVATE_EQUITY: 'Private Equity',
-  CRYPTOCURRENCY: 'Crypto',
+  CRYPTOCURRENCY: 'Cryptocurrency',
   ART_COLLECTIBLES: 'Art & Collectibles',
   CASH: 'Cash',
   OTHER: 'Other',

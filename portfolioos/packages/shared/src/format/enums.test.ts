@@ -51,6 +51,6 @@ describe('assetClassLabel', () => {
     expect(assetClassLabel('MUTUAL_FUND')).toBe('Mutual Fund');
     expect(assetClassLabel('POST_OFFICE_TD')).toBe('Post Office Term Deposit');
     expect(assetClassLabel('BANK_ACCOUNT')).toBe('Bank Account');
-    expect(assetClassLabel('LOAN_GIVEN')).toBe('Loan Given');
+    expect(assetClassLabel('LOAN_GIVEN')).toBe('Loans given');
   });
 });

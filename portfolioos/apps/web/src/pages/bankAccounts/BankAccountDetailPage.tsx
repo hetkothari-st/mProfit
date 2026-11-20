@@ -319,7 +319,7 @@ export function BankAccountDetailPage() {
                       dataKey="date"
                       tick={{ fontSize: 11 }}
                       tickFormatter={(v) =>
-                        new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                        formatDateIST(new Date(v), { day: '2-digit', month: 'short' })
                       }
                     />
                     <YAxis

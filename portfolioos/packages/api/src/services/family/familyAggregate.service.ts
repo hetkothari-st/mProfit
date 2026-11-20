@@ -23,7 +23,7 @@ import {
   type AttentionUrgency,
   type AttentionItem,
   type FamilyAttention,
-  premiumToAnnual, formatDateOnly
+  premiumToAnnual, formatDateOnly, humanizeEnum
 } from '@everypaisa/shared';
 import { runAsUser } from '../../lib/requestContext.js';
 import {
@@ -981,7 +981,7 @@ async function collectAttention(m: MemberContext): Promise<AttentionItem[]> {
     items.push({
       id: `INSURANCE_PREMIUM_DUE:${p.id}`,
       type: 'INSURANCE_PREMIUM_DUE',
-      title: `${p.insurer} ${p.type} premium due`,
+      title: `${p.insurer} ${humanizeEnum(p.type)} premium due`,
       description: `Premium due on ${formatDateOnly(due.toISOString().slice(0, 10))}`,
       urgency: urgencyForDays(days),
       daysUntil: days,

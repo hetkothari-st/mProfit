@@ -1,4 +1,4 @@
-import { formatINR, type ActOnItView } from '@everypaisa/shared';
+import { formatINR, type ActOnItView, formatDateIST } from '@everypaisa/shared';
 import { CalendarCheck, EyeOff, Scale } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { CATEGORY_LABEL, barShare, outcomeLabel, stateLabel } from './actOnItView';
@@ -66,7 +66,7 @@ export function TrackRecord({ view }: { view: ActOnItView }) {
             return (
               <li key={h.id} className="grid grid-cols-[64px_1fr] items-center gap-x-4 gap-y-2 border-t px-5 py-3.5 first:border-t-0 sm:grid-cols-[72px_1fr_160px_minmax(110px,auto)] sm:px-6">
                 <time className="text-[12px] leading-tight text-muted-foreground" dateTime={h.date}>
-                  {new Date(h.date).toLocaleDateString('en-IN', { month: 'short' })}<br />{h.date.slice(0, 4)}
+                  {formatDateIST(new Date(h.date), { month: 'short' })}<br />{h.date.slice(0, 4)}
                 </time>
                 <div className="min-w-0">
                   <b className="block truncate font-semibold" title={h.headline}>{h.headline}</b>

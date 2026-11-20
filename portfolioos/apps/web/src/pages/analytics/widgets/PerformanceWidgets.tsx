@@ -2,7 +2,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { formatINR, toDecimal } from '@everypaisa/shared';
+import { formatINR, toDecimal, formatDateIST } from '@everypaisa/shared';
 import type { ValuationPoint } from '@/api/analytics.api';
 import { shortInr } from '../chartColors';
 import { AnalyticsInfo } from '../AnalyticsInfo';
@@ -22,7 +22,7 @@ interface ValueLineProps {
 
 export function PortfolioValueLine({ points }: ValueLineProps) {
   const data = points.map((p) => ({
-    label: new Date(p.date).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }),
+    label: formatDateIST(new Date(p.date), { month: 'short', year: '2-digit' }),
     invested: toDecimal(p.cost).toNumber(),
     value: toDecimal(p.value).toNumber(),
   }));
