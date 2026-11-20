@@ -59,6 +59,6 @@ describe('planSteps', () => {
 
 describe('nextEventText', () => {
   it('describes the first warning date for an armed plan', () => {
-    expect(nextEventText(base, D('2027-01-10'))).toBe('First warning on 1 Apr 2027 if you stay inactive.');
+    expect(nextEventText(base, D('2027-01-10'))).toBe('First warning on 01/04/2027 if you stay inactive.');
   });
 });
