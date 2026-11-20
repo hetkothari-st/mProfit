@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderWillSummary, selectWillTemplate } from './index.js';
-import { renderWillText } from '../ast.js';
+import { renderWillText, type WillBlock } from '../ast.js';
 import { renderWillTextV2, type WillBlockV2 } from '../astV2.js';
 import { item, person, TODAY, validWillPayload } from '../__tests__/fixtures.js';
 import type { WillPayload } from '../schema.js';
@@ -246,7 +246,7 @@ describe('F: missing data is never filled in', () => {
 describe('G: joint assets and nominations', () => {
   const m = loadedPayload();
   const rows = schedules(m)[0]!.groups.flatMap((g) => g.rows);
-  const row = (label: string) => rows.find((r) => r[1].startsWith(label))!;
+  const row = (label: string) => rows.find((r) => r[1]?.startsWith(label))!;
 
   it('records the holding of every item instead of calling everything mine', () => {
     expect(row('Flat 4B')[3]).toBe('Joint - my share 50%');
@@ -299,14 +299,14 @@ describe('golden v2 wills', () => {
 
 describe('text of v1 blocks is unchanged by the v2 text renderer', () => {
   it('renders a v1-only block list exactly as renderWillText does', () => {
-    const v1 = [
+    const v1: WillBlock[] = [
       { t: 'title', text: 'Last Will and Testament' },
       { t: 'clause', n: 1, title: 'Declaration', paras: ['A.', 'B.  '] },
       { t: 'table', title: 'Assets', rows: [['x', 'y']] },
       { t: 'signature', lines: ['Place: __', '', '(N)'] },
       { t: 'witnesses', intro: 'I', count: 2, fields: ['Signature'] },
       { t: 'note', text: 'n' },
-    ] as const;
-    expect(renderWillTextV2([...v1])).toBe(renderWillText([...v1]));
+    ];
+    expect(renderWillTextV2(v1)).toBe(renderWillText(v1));
   });
 });

@@ -23,6 +23,7 @@ import { z } from 'zod';
 import { Decimal } from '@everypaisa/shared';
 import { env } from '../../config/env.js';
 import { logger } from '../../lib/logger.js';
+import { ANTHROPIC_CLIENT_OPTIONS } from '../../lib/anthropicOptions.js';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import {
   checkBudget,
@@ -68,7 +69,7 @@ let _client: Anthropic | null = null;
 function getClient(): Anthropic {
   if (_client) return _client;
   if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set');
-  _client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  _client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, ...ANTHROPIC_CLIENT_OPTIONS });
   return _client;
 }
 

@@ -376,7 +376,9 @@ export async function backfillRentalLedger(
       {
         // The shared client, not a transaction: each call carries its own
         // RLS transaction, and the recompute below commits per tenancy.
-        db: prisma,
+        // The extended client's generic signatures are not structurally assignable to the plain
+        // transaction-client shape, though it supports every call executeBackfill makes.
+        db: prisma as unknown as BackfillDb,
         recompute: async (tenancyId) => {
           await runInTransaction((tx) => recomputeTenancyLedger(tx, tenancyId));
         },
