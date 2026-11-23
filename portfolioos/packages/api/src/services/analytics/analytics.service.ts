@@ -1,5 +1,6 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
+import { getCurrentUserId, isSystemContext } from '../../lib/requestContext.js';
 import { prisma } from '../../lib/prisma.js';
 import { resultCache } from '../../lib/resultCache.js';
 import { financialYearOf } from '@everypaisa/shared';
@@ -689,11 +690,33 @@ export async function getMonthlyValuationWithPositions(
   return loadMonthlyValuation(scope, periodDays, true);
 }
 
-async function loadMonthlyValuation(
+type MonthlyValuation = { valueLine: ValuationPoint[]; months: MonthlyPositions[] };
+const monthlyInflight = new Map<string, Promise<MonthlyValuation>>();
+
+/**
+ * Identical requests running at the same moment share one valuation. The analytics snapshot asks for the
+ * value line and the cost/value drift in parallel, and both need the same (expensive) monthly valuation.
+ * Keyed by the acting user as well as the scope, so row-level security can never hand one user's result
+ * to another; the entry lives only while the computation runs.
+ */
+function loadMonthlyValuation(
   scope: AnalyticsScope,
   periodDays: number,
   withPositions: boolean,
-): Promise<{ valueLine: ValuationPoint[]; months: MonthlyPositions[] }> {
+): Promise<MonthlyValuation> {
+  const key = `${getCurrentUserId() ?? 'none'}|${isSystemContext() ? 's' : 'u'}|${JSON.stringify(scope)}|${periodDays}|${withPositions}`;
+  const running = monthlyInflight.get(key);
+  if (running) return running;
+  const work = computeMonthlyValuation(scope, periodDays, withPositions).finally(() => monthlyInflight.delete(key));
+  monthlyInflight.set(key, work);
+  return work;
+}
+
+async function computeMonthlyValuation(
+  scope: AnalyticsScope,
+  periodDays: number,
+  withPositions: boolean,
+): Promise<MonthlyValuation> {
   const pids = await portfolioIdsFor(scope);
   // Backfill real historical prices (stocks/MF/crypto) over the displayed
   // window before valuing snapshots — otherwise past months fall back to
@@ -1048,7 +1071,22 @@ export interface AnalyticsSnapshot {
   realisedVsUnrealised: RealisedVsUnrealised;
 }
 
+/**
+ * The dashboard's whole analytics payload in one call. 15 sub-queries (~5 s of CPU for a user with 6,000
+ * transactions), so it is cached like the heavy calls inside it: per acting user, dropped on the user's own
+ * writes, bounded by the TTL for everything else (see lib/resultCache.ts). All plain JSON.
+ */
 export async function getAnalyticsSnapshot(
+  scope: AnalyticsScope,
+  period: Period,
+): Promise<AnalyticsSnapshot> {
+  return resultCache.cached(
+    { name: 'analyticsSnapshot', params: { scope, period }, userIds: await cacheOwnersFor(scope) },
+    () => computeAnalyticsSnapshot(scope, period),
+  );
+}
+
+async function computeAnalyticsSnapshot(
   scope: AnalyticsScope,
   period: Period,
 ): Promise<AnalyticsSnapshot> {

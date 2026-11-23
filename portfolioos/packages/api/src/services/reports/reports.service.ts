@@ -13,7 +13,7 @@ import {
   computeUserRollingXirr,
   computeUserXirr,
 } from '../analytics/xirr.service.js';
-import { priceAt } from '../holdings/holdingsAsOf.service.js';
+import { createPriceLookup } from '../holdings/holdingsAsOf.service.js';
 import { replayTransactions } from '../holdings/holdingsProjection.js';
 import { grandfatheredCost } from './specialReports.service.js';
 import { listedEquityLtcgExemptionFor } from '@everypaisa/shared';
@@ -230,6 +230,18 @@ export async function historicalValuation(
   }
 
   const points: HistoricalValuationPoint[] = [];
+
+  // Prices for every (holding, month) in two queries, not one per pair.
+  const priceMetas = [...byAsset.values()].map((list) => ({
+    assetClass: list[0]!.assetClass,
+    stockId: list.find((t) => t.stockId)?.stockId ?? null,
+    fundId: list.find((t) => t.fundId)?.fundId ?? null,
+    isin: list.find((t) => t.isin)?.isin ?? null,
+  }));
+  const priceAt = await createPriceLookup(
+    priceMetas,
+    snapshotDates.map((d) => new Date(d.getTime() + 86_400_000 - 1)),
+  );
 
   // Tracked across snapshots so a corporate action is attributed to the period
   // it happened in, not to every snapshot after it.
