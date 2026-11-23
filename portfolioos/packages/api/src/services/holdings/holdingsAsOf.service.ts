@@ -34,6 +34,58 @@ export async function priceAt(meta: PriceMeta, date: Date): Promise<Decimal | nu
   return null;
 }
 
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+
+/**
+ * Same answers as calling `priceAt` for every (holding, date) pair, in two queries instead of one per pair.
+ * A monthly valuation of 120 holdings over five years asked the database ~7,000 questions one at a time
+ * (each with its own round trip); this asks for the whole grid at once, using the (id, date) index per cell.
+ * Pairs outside the grid, and asset kinds without a bulk path (crypto), fall back to `priceAt`.
+ */
+export async function createPriceLookup(
+  metas: PriceMeta[],
+  dates: Date[],
+): Promise<(meta: PriceMeta, date: Date) => Promise<Decimal | null>> {
+  const days = [...new Set(dates.map(isoDay))];
+  const stockIds = [...new Set(metas.filter((m) => !m.fundId && m.stockId).map((m) => m.stockId!))];
+  const fundIds = [...new Set(metas.filter((m) => m.fundId).map((m) => m.fundId!))];
+  const grid = new Map<string, Decimal | null>();
+  if (days.length > 0) {
+    const [stocks, funds] = await Promise.all([
+      stockIds.length === 0
+        ? []
+        : prisma.$queryRaw<Array<{ id: string; day: Date; px: Prisma.Decimal }>>`
+            SELECT s.id, d.day, p.close AS px
+            FROM unnest(${stockIds}::text[]) AS s(id)
+            CROSS JOIN unnest(${days}::date[]) AS d(day)
+            CROSS JOIN LATERAL (
+              SELECT close FROM "StockPrice" WHERE "stockId" = s.id AND date <= d.day ORDER BY date DESC LIMIT 1
+            ) p`,
+      fundIds.length === 0
+        ? []
+        : prisma.$queryRaw<Array<{ id: string; day: Date; px: Prisma.Decimal }>>`
+            SELECT f.id, d.day, p.nav AS px
+            FROM unnest(${fundIds}::text[]) AS f(id)
+            CROSS JOIN unnest(${days}::date[]) AS d(day)
+            CROSS JOIN LATERAL (
+              SELECT nav FROM "MFNav" WHERE "fundId" = f.id AND date <= d.day ORDER BY date DESC LIMIT 1
+            ) p`,
+    ]);
+    for (const r of stocks) grid.set(`s|${r.id}|${isoDay(r.day)}`, new Decimal(r.px.toString()));
+    for (const r of funds) grid.set(`f|${r.id}|${isoDay(r.day)}`, new Decimal(r.px.toString()));
+  }
+  return async (meta, date) => {
+    const day = isoDay(date);
+    if (meta.fundId && fundIds.includes(meta.fundId) && days.includes(day)) {
+      return grid.get(`f|${meta.fundId}|${day}`) ?? null; // absent = no price on or before the day
+    }
+    if (!meta.fundId && meta.stockId && days.includes(day) && stockIds.includes(meta.stockId)) {
+      return grid.get(`s|${meta.stockId}|${day}`) ?? null;
+    }
+    return priceAt(meta, date);
+  };
+}
+
 export type HoldingAsOf = HoldingProjection & { portfolio: { name: string } };
 
 const startOfUtcDay = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());

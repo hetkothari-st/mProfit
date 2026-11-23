@@ -19,6 +19,63 @@ import { backfillMfNavHistory } from '../../priceFeeds/amfi.service.js';
  * are swallowed (logged) — a missing feed must never break the chart.
  */
 
+/**
+ * This runs inside analytics requests, so it must never make a request pay for the same slow provider call
+ * twice. Per asset (and per process):
+ *  - one attempt covers ATTEMPT_TTL_MS whether it found data or not. Before this, an asset the provider
+ *    knew nothing about (delisted, renamed, throttled) was fetched again on EVERY dashboard load, and a
+ *    recently listed one re-downloaded its short history every time;
+ *  - concurrent requests share the attempt in flight;
+ *  - a request waits at most WAIT_CAP_MS for it. The fetch carries on in the background, so the data is
+ *    there for the next load, and this one values the asset at cost (as it already does without prices).
+ */
+const ATTEMPT_TTL_MS = 6 * 3_600_000;
+const WAIT_CAP_MS = 5_000;
+const lastAttempt = new Map<string, number>();
+const inFlight = new Map<string, Promise<void>>();
+
+function attemptOnce(key: string, run: () => Promise<void>): Promise<void> {
+  const last = lastAttempt.get(key);
+  if (last !== undefined && Date.now() - last < ATTEMPT_TTL_MS) return Promise.resolve();
+  let p = inFlight.get(key);
+  if (!p) {
+    p = run()
+      .finally(() => {
+        // Stamped on failure too: a provider that is down is not asked again for every request.
+        lastAttempt.set(key, Date.now());
+        inFlight.delete(key);
+        if (lastAttempt.size > 20_000) {
+          const cutoff = Date.now() - ATTEMPT_TTL_MS;
+          for (const [k, t] of lastAttempt) if (t < cutoff) lastAttempt.delete(k);
+        }
+      });
+    // The background run must never become an unhandled rejection; the caller below reports failures.
+    p.catch(() => undefined);
+    inFlight.set(key, p);
+  }
+  const attempt = p;
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, WAIT_CAP_MS);
+    timer.unref();
+    attempt.then(
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+/** Test hook: forget every attempt. */
+export function resetBackfillAttempts(): void {
+  lastAttempt.clear();
+  inFlight.clear();
+}
+
 /** Approx trading days (stocks/MF skip weekends ≈ 5/7 of calendar days). */
 function tradingDaysSince(fromDate: Date): number {
   const calDays = Math.max(1, Math.ceil((Date.now() - fromDate.getTime()) / 86_400_000));
@@ -111,10 +168,12 @@ export async function ensureHistoricalPricesForPortfolio(
     else if (t.assetClass === 'CRYPTOCURRENCY' && t.isin) cryptoSlugs.add(t.isin);
   }
 
+  // The window start is part of the key: a short-period request must not stop a longer one fetching more.
+  const win = fromDate.toISOString().slice(0, 10);
   const tasks: Promise<void>[] = [];
-  for (const id of stockIds) tasks.push(backfillStock(id, fromDate));
-  for (const id of fundIds) tasks.push(backfillFund(id, fromDate));
-  for (const slug of cryptoSlugs) tasks.push(backfillCrypto(slug, fromDate));
+  for (const id of stockIds) tasks.push(attemptOnce(`s:${id}:${win}`, () => backfillStock(id, fromDate)));
+  for (const id of fundIds) tasks.push(attemptOnce(`f:${id}:${win}`, () => backfillFund(id, fromDate)));
+  for (const slug of cryptoSlugs) tasks.push(attemptOnce(`c:${slug}:${win}`, () => backfillCrypto(slug, fromDate)));
 
   const results = await Promise.allSettled(tasks);
   for (const r of results) {
