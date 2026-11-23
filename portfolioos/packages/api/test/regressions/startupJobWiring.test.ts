@@ -34,3 +34,20 @@ describe('boot-time job wiring', () => {
     expect(index).toMatch(new RegExp(`^\\s*${name}\\(\\);`, 'm'));
   });
 });
+
+// PROCESS_ROLE=web must not drop work: these three queues are filled by requests and drained in the same
+// process, so they have to start in every role, not only where the cron jobs run.
+describe('process roles', () => {
+  const index = read('../../src/index.ts');
+  const fn = (name: string) => index.slice(index.indexOf(`function ${name}`), index.indexOf('\n}\n', index.indexOf(`function ${name}`)));
+
+  it.each(['startMfAnalysisJob', 'startMfProseJob', 'startPolicyProseJob'])('%s starts in every role', (name) => {
+    expect(fn('startRequestDrivenQueues')).toContain(`${name}();`);
+    expect(fn('startBackgroundJobs')).not.toContain(`${name}();`);
+  });
+
+  it('startRequestDrivenQueues runs unconditionally, background jobs only when the role runs jobs', () => {
+    expect(index).toMatch(/^\s*startRequestDrivenQueues\(\);/m);
+    expect(index).toMatch(/if \(runsJobs\) startBackgroundJobs\(\);/);
+  });
+});

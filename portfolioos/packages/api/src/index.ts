@@ -69,6 +69,7 @@ import { sweepOrphanWillDocuments } from './services/will/willOrphanSweep.js';
 import cron from 'node-cron';
 import { makeReadyHandler } from './lib/health.js';
 import { createShutdown } from './lib/shutdown.js';
+import { resolveProcessRole } from './lib/processRole.js';
 import { startPfFetchWorker } from './jobs/pfFetchWorker.js';
 import { startPfNudgeJob } from './jobs/pfNudgeJob.js';
 import { startSplitShareLinkReconcileJob } from './jobs/splitShareLinkReconcileJob.js';
@@ -201,8 +202,28 @@ try {
   logger.warn({ err }, 'Could not verify the database role');
 }
 
-const server = app.listen(env.PORT, '::', () => {
-  logger.info(`EveryPaisa API listening on http://localhost:${env.PORT}`);
+const { runsHttp, runsJobs } = resolveProcessRole(env.PROCESS_ROLE);
+
+// A worker answers the platform healthcheck and nothing else: it serves no API.
+const workerApp = express();
+workerApp.get('/health', (_req, res) => {
+  res.json({ success: true, data: { status: 'ok', role: 'worker', uptime: process.uptime() } });
+});
+workerApp.get('/ready', makeReadyHandler());
+
+/**
+ * In-memory, per-process queues that a request fills and this same process drains (MF analysis and
+ * narration after a holdings change, policy-check narration). They have no cron and no shared state,
+ * so they start in EVERY role: a web process that queued work and never drained it would drop it.
+ */
+function startRequestDrivenQueues(): void {
+  startMfAnalysisJob();
+  startMfProseJob();
+  if (env.ENABLE_POLICY_CHECK_JOB !== 'false') startPolicyProseJob();
+}
+
+/** Every cron schedule, queue worker and boot-time sync. Runs in `all` and `worker` processes only. */
+function startBackgroundJobs(): void {
   // Rate funds from the NAV history already stored, once, without holding up
   // the boot (it takes about an hour). See jobs/mfBootstrap.ts.
   if (env.ENABLE_MF_BOOTSTRAP === 'true' && env.NODE_ENV !== 'test') {
@@ -211,20 +232,6 @@ const server = app.listen(env.PORT, '::', () => {
       .catch((err: unknown) => logger.error({ err }, '[mf] bootstrap: could not start'));
   }
   startPriceJobs();
-  // Named-fund advice must be able to run honestly before it runs at all: the
-  // gate checks TER and AUM coverage and that the signed methodology is the
-  // newest one. It logs the figures either way and throws only when the
-  // feature is on and the data cannot support it.
-  void assertNamedFundReleaseGate().catch((err: unknown) => {
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      '[fundRanking] refusing to serve named-fund advice',
-    );
-    // Exiting rather than limping: a deployment configured to name funds but
-    // unable to do so would otherwise serve category-level advice silently,
-    // and nobody would notice for weeks.
-    process.exit(1);
-  });
   // After the AMFI NAV sync it schedules itself against; no-ops unless
   // named-fund advice is switched on.
   startFundScoringJob();
@@ -245,9 +252,9 @@ const server = app.listen(env.PORT, '::', () => {
   startAlertJobs();
   startWillReviewJob();
   // Policy Health Check workers (extraction + analysis share one queue; prose is in-process).
+  // (The prose drain is started by startRequestDrivenQueues, in every role.)
   if (env.ENABLE_POLICY_CHECK_JOB !== 'false') {
     startPolicyCheckJobWorker();
-    startPolicyProseJob();
   }
   startMcpCleanupJob();
   startNetWorthSnapshotJob();
@@ -312,8 +319,7 @@ const server = app.listen(env.PORT, '::', () => {
    * Prose runs on its own queue on purpose (`05 §7`): a narration failure must
    * never change a run's status, and findings are shown with or without it.
    */
-  startMfAnalysisJob();
-  startMfProseJob();
+  // startMfAnalysisJob / startMfProseJob: see startRequestDrivenQueues, which runs in every role.
   /**
    * The `06 §7` operational alerts that have no natural home inside a single
    * job -- the cross-job rates (analysis PARTIAL rate, prose verification
@@ -353,6 +359,28 @@ const server = app.listen(env.PORT, '::', () => {
     .catch((err: unknown) => logger.error({ errName: err instanceof Error ? err.name : 'unknown' }, 'will.orphan_sweep_failed'));
   // Fire-and-forget: run initial data sync in background so server stays responsive
   runStartupSync().catch((err) => logger.error({ err }, 'Startup sync failed'));
+}
+
+const server = (runsHttp ? app : workerApp).listen(env.PORT, '::', () => {
+  logger.info({ role: env.PROCESS_ROLE }, `EveryPaisa API listening on http://localhost:${env.PORT}`);
+  // Named-fund advice must be able to run honestly before it runs at all: the
+  // gate checks TER and AUM coverage and that the signed methodology is the
+  // newest one. It logs the figures either way and throws only when the
+  // feature is on and the data cannot support it. Checked in every role: the
+  // web process is the one that serves the advice.
+  void assertNamedFundReleaseGate().catch((err: unknown) => {
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      '[fundRanking] refusing to serve named-fund advice',
+    );
+    // Exiting rather than limping: a deployment configured to name funds but
+    // unable to do so would otherwise serve category-level advice silently,
+    // and nobody would notice for weeks.
+    process.exit(1);
+  });
+  startRequestDrivenQueues();
+  if (runsJobs) startBackgroundJobs();
+  else logger.info('PROCESS_ROLE=web: background jobs are not started here (run a worker process)');
 });
 
 // Railway's edge keeps upstream connections alive longer than Node's 5 s
