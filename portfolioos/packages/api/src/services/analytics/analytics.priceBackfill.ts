@@ -95,9 +95,10 @@ export async function ensureHistoricalPricesForPortfolio(
   portfolioId: string,
   fromDate: Date,
 ): Promise<void> {
-  const txs = await prisma.transaction.findMany({
+  // One row per distinct asset (SQL GROUP BY) instead of one per transaction.
+  const txs = await prisma.transaction.groupBy({
+    by: ['assetClass', 'stockId', 'fundId', 'isin'],
     where: { portfolioId },
-    select: { assetClass: true, stockId: true, fundId: true, isin: true },
   });
   if (txs.length === 0) return;
 

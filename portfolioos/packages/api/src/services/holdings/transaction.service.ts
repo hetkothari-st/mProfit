@@ -695,8 +695,55 @@ export function resolvePageSize(requested: number | null | undefined): number {
   return requested && requested > 0 ? Math.min(requested, MAX_TRANSACTION_PAGE_SIZE) : 50;
 }
 
-/** Every row matching the filters, in the requested order (no paging). */
-async function loadFilteredTransactions(userId: string, q: ListTransactionsQuery, familyId?: string) {
+/**
+ * Sorts the database can apply exactly as `sortTransactionRows` does. `type` is left out (Postgres orders
+ * an enum by declaration, the comparator by spelling) and so is `asset` (its key is a joined name).
+ */
+const DB_SORTABLE = new Set<TransactionSortKey>(['date', 'amount', 'quantity']);
+
+function dbOrderBy(sort: TransactionSortKey, dir: 'asc' | 'desc'): Prisma.TransactionOrderByWithRelationInput[] {
+  // Same tie-breaks as the comparator (newest trade, then newest entry), plus id so pages never overlap.
+  const tail: Prisma.TransactionOrderByWithRelationInput[] = [{ createdAt: 'desc' }, { id: 'asc' }];
+  if (sort === 'amount') return [{ netAmount: dir }, { tradeDate: 'desc' }, ...tail];
+  if (sort === 'quantity') return [{ quantity: dir }, { tradeDate: 'desc' }, ...tail];
+  return [{ tradeDate: dir }, ...tail];
+}
+
+/**
+ * One page, paged by the database: reads `pageSize` rows, not the user's whole history. Only for the
+ * common case (the caller's own transactions, sorted by date / amount / quantity); anything else returns
+ * null and takes the load-everything path below, which is unchanged.
+ */
+async function listTransactionsPaged(userId: string, q: ListTransactionsQuery, familyId?: string) {
+  const sort = q.sort ?? 'date';
+  if (!DB_SORTABLE.has(sort)) return null;
+  const prepared = await prepareTransactionFilter(userId, q, familyId);
+  if (!prepared) return { empty: true as const };
+  const { scope, where, include } = prepared;
+  if (scope.readableUserIds.some((u) => u !== scope.callerId)) return null;
+
+  const page = q.page && q.page > 0 ? q.page : 1;
+  const pageSize = resolvePageSize(q.pageSize);
+  const full = { ...where, ...portfolioChildReadableWhere(scope) };
+  const [rows, total] = await Promise.all([
+    prisma.transaction.findMany({
+      where: full,
+      include,
+      orderBy: dbOrderBy(sort, q.dir ?? 'desc'),
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.transaction.count({ where: full }),
+  ]);
+  return {
+    empty: false as const,
+    items: rows.map(toTransactionDTO),
+    pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+  };
+}
+
+/** Scope, filters and includes shared by the paged and load-everything paths; null = nothing visible. */
+async function prepareTransactionFilter(userId: string, q: ListTransactionsQuery, familyId?: string) {
   const scope = await getEffectiveScope(userId, familyId ? { familyId } : {});
 
   // A CONTRIBUTOR/VIEWER whose visibility excludes the requested asset
@@ -707,7 +754,7 @@ async function loadFilteredTransactions(userId: string, q: ListTransactionsQuery
     scope.allowedAssetClasses !== null &&
     !scope.allowedAssetClasses.includes(q.assetClass)
   ) {
-    return [];
+    return null;
   }
 
   const where: Prisma.TransactionWhereInput = {};
@@ -728,6 +775,14 @@ async function loadFilteredTransactions(userId: string, q: ListTransactionsQuery
     fund: { select: { schemeCode: true, schemeName: true, amcName: true, isin: true } },
     photos: { select: { id: true, fileName: true, mimeType: true, sizeBytes: true }, orderBy: { createdAt: 'asc' as const } },
   };
+  return { scope, where, include };
+}
+
+/** Every row matching the filters, in the requested order (no paging). */
+async function loadFilteredTransactions(userId: string, q: ListTransactionsQuery, familyId?: string) {
+  const prepared = await prepareTransactionFilter(userId, q, familyId);
+  if (!prepared) return [];
+  const { scope, where, include } = prepared;
 
   // Own personal transactions + any family-shared portfolio's transactions
   // are readable in the caller's own RLS context (membership-based policy).
@@ -759,6 +814,13 @@ export async function listTransactions(
   q: ListTransactionsQuery,
   familyId?: string,
 ) {
+  const paged = await listTransactionsPaged(userId, q, familyId);
+  if (paged) {
+    if (paged.empty) {
+      return { items: [], pagination: { page: q.page && q.page > 0 ? q.page : 1, pageSize: resolvePageSize(q.pageSize), total: 0, totalPages: 1 } };
+    }
+    return { items: paged.items, pagination: paged.pagination };
+  }
   const allRows = await loadFilteredTransactions(userId, q, familyId);
 
   const page = q.page && q.page > 0 ? q.page : 1;
