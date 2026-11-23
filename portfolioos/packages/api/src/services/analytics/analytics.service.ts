@@ -777,10 +777,10 @@ export interface AssetClassXirrRow {
 export async function getAssetClassXirr(scope: AnalyticsScope): Promise<AssetClassXirrRow[]> {
   const pids = await portfolioIdsFor(scope);
   // Distinct asset classes present in transactions across scope
-  const distinct = await prisma.transaction.findMany({
+  // groupBy, not findMany+distinct: Prisma emulates `distinct` by loading every row first.
+  const distinct = await prisma.transaction.groupBy({
+    by: ['assetClass'],
     where: { portfolioId: { in: pids } },
-    select: { assetClass: true },
-    distinct: ['assetClass'],
   });
   const classes = distinct.map((d) => d.assetClass as AssetClass);
 

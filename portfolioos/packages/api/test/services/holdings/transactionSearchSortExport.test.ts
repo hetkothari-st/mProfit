@@ -139,3 +139,80 @@ describe('listTransactions - search, filter, sort, export (DB)', () => {
     expect(rows.map((r) => r.tradeDate)).toEqual(['2026-01-10', '2026-02-10', '2026-03-10']);
   });
 });
+
+// The list pages in the database for date / amount / quantity sorts. It must return exactly what the
+// load-everything path (used for export, and for sort-by-asset) returns, page by page.
+describe('listTransactions - database paging matches the full sort (DB)', () => {
+  let scope: TestScope;
+
+  beforeAll(async () => {
+    scope = await createTestScope('tx-paging');
+    const a = await seedStockMaster(scope, { symbol: 'TSTPGA', name: 'Test Paging Alpha' });
+    const b = await seedStockMaster(scope, { symbol: 'TSTPGB', name: 'Test Paging Beta' });
+    await scope.runAs(async () => {
+      // 23 rows with repeated dates, amounts and quantities, so ties decide the order.
+      for (let i = 0; i < 23; i++) {
+        await createTransaction(scope.userId, {
+          portfolioId: scope.portfolioId,
+          transactionType: i % 5 === 4 ? 'SELL' : 'BUY',
+          assetClass: 'EQUITY',
+          stockSymbol: i % 2 ? a.symbol : b.symbol,
+          exchange: 'NSE',
+          tradeDate: `2026-0${1 + (i % 3)}-${String(10 + (i % 4)).padStart(2, '0')}`,
+          quantity: String(1 + (i % 4)),
+          // The duplicate guard rejects identical trades, so the price differs per row; dates and
+          // quantities still repeat, which is what makes the tie-breaks matter.
+          price: String(100 * (1 + (i % 3)) + Math.floor(i / 3)),
+        });
+      }
+    });
+  });
+
+  afterAll(async () => {
+    await scope.cleanup();
+  });
+
+  const idsFor = (q: Parameters<typeof listTransactions>[1]) =>
+    scope.runAs(async () => (await listTransactions(scope.userId, q)).items.map((r) => r.id));
+
+  it.each([
+    ['date', 'desc'],
+    ['date', 'asc'],
+    ['amount', 'desc'],
+    ['amount', 'asc'],
+    ['quantity', 'desc'],
+    ['quantity', 'asc'],
+  ] as const)('sort %s %s: every page lines up with the full ordering', async (sort, dir) => {
+    const full = await scope.runAs(async () =>
+      (await listTransactionsForExport(scope.userId, { sort, dir })).map((r) => r.id),
+    );
+    expect(full).toHaveLength(23);
+    const paged: string[] = [];
+    for (let page = 1; page <= 3; page++) paged.push(...(await idsFor({ sort, dir, page, pageSize: 10 })));
+    // Rows that tie on every sort key may sit in either order; compare the ordering of the keys instead.
+    const rows = await scope.runAs(async () => listTransactionsForExport(scope.userId, { sort, dir }));
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const key = (id: string) => {
+      const r = byId.get(id)!;
+      return sort === 'date' ? r.tradeDate : sort === 'amount' ? r.netAmount : r.quantity;
+    };
+    expect(new Set(paged).size).toBe(23); // no row twice, none missing
+    expect(paged.map(key)).toEqual(full.map(key));
+  });
+
+  it('reports the true total and page count, and an empty page past the end', async () => {
+    const res = await scope.runAs(() => listTransactions(scope.userId, { page: 2, pageSize: 10 }));
+    expect(res.pagination).toEqual({ page: 2, pageSize: 10, total: 23, totalPages: 3 });
+    expect(res.items).toHaveLength(10);
+    expect(await idsFor({ page: 4, pageSize: 10 })).toEqual([]);
+  });
+
+  it('keeps filters and search working on the paged path', async () => {
+    const sells = await scope.runAs(() => listTransactions(scope.userId, { transactionType: 'SELL', pageSize: 100 }));
+    expect(sells.pagination.total).toBe(sells.items.length);
+    expect(sells.items.every((r) => r.transactionType === 'SELL')).toBe(true);
+    const alpha = await scope.runAs(() => listTransactions(scope.userId, { q: 'paging alpha', pageSize: 100 }));
+    expect(alpha.items.length).toBeGreaterThan(0);
+    expect(alpha.items.every((r) => r.symbol === 'TSTPGA')).toBe(true);
+  });
+});
