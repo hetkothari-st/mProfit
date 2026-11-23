@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigationType } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Sidebar } from './Sidebar';
+import { RouteFallback } from './RouteFallback';
 import { Header } from './Header';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { MobileTabBar } from './MobileTabBar';
@@ -106,7 +107,9 @@ export function AppShell() {
               className="mx-auto w-full max-w-[1480px] px-4 py-5 sm:px-6 sm:py-7 lg:px-10 pb-[calc(3.5rem+env(safe-area-inset-bottom)+5rem)] md:pb-7"
             >
               <ErrorBoundary resetKey={location.pathname}>
-                <Outlet />
+                <Suspense fallback={<RouteFallback />}>
+                  <Outlet />
+                </Suspense>
               </ErrorBoundary>
             </div>
           </main>

@@ -17,6 +17,20 @@ import { installZodV3Messages } from '@everypaisa/shared';
 // zod 3's wording (see zodMessages.ts in @everypaisa/shared).
 installZodV3Messages();
 
+// Pages are separate chunks with hashed names. A tab opened before a deploy asks for a chunk the new
+// build no longer has; reload once to pick up the new build instead of showing a broken page. The
+// session flag stops a reload loop if the failure is something else (offline, blocked).
+window.addEventListener('vite:preloadError', (event) => {
+  try {
+    if (sessionStorage.getItem('chunk_reload') === '1') return;
+    sessionStorage.setItem('chunk_reload', '1');
+  } catch {
+    return;
+  }
+  event.preventDefault();
+  window.location.reload();
+});
+
 /**
  * The family scope is a real input to every request — `api/client.ts` attaches
  * it as `X-Viewing-As-Family`, and the server returns different rows for
