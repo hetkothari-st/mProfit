@@ -100,7 +100,7 @@ export function createResultCache(opts: { store: CacheStore | null; enabled: () 
     try {
       const ids = [...new Set([actor, ...spec.userIds])].sort();
       const versions = await store.mget(ids.map((id) => `rcv:${id}`));
-      const paramHash = createHash('sha1').update(JSON.stringify(spec.params ?? null)).digest('hex').slice(0, 16);
+      const paramHash = createHash('sha256').update(JSON.stringify(spec.params ?? null)).digest('hex').slice(0, 16);
       key = `rc:${spec.name}:${actor}:${paramHash}:${ids.map((id, i) => `${id}=${versions[i] ?? '0'}`).join(',')}`;
       const hit = await store.get(key);
       if (hit !== null) {
