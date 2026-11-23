@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { AssetClass } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
+import { resultCache } from '../../lib/resultCache.js';
 import { financialYearOf } from '@everypaisa/shared';
 import {
   computePortfolioXirr,
@@ -108,7 +109,18 @@ function fyStartDate(fy: string): Date {
   return new Date(Date.UTC(startYear, 3, 1));
 }
 
+/** Owner of the data a scope reads, for cache invalidation; empty if it cannot be found (then no cache). */
+async function cacheOwnersFor(scope: AnalyticsScope): Promise<string[]> {
+  if (scope.kind === 'user') return [scope.userId];
+  const p = await prisma.portfolio.findUnique({ where: { id: scope.portfolioId }, select: { userId: true } });
+  return p ? [p.userId] : [];
+}
+
 export async function getKpis(scope: AnalyticsScope): Promise<KpiBlock> {
+  return resultCache.cached({ name: 'kpis', params: scope, userIds: await cacheOwnersFor(scope) }, () => computeKpis(scope));
+}
+
+async function computeKpis(scope: AnalyticsScope): Promise<KpiBlock> {
   const fy = currentFy();
   if (scope.kind === 'portfolio') {
     const [overall, x1, x3, x5, unrealised, cg, income] = await Promise.all([
@@ -471,6 +483,10 @@ export interface CgByFyRow {
 }
 
 export async function getCgByFy(scope: AnalyticsScope): Promise<CgByFyRow[]> {
+  return resultCache.cached({ name: 'cgByFy', params: scope, userIds: await cacheOwnersFor(scope) }, () => computeCgByFy(scope));
+}
+
+async function computeCgByFy(scope: AnalyticsScope): Promise<CgByFyRow[]> {
   const cg = scope.kind === 'portfolio'
     ? await computePortfolioCapitalGains(scope.portfolioId)
     : await computeUserCapitalGains(scope.userId);
@@ -775,6 +791,10 @@ export interface AssetClassXirrRow {
 }
 
 export async function getAssetClassXirr(scope: AnalyticsScope): Promise<AssetClassXirrRow[]> {
+  return resultCache.cached({ name: 'assetClassXirr', params: scope, userIds: await cacheOwnersFor(scope) }, () => computeAssetClassXirr(scope));
+}
+
+async function computeAssetClassXirr(scope: AnalyticsScope): Promise<AssetClassXirrRow[]> {
   const pids = await portfolioIdsFor(scope);
   // Distinct asset classes present in transactions across scope
   // groupBy, not findMany+distinct: Prisma emulates `distinct` by loading every row first.

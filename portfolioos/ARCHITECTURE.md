@@ -206,3 +206,23 @@ process, so a write made by the worker is seen by the web cache only when its ti
 To split on Railway: add a service from `railway-worker.toml` with `PROCESS_ROLE=worker` and the same
 variables as the API, then set `PROCESS_ROLE=web` on the API service. Deploy the worker first, so there
 is never a moment with no job runner.
+
+## Result cache (`lib/resultCache.ts`)
+
+Redis cache for five heavy read calls that recompute a user's whole history per request: `getKpis`,
+`getCgByFy`, `getAssetClassXirr` (analytics) and `getPortfolioSummary`, `getPortfolioHoldings`. On a
+12k-transaction user a hit is 1-3 ms instead of 0.45-2 s. Rules, in order of importance:
+
+1. **Per acting user.** The key contains the user the request runs as, so a result computed under one
+   user's database access is never served to another. No acting user = no caching. Access checks
+   (`ensureReadable`) still run on every call; only the computation is cached.
+2. **A user's own writes are visible on the next read, on every server.** The Prisma write hook
+   (`userDataVersion.ts`) bumps `rcv:<userId>` in Redis (batched 150 ms); the version is in the key.
+3. **Writes the hook cannot attribute are bounded by the 60 s TTL**: background jobs (system context)
+   and a family member editing a shared portfolio.
+4. **Fails open.** Redis down or slow (250 ms command timeout) = compute directly. The first cached call
+   in a fresh process only opens the connection and computes uncached.
+
+Only plain-JSON results may be cached (a hit goes through `JSON.parse`: a Decimal or Date would become
+a string). Off in tests; `RESULT_CACHE=off` bypasses it in any environment.
+Measure with `pnpm exec tsx scripts/perfBench.ts` against a throwaway local DB.

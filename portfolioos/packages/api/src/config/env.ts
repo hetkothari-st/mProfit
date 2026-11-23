@@ -89,6 +89,8 @@ const EnvSchema = z.object({
   // all = one process does everything (default). web = HTTP only (scale out freely).
   // worker = background jobs only (run exactly one). See lib/processRole.ts.
   PROCESS_ROLE: z.enum(['all', 'web', 'worker']).default('all'),
+  // Shared Redis cache for the heavy per-user read calls (lib/resultCache.ts). 'off' bypasses it.
+  RESULT_CACHE: z.enum(['on', 'off']).default('on'),
   ENABLE_MAILBOX_POLLER: z.enum(['true', 'false']).default('true'),
   // Lowered from 10 → 3 minutes. CAS emails arrive 5–60 min after a request;
   // 3-min cadence gives near-real-time auto-import without crushing Gmail
