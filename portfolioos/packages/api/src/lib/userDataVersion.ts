@@ -9,6 +9,8 @@
  * still caught by the cache's own time limit.
  */
 
+import { resultCache } from './resultCache.js';
+
 const WRITE_OPERATIONS = new Set([
   'create',
   'createMany',
@@ -61,6 +63,9 @@ export function markUserDataChanged(userId: string | null): void {
     return;
   }
   versions.set(userId, (versions.get(userId) ?? 0) + 1);
+  // Also move the shared version, so every server's cached results for this user are dropped.
+  // (A null user, i.e. a background job, is left to the cache TTL: bumping everyone would empty it.)
+  resultCache.bump(userId);
 }
 
 /** A version string for these users' data — changes when any of it does. */

@@ -10,6 +10,7 @@ import {
 } from '@everypaisa/shared';
 import type { Transaction } from '@prisma/client';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
+import { resultCache } from '../../lib/resultCache.js';
 import { logger } from '../../lib/logger.js';
 import { ForbiddenError, NotFoundError } from '../../lib/errors.js';
 import { fetchHistorical, buildYahooSymbol } from '../../priceFeeds/yahoo.service.js';
@@ -388,7 +389,18 @@ export function latestVsPrevious<T, K>(
 }
 
 export async function getPortfolioSummary(userId: string, id: string) {
+  // Access is checked every time; only the computation below is cached.
   const portfolio = await ensureReadable(userId, id);
+  return resultCache.cached({ name: 'portfolioSummary', params: { id }, userIds: [portfolio.userId] }, () =>
+    computePortfolioSummary(userId, id, portfolio),
+  );
+}
+
+async function computePortfolioSummary(
+  userId: string,
+  id: string,
+  portfolio: Awaited<ReturnType<typeof ensureReadable>>,
+) {
   // Peer personal portfolios still need runAsUser context so child-table
   // RLS (HoldingProjection/Transaction join Portfolio.userId = current)
   // permits the read — same pattern as getPortfolioHoldings.
@@ -537,7 +549,18 @@ export async function getPortfolioSummary(userId: string, id: string) {
 }
 
 export async function getPortfolioHoldings(userId: string, id: string) {
+  // Access is checked every time; only the computation below is cached.
   const portfolio = await ensureReadable(userId, id);
+  return resultCache.cached({ name: 'portfolioHoldings', params: { id }, userIds: [portfolio.userId] }, () =>
+    computePortfolioHoldings(userId, id, portfolio),
+  );
+}
+
+async function computePortfolioHoldings(
+  userId: string,
+  id: string,
+  portfolio: Awaited<ReturnType<typeof ensureReadable>>,
+) {
   // Peer personal portfolios still need runAsUser context so child-
   // table RLS (HoldingProjection joins Portfolio.userId = current)
   // permits the read.

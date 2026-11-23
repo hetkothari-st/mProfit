@@ -19,6 +19,8 @@ import { getKpis, getCgByFy, getAssetClassXirr, getAllocationByClass } from '../
 import { computeUserCapitalGains } from '../src/services/tax/capitalGains.service.js';
 import { getPortfolioHoldings, getPortfolioSummary } from '../src/services/holdings/portfolio.service.js';
 import { listAlerts } from '../src/services/notifications/alerts.service.js';
+import { createTransaction } from '../src/services/holdings/transaction.service.js';
+import { resultCache } from '../src/lib/resultCache.js';
 
 const N_TXNS = Number(process.env.PERF_TXNS ?? 12000);
 const N_STOCKS = 120;
@@ -95,6 +97,10 @@ async function main() {
     ['portfolio holdings', () => getPortfolioHoldings(u, scope.portfolioId)],
     ['alerts page 1', () => listAlerts(u, { page: 1, limit: 20 } as never)],
   ];
+  // The first CACHED call in a fresh process only opens the Redis connection (it computes uncached).
+  await scope.runAs(() => getCgByFy({ kind: 'user', userId: u }));
+  await resultCache.flush();
+  await new Promise((r) => setTimeout(r, 500));
   console.log('case'.padEnd(32), 'cold ms', 'warm ms');
   for (const [name, fn] of cases) {
     try {
@@ -110,6 +116,25 @@ async function main() {
       console.log(name.padEnd(32), 'ERROR', (e as Error).message.slice(0, 90));
     }
   }
+  // Cache invalidation check: a user's own write must show on the very next read.
+  const before = (await scope.runAs(() => getKpis({ kind: 'user', userId: u }))).totalCost;
+  await scope.runAs(() =>
+    createTransaction(u, {
+      portfolioId: scope.portfolioId,
+      transactionType: 'BUY',
+      assetClass: 'EQUITY',
+      stockSymbol: `PERF${tag}0`,
+      exchange: 'NSE',
+      tradeDate: '2026-06-01',
+      quantity: '10',
+      price: '5555',
+    }),
+  );
+  await resultCache.flush();
+  t = Date.now();
+  const after = (await scope.runAs(() => getKpis({ kind: 'user', userId: u }))).totalCost;
+  console.log(`
+after a write: KPIs totalCost ${before} -> ${after} (${after !== before ? 'FRESH' : 'STALE!'}), ${Date.now() - t} ms`);
   if (process.env.PERF_KEEP !== '1') await scope.cleanup();
   await prisma.$disconnect();
 }
