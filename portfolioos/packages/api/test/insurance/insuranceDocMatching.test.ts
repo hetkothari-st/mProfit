@@ -147,7 +147,7 @@ describe('matching insurance documents to policies', () => {
     expect(payments.map((p) => [p.paidOn.toISOString().slice(0, 10), p.amount.toString(), p.periodFrom.toISOString().slice(0, 10)])).toEqual([
       ['2025-04-02', '26000', '2025-04-10'],
     ]);
-    expect((await statusOf(receipt.id)).note).toBe('Recorded a premium of ₹26,000.00 paid on 2 Apr 2025.');
+    expect((await statusOf(receipt.id)).note).toBe('Recorded a premium of ₹26,000.00 paid on 02/04/2025.');
 
     // The same premium mailed again is not recorded twice.
     const again = await addDoc(
@@ -155,7 +155,7 @@ describe('matching insurance documents to policies', () => {
       '2025-04-05',
     );
     await scope.runAs(() => matchInsuranceDocuments(scope.userId));
-    expect((await statusOf(again.id)).note).toBe('Linked to the policy. The premium due 10 Apr 2025 was already recorded.');
+    expect((await statusOf(again.id)).note).toBe('Linked to the policy. The premium due 10/04/2025 was already recorded.');
     expect(await scope.runAs(() => prisma.premiumPayment.count({ where: { policyId: policyId! } }))).toBe(1);
   });
 
@@ -203,7 +203,7 @@ describe('matching insurance documents to policies', () => {
     expect(claims.map((c) => [c.claimNumber, c.status, c.settledAmount?.toString()])).toEqual([
       ['RR-HS23-1001', 'SETTLED', '80000'],
     ]);
-    expect((await statusOf(ack.id)).note).toBe('Added a claim of ₹84,000.00 made on 15 Jan 2025.');
+    expect((await statusOf(ack.id)).note).toBe('Added a claim of ₹84,000.00 made on 15/01/2025.');
     expect((await statusOf(settled.id)).note).toBe('Updated the claim: settled.');
   });
 
