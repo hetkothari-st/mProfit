@@ -1,0 +1,15 @@
+# Background-jobs service. Same image as the API (railway-api.toml); the only difference is the
+# service variable PROCESS_ROLE=worker, which starts every cron/queue worker and serves only
+# /health and /ready. Set PROCESS_ROLE=web on the API service when you do this.
+#
+# Run EXACTLY ONE replica of this service: the timer jobs are not leader-elected, so two
+# workers would run every scheduled job twice. The API (web) service can scale freely.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "packages/api/Dockerfile"
+
+[deploy]
+healthcheckPath = "/ready"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

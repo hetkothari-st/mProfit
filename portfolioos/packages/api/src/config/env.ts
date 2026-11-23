@@ -86,6 +86,9 @@ const EnvSchema = z.object({
   KITE_API_SECRET: z.string().optional(),
   KITE_REDIRECT_URL: z.string().optional(),
 
+  // all = one process does everything (default). web = HTTP only (scale out freely).
+  // worker = background jobs only (run exactly one). See lib/processRole.ts.
+  PROCESS_ROLE: z.enum(['all', 'web', 'worker']).default('all'),
   ENABLE_MAILBOX_POLLER: z.enum(['true', 'false']).default('true'),
   // Lowered from 10 → 3 minutes. CAS emails arrive 5–60 min after a request;
   // 3-min cadence gives near-real-time auto-import without crushing Gmail

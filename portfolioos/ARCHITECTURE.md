@@ -186,3 +186,23 @@ folder (for example `mf*` routes map to `pages/mf/` and `pages/mutualFunds/`).
 | vehicles | `vehicles.routes.ts` | `vehicles.controller.ts` | `ingestion/vehicle/`, `priceFeeds/fuel.service.ts`, `priceFeeds/fuelStates.ts`, `services/security/`, `services/vehicles/` | `piiAtRestJobs.ts`, `priceJobs.ts`, `vehicleJobs.ts` | `vehicles/` | `vehicles.api.ts` |
 | will | `will.routes.ts` | `will.controller.ts` | `services/will/` | `willReviewJob.ts` | `will/` | `will.api.ts` |
 <!-- feature-index:end -->
+
+## Process roles (`PROCESS_ROLE`)
+
+One image, three modes (`packages/api/src/lib/processRole.ts`, wired in `src/index.ts`):
+
+| Role | Serves API | Runs cron / queue workers / startup sync |
+|---|---|---|
+| `all` (default) | yes | yes — the original single-service layout |
+| `web` | yes | no — scale to as many replicas as needed |
+| `worker` | no (`/health`, `/ready` only) | yes — run **exactly one** replica |
+
+Three in-memory queues are filled by requests and drained in the same process (MF analysis, MF
+narration, policy-check narration). They start in **every** role (`startRequestDrivenQueues`), so a
+`web` replica never queues work it will not run. Everything else with a schedule is in
+`startBackgroundJobs`. Known limit when split: `userDataVersion` (AI-adviser cache key) is per
+process, so a write made by the worker is seen by the web cache only when its time limit expires.
+
+To split on Railway: add a service from `railway-worker.toml` with `PROCESS_ROLE=worker` and the same
+variables as the API, then set `PROCESS_ROLE=web` on the API service. Deploy the worker first, so there
+is never a moment with no job runner.
