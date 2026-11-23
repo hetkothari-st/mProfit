@@ -75,6 +75,31 @@ export async function listPortfolios(userId: string) {
   });
 }
 
+/**
+ * Adds `_count: { holdingProjections, transactions }` to portfolio rows.
+ *
+ * Replaces Prisma's `include: { _count }`, which compiles to a LEFT JOIN over a GROUP BY of the WHOLE child
+ * table: 3.2 s with 500k transactions in the database, for a user who owns 80. A groupBy restricted to these
+ * portfolio ids walks the portfolioId index instead, so the cost follows the user's own rows, not the table.
+ * Must run in the same user context as the portfolio read (row-level security applies to the counts too).
+ */
+async function withChildCounts<T extends { id: string }>(
+  rows: T[],
+): Promise<Array<T & { _count: { holdingProjections: number; transactions: number } }>> {
+  if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.id);
+  const [tx, hp] = await Promise.all([
+    prisma.transaction.groupBy({ by: ['portfolioId'], where: { portfolioId: { in: ids } }, _count: { _all: true } }),
+    prisma.holdingProjection.groupBy({ by: ['portfolioId'], where: { portfolioId: { in: ids } }, _count: { _all: true } }),
+  ]);
+  const txBy = new Map(tx.map((r) => [r.portfolioId, r._count._all]));
+  const hpBy = new Map(hp.map((r) => [r.portfolioId, r._count._all]));
+  return rows.map((r) => ({
+    ...r,
+    _count: { holdingProjections: hpBy.get(r.id) ?? 0, transactions: txBy.get(r.id) ?? 0 },
+  }));
+}
+
 async function listPortfoliosWithScope(scope: EffectiveScope) {
   // OWNER cross-member reads on personal portfolios need to run under
   // each member's user context so the personal-portfolio RLS branch
@@ -88,24 +113,18 @@ async function listPortfoliosWithScope(scope: EffectiveScope) {
 
   const rows = await (async () => {
     if (!isFamilyView) {
-      return prisma.portfolio.findMany({
-        where: portfolioReadableWhere(scope),
-        orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
-        include: {
-          _count: { select: { holdingProjections: true, transactions: true } },
-        },
-      });
+      return withChildCounts(
+        await prisma.portfolio.findMany({
+          where: portfolioReadableWhere(scope),
+          orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+        }),
+      );
     }
     const otherUserIds = scope.readableUserIds.filter((u) => u !== scope.callerId);
     const perMember = await Promise.all(
       otherUserIds.map((uid) =>
-        runAsUser(uid, () =>
-          prisma.portfolio.findMany({
-            where: { userId: uid, familyId: null },
-            include: {
-              _count: { select: { holdingProjections: true, transactions: true } },
-            },
-          }),
+        runAsUser(uid, async () =>
+          withChildCounts(await prisma.portfolio.findMany({ where: { userId: uid, familyId: null } })),
         ),
       ),
     );
@@ -114,19 +133,18 @@ async function listPortfoliosWithScope(scope: EffectiveScope) {
     // Relying on row-level security to trim the overlap put the same portfolio
     // in the list twice wherever policies do not bite — as on a connection
     // that bypasses RLS, which is what production uses today.
-    const own = await prisma.portfolio.findMany({
-      where: {
-        OR: [
-          { userId: scope.callerId, familyId: null },
-          ...(scope.readableFamilyIds.length > 0
-            ? [{ familyId: { in: scope.readableFamilyIds } }]
-            : []),
-        ],
-      },
-      include: {
-        _count: { select: { holdingProjections: true, transactions: true } },
-      },
-    });
+    const own = await withChildCounts(
+      await prisma.portfolio.findMany({
+        where: {
+          OR: [
+            { userId: scope.callerId, familyId: null },
+            ...(scope.readableFamilyIds.length > 0
+              ? [{ familyId: { in: scope.readableFamilyIds } }]
+              : []),
+          ],
+        },
+      }),
+    );
     // One row per portfolio whatever the queries overlap on: two sources and
     // a concatenation is exactly how the list grew duplicate cards before.
     const seen = new Set<string>();
