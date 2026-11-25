@@ -14,7 +14,7 @@ import {
   computeUserXirr,
 } from '../analytics/xirr.service.js';
 import { createPriceLookup } from '../holdings/holdingsAsOf.service.js';
-import { replayTransactions } from '../holdings/holdingsProjection.js';
+import { compareReplayOrder, createReplay } from '../holdings/holdingsProjection.js';
 import { grandfatheredCost } from './specialReports.service.js';
 import { listedEquityLtcgExemptionFor } from '@everypaisa/shared';
 import { computeCapitalGainsTax } from '../tax/taxComputation.js';
@@ -231,6 +231,23 @@ export async function historicalValuation(
 
   const points: HistoricalValuationPoint[] = [];
 
+  // One running replay per asset, fed in replay order. A month's position is the fold after the rows up to
+  // that month, so each row is replayed once (not once per month, which was months x history).
+  const runs = [...byAsset.entries()].map(([key, list]) => {
+    const rows = [...list].sort(compareReplayOrder);
+    return {
+      key,
+      rows,
+      next: 0,
+      replay: createReplay(rows),
+      stockId: null as string | null,
+      fundId: null as string | null,
+      isin: null as string | null,
+      foreign: false,
+      lastActionAt: null as Date | null,
+    };
+  });
+
   // Prices for every (holding, month) in two queries, not one per pair.
   const priceMetas = [...byAsset.values()].map((list) => ({
     assetClass: list[0]!.assetClass,
@@ -253,23 +270,32 @@ export async function historicalValuation(
     let totalCost = new Decimal(0);
     let totalValue = new Decimal(0);
     let holdingCount = 0;
-    for (const [key, list] of byAsset.entries()) {
-      const upTo = list.filter((t) => t.tradeDate.getTime() <= endOfSnap.getTime());
-      if (upTo.length === 0) continue;
-      const agg = replayTransactions(upTo);
+    for (const run of runs) {
+      const { key, rows } = run;
+      const cutoff = endOfSnap.getTime();
+      while (run.next < rows.length && rows[run.next]!.tradeDate.getTime() <= cutoff) {
+        const t = rows[run.next++]!;
+        run.replay.apply(t);
+        // The first row that carries each id wins, as `find` over the prefix did.
+        run.stockId ??= t.stockId ?? null;
+        run.fundId ??= t.fundId ?? null;
+        run.isin ??= t.isin ?? null;
+        const c = (t as typeof t & { currency?: string | null }).currency;
+        if (c && c !== 'INR') run.foreign = true;
+        if (CORPORATE_ACTION_TYPES.has(t.transactionType)) run.lastActionAt = t.tradeDate;
+      }
+      if (run.next === 0) continue;
+      const agg = run.replay.aggregate();
       // Closed positions drop out; cost-only holdings (FDs, property) stay.
       if (agg.quantity.lessThanOrEqualTo(0) && agg.totalCost.lessThanOrEqualTo(0)) continue;
       holdingCount++;
       totalCost = totalCost.plus(agg.totalCost);
-      const foreign = upTo.some((t) => {
-        const c = (t as typeof t & { currency?: string | null }).currency;
-        return !!c && c !== 'INR';
-      });
+      const foreign = run.foreign;
       const meta = {
-        assetClass: upTo[0]!.assetClass,
-        stockId: upTo.find((t) => t.stockId)?.stockId ?? null,
-        fundId: upTo.find((t) => t.fundId)?.fundId ?? null,
-        isin: upTo.find((t) => t.isin)?.isin ?? null,
+        assetClass: rows[0]!.assetClass,
+        stockId: run.stockId,
+        fundId: run.fundId,
+        isin: run.isin,
       };
       const price = !foreign && agg.quantity.greaterThan(0) ? await priceAt(meta, endOfSnap) : null;
       totalValue = totalValue.plus(price ? agg.quantity.times(price) : agg.totalCost);
@@ -283,11 +309,8 @@ export async function historicalValuation(
         });
         // A split or bonus in this period changes the share count, which a
         // period return would otherwise read as a price move.
-        const hadAction = upTo.some(
-          (t) =>
-            CORPORATE_ACTION_TYPES.has(t.transactionType) &&
-            (previousSnap === null || t.tradeDate > previousSnap),
-        );
+        const hadAction =
+          run.lastActionAt !== null && (previousSnap === null || run.lastActionAt > previousSnap);
         if (hadAction) corporateActionKeys.add(key);
       }
     }
