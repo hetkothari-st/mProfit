@@ -107,6 +107,17 @@ import {
   billingDefaultsHandler,
 } from '../controllers/caInvoice.controller.js';
 
+import {
+  listSeatsHandler,
+  inviteStaffHandler,
+  assignClientHandler,
+  unassignClientHandler,
+  revokeSeatHandler,
+  peekStaffInvitationHandler,
+  acceptStaffInvitationHandler,
+  mySeatsHandler,
+} from '../controllers/caFirmSeats.controller.js';
+
 export const caRouter = Router();
 caRouter.use(authenticate);
 // The client list comes before the gate: every signed-in user's sidebar asks
@@ -115,6 +126,12 @@ caRouter.use(authenticate);
 caRouter.get('/clients', asyncHandler(listClientsHandler));
 caRouter.get('/clients/count', asyncHandler(countClientsHandler));
 // Two-factor sign-in, used for this session, for anything else in the workspace.
+// A seat invitation is accepted before the staff member has opened any
+// books; the second factor is required from the first client they open.
+caRouter.get('/seats/invite/:token', asyncHandler(peekStaffInvitationHandler));
+caRouter.post('/seats/accept', asyncHandler(acceptStaffInvitationHandler));
+caRouter.get('/seats/mine', asyncHandler(mySeatsHandler));
+
 caRouter.use(requireProfessionalSecondFactor);
 
 /**
@@ -162,6 +179,14 @@ caRouter.get('/invoices/:id/pdf', asyncHandler(invoicePdfHandler));
 caRouter.post('/invoices/:id/paid', asyncHandler(markInvoicePaidHandler));
 caRouter.post('/invoices/:id/cancel', asyncHandler(cancelInvoiceHandler));
 caRouter.get('/clients/:clientId/billing-defaults', asyncHandler(billingDefaultsHandler));
+
+// Firm seats (the CA's own staff). Inviting is part of running a practice,
+// so it carries the advisor plan; the rest only touches seats the CA owns.
+caRouter.get('/seats', asyncHandler(listSeatsHandler));
+caRouter.post('/seats', requireAdvisorPlan, asyncHandler(inviteStaffHandler));
+caRouter.post('/seats/:id/clients', asyncHandler(assignClientHandler));
+caRouter.delete('/seats/:id/clients/:clientId', asyncHandler(unassignClientHandler));
+caRouter.post('/seats/:id/revoke', asyncHandler(revokeSeatHandler));
 
 // Grants
 caRouter.post('/clients', requireAdvisorPlan, asyncHandler(createManagedClientHandler));

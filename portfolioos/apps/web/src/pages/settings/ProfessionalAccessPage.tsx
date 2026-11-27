@@ -334,6 +334,11 @@ function ActiveGrant({
             <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
               {g.advisor?.email ?? g.invitedEmail}
             </p>
+            {g.staff && g.staff.length > 0 && (
+              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                Their staff with access: {g.staff.join(', ')}
+              </p>
+            )}
           </div>
         </div>
 

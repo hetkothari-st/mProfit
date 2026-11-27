@@ -4,6 +4,7 @@ import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
 import { recordCaAudit } from './caAudit.service.js';
+import { actsForClient } from './caAccess.service.js';
 import { createDocument } from '../documents/document.service.js';
 
 /**
@@ -57,7 +58,7 @@ async function advisorClient(callerId: string, clientId: string, write: boolean)
     select: { id: true, advisorId: true, userId: true, status: true },
   });
   if (!client) throw new NotFoundError('Client not found.');
-  if (client.advisorId !== callerId) throw new ForbiddenError('That client is not yours.');
+  if (!(await actsForClient(callerId, client))) throw new ForbiddenError('That client is not yours.');
   if (write && client.status !== 'ACTIVE') throw new BadRequestError('This engagement is not active.');
   return client;
 }

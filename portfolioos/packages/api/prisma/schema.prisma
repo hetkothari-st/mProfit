@@ -16,6 +16,8 @@ datasource db {
 // ─── USERS & AUTH ───────────────────────────────────────────────
 
 model User {
+  firmSeatsOwned FirmSeat[] @relation("FirmSeatOwner")
+  firmSeatsHeld  FirmSeat[] @relation("FirmSeatStaff")
   // Insurance Policy Health Check. PolicyFinding/PolicyVerdict carry their own userId (RLS), no relation here.
   policyHealthChecks PolicyHealthCheck[]
   splitContacts          SplitContact[]   @relation("SplitContactOwner")
@@ -550,6 +552,7 @@ model Client {
   tasks           ClientTask[]
   documentRequests DocumentRequest[]
   invoices         Invoice[]
+  staffAssignments FirmSeatClient[]
 
   @@index([advisorId, status])
   @@index([userId, status])
@@ -719,6 +722,48 @@ enum InvoiceStatus {
   ISSUED
   PAID
   CANCELLED
+}
+
+/// A seat in a CA's firm: a staff member who works on the clients the CA
+/// assigns them, under the client's own grant. See migration
+/// 20261127200000_ca_firm_seats for how access follows.
+model FirmSeat {
+  id              String           @id @default(cuid())
+  firmOwnerId     String
+  firmOwner       User             @relation("FirmSeatOwner", fields: [firmOwnerId], references: [id], onDelete: Cascade)
+  staffUserId     String?
+  staffUser       User?            @relation("FirmSeatStaff", fields: [staffUserId], references: [id], onDelete: SetNull)
+  name            String
+  invitedEmail    String
+  inviteTokenHash String?          @unique
+  inviteExpiresAt DateTime?
+  status          FirmSeatStatus   @default(PENDING)
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  clients         FirmSeatClient[]
+
+  @@index([firmOwnerId, status])
+  @@index([staffUserId, status])
+}
+
+model FirmSeatClient {
+  id        String   @id @default(cuid())
+  seatId    String
+  seat      FirmSeat @relation(fields: [seatId], references: [id], onDelete: Cascade)
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([seatId, clientId])
+  @@index([clientId])
+}
+
+enum FirmSeatStatus {
+  PENDING
+  ACTIVE
+  REVOKED
 }
 
 enum ClientFilingStatus {
@@ -5431,6 +5476,8 @@ enum CaAuditAction {
   FILING_STATUS_CHANGED
   DOCUMENT_REQUESTED
   DOCUMENT_REQUEST_CLOSED
+  STAFF_ASSIGNED
+  STAFF_UNASSIGNED
 }
 
 /// A user's data-encryption key, wrapped by the KEK (lib/userKeys). Never

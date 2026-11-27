@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
 import { recordCaAudit } from './caAudit.service.js';
+import { actsForClient, clientsActedForWhere } from './caAccess.service.js';
 
 /**
  * The CA's client list, built for a practice of hundreds: who the client is
@@ -72,6 +73,8 @@ function daysUntil(isoDate: string, now: Date): number {
 
 export interface ClientOverviewRow {
   clientId: string;
+  /** The CA on the grant, or a staff member of their firm. */
+  actingAs: 'ADVISOR' | 'STAFF';
   name: string;
   email: string | null;
   /** "XXXXXX234F" — never the full PAN. Null when none is on record. */
@@ -113,9 +116,10 @@ const MAX_LIMIT = 200;
 
 async function overviewRows(callerId: string, fy: string, now: Date): Promise<ClientOverviewRow[]> {
   const clients = await prisma.client.findMany({
-    where: { advisorId: callerId, status: 'ACTIVE' },
+    where: { AND: [clientsActedForWhere(callerId), { status: 'ACTIVE' }] },
     select: {
       id: true,
+      advisorId: true,
       name: true,
       email: true,
       panLast4: true,
@@ -144,6 +148,7 @@ async function overviewRows(callerId: string, fy: string, now: Date): Promise<Cl
     const done = status === 'FILED' || status === 'VERIFIED';
     return {
       clientId: c.id,
+      actingAs: c.advisorId === callerId ? ('ADVISOR' as const) : ('STAFF' as const),
       name: shown.name,
       email: shown.email,
       panMasked: last4 ? `XXXXXX${last4}` : null,
@@ -240,7 +245,7 @@ export async function setClientFiling(
     select: { id: true, advisorId: true, userId: true, status: true },
   });
   if (!client) throw new NotFoundError('Client not found.');
-  if (client.advisorId !== callerId) throw new ForbiddenError('That client is not yours.');
+  if (!(await actsForClient(callerId, client))) throw new ForbiddenError('That client is not yours.');
   if (client.status !== 'ACTIVE') throw new BadRequestError('This engagement is not active.');
 
   const data = {

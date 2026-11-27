@@ -54,6 +54,8 @@ export async function recordCaAudit(
   const metadata: Record<string, unknown> = {};
   if (entry.before !== undefined) metadata.before = entry.before;
   if (entry.after !== undefined) metadata.after = entry.after;
+  const actor = await staffActorLabel(tx, ctx);
+  if (actor) metadata.actor = actor;
 
   await tx.caAuditLog.create({
     data: {
@@ -96,4 +98,20 @@ export async function recordProjectionIfAny(
     summary: `Generated ${created} voucher${created === 1 ? '' : 's'} from this client's recorded activity.`,
     after: { generated: created },
   });
+}
+
+/**
+ * "Ramesh (Iyer’s office)" when a firm's staff member acted, so the client's
+ * trail says who: the summaries are written as "Your CA …", and a staff seat
+ * acts under the CA's grant. Null when the caller is the CA or the client.
+ */
+async function staffActorLabel(tx: Prisma.TransactionClient, ctx: CaAuditContext): Promise<string | null> {
+  const client = await tx.client.findUnique({ where: { id: ctx.clientId }, select: { advisorId: true, userId: true } });
+  if (!client?.advisorId || ctx.actorUserId === client.advisorId || ctx.actorUserId === client.userId) return null;
+  const seat = await tx.firmSeat.findFirst({
+    where: { staffUserId: ctx.actorUserId, firmOwnerId: client.advisorId },
+    select: { name: true, firmOwner: { select: { name: true, email: true } } },
+  });
+  if (!seat) return null;
+  return `${seat.name} (${seat.firmOwner.name || seat.firmOwner.email}’s office)`;
 }
