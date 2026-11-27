@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { HScroll } from '@/components/ui/h-scroll';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { LIVE_QUERY, LIVE_INTERVAL_MS } from '@/lib/liveQuery';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -23,6 +23,7 @@ import {
   FileBarChart,
   FolderOpen,
   History,
+  NotebookPen,
   CheckCircle2,
   AlertTriangle,
 } from 'lucide-react';
@@ -49,6 +50,7 @@ import { AddTransactionDialog } from '@/components/ca/AddTransactionDialog';
 import { FmvFormDialog } from '@/components/ca/FmvFormDialog';
 import { ClientReportsTab } from '@/components/ca/ClientReportsTab';
 import { ClientDocumentsTab } from '@/components/ca/ClientDocumentsTab';
+import { ClientNotesTasksTab } from '@/components/ca/ClientNotesTasksTab';
 import { Initials, ClientAccessStrip } from '@/components/ca/AccessParts';
 import { editModeOfClient, EDIT_MODE_LABEL, type EditMode } from '@/components/ca/accessModel';
 import { IMPORT_STATUS_LABELS, type ImportStatus } from '@everypaisa/shared';
@@ -70,6 +72,7 @@ type Tab =
   | 'trial-balance'
   | 'reports'
   | 'documents'
+  | 'notes'
   | 'activity';
 
 /**
@@ -91,6 +94,7 @@ const TAB_GROUPS: { key: Tab; label: string; icon: typeof BookOpen }[][] = [
     { key: 'reports', label: 'Reports', icon: FileBarChart },
     { key: 'documents', label: 'Documents', icon: FolderOpen },
   ],
+  [{ key: 'notes', label: 'Notes & tasks', icon: NotebookPen }],
   [{ key: 'activity', label: 'Activity', icon: History }],
 ];
 
@@ -152,7 +156,12 @@ export function ClientBooksPage() {
       toast.success(`${client.displayName} updated what you can do in their books.`);
     }
   }, [rightsKey, client, readOnly]);
-  const [tab, setTab] = useState<Tab>('accounts');
+  // ?tab= opens a tab directly (the workspace's task list links to Notes & tasks).
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => {
+    const asked = searchParams.get('tab');
+    return TAB_GROUPS.flat().some((t) => t.key === asked) ? (asked as Tab) : 'accounts';
+  });
   const [accountDialog, setAccountDialog] = useState<{
     open: boolean;
     account: CaAccountRow | null;
@@ -700,6 +709,8 @@ export function ClientBooksPage() {
       {tab === 'reports' && <ClientReportsTab clientId={clientId} />}
 
       {tab === 'documents' && <ClientDocumentsTab clientId={clientId} />}
+
+      {tab === 'notes' && <ClientNotesTasksTab clientId={clientId} />}
 
       {tab === 'activity' && (
         <CaActivityFeed
