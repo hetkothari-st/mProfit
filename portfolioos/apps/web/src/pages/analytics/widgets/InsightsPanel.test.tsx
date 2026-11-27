@@ -83,3 +83,35 @@ describe('InsightsPanel collapse', () => {
     expect(screen.getByRole('button', { name: 'About AI portfolio insights' })).toBeTruthy();
   });
 });
+
+// Launch review B2: a cached insight whose data has since moved must not read as current.
+describe('InsightsPanel out-of-date insight', () => {
+  const insight = (stale: boolean) => ({
+    ok: true,
+    fromCache: true,
+    generatedAt: '2026-09-01T00:00:00.000Z',
+    stale,
+    staleReason: stale ? 'Your portfolio value has moved since it was written.' : null,
+    model: 'test',
+    costInr: '0',
+    cards: [],
+    narrative: 'Your XIRR is 9%.',
+    disclaimer: 'Not advice.',
+  });
+
+  it('marks a stale insight out of date and says why', async () => {
+    api.insights.mockResolvedValue(insight(true));
+    renderPanel();
+    expect(await screen.findByText(/Out of date — written/)).toBeTruthy();
+    expect(screen.getByText(/Your portfolio value has moved since it was written\./)).toBeTruthy();
+    expect(screen.getByText(/^Out of date ·/)).toBeTruthy();
+    expect(screen.queryByText(/^Cached ·/)).toBeNull();
+  });
+
+  it('shows a current cached insight without the warning', async () => {
+    api.insights.mockResolvedValue(insight(false));
+    renderPanel();
+    expect(await screen.findByText('Your XIRR is 9%.')).toBeTruthy();
+    expect(screen.queryByText(/Out of date/)).toBeNull();
+  });
+});

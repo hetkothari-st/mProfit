@@ -199,6 +199,13 @@ export interface InsightsResult {
   ok: true;
   fromCache: boolean;
   generatedAt: string;
+  /**
+   * The data has moved since this insight was written (launch review B2): the
+   * page must not present it as a reading of the portfolio today.
+   */
+  stale: boolean;
+  /** Why it is out of date, in words the page can show; null when current. */
+  staleReason: string | null;
   model: string;
   costInr: string;
   cards: InsightCard[];
@@ -283,6 +290,48 @@ function buildPromptContext(snapshot: AnalyticsSnapshot): string {
   return JSON.stringify(compact, null, 2);
 }
 
+/** An insight older than this is out of date whatever the numbers do. */
+export const INSIGHT_MAX_AGE_HOURS = 24;
+/** A move in portfolio value bigger than this share makes an insight out of date. */
+export const INSIGHT_VALUE_DRIFT = new Decimal('0.05');
+
+/**
+ * Whether the data behind an insight has moved since it was written: it is
+ * past its day, the portfolio value it was written against has moved more
+ * than INSIGHT_VALUE_DRIFT, or a transaction in scope was added or edited
+ * after it. Valued the same way as the KPI "current value" the insight was
+ * fed (each holding at its current value, or at cost when unpriced).
+ */
+async function insightStaleness(
+  row: { userId: string; portfolioId: string | null; portfolioValueInr: { toString(): string }; generatedAt: Date },
+  now: Date = new Date(),
+): Promise<string | null> {
+  if (now.getTime() - row.generatedAt.getTime() > INSIGHT_MAX_AGE_HOURS * 3_600_000) {
+    return `Written more than ${INSIGHT_MAX_AGE_HOURS} hours ago.`;
+  }
+  const portfolioWhere = row.portfolioId ? { id: row.portfolioId } : { userId: row.userId };
+  const changedTx = await prisma.transaction.findFirst({
+    where: { portfolio: portfolioWhere, updatedAt: { gt: row.generatedAt } },
+    select: { id: true },
+  });
+  if (changedTx) return 'Your transactions have changed since it was written.';
+
+  const holdings = await prisma.holdingProjection.findMany({
+    where: { portfolio: portfolioWhere },
+    select: { currentValue: true, totalCost: true },
+  });
+  const current = holdings.reduce(
+    (sum, h) => sum.plus(new Decimal((h.currentValue ?? h.totalCost).toString())),
+    new Decimal(0),
+  );
+  const then = new Decimal(row.portfolioValueInr.toString());
+  const base = Decimal.max(then.abs(), new Decimal(1));
+  if (current.minus(then).abs().dividedBy(base).greaterThan(INSIGHT_VALUE_DRIFT)) {
+    return 'Your portfolio value has moved since it was written.';
+  }
+  return null;
+}
+
 /** 24-hour cache key. Returns the latest row in the window, or null. */
 async function findCachedInsight(
   userId: string,
@@ -299,10 +348,14 @@ async function findCachedInsight(
     orderBy: { generatedAt: 'desc' },
   });
   if (!row) return null;
+  // A cached insight the data has since moved past is a miss, not a hit.
+  if ((await insightStaleness(row)) !== null) return null;
   return {
     ok: true,
     fromCache: true,
     generatedAt: row.generatedAt.toISOString(),
+    stale: false,
+    staleReason: null,
     model: row.model,
     costInr: row.costInr.toString(),
     cards: withActions(row.cards as unknown as InsightCard[]),
@@ -483,6 +536,8 @@ export async function getOrGenerateInsights(
     ok: true,
     fromCache: false,
     generatedAt: row.generatedAt.toISOString(),
+    stale: false,
+    staleReason: null,
     model,
     costInr: costInr.toFixed(4),
     cards: withActions(cards),
@@ -505,10 +560,13 @@ export async function getLatestInsight(
     orderBy: { generatedAt: 'desc' },
   });
   if (!row) return null;
+  const staleReason = await insightStaleness(row);
   return {
     ok: true,
     fromCache: true,
     generatedAt: row.generatedAt.toISOString(),
+    stale: staleReason !== null,
+    staleReason,
     model: row.model,
     costInr: row.costInr.toString(),
     cards: withActions(row.cards as unknown as InsightCard[]),
