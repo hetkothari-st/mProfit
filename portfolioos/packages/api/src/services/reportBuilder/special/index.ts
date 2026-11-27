@@ -179,7 +179,7 @@ export async function buildGrandfatheringLayout(userId: string, fy?: string): Pr
     });
 
   const columns: ColumnDef[] = [
-    { key: 'scriptName', label: 'Script Name', width: 14, align: 'left' },
+    { key: 'scriptName', label: 'Scrip Name', width: 14, align: 'left' },
     { key: 'buyDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
     { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'buyRate', label: 'Rate', width: 6, align: 'right', formatter: MONEY },
@@ -201,7 +201,7 @@ export async function buildGrandfatheringLayout(userId: string, fy?: string): Pr
     pan: m.pan,
     financialYear: r.scope.financialYear ?? 'All',
     headerRow1: [
-      { label: 'Script Name', spanCols: 1 },
+      { label: 'Scrip Name', spanCols: 1 },
       { label: 'Opening / Purchase', spanCols: 4 },
       { label: '31st Jan 2018', spanCols: 1 },
       { label: 'Sale', spanCols: 4 },
@@ -269,7 +269,7 @@ export async function buildDematHoldingsLayout(userId: string): Promise<MprofitL
               bg: mv.kind === 'OPENING' ? '#2E1418' : undefined,
             })),
             subtotal: {
-              label: 'Script Total',
+              label: 'Scrip Total',
               values: {
                 inQty: sumIn.toString(),
                 outQty: sumOut.toString(),
@@ -368,7 +368,7 @@ export async function buildM2MLayout(userId: string, asOf?: Date): Promise<Mprof
       : indianMoney(v, 2);
 
   const columns: ColumnDef[] = [
-    { key: 'scriptName', label: 'Script Name', width: 16, align: 'left' },
+    { key: 'scriptName', label: 'Scrip Name', width: 16, align: 'left' },
     { key: 'closingDate', label: 'Closing Date', width: 7, align: 'center', formatter: DATE },
     { key: 'qty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'purRate', label: 'Pur Rate', width: 7, align: 'right', formatter: MONEY },
@@ -389,7 +389,7 @@ export async function buildM2MLayout(userId: string, asOf?: Date): Promise<Mprof
     member: m.member,
     pan: m.pan,
     headerRow1: [
-      { label: 'Script Name', spanCols: 1 },
+      { label: 'Scrip Name', spanCols: 1 },
       { label: 'Closing Date', spanCols: 1 },
       { label: 'Average', spanCols: 3 },
       { label: 'Bhav Rate', spanCols: 1 },
@@ -416,7 +416,7 @@ export async function buildM2MLayout(userId: string, asOf?: Date): Promise<Mprof
 
 function cgColumns(): ColumnDef[] {
   return [
-    { key: 'scriptName', label: 'Script Name', width: 14, align: 'left' },
+    { key: 'scriptName', label: 'Scrip Name', width: 14, align: 'left' },
     { key: 'buyDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
     { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'buyRate', label: 'Rate', width: 7, align: 'right', formatter: MONEY },
@@ -433,7 +433,7 @@ function cgColumns(): ColumnDef[] {
 
 function cgHeaderRow1() {
   return [
-    { label: 'Script Name', spanCols: 1 },
+    { label: 'Scrip Name', spanCols: 1 },
     { label: 'Opening / Purchase', spanCols: 4 },
     { label: 'Sale', spanCols: 4 },
     { label: 'Gain / Loss', spanCols: 3 },
@@ -996,7 +996,7 @@ export async function buildDailyTransactionsLayout(
   const columns: ColumnDef[] = [
     { key: 'tradeDate', label: 'Date', width: 8, align: 'center', formatter: DATE },
     { key: 'type', label: 'Type', width: 8, align: 'left' },
-    { key: 'script', label: 'Script Name', width: 24, align: 'left' },
+    { key: 'script', label: 'Scrip Name', width: 24, align: 'left' },
     { key: 'qty', label: 'Qty', width: 6, align: 'right', formatter: QTY },
     { key: 'rate', label: 'Rate', width: 8, align: 'right', formatter: MONEY },
     { key: 'gross', label: 'Gross Amt.', width: 9, align: 'right', formatter: MONEY, signed: true },
@@ -1043,7 +1043,7 @@ export async function buildIncomeReportLayout(
   const columns: ColumnDef[] = [
     { key: 'date', label: 'Date', width: 8, align: 'center', formatter: DATE },
     { key: 'type', label: 'Type', width: 12, align: 'left' },
-    { key: 'assetName', label: 'Script', width: 28, align: 'left' },
+    { key: 'assetName', label: 'Scrip', width: 28, align: 'left' },
     { key: 'amount', label: 'Amount', width: 10, align: 'right', formatter: MONEY },
     { key: 'narration', label: 'Narration', width: 32, align: 'left' },
   ];
@@ -1178,7 +1178,7 @@ export async function buildPortfolioHoldingsSummaryLayout(
   );
 
   const columns: ColumnDef[] = [
-    { key: 'scriptName', label: 'Script / Holding', width: 20, align: 'left' },
+    { key: 'scriptName', label: 'Scrip / Holding', width: 20, align: 'left' },
     { key: 'isin', label: 'ISIN', width: 10, align: 'left' },
     { key: 'portfolio', label: 'Portfolio', width: 12, align: 'left' },
     { key: 'qty', label: 'Qty', width: 7, align: 'right', formatter: (v) => indianMoney(v, 4) },
@@ -1377,7 +1377,7 @@ export async function buildTaxSummaryLayout(
   ];
 
   return {
-    reportTitle: `Tax Summary (Form 16 Helper) FY ${financialYear}`,
+    reportTitle: `Tax Summary (ITR Helper) FY ${financialYear}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -1846,8 +1846,8 @@ export async function buildCombinedRealisedUnrealisedLayout(
   }
 
   const columns: ColumnDef[] = [
-    { key: 'scriptName', label: 'Script Name', width: 12, align: 'left' },
-    { key: 'scriptCode', label: 'Script Code', width: 7, align: 'left' },
+    { key: 'scriptName', label: 'Scrip Name', width: 12, align: 'left' },
+    { key: 'scriptCode', label: 'Scrip Code', width: 7, align: 'left' },
     { key: 'buyDate', label: 'Date', width: 6, align: 'center', formatter: DATE },
     { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'buyRate', label: 'Rate', width: 6, align: 'right', formatter: MONEY },
@@ -1874,8 +1874,8 @@ export async function buildCombinedRealisedUnrealisedLayout(
     member: m.member,
     pan: m.pan,
     headerRow1: [
-      { label: 'Script Name', spanCols: 1 },
-      { label: 'Script Code', spanCols: 1 },
+      { label: 'Scrip Name', spanCols: 1 },
+      { label: 'Scrip Code', spanCols: 1 },
       { label: 'Buy', spanCols: 4 },
       { label: 'Sell', spanCols: 4 },
       { label: 'Closing', spanCols: 1 },
@@ -1989,7 +1989,7 @@ export async function buildFamilyWiseHoldingsLayout(
   const grandValue = holdings.reduce((s, h) => s.plus(effectiveVal(h)), new Decimal(0));
 
   const columns: ColumnDef[] = [
-    { key: 'script', label: 'Script / Consultant Name', width: 32, align: 'left' },
+    { key: 'script', label: 'Scrip / Consultant Name', width: 32, align: 'left' },
     { key: 'qty', label: 'Qty', width: 8, align: 'right', formatter: (v) => indianMoney(v, 4) },
     { key: 'rate', label: 'Rate', width: 9, align: 'right', formatter: MONEY },
     { key: 'value', label: 'Value', width: 11, align: 'right', formatter: MONEY },
@@ -2001,7 +2001,7 @@ export async function buildFamilyWiseHoldingsLayout(
     member: m.member,
     pan: m.pan,
     headerRow1: [
-      { label: 'Script / Consultant Name', spanCols: 1 },
+      { label: 'Scrip / Consultant Name', spanCols: 1 },
       { label: 'Average', spanCols: 3 },
     ],
     headerRow2: columns.map((c) => ({ label: c.label, align: c.align })),
@@ -2170,7 +2170,7 @@ export async function buildScriptwiseQtywiseLayout(
   const toStamp = opts.to ? fmtDateDDMMYYYY(opts.to) : todayDDMMYYYY();
 
   return {
-    reportTitle: `Scriptwise - Qtywise Report As ${fromStamp} To ${toStamp} (Equity)`,
+    reportTitle: `Scrip-wise - Qty-wise Report As ${fromStamp} To ${toStamp} (Equity)`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -2462,7 +2462,7 @@ export async function buildMfM2MLayout(
     });
 
   const columns: ColumnDef[] = [
-    { key: 'scheme', label: 'Script Name', width: 22, align: 'left' },
+    { key: 'scheme', label: 'Scrip Name', width: 22, align: 'left' },
     { key: 'closingDate', label: 'Closing Date', width: 7, align: 'center', formatter: DATE },
     { key: 'qty', label: 'Qty', width: 7, align: 'right', formatter: (v) => indianMoney(v, 4) },
     { key: 'avgRate', label: 'Avg Rate', width: 7, align: 'right', formatter: MONEY },
@@ -2483,7 +2483,7 @@ export async function buildMfM2MLayout(
     member: m.member,
     pan: m.pan,
     headerRow1: [
-      { label: 'Script Name', spanCols: 1 },
+      { label: 'Scrip Name', spanCols: 1 },
       { label: 'Closing Date', spanCols: 1 },
       { label: 'Average', spanCols: 3 },
       { label: 'MF Bhav Rate', spanCols: 1 },
@@ -2811,7 +2811,7 @@ export async function buildTopHoldingsLayout(userId: string): Promise<MprofitLay
   }
 
   const columns: ColumnDef[] = [
-    { key: 'scriptName', label: 'Script Name', width: 28, align: 'left' },
+    { key: 'scriptName', label: 'Scrip Name', width: 28, align: 'left' },
     { key: 'qty', label: 'Quantity / Units', width: 9, align: 'right', formatter: (v) => indianMoney(v, 4) },
     { key: 'invested', label: 'Amount invested', width: 11, align: 'right', formatter: MONEY },
     { key: 'weight', label: '% weightage', width: 7, align: 'right' },
@@ -2968,7 +2968,7 @@ export async function buildSectorWiseAllocationLayout(
       };
     });
   const columns: ColumnDef[] = [
-    { key: 'scriptName', label: 'Script Name', width: 28, align: 'left' },
+    { key: 'scriptName', label: 'Scrip Name', width: 28, align: 'left' },
     { key: 'qty', label: 'Quantity / Units', width: 9, align: 'right', formatter: (v) => indianMoney(v, 4) },
     { key: 'invested', label: 'Amount invested', width: 11, align: 'right', formatter: MONEY },
     { key: 'weight', label: '% weightage', width: 7, align: 'right' },
@@ -3324,7 +3324,7 @@ export async function buildBrokerwiseCapitalGainLayout(
     });
 
   const columns: ColumnDef[] = [
-    { key: 'scriptName', label: 'Script Name', width: 18, align: 'left' },
+    { key: 'scriptName', label: 'Scrip Name', width: 18, align: 'left' },
     { key: 'openQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'openRate', label: 'Rate', width: 6, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'openAmount', label: 'Amount', width: 8, align: 'right', formatter: MONEY },
@@ -3349,7 +3349,7 @@ export async function buildBrokerwiseCapitalGainLayout(
     member: m.member,
     pan: m.pan,
     headerRow1: [
-      { label: 'Script Name', spanCols: 1 },
+      { label: 'Scrip Name', spanCols: 1 },
       { label: 'Opening', spanCols: 3 },
       { label: 'Purchase', spanCols: 3 },
       { label: 'Sale', spanCols: 3 },
@@ -3419,7 +3419,7 @@ export async function buildTaxPnLLayout(
   });
 
   const columns: ColumnDef[] = [
-    { key: 'scriptName', label: 'Script Name', width: 16, align: 'left' },
+    { key: 'scriptName', label: 'Scrip Name', width: 16, align: 'left' },
     { key: 'openQty', label: 'Qty', width: 4, align: 'right', formatter: QTY },
     { key: 'openRate', label: 'Rate', width: 5, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'openAmount', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
@@ -3449,7 +3449,7 @@ export async function buildTaxPnLLayout(
     pan: m.pan,
     financialYear: opts.from && opts.to ? `${opts.from} → ${opts.to}` : undefined,
     headerRow1: [
-      { label: 'Script Name', spanCols: 1 },
+      { label: 'Scrip Name', spanCols: 1 },
       { label: 'Opening', spanCols: 3 },
       { label: 'Purchase', spanCols: 3 },
       { label: 'Sale', spanCols: 3 },
@@ -3587,7 +3587,7 @@ export async function buildStt10DbLayout(
 
   const columns: ColumnDef[] = [
     { key: 'broker', label: 'Broker Name', width: 14, align: 'left' },
-    { key: 'script', label: 'Script Name', width: 18, align: 'left' },
+    { key: 'script', label: 'Scrip Name', width: 18, align: 'left' },
     { key: 'billNo', label: 'Bill No', width: 9, align: 'left' },
     { key: 'billDate', label: 'Bill Date', width: 8, align: 'center', formatter: DATE },
     { key: 'qty', label: 'Qty', width: 6, align: 'right', formatter: (v) => indianMoney(v, 4) },
@@ -3656,7 +3656,7 @@ export async function buildCapitalGainsFifoLayout(
   });
 
   const columns: ColumnDef[] = [
-    { key: 'scriptName', label: 'Script Name', width: 14, align: 'left' },
+    { key: 'scriptName', label: 'Scrip Name', width: 14, align: 'left' },
     { key: 'closingQty', label: 'Qty', width: 4, align: 'right', formatter: QTY, signed: true },
     { key: 'closingRate', label: 'Rate', width: 5, align: 'right', formatter: (v) => v ? MONEY(v) : '' },
     { key: 'closingValue', label: 'Value', width: 7, align: 'right', formatter: MONEY, signed: true },
@@ -3678,7 +3678,7 @@ export async function buildCapitalGainsFifoLayout(
     member: m.member,
     pan: m.pan,
     headerRow1: [
-      { label: 'Script Name', spanCols: 1 },
+      { label: 'Scrip Name', spanCols: 1 },
       { label: 'Closing=Op+Pur-Sell(+/-) G/L', spanCols: 3 },
       { label: 'Capital Gain/Loss', spanCols: 1 },
       { label: 'Gain/Loss', spanCols: 5 },
@@ -3922,7 +3922,7 @@ export async function buildAdvanceTaxSummaryLayout(
   });
 
   const columns: ColumnDef[] = [
-    { key: 'scriptName', label: 'Script Name', width: 18, align: 'left' },
+    { key: 'scriptName', label: 'Scrip Name', width: 18, align: 'left' },
     { key: 'openQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
     { key: 'openValue', label: 'Amount', width: 7, align: 'right', formatter: MONEY },
     { key: 'buyQty', label: 'Qty', width: 5, align: 'right', formatter: QTY },
@@ -3946,7 +3946,7 @@ export async function buildAdvanceTaxSummaryLayout(
     pan: m.pan,
     financialYear: fyLabel,
     headerRow1: [
-      { label: 'Script Name', spanCols: 1 },
+      { label: 'Scrip Name', spanCols: 1 },
       { label: 'Opening', spanCols: 2 },
       { label: 'Purchase', spanCols: 2 },
       { label: 'Sale', spanCols: 2 },
@@ -4298,7 +4298,7 @@ export async function buildScriptLedgerLayout(
   }
 
   const columns: ColumnDef[] = [
-    { key: 'scriptName', label: 'Script Name', width: 16, align: 'left' },
+    { key: 'scriptName', label: 'Scrip Name', width: 16, align: 'left' },
     { key: 'date', label: 'Date', width: 8, align: 'center', formatter: DATE },
     { key: 'settlement', label: 'Settlement', width: 8, align: 'center' },
     { key: 'description', label: 'Description', width: 18, align: 'left' },
@@ -4309,7 +4309,7 @@ export async function buildScriptLedgerLayout(
   ];
 
   return {
-    reportTitle: `Script Account Ledger As On ${fmtDateDDMMYYYY(cutoff)}`,
+    reportTitle: `Scrip Account Ledger As On ${fmtDateDDMMYYYY(cutoff)}`,
     family: m.family,
     member: m.member,
     pan: m.pan,
@@ -4595,7 +4595,7 @@ export async function buildBrokerBillRegisterLayout(
 
   const columns: ColumnDef[] = [
     { key: 'consultant', label: 'Consultant Name', width: 14, align: 'left' },
-    { key: 'script', label: 'Script Name', width: 22, align: 'left' },
+    { key: 'script', label: 'Scrip Name', width: 22, align: 'left' },
     { key: 'type', label: 'Type', width: 6, align: 'left' },
     { key: 'qty', label: 'Qty', width: 7, align: 'right', formatter: QTY, signed: true },
     { key: 'holdingType', label: 'Holding Type', width: 16, align: 'left' },
