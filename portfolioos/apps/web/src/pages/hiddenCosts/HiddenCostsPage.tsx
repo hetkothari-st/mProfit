@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Loader2, ScanSearch } from 'lucide-react';
@@ -15,8 +16,25 @@ const inr0 = (v: string) => formatINR(v, { fractionDigits: 0 });
  * user can stop paying, amber where they can't, striped where it is an
  * estimate, grey for taxes), the 20-year cost, and the way out.
  */
-export function HiddenCostsPage() {
+/** After this long without an answer the spinner says it is still working (launch review B4). */
+export const HIDDEN_COSTS_SLOW_MS = 8_000;
+
+function useSlow(active: boolean, afterMs: number): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!active) {
+      setSlow(false);
+      return;
+    }
+    const id = setTimeout(() => setSlow(true), afterMs);
+    return () => clearTimeout(id);
+  }, [active, afterMs]);
+  return slow;
+}
+
+export function HiddenCostsPage({ slowAfterMs = HIDDEN_COSTS_SLOW_MS }: { slowAfterMs?: number } = {}) {
   const { data, isLoading, error } = useQuery({ queryKey: HIDDEN_COSTS_KEY, queryFn: () => hiddenCostsApi.view() });
+  const slow = useSlow(isLoading, slowAfterMs);
 
   return (
     <div className="space-y-6">
@@ -26,7 +44,14 @@ export function HiddenCostsPage() {
         description="Fees, commissions and charges taken from your money every year, without a bill."
       />
       {isLoading ? (
-        <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        <div className="flex flex-col items-center gap-3 py-20" role="status">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          {slow && (
+            <p className="max-w-[46ch] text-center text-[14px] text-muted-foreground">
+              Still working out your costs — this can take up to a minute on a large portfolio.
+            </p>
+          )}
+        </div>
       ) : error || !data ? (
         <p className="rounded-2xl border p-6 text-[14px] text-muted-foreground">{apiErrorMessage(error, 'Hidden costs could not load. Try again in a minute.')}</p>
       ) : data.sources.length === 0 ? (
