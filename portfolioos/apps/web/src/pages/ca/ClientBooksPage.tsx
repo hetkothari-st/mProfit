@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
-import { HScroll } from '@/components/ui/h-scroll';
+import { ScrollTabs } from '@/components/ui/scroll-tabs';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { LIVE_QUERY, LIVE_INTERVAL_MS } from '@/lib/liveQuery';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -314,11 +314,7 @@ export function ClientBooksPage() {
         <div className="mb-6 h-[150px] animate-pulse rounded-xl border border-border/60 bg-muted/20" />
       )}
 
-      <HScroll
-        as="nav"
-        aria-label="Sections of these books"
-        className="mb-6 flex items-center gap-1 overflow-x-auto rounded-xl border border-border/70 bg-muted/30 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
+      <ScrollTabs aria-label="Sections of these books" activeKey={tab} className="mb-6">
         {TAB_GROUPS.map((group, gi) => (
           <Fragment key={gi}>
             {gi > 0 && <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />}
@@ -345,7 +341,7 @@ export function ClientBooksPage() {
             })}
           </Fragment>
         ))}
-      </HScroll>
+      </ScrollTabs>
 
       {tab === 'accounts' && (
         <>
@@ -711,7 +707,7 @@ export function ClientBooksPage() {
 
       {tab === 'documents' && (
         <>
-          <DocumentRequestsPanel clientId={clientId} />
+          <DocumentRequestsPanel clientId={clientId} canRequest={client?.kind !== 'SHADOW'} />
           <ClientDocumentsTab clientId={clientId} />
         </>
       )}

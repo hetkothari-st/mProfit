@@ -50,3 +50,16 @@ describe('DocumentRequestsPanel', () => {
     await waitFor(() => expect(api.close).toHaveBeenCalledWith('c1', 'r1', 'ACCEPTED'));
   });
 });
+
+describe('DocumentRequestsPanel for a record with no login', () => {
+  it('explains instead of offering a request nobody could receive', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <DocumentRequestsPanel clientId="c1" canRequest={false} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText(/no login to send a request to/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /send request/i })).toBeNull();
+  });
+});

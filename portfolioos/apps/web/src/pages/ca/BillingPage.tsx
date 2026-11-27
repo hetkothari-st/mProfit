@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, FileDown, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { GST_STATES, formatINR, isValidGstin } from '@everypaisa/shared';
+import { GST_STATES, GST_STATE_LIST, formatINR, isValidGstin } from '@everypaisa/shared';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -279,7 +279,7 @@ function ProfileForm({ initial, onDone }: { initial: PracticeProfile | null; onD
       <div>
         <Label htmlFor="pp-state">State</Label>
         <select id="pp-state" value={stateCode} onChange={(e) => setStateCode(e.target.value)} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-[13px]">
-          {Object.entries(GST_STATES).map(([code, name]) => (
+          {GST_STATE_LIST.map(([code, name]) => (
             <option key={code} value={code}>
               {name}
             </option>

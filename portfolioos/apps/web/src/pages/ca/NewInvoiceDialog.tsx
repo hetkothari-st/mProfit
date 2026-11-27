@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Decimal, GST_STATES, formatINR, gstinStateCode, invoiceTotals, isValidGstin } from '@everypaisa/shared';
+import { Decimal, GST_STATE_LIST, formatINR, gstinStateCode, invoiceTotals, isValidGstin } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -163,7 +163,7 @@ export function NewInvoiceDialog({
               onChange={(e) => setPos(e.target.value)}
               className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-[13px]"
             >
-              {Object.entries(GST_STATES).map(([code, name]) => (
+              {GST_STATE_LIST.map(([code, name]) => (
                 <option key={code} value={code}>
                   {name} ({code})
                 </option>
