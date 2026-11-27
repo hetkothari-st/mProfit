@@ -85,6 +85,16 @@ import {
   listMyOpenTasksHandler,
 } from '../controllers/caPractice.controller.js';
 
+import {
+  listClientRequestsHandler,
+  requestDocumentHandler,
+  closeRequestHandler,
+  listMyDocumentRequestsHandler,
+  answerWithUploadHandler,
+  answerNotApplicableHandler,
+} from '../controllers/caDocumentRequests.controller.js';
+import { uploadDocumentFile } from '../middleware/documentUpload.js';
+
 export const caRouter = Router();
 caRouter.use(authenticate);
 // The client list comes before the gate: every signed-in user's sidebar asks
@@ -124,6 +134,11 @@ caRouter.get('/clients/:clientId/tasks', asyncHandler(listTasksHandler));
 caRouter.post('/clients/:clientId/tasks', asyncHandler(addTaskHandler));
 caRouter.patch('/clients/:clientId/tasks/:id', asyncHandler(updateTaskHandler));
 caRouter.delete('/clients/:clientId/tasks/:id', asyncHandler(deleteTaskHandler));
+
+// Documents the CA asks the client for.
+caRouter.get('/clients/:clientId/document-requests', asyncHandler(listClientRequestsHandler));
+caRouter.post('/clients/:clientId/document-requests', asyncHandler(requestDocumentHandler));
+caRouter.post('/clients/:clientId/document-requests/:id/close', asyncHandler(closeRequestHandler));
 
 // Grants
 caRouter.post('/clients', requireAdvisorPlan, asyncHandler(createManagedClientHandler));
@@ -221,6 +236,16 @@ professionalAccessRouter.get('/', asyncHandler(listMyProfessionalsHandler));
 professionalAccessRouter.get('/grants', asyncHandler(listMyGrantsHandler));
 professionalAccessRouter.post('/invite', asyncHandler(inviteProfessionalHandler));
 professionalAccessRouter.get('/activity', asyncHandler(listMyAccessActivityHandler));
+// Documents a professional has asked this account holder for. Before
+// '/:clientId', which would otherwise swallow the path.
+professionalAccessRouter.get('/document-requests', asyncHandler(listMyDocumentRequestsHandler));
+professionalAccessRouter.post(
+  '/document-requests/:id/upload',
+  uploadDocumentFile,
+  rebindUserContext,
+  asyncHandler(answerWithUploadHandler),
+);
+professionalAccessRouter.post('/document-requests/:id/not-applicable', asyncHandler(answerNotApplicableHandler));
 // `/invitations/...` is declared before `/:clientId/...` so a token is never
 // mistaken for a client id.
 professionalAccessRouter.post('/invitations/:token/accept', asyncHandler(acceptInvitationHandler));

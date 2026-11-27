@@ -34,6 +34,7 @@ import { InviteEmailComposer } from '@/components/ca/InviteEmailComposer';
 import { accountHolderInviteSource } from '@/components/ca/inviteEmailSources';
 import { Initials, AccessStrip, AccessCell } from '@/components/ca/AccessParts';
 import { fmtDate, inviteLinkStatus } from '@/components/ca/accessModel';
+import { MyDocumentRequests } from './MyDocumentRequests';
 
 /**
  * Account Access — the account holder's page.
@@ -218,6 +219,8 @@ export function ProfessionalAccessPage() {
           )}
         </section>
       )}
+
+      <MyDocumentRequests />
 
       <ActForClientsCard />
 

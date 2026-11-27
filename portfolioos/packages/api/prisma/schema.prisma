@@ -548,6 +548,7 @@ model Client {
   filings         ClientFiling[]
   notes           ClientNote[]
   tasks           ClientTask[]
+  documentRequests DocumentRequest[]
 
   @@index([advisorId, status])
   @@index([userId, status])
@@ -612,6 +613,40 @@ model ClientTask {
 enum ClientTaskStatus {
   OPEN
   DONE
+}
+
+/// A document the CA asks the client for ("Form 16 for FY 2025-26"). The
+/// client answers by uploading into their own vault (documentId) or saying it
+/// does not apply. Both sides of the grant read it; the service decides which
+/// side may make which change.
+model DocumentRequest {
+  id                String                @id @default(cuid())
+  clientId          String
+  client            Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  requestedByUserId String
+  title             String
+  note              String?
+  financialYear     String?
+  dueDate           DateTime?             @db.Date
+  status            DocumentRequestStatus @default(OPEN)
+  /// The client's upload, a Document they own.
+  documentId        String?
+  /// The client's reply when it does not apply, or anything they add.
+  clientNote        String?
+  respondedAt       DateTime?
+  closedAt          DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@index([clientId, status])
+}
+
+enum DocumentRequestStatus {
+  OPEN
+  UPLOADED
+  NOT_APPLICABLE
+  ACCEPTED
+  CANCELLED
 }
 
 enum ClientFilingStatus {
@@ -5322,6 +5357,8 @@ enum CaAuditAction {
   GRANT_REINSTATED
   INVITATION_EMAILED
   FILING_STATUS_CHANGED
+  DOCUMENT_REQUESTED
+  DOCUMENT_REQUEST_CLOSED
 }
 
 /// A user's data-encryption key, wrapped by the KEK (lib/userKeys). Never
