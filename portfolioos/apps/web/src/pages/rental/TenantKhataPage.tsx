@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Select } from '@/components/ui/select';
 import {
   rentalApi,
@@ -155,8 +156,7 @@ function AddEntryDialog({
             </div>
             <div>
               <Label>Date</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={entryDate}
                 onChange={(e) => setEntryDate(e.target.value)}
               />

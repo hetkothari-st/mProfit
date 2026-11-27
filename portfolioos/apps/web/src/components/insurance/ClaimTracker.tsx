@@ -11,6 +11,7 @@ import { CLAIM_GUIDES, formatINR, type ClaimGuide } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
 import { insuranceApi, type InsuranceClaimDTO, type UpdateClaimInput } from '@/api/insurance/insurance.api';
@@ -447,8 +448,7 @@ export function ClaimTracker({ claim, insurer }: { claim: InsuranceClaimDTO; ins
             saveQuick({ timeline: [...(claim.timeline ?? []), { on: noteOn, note: note.trim() }] }, () => setNote(''));
           }}
         >
-          <Input
-            type="date"
+          <DateInput
             aria-label="Date of note"
             className="w-auto"
             value={noteOn}

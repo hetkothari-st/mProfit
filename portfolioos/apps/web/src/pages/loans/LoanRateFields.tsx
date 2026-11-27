@@ -2,7 +2,7 @@ import {
   LOAN_RATE_BENCHMARKS, LOAN_RATE_BENCHMARK_LABELS, LOAN_RATE_TYPES, LOAN_RATE_TYPE_LABELS,
   type LoanRateBenchmark, type LoanRateType,
 } from '@everypaisa/shared';
-import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 
@@ -95,9 +95,8 @@ export function LoanRateFields({
           </div>
           <div>
             <Label htmlFor={resetId}>Next rate reset (optional)</Label>
-            <Input
+            <DateInput
               id={resetId}
-              type="date"
               className="mt-1"
               value={value.nextRateResetDate}
               onChange={(e) => onChange({ ...value, nextRateResetDate: e.target.value })}

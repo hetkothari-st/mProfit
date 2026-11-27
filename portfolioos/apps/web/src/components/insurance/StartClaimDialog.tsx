@@ -6,6 +6,7 @@ import { CLAIM_GUIDES, guidesForPolicyType, type ClaimKind } from '@everypaisa/s
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
 import { insuranceApi, type InsurancePolicyDTO } from '@/api/insurance/insurance.api';
@@ -150,9 +151,8 @@ export function StartClaimDialog({
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="start-claim-date">Reported to the insurer on</Label>
-                  <Input
+                  <DateInput
                     id="start-claim-date"
-                    type="date"
                     value={form.claimDate}
                     onChange={(e) => setForm((f) => ({ ...f, claimDate: e.target.value }))}
                   />

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -320,7 +321,7 @@ function ManualRateForm(props: {
       </div>
       <div className="space-y-1">
         <Label htmlFor={id('wef')}>With effect from (optional)</Label>
-        <Input id={id('wef')} type="date" value={wef} onChange={(e) => setWef(e.target.value)} />
+        <DateInput id={id('wef')} value={wef} onChange={(e) => setWef(e.target.value)} />
       </div>
       <div className="space-y-1 sm:col-span-2">
         <Label htmlFor={id('note')}>Note (where this rate comes from)</Label>

@@ -128,8 +128,9 @@ describe('BankAccountDialog autofill', () => {
     // Local date, not UTC — UTC lags IST until 05:30.
     const d = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
+    // Shown as dd/mm/yyyy, whatever the browser's own date format is.
     expect(field('As of').value).toBe(
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+      `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`,
     );
   });
 

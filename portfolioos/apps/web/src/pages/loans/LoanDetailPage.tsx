@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
 import { MarketCheckCard } from './MarketCheckCard';
 import { LoanRateFields, rateFieldsFrom, rateFieldsPayload, type RateFieldsValue } from './LoanRateFields';
@@ -178,7 +179,7 @@ function PaymentDialog({
 
           <div>
             <Label>Paid on *</Label>
-            <Input type="date" value={form.paidOn}
+            <DateInput value={form.paidOn}
               onChange={(e) => set('paidOn', e.target.value)}
               className={errors['paidOn'] ? 'border-negative' : ''} />
             {errors['paidOn'] && <p className="text-xs text-negative mt-1">{errors['paidOn']}</p>}

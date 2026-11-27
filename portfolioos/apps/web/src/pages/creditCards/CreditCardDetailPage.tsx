@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import {
   creditCardsApi,
   type CreditCardDTO,
@@ -162,7 +163,7 @@ function AddStatementDialog({
           </div>
           <div>
             <Label>Due date *</Label>
-            <Input type="date" value={form.dueDate}
+            <DateInput value={form.dueDate}
               onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
               className={errors['dueDate'] ? 'border-negative' : ''} />
             {errors['dueDate'] && <p className="text-xs text-negative mt-1">{errors['dueDate']}</p>}
@@ -242,7 +243,7 @@ function MarkPaidDialog({
           </div>
           <div>
             <Label>Paid on *</Label>
-            <Input type="date" value={form.paidOn}
+            <DateInput value={form.paidOn}
               onChange={(e) => setForm((f) => ({ ...f, paidOn: e.target.value }))}
               className={errors['paidOn'] ? 'border-negative' : ''} />
             {errors['paidOn'] && <p className="text-xs text-negative mt-1">{errors['paidOn']}</p>}

@@ -6,6 +6,7 @@ import { FileDown, Loader2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { financialYearRange } from '@everypaisa/shared';
@@ -134,8 +135,7 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
             </div>
             <div>
               <Label>As-of date</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={asOf}
                 onChange={(e) => setAsOf(e.target.value)}
                 className="mt-1 w-full sm:w-40"
@@ -143,8 +143,7 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
             </div>
             <div>
               <Label>From</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
                 className="mt-1 w-full sm:w-40"
@@ -152,8 +151,7 @@ export function ClientReportsTab({ clientId }: { clientId: string }) {
             </div>
             <div>
               <Label>To</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
                 className="mt-1 w-full sm:w-40"

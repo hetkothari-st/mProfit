@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { financialYearOf, financialYearRange, formatINR, toDecimal, formatDateOnly } from '@everypaisa/shared';
@@ -275,7 +276,7 @@ function VoucherFormDialog({ open, onOpenChange, accounts, initial }: {
             </div>
             <div>
               <Label>Date</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <DateInput value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
           </div>
           <div>
@@ -595,11 +596,11 @@ function LedgerTab() {
         </div>
         <div>
           <Label>From</Label>
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-36" />
+          <DateInput value={from} onChange={(e) => setFrom(e.target.value)} className="w-36" />
         </div>
         <div>
           <Label>To</Label>
-          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-36" />
+          <DateInput value={to} onChange={(e) => setTo(e.target.value)} className="w-36" />
         </div>
       </div>
 
@@ -679,7 +680,7 @@ function TrialBalanceReport() {
   return (
     <div className="space-y-4">
       <div className="flex items-end gap-3">
-        <div><Label>As of date</Label><Input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-40" /></div>
+        <div><Label>As of date</Label><DateInput value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-40" /></div>
       </div>
       {isLoading ? <div className="h-32 animate-pulse bg-muted/60 rounded" /> : (
         <Card>
@@ -744,8 +745,8 @@ function PnLReport() {
   return (
     <div className="space-y-4">
       <div className="flex items-end gap-3">
-        <div><Label>From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" /></div>
-        <div><Label>To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" /></div>
+        <div><Label>From</Label><DateInput value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" /></div>
+        <div><Label>To</Label><DateInput value={to} onChange={(e) => setTo(e.target.value)} className="w-40" /></div>
       </div>
       {isLoading ? <div className="h-32 animate-pulse bg-muted/60 rounded" /> : data && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -811,7 +812,7 @@ function BalanceSheetReport() {
   return (
     <div className="space-y-4">
       <div className="flex items-end gap-3">
-        <div><Label>As of date</Label><Input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-40" /></div>
+        <div><Label>As of date</Label><DateInput value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-40" /></div>
       </div>
       {isLoading ? <div className="h-32 animate-pulse bg-muted/60 rounded" /> : data && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

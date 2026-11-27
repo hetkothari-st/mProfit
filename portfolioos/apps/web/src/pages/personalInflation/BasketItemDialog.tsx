@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -182,7 +183,7 @@ export function BasketItemDialog({ open, onOpenChange, existing, preset = null, 
               <Label>What you paid before</Label>
               {points.map((p, i) => (
                 <div key={i} className="flex gap-2 items-center">
-                  <Input type="date" aria-label={`Date ${i + 1}`} value={p.asOf}
+                  <DateInput aria-label={`Date ${i + 1}`} value={p.asOf}
                     onChange={(e) => setPoints(points.map((q, j) => (j === i ? { ...q, asOf: e.target.value } : q)))} />
                   <Input inputMode="decimal" aria-label={`Amount ${i + 1}`} placeholder="Amount (₹)" value={p.amount}
                     onChange={(e) => setPoints(points.map((q, j) => (j === i ? { ...q, amount: e.target.value.replace(/[,\s]/g, '') } : q)))} />

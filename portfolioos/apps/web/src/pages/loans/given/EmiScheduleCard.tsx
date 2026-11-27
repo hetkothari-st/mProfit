@@ -7,6 +7,7 @@ import { Decimal, formatINR } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -86,10 +87,9 @@ function PartialDialog({
             </div>
             <div>
               <Label htmlFor="emi-partial-date">On</Label>
-              <Input
+              <DateInput
                 id="emi-partial-date"
                 className="mt-1"
-                type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />

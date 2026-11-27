@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -580,9 +581,8 @@ export function TransactionFormDialog({ open, onOpenChange, initial, defaultPort
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <Label htmlFor="tradeDate">Trade date</Label>
-              <Input
+              <DateInput
                 id="tradeDate"
-                type="date"
                 className="mt-1"
                 max={!isEdit && prefill?.onOrBefore ? prefill.onOrBefore : undefined}
                 {...register('tradeDate')}

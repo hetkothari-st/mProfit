@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
 import { insuranceApi, type AddPremiumInput } from '@/api/insurance/insurance.api';
@@ -76,7 +77,7 @@ export function RecordPremiumDialog({
         <div className="space-y-3">
           <div>
             <Label htmlFor="premium-paid-on">Paid on</Label>
-            <Input id="premium-paid-on" type="date" {...field('paidOn')} />
+            <DateInput id="premium-paid-on" {...field('paidOn')} />
           </div>
           <div>
             <Label htmlFor="premium-amount">Amount (₹)</Label>
@@ -86,11 +87,11 @@ export function RecordPremiumDialog({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label htmlFor="premium-from">Covers from</Label>
-              <Input id="premium-from" type="date" {...field('periodFrom')} />
+              <DateInput id="premium-from" {...field('periodFrom')} />
             </div>
             <div>
               <Label htmlFor="premium-to">Until</Label>
-              <Input id="premium-to" type="date" {...field('periodTo')} />
+              <DateInput id="premium-to" {...field('periodTo')} />
               {errors.periodTo && <p className="mt-1 text-xs text-negative">{errors.periodTo}</p>}
             </div>
           </div>

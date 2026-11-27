@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Loader2, Eye, PencilLine, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { cn } from '@/lib/cn';
 import {
   professionalAccessApi,
@@ -509,8 +509,7 @@ function DateField({
   return (
     <label className="flex flex-col gap-1 text-[12px] text-muted-foreground">
       {label}
-      <Input
-        type="date"
+      <DateInput
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="h-9 w-[160px]"

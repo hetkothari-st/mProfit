@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
 import { apiErrorMessage } from '@/api/client';
@@ -408,7 +409,7 @@ export function PropertyFormDialog({ open, onOpenChange, initial }: Props) {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <div>
                 <Label>Purchase date</Label>
-                <Input type="date" value={form.purchaseDate ?? ''} onChange={(e) => set('purchaseDate', e.target.value)} />
+                <DateInput value={form.purchaseDate ?? ''} onChange={(e) => set('purchaseDate', e.target.value)} />
               </div>
               <div>
                 <Label>Purchase price (₹)</Label>
@@ -537,8 +538,7 @@ export function PropertyFormDialog({ open, onOpenChange, initial }: Props) {
                 </div>
                 <div>
                   <Label>Expected possession</Label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={form.expectedPossessionDate ?? ''}
                     onChange={(e) => set('expectedPossessionDate', e.target.value)}
                   />
@@ -555,8 +555,7 @@ export function PropertyFormDialog({ open, onOpenChange, initial }: Props) {
           <Section title="Lease (optional)">
             <div>
               <Label>Leasehold end date</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.leaseholdEndDate ?? ''}
                 onChange={(e) => set('leaseholdEndDate', e.target.value)}
               />

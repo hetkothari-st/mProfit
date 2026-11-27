@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { Decimal } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -200,10 +201,9 @@ export function LoanGivenFormDialog({
             </div>
             <div>
               <Label htmlFor="lg-lent-on">Lent on</Label>
-              <Input
+              <DateInput
                 id="lg-lent-on"
                 className="mt-1"
-                type="date"
                 value={form.lentOn}
                 onChange={(e) => set('lentOn', e.target.value)}
               />
@@ -251,10 +251,9 @@ export function LoanGivenFormDialog({
           {form.repaymentMode === 'FLEXIBLE' ? (
             <div>
               <Label htmlFor="lg-due">Expected back by (optional)</Label>
-              <Input
+              <DateInput
                 id="lg-due"
                 className="mt-1"
-                type="date"
                 min={form.lentOn}
                 value={form.dueDate}
                 onChange={(e) => set('dueDate', e.target.value)}
@@ -287,10 +286,9 @@ export function LoanGivenFormDialog({
               </div>
               <div>
                 <Label htmlFor="lg-first-emi">First EMI on</Label>
-                <Input
+                <DateInput
                   id="lg-first-emi"
                   className="mt-1"
-                  type="date"
                   min={form.lentOn}
                   value={form.firstEmiDate}
                   onChange={(e) => set('firstEmiDate', e.target.value)}

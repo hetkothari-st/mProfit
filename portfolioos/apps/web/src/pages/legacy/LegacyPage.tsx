@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -133,7 +134,7 @@ function LegacyPageContent() {
           )}
           {COUNTING.has(o.status) && (
             <>
-              <Input type="date" className="w-44" value={pauseUntil} onChange={(e) => setPauseUntil(e.target.value)} aria-label="Pause until" />
+              <DateInput className="w-44" value={pauseUntil} onChange={(e) => setPauseUntil(e.target.value)} aria-label="Pause until" />
               <Button variant="outline" disabled={!pauseUntil} onClick={() => guarded(() => legacyApi.pause(pauseUntil), 'Paused')}>Pause</Button>
             </>
           )}
@@ -180,7 +181,7 @@ function LegacyPageContent() {
         {trigger !== 'INACTIVITY' && (
           <div className="space-y-1">
             <Label htmlFor="lg-date">Release date</Label>
-            <Input id="lg-date" type="date" value={date} disabled={!canEdit} onChange={(e) => setDate(e.target.value)} />
+            <DateInput id="lg-date" value={date} disabled={!canEdit} onChange={(e) => setDate(e.target.value)} />
           </div>
         )}
         <div className="space-y-1">

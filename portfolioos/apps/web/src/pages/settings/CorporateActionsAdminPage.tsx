@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { apiErrorMessage } from '@/api/client';
@@ -78,7 +79,7 @@ export function CorporateActionsAdminPage() {
             </div>
             <div>
               <Label htmlFor="ca-exdate">Ex-date</Label>
-              <Input id="ca-exdate" type="date" value={exDate} onChange={(e) => setExDate(e.target.value)} required />
+              <DateInput id="ca-exdate" value={exDate} onChange={(e) => setExDate(e.target.value)} required />
             </div>
             <div />
             <div>
