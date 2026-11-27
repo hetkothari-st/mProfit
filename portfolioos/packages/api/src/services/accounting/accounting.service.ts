@@ -76,6 +76,28 @@ export const DEFAULT_COA: Array<{
   { code: '5009', name: 'Speculative Loss', type: 'EXPENSE', parentCode: '5000' },
   { code: '5010', name: 'Loan Charges', type: 'EXPENSE', parentCode: '5000' },
   { code: '5011', name: 'F&O Loss', type: 'EXPENSE', parentCode: '5000' },
+  // Heads a CA keeps for an Indian individual (CA workspace review). Added at
+  // the end so existing codes never move; parents before children.
+  { code: '1003', name: 'Loans Given', type: 'ASSET', parentCode: '1000' },
+  { code: '1107', name: 'PPF, EPF & NPS', type: 'ASSET', parentCode: '1100' },
+  // Virtual digital assets: sec 115BBH taxes the gain at a flat rate and lets
+  // no loss be set off or carried forward, so they are kept apart throughout.
+  { code: '1108', name: 'Crypto (VDA) Holdings', type: 'ASSET', parentCode: '1100' },
+  { code: '1109', name: 'Real Estate', type: 'ASSET', parentCode: '1100' },
+  { code: '1200', name: 'Taxes Paid & Deducted', type: 'ASSET', parentCode: '1000' },
+  { code: '1201', name: 'TDS Receivable', type: 'ASSET', parentCode: '1200' },
+  { code: '1202', name: 'TCS Receivable', type: 'ASSET', parentCode: '1200' },
+  { code: '1203', name: 'Advance Tax Paid', type: 'ASSET', parentCode: '1200' },
+  { code: '1204', name: 'Self-assessment Tax Paid', type: 'ASSET', parentCode: '1200' },
+  { code: '2002', name: 'Credit Card Payable', type: 'LIABILITY', parentCode: '2000' },
+  { code: '4009', name: 'Salary Income', type: 'INCOME', parentCode: '4000' },
+  { code: '4010', name: 'Business / Professional Income', type: 'INCOME', parentCode: '4000' },
+  { code: '4011', name: 'Crypto (VDA) Gains', type: 'INCOME', parentCode: '4000' },
+  // Short- and long-term losses apart: they set off under different rules
+  // and carry forward separately. 5006 stays for books that already use it.
+  { code: '5012', name: 'Short-term Capital Loss', type: 'EXPENSE', parentCode: '5000' },
+  { code: '5013', name: 'Long-term Capital Loss', type: 'EXPENSE', parentCode: '5000' },
+  { code: '5014', name: 'Crypto (VDA) Loss', type: 'EXPENSE', parentCode: '5000' },
 ];
 
 // Additively ensure every default code exists for this user. Existing rows
@@ -694,23 +716,11 @@ export async function suggestVoucherForTransaction(userId: string, transactionId
   const byCode = new Map(accounts.map((a) => [a.code, a]));
 
   const bankAcct = byCode.get('1001');
-  const equityAcct = byCode.get('1101');
-  const mfAcct = byCode.get('1102');
-  const fdAcct = byCode.get('1103');
-  const bondsAcct = byCode.get('1104');
-  const goldAcct = byCode.get('1105');
-  const stcgAcct = byCode.get('4003');
-  const ltcgAcct = byCode.get('4004');
-
-  const investmentAcct = (() => {
-    const ac = txn.assetClass;
-    if (ac === 'EQUITY' || ac === 'ETF') return equityAcct;
-    if (ac === 'MUTUAL_FUND') return mfAcct;
-    if (ac === 'FIXED_DEPOSIT' || ac === 'RECURRING_DEPOSIT') return fdAcct;
-    if (ac === 'BOND' || ac === 'GOVT_BOND' || ac === 'CORPORATE_BOND') return bondsAcct;
-    if (ac === 'PHYSICAL_GOLD' || ac === 'GOLD_BOND' || ac === 'GOLD_ETF') return goldAcct;
-    return null;
-  })();
+  // Same investment head the generated vouchers use, so a suggestion and the
+  // books never disagree (crypto, retirement savings, property included).
+  const invCode = investmentAccountCode(txn.assetClass);
+  const investmentAcct = invCode ? byCode.get(invCode) : undefined;
+  const stcgAcct = byCode.get(txn.assetClass === 'CRYPTOCURRENCY' ? '4011' : '4003');
 
   // Net amount in INR: charges are part of cost, as in the generated vouchers.
   const amount = transactionInrNet(txn).toFixed(4);
@@ -820,6 +830,14 @@ function investmentAccountCode(assetClass: string): string | null {
     case 'GOLD_BOND':
     case 'GOLD_ETF':
       return '1105';
+    case 'PPF':
+    case 'EPF':
+    case 'NPS':
+      return '1107';
+    case 'CRYPTOCURRENCY':
+      return '1108';
+    case 'REAL_ESTATE':
+      return '1109';
     // F&O books its P&L, not contracts; insurance through premium payments;
     // cash is the bank itself.
     case 'FUTURES':
@@ -957,11 +975,16 @@ export async function generateVouchersFromActivity(
           matched
             .filter((g) => g.capitalGainType === type)
             .reduce((s, g) => s.plus(g.bookSellAmount.minus(g.bookBuyAmount)), ZERO);
-        const legs: Array<[Decimal, string, string, string]> = [
-          [bucket('SHORT_TERM'), '4003', '5006', 'Short-term'],
-          [bucket('LONG_TERM'), '4004', '5006', 'Long-term'],
-          [bucket('INTRADAY'), '4007', '5009', 'Speculative'],
-        ];
+        // Crypto is one head either way (sec 115BBH has no short/long split
+        // and no set-off); everything else keeps its term apart.
+        const legs: Array<[Decimal, string, string, string]> =
+          t.assetClass === 'CRYPTOCURRENCY'
+            ? [[bucket('SHORT_TERM').plus(bucket('LONG_TERM')).plus(bucket('INTRADAY')), '4011', '5014', 'Crypto (VDA)']]
+            : [
+                [bucket('SHORT_TERM'), '4003', '5012', 'Short-term'],
+                [bucket('LONG_TERM'), '4004', '5013', 'Long-term'],
+                [bucket('INTRADAY'), '4007', '5009', 'Speculative'],
+              ];
         let bookedGains = ZERO;
         for (const [g, gainCode, lossCode, label] of legs) {
           if (g.greaterThan(0) && acctId(gainCode)) {

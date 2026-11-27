@@ -111,6 +111,25 @@ const EXACT_CODE_OVERRIDES: Record<string, TallyReservedGroup> = {
   '5006': 'Indirect Expenses',
   '5007': 'Indirect Expenses',
   '5008': 'Indirect Expenses',
+  // Indian-individual heads. Tax paid or deducted is recoverable against the
+  // year's liability, so it sits with advances, not "Duties & Taxes" (where
+  // the name heuristic would put anything called "tax").
+  '1003': 'Loans & Advances (Asset)',
+  '1107': 'Investments',
+  '1108': 'Investments',
+  '1109': 'Investments',
+  '1200': 'Loans & Advances (Asset)',
+  '1201': 'Loans & Advances (Asset)',
+  '1202': 'Loans & Advances (Asset)',
+  '1203': 'Loans & Advances (Asset)',
+  '1204': 'Loans & Advances (Asset)',
+  '2002': 'Current Liabilities',
+  '4009': 'Indirect Incomes',
+  '4010': 'Indirect Incomes',
+  '4011': 'Indirect Incomes',
+  '5012': 'Indirect Expenses',
+  '5013': 'Indirect Expenses',
+  '5014': 'Indirect Expenses',
 };
 
 /** Name-substring heuristics for custom (non-DEFAULT_COA) accounts, checked in order. */
