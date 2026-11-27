@@ -19,6 +19,8 @@ export interface CaClient {
   name: string;
   /** Who these books belong to. What the professional's screens show. */
   displayName: string;
+  /** The CA on the grant, or a staff member of their firm working under it. */
+  actingAs?: 'ADVISOR' | 'STAFF';
   displayEmail: string | null;
   initiatedBy: 'ADVISOR' | 'CLIENT';
   email: string | null;
@@ -672,6 +674,8 @@ export const myInviteEmailApi = {
 
 /** A row on the Account Access page: an open invitation, or a live grant. */
 export interface MyProfessionalGrant {
+  /** The firm's staff the CA has given access to these books, by name. */
+  staff?: string[];
   clientId: string;
   name: string;
   status: ClientStatus;

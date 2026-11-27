@@ -285,9 +285,11 @@ function ClientRow({
                   <BookOpen className="h-3.5 w-3.5" /> Open books
                 </Link>
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setConfirming(true)} className="text-muted-foreground">
-                Close
-              </Button>
+              {r.actingAs !== 'STAFF' && (
+                <Button variant="ghost" size="sm" onClick={() => setConfirming(true)} className="text-muted-foreground">
+                  Close
+                </Button>
+              )}
             </>
           )}
         </div>

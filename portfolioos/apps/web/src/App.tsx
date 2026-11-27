@@ -24,6 +24,8 @@ const FamilyPage = lazy(() => import('./pages/family/FamilyPage').then((m) => ({
 const CaWorkspacePage = lazy(() => import('./pages/ca/CaWorkspacePage').then((m) => ({ default: m.CaWorkspacePage })));
 const ClientBooksPage = lazy(() => import('./pages/ca/ClientBooksPage').then((m) => ({ default: m.ClientBooksPage })));
 const BillingPage = lazy(() => import('./pages/ca/BillingPage').then((m) => ({ default: m.BillingPage })));
+const StaffPage = lazy(() => import('./pages/ca/StaffPage').then((m) => ({ default: m.StaffPage })));
+const AcceptSeatPage = lazy(() => import('./pages/ca/AcceptSeatPage').then((m) => ({ default: m.AcceptSeatPage })));
 const AcceptCaInvitationPage = lazy(() => import('./pages/ca/AcceptCaInvitationPage').then((m) => ({ default: m.AcceptCaInvitationPage })));
 const AcceptProfessionalInvitePage = lazy(() => import('./pages/ca/AcceptProfessionalInvitePage').then((m) => ({ default: m.AcceptProfessionalInvitePage })));
 const ProfessionalAccessPage = lazy(() => import('./pages/settings/ProfessionalAccessPage').then((m) => ({ default: m.ProfessionalAccessPage })));
@@ -199,6 +201,8 @@ export function App() {
         <Route path="/ca" element={<ProfessionalTwoFactorGate><CaWorkspacePage /></ProfessionalTwoFactorGate>} />
         <Route path="/ca/clients/:clientId" element={<ProfessionalTwoFactorGate><ClientBooksPage /></ProfessionalTwoFactorGate>} />
         <Route path="/ca/billing" element={<ProfessionalTwoFactorGate><BillingPage /></ProfessionalTwoFactorGate>} />
+        <Route path="/ca/staff" element={<ProfessionalTwoFactorGate><StaffPage /></ProfessionalTwoFactorGate>} />
+        <Route path="/firm-invite/:token" element={<AcceptSeatPage />} />
         <Route path="/ca/invitations/:token/accept" element={<AcceptCaInvitationPage />} />
         <Route path="/settings/professional-access" element={<ProfessionalAccessPage />} />
         <Route path="/settings/ai-connectors" element={<AiConnectorsPage />} />

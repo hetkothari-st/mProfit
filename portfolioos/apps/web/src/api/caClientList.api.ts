@@ -24,6 +24,7 @@ export const ITR_FORMS = ['ITR-1', 'ITR-2', 'ITR-3', 'ITR-4'] as const;
 
 export interface ClientOverviewRow {
   clientId: string;
+  actingAs?: 'ADVISOR' | 'STAFF';
   name: string;
   email: string | null;
   panMasked: string | null;

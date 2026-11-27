@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, Mail, ChevronDown, ReceiptText } from 'lucide-react';
+import { Briefcase, Mail, ChevronDown, ReceiptText, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -66,6 +66,8 @@ export function CaWorkspacePage() {
   });
 
   const rows = clients ?? [];
+  // Someone who only works on clients as a firm's staff gets the books, not the practice.
+  const staffOnly = rows.length > 0 && rows.every((c) => c.actingAs === 'STAFF');
   const active = rows.filter((c) => c.status === 'ACTIVE');
   const pending = rows.filter((c) => c.status === 'PENDING');
   const closed = rows.filter((c) => c.status === 'REVOKED');
@@ -77,7 +79,13 @@ export function CaWorkspacePage() {
         title="Clients"
         description="The people whose books you keep. Each of them decides what you can see and do, and can withdraw it at any time."
         actions={
+          staffOnly ? undefined : (
           <div className="flex gap-2">
+            <Button asChild size="sm" variant="outline">
+              <Link to="/ca/staff">
+                <Users className="h-4 w-4" /> Staff
+              </Link>
+            </Button>
             <Button asChild size="sm" variant="outline">
               <Link to="/ca/billing">
                 <ReceiptText className="h-4 w-4" /> Billing
@@ -95,6 +103,7 @@ export function CaWorkspacePage() {
               </Button>
             )}
           </div>
+          )
         }
       />
 
