@@ -315,16 +315,32 @@ export function replayLots(txs: Transaction[]): {
   realisedPnL: Decimal;
   sourceTxCount: number;
 } {
+  const sorted = [...txs].sort(compareReplayOrder);
+  const replay = createReplay(sorted);
+  for (const tx of sorted) replay.apply(tx);
+  return replay.state();
+}
+
+/**
+ * The same FIFO replay as a running fold: feed rows in `compareReplayOrder` and read the state after any
+ * prefix. A reader that needs the position at many dates (a month-by-month valuation) feeds each row once
+ * instead of replaying the whole history per date. `byId` is every row of the asset, for the maturity dates
+ * an FD maturity matches on (a lot only ever refers to a row before it, so the prefix is enough).
+ */
+export function createReplay(allRows: Transaction[]): {
+  apply(tx: Transaction): void;
+  state(): { lots: OpenLot[]; realisedPnL: Decimal; sourceTxCount: number };
+  aggregate(): ProjectionAggregate;
+} {
   const lots: OpenLot[] = [];
   let realisedPnL = new Decimal(0);
+  let applied = 0;
   const openQuantity = () => lots.reduce((s, l) => s.plus(l.qty), new Decimal(0));
-
-  const sorted = [...txs].sort(compareReplayOrder);
-
   // Opening row of each lot, for the maturity dates an FD maturity matches on.
-  const byId = new Map(sorted.map((t) => [t.id, t]));
+  const byId = new Map(allRows.map((t) => [t.id, t]));
 
-  for (const tx of sorted) {
+  function apply(tx: Transaction): void {
+    applied++;
     const qty = new Decimal(tx.quantity.toString());
     // INR-equivalent net for cost basis: foreign-currency trades carry
     // `inrEquivalent` frozen at trade time (Rule 115). When set, prefer it
@@ -380,7 +396,23 @@ export function replayLots(txs: Transaction[]): {
     }
   }
 
-  return { lots, realisedPnL, sourceTxCount: sorted.length };
+  return {
+    apply,
+    state: () => ({ lots, realisedPnL, sourceTxCount: applied }),
+    aggregate: () => aggregateLots(lots, realisedPnL, applied),
+  };
+}
+
+function aggregateLots(lots: OpenLot[], realisedPnL: Decimal, sourceTxCount: number): ProjectionAggregate {
+  const quantity = lots.reduce((s, l) => s.plus(l.qty), new Decimal(0));
+  const totalCost = lots.reduce((s, l) => s.plus(l.qty.times(l.costPerUnit)), new Decimal(0));
+  return {
+    quantity,
+    totalCost,
+    avgCostPrice: quantity.isZero() ? new Decimal(0) : totalCost.dividedBy(quantity),
+    realisedPnL,
+    sourceTxCount,
+  };
 }
 
 /**
@@ -437,16 +469,7 @@ function takeByAmount(
 
 export function replayTransactions(txs: Transaction[]): ProjectionAggregate {
   const { lots, realisedPnL, sourceTxCount } = replayLots(txs);
-  const quantity = lots.reduce((s, l) => s.plus(l.qty), new Decimal(0));
-  const totalCost = lots.reduce((s, l) => s.plus(l.qty.times(l.costPerUnit)), new Decimal(0));
-
-  return {
-    quantity,
-    totalCost,
-    avgCostPrice: quantity.isZero() ? new Decimal(0) : totalCost.dividedBy(quantity),
-    realisedPnL,
-    sourceTxCount,
-  };
+  return aggregateLots(lots, realisedPnL, sourceTxCount);
 }
 
 export interface ExpectedProjection extends ProjectionAggregate {
