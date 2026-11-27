@@ -56,6 +56,31 @@ function parseDdMmmYyyy(s: string): Date | null {
   return new Date(Date.UTC(Number(m[3]), mo, Number(m[1])));
 }
 
+/**
+ * "From Rs 2/- Per Share To Re 1/- Per Share", "Rs.10/- to Rs.5/-",
+ * "Rs 10 to Rs 2": old face value, then new. NSE writes "/-" and
+ * "Per Share" between the two numbers, and "Re" for one rupee — the old
+ * "<n> to <n>" pattern matched none of that, so splits were stored without a
+ * ratio and never applied (launch review B3).
+ */
+const FACE_VALUE_FROM_TO =
+  /(?:r[se]\.?\s*)?(\d+(?:\.\d+)?)\s*(?:\/-)?\s*(?:per\s+(?:equity\s+)?share)?\s*to\s*(?:r[se]\.?\s*)?(\d+(?:\.\d+)?)/i;
+
+/**
+ * Every action one purpose line announces. NSE files a bonus issued together
+ * with a split as one line ("Bonus 4:1 And Face Value Split ..."); reading only
+ * the first half left the split out.
+ */
+function classifyAll(subject: string): Array<ReturnType<typeof classify>> {
+  const parts = subject.split(/\s+(?:and|&)\s+|\s*\/\s+(?=[a-z])/i).map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return [classify(subject)];
+  const out = parts.map((p) => classify(p));
+  // A part that names nothing we know falls through to DIVIDEND with no
+  // amount; drop those when another part carries the real action.
+  const known = out.filter((c) => !(c.type === 'DIVIDEND' && c.amount === null));
+  return known.length > 0 ? known : [classify(subject)];
+}
+
 function classify(subject: string): {
   type: CorporateActionType;
   ratio: Decimal | null;
@@ -72,8 +97,8 @@ function classify(subject: string): {
     const ratio = m ? new Decimal(m[1]!).div(new Decimal(m[2]!)) : null;
     return { type: 'BONUS', ratio, amount: null };
   }
-  if (s.includes('split') || s.includes('sub division') || s.includes('stock split')) {
-    const m = subject.match(/(?:rs\.?\s*)?(\d+(?:\.\d+)?)\s*to\s*(?:rs\.?\s*)?(\d+(?:\.\d+)?)/i);
+  if (s.includes('split') || s.includes('sub division') || s.includes('sub-division') || s.includes('stock split')) {
+    const m = subject.match(FACE_VALUE_FROM_TO);
     if (m) return { type: 'SPLIT', ratio: new Decimal(m[1]!).div(new Decimal(m[2]!)), amount: null };
     const n = subject.match(/(\d+)\s*[:/]\s*(\d+)/);
     return {
@@ -138,19 +163,20 @@ export function parseCorpActionsCsvWithCounts(text: string): CorpActionParseOutc
       parseFailures++;
       continue;
     }
-    const cls = classify(subject);
-    rows.push({
-      symbol,
-      series: c[iSeries] ?? 'EQ',
-      company: c[iCompany] ?? '',
-      subject,
-      exDate,
-      recordDate: parseDdMmmYyyy(c[iRecord] ?? ''),
-      type: cls.type,
-      ratio: cls.ratio,
-      amount: cls.amount,
-      raw: subject,
-    });
+    for (const cls of classifyAll(subject)) {
+      rows.push({
+        symbol,
+        series: c[iSeries] ?? 'EQ',
+        company: c[iCompany] ?? '',
+        subject,
+        exDate,
+        recordDate: parseDdMmmYyyy(c[iRecord] ?? ''),
+        type: cls.type,
+        ratio: cls.ratio,
+        amount: cls.amount,
+        raw: subject,
+      });
+    }
   }
   return { rows, dataLines: lines.length - 1, parseFailures };
 }
