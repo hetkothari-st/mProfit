@@ -237,7 +237,13 @@ export async function planLegacyRentCashRepair(userId: string, today: Date = new
 }
 
 /** Plan, and with `apply` write it in one transaction checked against the plan. */
-export async function repairLegacyRentCash(opts: { userId: string; apply: boolean; today?: Date }): Promise<RepairReport> {
+export async function repairLegacyRentCash(opts: {
+  userId: string;
+  apply: boolean;
+  today?: Date;
+  /** Delete duplicate orphan rows on --apply (default). The ledger backfill passes false: it only links. */
+  deleteDuplicates?: boolean;
+}): Promise<RepairReport> {
   if (!opts.userId) throw new Error('repairLegacyRentCash needs a userId; it never runs unscoped');
   return runAsSystem(async () => {
     const plan = await planLegacyRentCashRepair(opts.userId, opts.today);
@@ -257,7 +263,7 @@ export async function repairLegacyRentCash(opts: { userId: string; apply: boolea
             },
           });
         }
-        for (const d of report.duplicates) {
+        for (const d of opts.deleteDuplicates === false ? [] : report.duplicates) {
           // Still an orphan? Delete only then.
           const stillLinked =
             (await tx.rentLedgerEntry.count({ where: { cashFlowId: d.cashFlowId } })) +
