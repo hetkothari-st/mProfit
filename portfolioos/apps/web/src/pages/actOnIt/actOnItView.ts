@@ -1,4 +1,4 @@
-import { Decimal, formatINR } from '@everypaisa/shared';
+import { Decimal, formatINR, formatDateIST } from '@everypaisa/shared';
 import type { ActOnItView, AdviceFact, AdviceHistoryRow, AdviceOutcome, AdviceRiskBand, AdviceState } from '@everypaisa/shared';
 
 /** Pure helpers for the Act on it page. Money arrives as strings; Decimal for any maths. */
@@ -136,4 +136,19 @@ export function adviceTabs(view: ActOnItView): { key: AdviceTabKey; label: strin
       return { key: t.key, label: t.label, count: rows.length, rows };
     }),
   ];
+}
+
+/**
+ * The dates a card's figures belong to (launch review B1). The headline and
+ * reason are written once and kept; the "Why now" facts refresh with each
+ * daily run. A total quoted in the reason (say "of your ₹56.6L portfolio")
+ * must not read as today's figure next to a fresher one.
+ */
+export function adviceFigureDates(card: { createdAt: string; factsAsOf: string | null }): {
+  workedOut: string;
+  factsAsOf: string | null;
+} {
+  const workedOut = formatDateIST(card.createdAt);
+  const facts = card.factsAsOf ? formatDateIST(card.factsAsOf) : null;
+  return { workedOut, factsAsOf: facts && facts !== workedOut ? facts : null };
 }

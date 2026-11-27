@@ -127,6 +127,14 @@ function whyNow(r: Row): AdviceWhyNow | null {
   return items.length ? { kind: 'FACTS', items } : null;
 }
 
+/** The run date stamped into the facts snapshot ("asOf"), when it is a valid date. */
+function factsAsOfOf(inputs: unknown): string | null {
+  const asOf = s(obj(inputs).asOf);
+  if (!asOf) return null;
+  const t = new Date(asOf);
+  return Number.isFinite(t.getTime()) ? t.toISOString() : null;
+}
+
 function card(r: Row, now: Date): AdviceCardView {
   const p = obj(r.promise);
   const m = obj(r.measurement);
@@ -147,6 +155,7 @@ function card(r: Row, now: Date): AdviceCardView {
     urgent: !!r.urgentUntil && r.urgentUntil >= now,
     expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
+    factsAsOf: factsAsOfOf(r.inputsSnapshot),
     state: stateOf(r, now),
     whyNow: whyNow(r),
     twoPaths,

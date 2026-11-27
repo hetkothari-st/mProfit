@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { barShare, outcomeLabel, stateLabel, twoPathEnds, riskSteps, shortInr, factValue, reasonPoints, figureParts, adviceTabs } from './actOnItView';
+import { barShare, outcomeLabel, stateLabel, twoPathEnds, riskSteps, shortInr, factValue, reasonPoints, figureParts, adviceTabs, adviceFigureDates } from './actOnItView';
 import type { ActOnItView, AdviceHistoryRow } from '@everypaisa/shared';
 
 describe('act on it view helpers', () => {
@@ -64,5 +64,19 @@ describe('act on it view helpers', () => {
     const t = adviceTabs(view);
     expect(t.map((x) => [x.key, x.count])).toEqual([['open', 2], ['accepted', 1], ['done', 2], ['skipped', 1], ['past', 2]]);
     expect(t.find((x) => x.key === 'done')!.rows.map((r) => r.id)).toEqual(['d1', 'd2']);
+  });
+});
+
+// Launch review B1: the reason on a card is written once, its facts refresh daily.
+describe('adviceFigureDates', () => {
+  it('names the day the reason was worked out, and a later facts date when it differs', () => {
+    expect(adviceFigureDates({ createdAt: '2026-10-01T00:30:00Z', factsAsOf: '2026-11-20T00:30:00Z' })).toEqual({
+      workedOut: '01/10/2026',
+      factsAsOf: '20/11/2026',
+    });
+  });
+  it('does not repeat the date when the facts are from the same day', () => {
+    expect(adviceFigureDates({ createdAt: '2026-11-20T00:30:00Z', factsAsOf: '2026-11-20T00:40:00Z' }).factsAsOf).toBeNull();
+    expect(adviceFigureDates({ createdAt: '2026-11-20T00:30:00Z', factsAsOf: null }).factsAsOf).toBeNull();
   });
 });
