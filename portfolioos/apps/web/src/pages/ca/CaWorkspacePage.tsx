@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, Mail, BookOpen, ChevronDown } from 'lucide-react';
+import { Briefcase, Mail, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -21,8 +21,9 @@ import { InviteEmailComposer } from '@/components/ca/InviteEmailComposer';
 import { cn } from '@/lib/cn';
 import { caApi, type CaClient } from '@/api/ca.api';
 import { LIVE_QUERY, LIVE_INTERVAL_MS } from '@/lib/liveQuery';
-import { Initials, ClientAccessStrip } from '@/components/ca/AccessParts';
+import { Initials } from '@/components/ca/AccessParts';
 import { fmtDate, inviteLinkStatus } from '@/components/ca/accessModel';
+import { ClientListTable } from './ClientListTable';
 
 /**
  * A CA's client list.
@@ -69,7 +70,7 @@ export function CaWorkspacePage() {
   const closed = rows.filter((c) => c.status === 'REVOKED');
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-6xl">
       <PageHeader
         eyebrow="Practice"
         title="Clients"
@@ -114,20 +115,17 @@ export function CaWorkspacePage() {
       ) : (
         <div className="space-y-8">
           {active.length > 0 && (
-            <Group
-              title="Your clients"
-              count={active.length}
-              hint="Open someone's books to work in them. What you can change is theirs to decide."
-            >
-              {active.map((c) => (
-                <ActiveClient
-                  key={c.id}
-                  client={c}
-                  onClose={() => revoke.mutate(c.id)}
-                  closing={revoke.isPending}
-                />
-              ))}
-            </Group>
+            <section>
+              <div className="mb-3">
+                <h2 className="text-[15px] font-medium text-foreground">
+                  Your clients <span className="text-muted-foreground">{active.length}</span>
+                </h2>
+                <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                  Open someone's books to work in them. What you can change is theirs to decide.
+                </p>
+              </div>
+              <ClientListTable onCloseEngagement={(id) => revoke.mutate(id)} closing={revoke.isPending} />
+            </section>
           )}
 
           {pending.length > 0 && (
@@ -215,75 +213,6 @@ function clientEmail(c: CaClient): string | null {
   // A client who invited you is identified by their own address; one you
   // invited, by the address you sent it to.
   return c.initiatedBy === 'CLIENT' ? c.displayEmail : (c.displayEmail ?? c.invitedEmail);
-}
-
-function ActiveClient({
-  client: c,
-  onClose,
-  closing,
-}: {
-  client: CaClient;
-  onClose: () => void;
-  closing: boolean;
-}) {
-  const [confirming, setConfirming] = useState(false);
-
-  return (
-    <li className="overflow-hidden rounded-xl border border-border/70 bg-card">
-      <div className="flex flex-wrap items-start justify-between gap-4 px-5 pt-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <Initials name={c.displayName} tone="active" />
-          <div className="min-w-0">
-            <p className="truncate font-display text-[17px] leading-tight text-foreground">
-              {c.displayName}
-            </p>
-            <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
-              {clientEmail(c) ?? 'No email on record'}
-              {c.acceptedAt && <span className="ml-2">Client since {fmtDate(c.acceptedAt)}</span>}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {confirming ? (
-            <>
-              <span className="text-[12.5px] text-muted-foreground">Close this engagement?</span>
-              <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
-                Keep
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={closing}
-                onClick={onClose}
-                className="border-negative/40 text-negative hover:bg-negative/10"
-              >
-                Close engagement
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button asChild size="sm">
-                <Link to={`/ca/clients/${c.id}`}>
-                  <BookOpen className="h-3.5 w-3.5" /> Open books
-                </Link>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setConfirming(true)}
-                className="text-muted-foreground hover:text-negative"
-              >
-                Close
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <ClientAccessStrip client={c} className="mt-4" />
-    </li>
-  );
 }
 
 function PendingClient({

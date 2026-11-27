@@ -67,6 +67,12 @@ import { requireProfessionalSecondFactor } from '../lib/professionalMfa.js';
  * policies say what you may touch once you do. Three independent gates, none
  * of them standing in for another.
  */
+import {
+  clientOverviewHandler,
+  clientOverviewCsvHandler,
+  setClientFilingHandler,
+} from '../controllers/caClientList.controller.js';
+
 export const caRouter = Router();
 caRouter.use(authenticate);
 // The client list comes before the gate: every signed-in user's sidebar asks
@@ -90,6 +96,11 @@ caRouter.use(requireProfessionalSecondFactor);
  * this feature" and "may you act for this person".
  */
 const requireAdvisorPlan = requireFeature('CA_WORKSPACE');
+
+// The practice's client list: search, PAN, return status and due dates, export.
+caRouter.get('/clients/overview', asyncHandler(clientOverviewHandler));
+caRouter.get('/clients/overview.csv', asyncHandler(clientOverviewCsvHandler));
+caRouter.put('/clients/:clientId/filings/:fy', asyncHandler(setClientFilingHandler));
 
 // Grants
 caRouter.post('/clients', requireAdvisorPlan, asyncHandler(createManagedClientHandler));

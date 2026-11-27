@@ -545,9 +545,41 @@ model Client {
 
   portfolios      Portfolio[]
   portfolioScopes ClientPortfolioScope[]
+  filings         ClientFiling[]
 
   @@index([advisorId, status])
   @@index([userId, status])
+}
+
+/// Where a client's income-tax return stands for one financial year, as the
+/// CA tracks it. Practice bookkeeping, not tax data: the client may read it
+/// (it is about them), only the CA on the grant may change it.
+model ClientFiling {
+  id              String             @id @default(cuid())
+  clientId        String
+  client          Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  /// "2025-26": the financial year the return covers (AY 2026-27).
+  financialYear   String
+  status          ClientFilingStatus @default(NOT_STARTED)
+  /// "ITR-1" … "ITR-4", once known.
+  itrForm         String?
+  /// Tax audit applies: the due date moves from 31 July to 31 October.
+  auditApplicable Boolean            @default(false)
+  filedOn         DateTime?          @db.Date
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@unique([clientId, financialYear])
+  @@index([financialYear, status])
+}
+
+enum ClientFilingStatus {
+  NOT_STARTED
+  DOCS_PENDING
+  IN_PROGRESS
+  READY_FOR_REVIEW
+  FILED
+  VERIFIED
 }
 
 /// One portfolio a CA grant is allowed to reach, when the grant is not set to
@@ -5248,6 +5280,7 @@ enum CaAuditAction {
   GRANT_SCOPE_CHANGED
   GRANT_REINSTATED
   INVITATION_EMAILED
+  FILING_STATUS_CHANGED
 }
 
 /// A user's data-encryption key, wrapped by the KEK (lib/userKeys). Never
