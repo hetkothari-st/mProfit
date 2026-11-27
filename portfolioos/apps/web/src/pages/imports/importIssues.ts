@@ -67,3 +67,31 @@ export function importTypeLabel(type: string, fileName: string | null | undefine
     /\b(nsdl|cdsl)\b|nsdl|cdsl|depository|transaction[-_\s]?(with|cum)[-_\s]?holding|_txn\./.test(name);
   return depository ? `Depository statement (${kind})` : `Mutual fund CAS (${kind})`;
 }
+
+/**
+ * One line naming where to get the file this importer reads, for a failed or
+ * empty import (launch review B5). Picked from the import type, the parser
+ * that ran and the file name; null when we cannot tell the source.
+ */
+export function importSourceHelp(type: string, fileName: string | null | undefined, parser?: string | null): string | null {
+  const name = `${(fileName ?? '').toLowerCase()} ${(parser ?? '').toLowerCase()}`;
+  if (/zerodha|kite|console/.test(name)) return 'Zerodha: Console → Reports → Contract notes, one file per day.';
+  if (/\b(nsdl|cdsl)\b|nsdl|cdsl|depository|transaction[-_\s]?(with|cum)[-_\s]?holding/.test(name)) {
+    return 'NSDL/CDSL: download the CAS from NSDL or CDSL.';
+  }
+  if (/cams|kfin|karvy/.test(name) || type === 'MF_CAS_PDF' || type === 'MF_CAS_EXCEL') {
+    return 'CAMS/KFin: download the Detailed CAS from camsonline.com, as a PDF, with a password.';
+  }
+  if (/kotak|hdfc\s?sec|hdfcsec|icici|groww|upstox|angel|dhan|5paisa|motilal|sharekhan/.test(name) || type.startsWith('CONTRACT_NOTE')) {
+    return "Broker: download the contract note from your broker's back office, one file per trading day.";
+  }
+  return null;
+}
+
+/** The source hint for a job that failed or imported nothing; null for a job that worked. */
+export function importFixHint(job: ImportJobDTO): string | null {
+  const failedOrEmpty = job.status === 'FAILED' || ((job.totalRows ?? 0) === 0 && (job.successRows ?? 0) === 0);
+  if (!failedOrEmpty || job.status === 'PENDING' || job.status === 'PROCESSING' || job.status === 'NEEDS_PASSWORD') return null;
+  if (importSkippedCount(job) > 0) return null; // nothing new because it was already imported
+  return importSourceHelp(job.type, job.fileName, job.errorLog?.parser ?? null);
+}
