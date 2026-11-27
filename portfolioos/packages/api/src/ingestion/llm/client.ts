@@ -122,7 +122,16 @@ export interface LlmParseInput {
   sourceRef: string;
   /** Human-readable purpose string (e.g. "gmail_parse", "template_learning"). Goes into LlmSpend.purpose. */
   purpose: string;
+  /**
+   * Output token limit for this call. Defaults to DEFAULT_MAX_OUTPUT_TOKENS,
+   * which suits one email. A statement or contract note listing many trades
+   * needs more room — one event costs roughly 100–150 output tokens.
+   */
+  maxTokens?: number;
 }
+
+/** Output limit for a call that does not choose its own. */
+export const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
 
 export type LlmParseResult =
   | {
@@ -147,6 +156,7 @@ export type LlmFailureReason =
   | 'budget_capped'     // monthly spend ≥ cap
   | 'api_error'         // Anthropic returned an error or network failed
   | 'no_tool_use'       // model replied with text instead of calling the tool
+  | 'truncated'         // the answer hit the output limit before the tool call was complete
   | 'validation_error'; // tool input failed Zod validation
 
 export interface LlmUsage {
@@ -254,7 +264,7 @@ export async function parseEmailWithLlm(
     const client = getClient();
     const res = await client.messages.create({
       model,
-      max_tokens: 4096,
+      max_tokens: input.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
       system: SYSTEM_PROMPT,
       tools: [
         {
@@ -337,6 +347,25 @@ ${sealUntrusted(redacted.text)}
       ok: false,
       reason: 'api_error',
       message: apiError?.message ?? 'unknown Anthropic error',
+      usage,
+      budget,
+    };
+  }
+
+  // A cut-off answer leaves a half-written tool call, which then fails schema
+  // validation with a message that tells the user nothing (launch review B5).
+  // Say what happened and what to do instead.
+  if (apiResponse.stopReason === 'max_tokens') {
+    logger.warn(
+      { userId: input.userId, sourceRef: input.sourceRef, outputTokens: apiResponse.outputTokens },
+      'llm.truncated',
+    );
+    return {
+      ok: false,
+      reason: 'truncated',
+      message:
+        'This document is too long to read in one go — it lists more entries than we can extract at once. ' +
+        'Upload one trading day (one contract note) per file, or download the statement for a shorter date range, and try again.',
       usage,
       budget,
     };

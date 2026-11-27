@@ -30,3 +30,18 @@ describe('isPriceStale', () => {
     expect(isPriceStale('REAL_ESTATE', null, now)).toBe(false);
   });
 });
+
+// Launch review follow-up: exchange prices are judged by trading sessions.
+describe('session rule for exchange prices', () => {
+  const ist = (isoLocal: string) => new Date(`${isoLocal}+05:30`);
+  it('a Friday close read on Sunday is current', () => {
+    expect(isPriceStale('EQUITY', new Date('2026-11-20T00:00:00Z'), ist('2026-11-22T11:00:00'))).toBe(false);
+  });
+  it('a Friday close on Tuesday evening is stale (two sessions missed), though under 5 days old', () => {
+    expect(isPriceStale('EQUITY', new Date('2026-11-20T00:00:00Z'), ist('2026-11-24T18:00:00'))).toBe(true);
+  });
+  it('crypto keeps its calendar-day tolerance', () => {
+    expect(isPriceStale('CRYPTOCURRENCY', new Date('2026-11-20T00:00:00Z'), ist('2026-11-21T11:00:00'))).toBe(false);
+    expect(isPriceStale('CRYPTOCURRENCY', new Date('2026-11-20T00:00:00Z'), ist('2026-11-22T11:00:00'))).toBe(true);
+  });
+});

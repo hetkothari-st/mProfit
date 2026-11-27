@@ -14,7 +14,7 @@ vi.mock('../../../src/lib/prisma.js', () => ({
 }));
 
 const svc = vi.hoisted(() => ({
-  activeMonthlyIncomeTotal: vi.fn(),
+  activeEarnedMonthlyIncome: vi.fn(),
   getEmergencyFundInputs: vi.fn(),
   getDashboardNetWorth: vi.fn(),
   listGoals: vi.fn(),
@@ -23,7 +23,7 @@ const svc = vi.hoisted(() => ({
   listOwnedProperties: vi.fn(),
   listRentalProperties: vi.fn(),
 }));
-vi.mock('../../../src/services/income/income.service.js', () => ({ activeMonthlyIncomeTotal: svc.activeMonthlyIncomeTotal }));
+vi.mock('../../../src/services/income/income.service.js', () => ({ activeEarnedMonthlyIncome: svc.activeEarnedMonthlyIncome }));
 vi.mock('../../../src/services/analytics/healthScore.service.js', () => ({ getEmergencyFundInputs: svc.getEmergencyFundInputs }));
 vi.mock('../../../src/services/analytics/dashboard.service.js', () => ({ getDashboardNetWorth: svc.getDashboardNetWorth }));
 vi.mock('../../../src/services/goals/goals.service.js', () => ({ listGoals: svc.listGoals }));
@@ -56,7 +56,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-09-11T06:00:00Z'));
   for (const fn of Object.values(svc)) fn.mockReset();
 
-  svc.activeMonthlyIncomeTotal.mockResolvedValue(new Decimal('150000'));
+  svc.activeEarnedMonthlyIncome.mockResolvedValue(new Decimal('150000'));
   svc.getEmergencyFundInputs.mockResolvedValue({
     liquidAssets: new Decimal('400000'),
     monthlyExpenses: new Decimal('60000'),

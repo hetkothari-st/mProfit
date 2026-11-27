@@ -2,7 +2,7 @@ import { Decimal, formatINR, type AdviceCardView, formatDateIST } from '@everypa
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
-import { factValue, riskSteps, twoPathEnds } from './actOnItView';
+import { adviceFigureDates, factValue, riskSteps, twoPathEnds } from './actOnItView';
 import { ReasonPoints } from './ReasonPoints';
 
 const inr0 = (v: string) => formatINR(v, { fractionDigits: 0 });
@@ -43,6 +43,9 @@ export function AdviceCard({
           {card.headline}
         </h2>
         <ReasonPoints rationale={card.rationale} limit={2} className="mt-4 max-w-[60ch]" />
+        <p className="mt-2 text-[12px] text-muted-foreground">
+          Worked out on {adviceFigureDates(card).workedOut}, with the figures of that day.
+        </p>
 
         {card.twoPaths ? (
           <TwoPaths card={card} />
@@ -161,7 +164,9 @@ function WhyNow({ card }: { card: AdviceCardView }) {
   }
   return (
     <div>
-      <h3 className="mb-2 text-[13px] font-medium text-muted-foreground">Why now</h3>
+      <h3 className="mb-2 text-[13px] font-medium text-muted-foreground">
+        Why now{adviceFigureDates(card).factsAsOf && <> · figures as of {adviceFigureDates(card).factsAsOf}</>}
+      </h3>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
         {(w.items ?? []).slice(0, 6).map((i) => (
           <div key={i.label} className="contents">

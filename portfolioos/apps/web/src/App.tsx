@@ -30,6 +30,7 @@ const AiConnectorsPage = lazy(() => import('./pages/settings/AiConnectorsPage').
 const LoanRatesAdminPage = lazy(() => import('./pages/settings/LoanRatesAdminPage').then((m) => ({ default: m.LoanRatesAdminPage })));
 const SupportPage = lazy(() => import('./pages/support/SupportPage').then((m) => ({ default: m.SupportPage })));
 const SupportAdminPage = lazy(() => import('./pages/settings/SupportAdminPage').then((m) => ({ default: m.SupportAdminPage })));
+const CorporateActionsAdminPage = lazy(() => import('./pages/settings/CorporateActionsAdminPage').then((m) => ({ default: m.CorporateActionsAdminPage })));
 const FamilyMemberPage = lazy(() => import('./pages/family/FamilyMemberPage').then((m) => ({ default: m.FamilyMemberPage })));
 const TransactionsPage = lazy(() => import('./pages/transactions/TransactionsPage').then((m) => ({ default: m.TransactionsPage })));
 const StocksPage = lazy(() => import('./pages/assetClasses/StocksPage').then((m) => ({ default: m.StocksPage })));
@@ -201,6 +202,7 @@ export function App() {
         <Route path="/settings/ai-connectors" element={<AiConnectorsPage />} />
         <Route path="/settings/loan-rates" element={<LoanRatesAdminPage />} />
         <Route path="/settings/support" element={<SupportAdminPage />} />
+        <Route path="/settings/corporate-actions" element={<CorporateActionsAdminPage />} />
         <Route path="/support" element={<SupportPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/stocks" element={<StocksPage />} />

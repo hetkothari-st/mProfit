@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ImportJobDTO } from '@everypaisa/shared';
-import { importHeadline, importIssueLabel, importSkippedCount, importTypeLabel } from './importIssues';
+import { importFixHint, importHeadline, importIssueLabel, importSkippedCount, importSourceHelp, importTypeLabel } from './importIssues';
 
 const job = (over: Partial<ImportJobDTO> = {}): ImportJobDTO =>
   ({
@@ -65,5 +65,25 @@ describe('importTypeLabel', () => {
     expect(importTypeLabel('MF_CAS_EXCEL', 'cas.xlsx')).toBe('Mutual fund CAS (Excel)');
     expect(importTypeLabel('CONTRACT_NOTE_PDF', 'x.pdf')).toBe('Contract Note PDF');
     expect(importTypeLabel('MF_CAS_PDF', null)).toBe('Mutual fund CAS (PDF)');
+  });
+});
+
+// Launch review B5: a failed import says where to get the right file.
+describe('importSourceHelp / importFixHint', () => {
+  it('names the right download for each source', () => {
+    expect(importSourceHelp('MF_CAS_PDF', 'cams_cas_statement.pdf')).toMatch(/Detailed CAS from camsonline\.com/);
+    expect(importSourceHelp('MF_CAS_PDF', 'nsdl_demat_statement.pdf')).toMatch(/CAS from NSDL or CDSL/);
+    expect(importSourceHelp('CONTRACT_NOTE_PDF', 'zerodha_contract_note.pdf')).toMatch(/Console → Reports → Contract notes, one file per day/);
+    expect(importSourceHelp('CONTRACT_NOTE_PDF', 'hdfcsec_heavy_multi_segment.pdf')).toMatch(/one file per trading day/);
+    expect(importSourceHelp('GENERIC_CSV', 'notes.csv')).toBeNull();
+  });
+
+  it('shows only on a failed or empty import', () => {
+    const failed = job({ status: 'FAILED', type: 'MF_CAS_PDF', fileName: 'cams.pdf', totalRows: 0, successRows: 0 });
+    expect(importFixHint(failed)).toMatch(/camsonline/);
+    const ok = job({ status: 'COMPLETED', type: 'MF_CAS_PDF', fileName: 'cams.pdf', totalRows: 12, successRows: 12 });
+    expect(importFixHint(ok)).toBeNull();
+    const dupes = job({ status: 'COMPLETED', type: 'MF_CAS_PDF', fileName: 'cams.pdf', totalRows: 0, successRows: 0, errorLog: { skippedAsDuplicates: 4 } });
+    expect(importFixHint(dupes)).toBeNull();
   });
 });

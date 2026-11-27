@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CREDIT_LIMIT_CHECK_MESSAGE, creditLimitLooksHigh } from '@everypaisa/shared';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -508,6 +509,9 @@ function CreateCardDialog({
               onChange={(e) => set('creditLimit', e.target.value)}
               className={errors['creditLimit'] ? 'border-negative' : ''} />
             {errors['creditLimit'] && <p className="text-xs text-negative mt-1">{errors['creditLimit']}</p>}
+            {!errors['creditLimit'] && creditLimitLooksHigh(form.creditLimit) && (
+              <p role="status" className="text-xs text-amber-700 dark:text-amber-400 mt-1">{CREDIT_LIMIT_CHECK_MESSAGE}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

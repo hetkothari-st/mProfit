@@ -94,7 +94,7 @@ async function scanPropertyTax(property: PropertyForScan, today: Date): Promise<
       description: taxAmount
         ? `${taxAmount} property tax due on ${formatDateOnly(dueDate.toISOString().slice(0, 10))}`
         : `Property tax due on ${formatDateOnly(dueDate.toISOString().slice(0, 10))}`,
-      triggerDate: new Date(),
+      triggerDate: dueDate,
       metadata: {
         key: metaKey,
         propertyId: property.id,
@@ -132,7 +132,7 @@ async function scanPossession(property: PropertyForScan, today: Date): Promise<n
       description: property.builderName
         ? `${property.builderName} — possession expected on ${formatDateOnly(due.toISOString().slice(0, 10))}`
         : `Possession expected on ${formatDateOnly(due.toISOString().slice(0, 10))}`,
-      triggerDate: new Date(),
+      triggerDate: due,
       metadata: {
         key: metaKey,
         propertyId: property.id,
@@ -173,7 +173,7 @@ async function scanInsuranceLink(
       type: 'INSURANCE_PREMIUM',
       title: `Insurance renewal in ${days} day${days !== 1 ? 's' : ''} — ${property.name}`,
       description: `${policy.insurer} — premium due on ${formatDateOnly(policy.nextPremiumDue.toISOString().slice(0, 10))}`,
-      triggerDate: new Date(),
+      triggerDate: policy.nextPremiumDue,
       metadata: {
         key: metaKey,
         propertyId: property.id,

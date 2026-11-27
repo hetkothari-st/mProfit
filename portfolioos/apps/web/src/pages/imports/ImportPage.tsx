@@ -14,7 +14,7 @@ import { apiErrorMessage } from '@/api/client';
 import type { ImportJobDTO, ImportStatus } from '@everypaisa/shared';
 import { IMPORT_STATUS_LABELS, formatDateTimeIST } from '@everypaisa/shared';
 import { ImportErrorDialog } from './ImportErrorDialog';
-import { importIssueLabel, importHeadline, importSkippedCount, importTypeLabel } from './importIssues';
+import { importFixHint, importIssueLabel, importHeadline, importSkippedCount, importTypeLabel } from './importIssues';
 import { ImportDropzone } from './ImportDropzone';
 import { PasswordPromptDialog } from '@/components/upload/PasswordPromptDialog';
 import { useUploadWithPasswordRetry } from '@/hooks/useUploadWithPasswordRetry';
@@ -257,6 +257,7 @@ export function ImportPage() {
                     const isRunning = status === 'PROCESSING' || status === 'PENDING';
                     const issueLabel = importIssueLabel(j);
                     const headline = importHeadline(j);
+                    const fixHint = importFixHint(j);
                     return (
                       <tr key={j.id} className={`hover:bg-muted/30 ${selected.has(j.id) ? 'bg-accent/20' : ''}`}>
                         <td data-label="" className="px-4 py-2 w-8">
@@ -297,6 +298,9 @@ export function ImportPage() {
                           )}
                           {headline && (
                             <div className="mt-1 max-w-[16rem] text-[11px] leading-snug text-muted-foreground">{headline}</div>
+                          )}
+                          {fixHint && (
+                            <div className="mt-1 max-w-[16rem] text-[11px] leading-snug text-foreground">{fixHint}</div>
                           )}
                         </td>
                         <td data-label="Rows" className="px-4 py-2 text-right tabular-nums">{j.totalRows ?? '—'}</td>

@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma.js';
-import { applyCorporateActionsForPortfolio } from '../services/corporateActions/corporateActionApply.service.js';
+import { applyCorporateActionsForPortfolio, NIGHTLY_DIVIDEND_LOOKBACK_DAYS } from '../services/corporateActions/corporateActionApply.service.js';
 
 /**
  * Sweep every portfolio and fold any newly-fetched corporate actions (splits,
@@ -11,7 +11,8 @@ export async function runCorporateActionApplyAll(): Promise<{ portfolios: number
   const portfolios = await prisma.portfolio.findMany({ select: { id: true } });
   let applied = 0;
   for (const p of portfolios) {
-    applied += await applyCorporateActionsForPortfolio(p.id);
+    // Unattended run over every user: recent dividends only (see NIGHTLY_DIVIDEND_LOOKBACK_DAYS).
+    applied += await applyCorporateActionsForPortfolio(p.id, { dividendLookbackDays: NIGHTLY_DIVIDEND_LOOKBACK_DAYS });
   }
   return { portfolios: portfolios.length, applied };
 }

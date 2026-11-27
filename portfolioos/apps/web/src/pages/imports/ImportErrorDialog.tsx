@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { ImportJobDTO } from '@everypaisa/shared';
+import { importFixHint } from './importIssues';
 
 interface Props {
   job: ImportJobDTO | null;
@@ -14,6 +15,13 @@ export function ImportErrorDialog({ job, onClose }: Props) {
         <DialogHeader>
           <DialogTitle>Import issues — {job?.fileName}</DialogTitle>
         </DialogHeader>
+
+        {job && importFixHint(job) && (
+          <div className="rounded-md border border-accent/40 bg-accent/5 p-3 text-sm">
+            <span className="font-medium">Get the right file: </span>
+            {importFixHint(job)}
+          </div>
+        )}
 
         {log?.parser && (
           <div className="text-xs text-muted-foreground">

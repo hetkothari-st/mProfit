@@ -1,4 +1,5 @@
 import type { AssetClass } from '@prisma/client';
+import { EQUITY_CLOSE_AVAILABLE_IST, NAV_AVAILABLE_IST, isSessionPriceStale } from '@everypaisa/shared';
 
 /**
  * Accrual / cost / appraisal classes carry no market price feed, so the
@@ -14,6 +15,11 @@ const NON_MARKET: ReadonlySet<AssetClass> = new Set<AssetClass>([
 ]);
 
 const DAY = 24 * 60 * 60 * 1000;
+
+/** Priced off an Indian exchange's end-of-day close. */
+const EXCHANGE_SESSION: ReadonlySet<AssetClass> = new Set<AssetClass>([
+  'EQUITY', 'ETF', 'GOLD_ETF', 'REIT', 'INVIT', 'GOLD_BOND',
+]);
 
 /**
  * Max age before a market price is considered stale, by class.
@@ -40,6 +46,11 @@ export function isPriceStale(
 ): boolean {
   if (NON_MARKET.has(assetClass)) return false;
   if (!asOf) return true;
+  // Exchange-traded prices and fund NAVs are judged by trading sessions, so a
+  // Friday close on Sunday is current and the same price on Tuesday evening
+  // is not (shared/marketSession.ts).
+  if (EXCHANGE_SESSION.has(assetClass)) return isSessionPriceStale(asOf, now, EQUITY_CLOSE_AVAILABLE_IST);
+  if (assetClass === 'MUTUAL_FUND') return isSessionPriceStale(asOf, now, NAV_AVAILABLE_IST);
   return now.getTime() - asOf.getTime() > maxAgeDays(assetClass) * DAY;
 }
 

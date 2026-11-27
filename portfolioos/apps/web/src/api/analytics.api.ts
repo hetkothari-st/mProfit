@@ -222,6 +222,9 @@ export interface InsightsResultOk {
   ok: true;
   fromCache: boolean;
   generatedAt: string;
+  /** The data has moved since it was written; never shown as current. */
+  stale?: boolean;
+  staleReason?: string | null;
   model: string;
   costInr: string;
   cards: InsightCard[];

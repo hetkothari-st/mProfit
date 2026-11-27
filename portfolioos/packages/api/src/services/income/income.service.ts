@@ -109,6 +109,23 @@ export async function deleteIncome(userId: string, id: string) {
   await prisma.income.delete({ where: { id } });
 }
 
+/**
+ * Income that stops if the earner dies: what life cover replaces. Rent keeps
+ * coming, trading P&L is not a wage, and interest, dividends and gains come
+ * from assets that pass on. OTHER is kept: it is most often a pension or
+ * other personal earnings, and leaving it out would understate the need.
+ */
+export const EARNED_INCOME_TYPES = ['SALARY', 'BUSINESS', 'FREELANCE', 'OTHER'] as const satisfies readonly IncomeType[];
+
+/** Active earned-income entries per month (EARNED_INCOME_TYPES): the base for life-cover sizing. */
+export async function activeEarnedMonthlyIncome(userId: string): Promise<Decimal> {
+  const rows = await prisma.income.findMany({
+    where: { userId, isActive: true, type: { in: [...EARNED_INCOME_TYPES] } },
+    select: { monthlyAmount: true },
+  });
+  return rows.reduce((s, r) => s.plus(d(r.monthlyAmount)), ZERO);
+}
+
 /** Sum of active entries' monthlyAmount across all income types. Zero if the user has none entered. */
 export async function activeMonthlyIncomeTotal(userId: string): Promise<Decimal> {
   const rows = await prisma.income.findMany({ where: { userId, isActive: true }, select: { monthlyAmount: true } });

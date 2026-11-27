@@ -9,7 +9,13 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Decimal } from 'decimal.js';
 import { Loader2, Plus, X } from 'lucide-react';
-import { formatINR, type ApiResponse, type AssetSearchHit } from '@everypaisa/shared';
+import {
+  CREDIT_LIMIT_CHECK_MESSAGE,
+  creditLimitLooksHigh,
+  formatINR,
+  type ApiResponse,
+  type AssetSearchHit,
+} from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -699,6 +705,9 @@ function CreditCardForm({ portfolioId, onSaved }: QuickFormProps) {
       <div className="grid grid-cols-2 gap-3">
         <Field label="Credit limit (₹)">
           <AmountInput value={limit} onChange={setLimit} placeholder="e.g. 200000" />
+          {creditLimitLooksHigh(limit) && (
+            <p role="status" className="mt-1 text-xs text-amber-700 dark:text-amber-400">{CREDIT_LIMIT_CHECK_MESSAGE}</p>
+          )}
         </Field>
         <Field label="Amount due now (₹)">
           <AmountInput value={due} onChange={setDue} placeholder="0" />

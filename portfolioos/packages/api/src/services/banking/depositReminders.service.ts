@@ -75,7 +75,11 @@ async function createOnce(
       type,
       title: alert.title,
       description: alert.description,
-      triggerDate: new Date(),
+      // Dated by the due date when the reminder has one, so the inbox measures "late" from it.
+      triggerDate:
+        typeof alert.metadata.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(alert.metadata.dueDate)
+          ? new Date(`${alert.metadata.dueDate}T00:00:00Z`)
+          : new Date(),
       metadata: { key, ...alert.metadata },
     },
   });

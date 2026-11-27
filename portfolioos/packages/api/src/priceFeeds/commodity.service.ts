@@ -341,9 +341,29 @@ const EMPTY_CACHE: LiveCache = {
 };
 const COLD_WAIT_MS = 4000;
 
+/**
+ * The longest one background refresh may run. Yahoo quote calls carry no
+ * timeout of their own, and only one refresh runs at a time — so a call that
+ * never answered used to leave the in-flight slot taken forever, and the live
+ * snapshot froze (the Gold page showed "updated 4241 min ago"). Past this
+ * limit the refresh is abandoned and the next request starts a fresh one.
+ */
+export const LIVE_REFRESH_TIMEOUT_MS = 30_000;
+
+function withRefreshTimeout<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`live price refresh took longer than ${LIVE_REFRESH_TIMEOUT_MS}ms`)),
+      LIVE_REFRESH_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([work, limit]).finally(() => clearTimeout(timer));
+}
+
 function startRefresh(): Promise<LiveCache> {
   if (!inflightRefresh) {
-    inflightRefresh = refreshLivePrices()
+    inflightRefresh = withRefreshTimeout(refreshLivePrices())
       .catch((err) => {
         logger.warn({ err }, '[commodity] refresh failed');
         return liveCache ?? EMPTY_CACHE;

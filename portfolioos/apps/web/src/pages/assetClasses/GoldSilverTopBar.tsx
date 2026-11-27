@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Decimal } from '@everypaisa/shared';
+import { goldFreshnessLabel } from './goldFreshness';
 import { assetsApi } from '@/api/assets.api';
 import { pricePerGram, puritiesFor, type Metal } from '@/lib/metalPurity';
 
@@ -25,12 +26,6 @@ function useSecondsAgo(fetchedAt: string | undefined) {
   return secs;
 }
 
-function freshnessLabel(secs: number): string {
-  if (secs < 5) return 'just now';
-  if (secs < 60) return `${secs}s ago`;
-  const m = Math.floor(secs / 60);
-  return m === 1 ? '1 min ago' : `${m} min ago`;
-}
 
 // ── Purity choice, remembered per viewer ─────────────────────────────────────
 
@@ -162,7 +157,9 @@ export function GoldSilverTopBar() {
     retry: 2,
   });
 
-  const secs = useSecondsAgo(data?.fetchedAt);
+  // Re-render every second so the age stays current.
+  useSecondsAgo(data?.fetchedAt);
+  const freshness = data ? goldFreshnessLabel(data.fetchedAt, data.source, new Date()) : null;
 
   return (
     <div className="sticky top-0 z-30 mb-5 px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-lg border border-border/60 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-sm">
@@ -180,14 +177,14 @@ export function GoldSilverTopBar() {
             <>
               <span
                 className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                  isFetching ? 'bg-amber-500 animate-pulse' : 'bg-green-500 animate-pulse'
+                  isFetching && !data
+                    ? 'bg-amber-500 animate-pulse'
+                    : freshness?.live
+                      ? 'bg-green-500 animate-pulse'
+                      : 'bg-muted-foreground/60'
                 }`}
               />
-              <span>
-                {isFetching && !data
-                  ? 'Loading…'
-                  : `Live · updated ${freshnessLabel(secs)}`}
-              </span>
+              <span>{!freshness ? 'Loading…' : freshness.text}</span>
             </>
           )}
         </div>

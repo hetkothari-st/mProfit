@@ -209,8 +209,12 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
             <AnalyticsInfo k="insights" />
           </CardTitle>
           {open && okPayload?.fromCache && (
-            <span className="shrink-0 whitespace-nowrap text-[10px] uppercase tracking-kerned text-muted-foreground border rounded-full px-2 py-0.5">
-              Cached · {formatDateIST(okPayload.generatedAt)}
+            <span
+              className={`shrink-0 whitespace-nowrap text-[10px] uppercase tracking-kerned border rounded-full px-2 py-0.5 ${
+                okPayload.stale ? 'text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800' : 'text-muted-foreground'
+              }`}
+            >
+              {okPayload.stale ? 'Out of date' : 'Cached'} · {formatDateIST(okPayload.generatedAt)}
             </span>
           )}
         </div>
@@ -282,8 +286,26 @@ export function InsightsPanel({ portfolioId, period }: InsightsPanelProps) {
           </div>
         )}
 
+        {okPayload && okPayload.ok && okPayload.stale && (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 mb-4 text-sm"
+          >
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium text-amber-800 dark:text-amber-200">
+                Out of date — written {formatDateIST(okPayload.generatedAt)}
+              </p>
+              <p className="text-xs text-amber-700/90 dark:text-amber-300/80">
+                {okPayload.staleReason ?? 'Your numbers have changed since.'} The figures below are from then, not today.
+                Regenerate for a current reading.
+              </p>
+            </div>
+          </div>
+        )}
+
         {okPayload && okPayload.ok && (
-          <div className="space-y-4">
+          <div className={`space-y-4 ${okPayload.stale ? 'opacity-60' : ''}`} aria-label={okPayload.stale ? 'Out-of-date insight' : undefined}>
             <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">
               {okPayload.narrative}
             </p>

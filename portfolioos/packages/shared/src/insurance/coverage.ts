@@ -79,7 +79,7 @@ export const SUPER_TOP_UP_EXPLAINER =
 // ── Facts (from the API) and assumptions (editable) ─────────────────
 
 export interface CoverageFigures {
-  /** Active income entries, per month. */
+  /** Active earned-income entries per month (salary, business, freelance, other — not rent, trading or investment income). */
   monthlyIncome: string;
   /** Estimated monthly spending; null when we have no spending signal. */
   monthlyExpenses: string | null;

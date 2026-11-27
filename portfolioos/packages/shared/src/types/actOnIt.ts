@@ -50,7 +50,14 @@ export interface AdviceCardView {
   confidence: 'HIGH' | 'MEDIUM';
   urgent: boolean;
   expiresAt: string | null;
+  /** When the headline and reason were written. They stay as first shown. */
   createdAt: string;
+  /**
+   * When the "Why now" facts were last refreshed (they move with the daily
+   * run while the headline and reason do not). Shown beside both so a total
+   * quoted in the reason is never read as today's figure (launch review B1).
+   */
+  factsAsOf: string | null;
   state: AdviceState;
   whyNow: AdviceWhyNow | null;
   /** For a do-nothing vs act comparison chart: the money and the two yearly rates. */

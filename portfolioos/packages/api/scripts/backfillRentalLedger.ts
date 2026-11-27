@@ -96,6 +96,7 @@ import { createHash } from 'node:crypto';
 import { prisma, runInTransaction } from '../src/lib/prisma.js';
 import { runAsSystem } from '../src/lib/requestContext.js';
 import { recomputeTenancyLedger } from '../src/services/rental/rentalLedger.service.js';
+import { planLegacyRentCashRepair, repairLegacyRentCash } from './repairLegacyRentCash.js';
 
 /**
  * A drift row tagged `OVERDUE_CATCHUP` is a receipt the overdue cron should
@@ -119,6 +120,14 @@ export interface BackfillReport {
    * failure signal — a record for review.
    */
   semanticChanges: Array<{ receiptId: string; field: string; before: string | null; after: string | null }>;
+  /**
+   * Pre-ledger "Rent received" cash the receipts no longer point at, because
+   * a recompute ran before this backfill and reset their legacy state (launch
+   * review B7). Linked into the ledger by month (a dry run only counts them);
+   * duplicates of months the ledger already has are reported, never deleted
+   * here — scripts/repairLegacyRentCash.ts does that, per user, on request.
+   */
+  orphanCash: { linked: number; duplicates: number; skipped: number };
 }
 
 const BACKFILL_PAYMENT_PREFIX = 'backfill:payment:';
@@ -338,6 +347,7 @@ export async function backfillRentalLedger(
       tenanciesRecomputed: 0,
       drift: [],
       semanticChanges: [],
+      orphanCash: { linked: 0, duplicates: 0, skipped: 0 },
     };
 
     if (opts.dryRun) {
@@ -369,6 +379,7 @@ export async function backfillRentalLedger(
       } catch (err) {
         if (!(err instanceof DryRunRollback)) throw err;
       }
+      await adoptOrphanRentCash(report, opts.onlyTenancyIds, false);
       return report;
     }
 
@@ -386,8 +397,31 @@ export async function backfillRentalLedger(
       report,
       opts.onlyTenancyIds,
     );
+    await adoptOrphanRentCash(report, opts.onlyTenancyIds, true);
     return report;
   });
+}
+
+/**
+ * After the receipt-state pass: cash that legacy receipts used to point at.
+ * Runs per user (the repair is user-scoped); `onlyTenancyIds` narrows it to
+ * those tenancies' owners. A dry run plans only — against committed data, so
+ * it does not see payments the rolled-back pass above would have added.
+ */
+async function adoptOrphanRentCash(report: BackfillReport, onlyTenancyIds: string[] | undefined, apply: boolean): Promise<void> {
+  const owners = await prisma.rentalProperty.findMany({
+    where: onlyTenancyIds ? { tenancies: { some: { id: { in: onlyTenancyIds } } } } : {},
+    select: { userId: true },
+    distinct: ['userId'],
+  });
+  for (const { userId } of owners) {
+    const r = apply
+      ? await repairLegacyRentCash({ userId, apply: true, deleteDuplicates: false })
+      : (await planLegacyRentCashRepair(userId)).report;
+    report.orphanCash.linked += r.linked.length;
+    report.orphanCash.duplicates += r.duplicates.length;
+    report.orphanCash.skipped += r.skipped.length;
+  }
 }
 
 // Direct execution: print the report and exit non-zero on drift.

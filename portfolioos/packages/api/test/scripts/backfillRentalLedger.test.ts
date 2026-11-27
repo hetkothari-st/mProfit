@@ -665,3 +665,57 @@ describe('backfillRentalLedger — an UNPINNED live payment also blocks the back
     });
   });
 });
+
+/**
+ * Launch review B7: a recompute that ran BEFORE the backfill reset each
+ * legacy receipt (status, received amount, cashFlowId) from the empty ledger,
+ * so the backfill found nothing to convert while the "Rent received" cash
+ * stayed in Cash Activity. The backfill now adopts that orphan cash.
+ */
+describe('backfillRentalLedger after an early recompute', () => {
+  let scope: TestScope;
+  let tenancyId: string;
+
+  beforeAll(async () => {
+    scope = await createTestScope('rental-ledger-backfill-late');
+    await scope.runAs(async () => {
+      const property = await prisma.rentalProperty.create({
+        data: { userId: scope.userId, name: 'Late Backfill Flat', propertyType: 'RESIDENTIAL', portfolioId: scope.portfolioId },
+      });
+      const tenancy = await prisma.tenancy.create({
+        data: { propertyId: property.id, tenantName: 'LATE TENANT', startDate: new Date('2025-01-01T00:00:00Z'), monthlyRent: '25000', rentDueDay: 1 },
+      });
+      tenancyId = tenancy.id;
+      // What the overdue job left behind: the receipt reset, the cash still there.
+      await prisma.rentReceipt.create({
+        data: { tenancyId, forMonth: '2025-02', expectedAmount: '25000', dueDate: new Date('2025-02-01T00:00:00Z'), status: 'OVERDUE' },
+      });
+      await prisma.cashFlow.create({
+        data: {
+          portfolioId: scope.portfolioId, date: new Date('2026-05-05T00:00:00Z'), type: 'INFLOW', amount: '25000',
+          description: 'Rent received — Late Backfill Flat / LATE TENANT (2025-02)', createdAt: new Date('2026-05-05T00:00:00Z'),
+        },
+      });
+    });
+  });
+  afterAll(async () => {
+    await scope.runAs(() => prisma.cashFlow.deleteMany({ where: { portfolioId: scope.portfolioId } }));
+    await scope.cleanup();
+  });
+
+  it('a dry run counts the orphan cash and writes nothing', async () => {
+    const report = await backfillRentalLedger({ dryRun: true, onlyTenancyIds: await scopeTenancies(scope) });
+    expect(report.orphanCash).toEqual({ linked: 1, duplicates: 0, skipped: 0 });
+    const status = await scope.runAs(async () => (await prisma.rentReceipt.findFirstOrThrow({ where: { tenancyId } })).status);
+    expect(status).toBe('OVERDUE');
+  });
+
+  it('the real run links the cash to its month and settles it', async () => {
+    const report = await backfillRentalLedger({ onlyTenancyIds: await scopeTenancies(scope) });
+    expect(report.orphanCash.linked).toBe(1);
+    const receipt = await scope.runAs(() => prisma.rentReceipt.findFirstOrThrow({ where: { tenancyId } }));
+    expect(receipt.status).toBe('RECEIVED');
+    // And a second run finds nothing left to adopt.
+    expect((await backfillRentalLedger({ onlyTenancyIds: await scopeTenancies(scope) })).orphanCash.linked).toBe(0);
+  });
+});
