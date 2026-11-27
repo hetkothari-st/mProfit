@@ -1,5 +1,6 @@
 import type { CaAuditEntry } from '@/api/ca.api';
 import { cn } from '@/lib/cn';
+import { describeBefore } from './accessModel';
 
 import { formatDateIST } from '@everypaisa/shared';
 /**
@@ -73,7 +74,7 @@ export function CaActivityFeed({
                         feed only confirms that something changed. */}
                     {e.metadata?.before !== undefined && (
                       <p className="mt-1 break-words text-[11.5px] leading-relaxed text-muted-foreground">
-                        Was <span className="numeric">{summarise(e.metadata.before)}</span>
+                        Was <span className="numeric">{describeBefore(e.metadata.before)}</span>
                       </p>
                     )}
                   </li>
@@ -118,15 +119,4 @@ function groupByDay(entries: CaAuditEntry[]): Array<[string, CaAuditEntry[]]> {
     else groups.set(key, [e]);
   }
   return [...groups.entries()];
-}
-
-/** Compact one-line rendering of a before/after blob. */
-function summarise(value: unknown): string {
-  if (value === null || value === undefined) return 'nothing';
-  if (typeof value !== 'object') return String(value);
-  const parts = Object.entries(value as Record<string, unknown>)
-    .filter(([, v]) => v !== null && v !== undefined && typeof v !== 'object')
-    .slice(0, 4)
-    .map(([k, v]) => `${k} ${String(v)}`);
-  return parts.length > 0 ? parts.join(', ') : 'nothing';
 }

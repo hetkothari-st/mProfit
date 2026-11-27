@@ -22,7 +22,7 @@ import { cn } from '@/lib/cn';
 import { caApi, type CaClient } from '@/api/ca.api';
 import { LIVE_QUERY, LIVE_INTERVAL_MS } from '@/lib/liveQuery';
 import { Initials, ClientAccessStrip } from '@/components/ca/AccessParts';
-import { fmtDate } from '@/components/ca/accessModel';
+import { fmtDate, inviteLinkStatus } from '@/components/ca/accessModel';
 
 /**
  * A CA's client list.
@@ -55,8 +55,9 @@ export function CaWorkspacePage() {
 
   const revoke = useMutation({
     mutationFn: (clientId: string) => caApi.revokeGrant(clientId),
-    onSuccess: () => {
-      toast.success('Engagement closed');
+    onSuccess: (_res, clientId) => {
+      const wasPending = clients?.find((c) => c.id === clientId)?.status === 'PENDING';
+      toast.success(wasPending ? 'Invitation withdrawn' : 'Engagement closed');
       qc.invalidateQueries({ queryKey: ['ca', 'clients'] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -136,7 +137,12 @@ export function CaWorkspacePage() {
               hint="Invited, not yet accepted. Their books stay closed to you until they do."
             >
               {pending.map((c) => (
-                <PendingClient key={c.id} client={c} />
+                <PendingClient
+                  key={c.id}
+                  client={c}
+                  onWithdraw={() => revoke.mutate(c.id)}
+                  withdrawing={revoke.isPending}
+                />
               ))}
             </Group>
           )}
@@ -280,7 +286,18 @@ function ActiveClient({
   );
 }
 
-function PendingClient({ client: c }: { client: CaClient }) {
+function PendingClient({
+  client: c,
+  onWithdraw,
+  withdrawing,
+}: {
+  client: CaClient;
+  onWithdraw: () => void;
+  withdrawing: boolean;
+}) {
+  // A link past its date is dead (the server refuses it), so say so and let the
+  // CA clear it; inviting the same address again sends a fresh link.
+  const link = inviteLinkStatus(c.inviteExpiresAt);
   return (
     <li className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-dashed border-border px-5 py-4">
       <div className="flex min-w-0 items-center gap-3">
@@ -289,12 +306,26 @@ function PendingClient({ client: c }: { client: CaClient }) {
           <p className="truncate text-[15px] text-foreground">{c.displayName}</p>
           <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
             {clientEmail(c) ?? 'No email on record'}
-            {c.inviteExpiresAt && (
-              <span className="ml-2 text-warning">Link expires {fmtDate(c.inviteExpiresAt)}</span>
+            {link && (
+              <span className={cn('ml-2', link.expired ? 'text-negative' : 'text-warning')}>{link.text}</span>
             )}
           </p>
+          {link?.expired && (
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              This link no longer works. Withdraw it and invite them again for a new one.
+            </p>
+          )}
         </div>
       </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={withdrawing}
+        onClick={onWithdraw}
+        className="text-muted-foreground hover:text-negative"
+      >
+        Withdraw invitation
+      </Button>
     </li>
   );
 }
@@ -338,7 +369,7 @@ function InviteClientDialog({
           <DialogDescription>
             {createdClientId
               ? 'Read it, change anything you want to say, then send. The link works once and expires in 14 days.'
-              : 'They keep their own account and can withdraw access at any time.'}
+              : 'They keep their own account and grant you access. They can see everything you do and withdraw it at any time.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -347,10 +378,6 @@ function InviteClientDialog({
         ) : (
           <>
             <div className="space-y-3">
-              <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-                They keep their own account and grant you access. They can see everything you do and
-                withdraw it at any time.
-              </p>
               <div>
                 <Label>Client name</Label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} />

@@ -564,7 +564,9 @@ export async function revokeGrant(callerId: string, clientId: string, req?: Requ
         resourceId: clientId,
         summary: isSubject
           ? 'You revoked your CA’s access to your books.'
-          : `Your CA closed the engagement for ${client.name}.`,
+          : client.acceptedAt
+            ? `Your CA closed the engagement for ${client.name}.`
+            : `Withdrew the invitation to ${client.name}.`,
       },
     );
   });
