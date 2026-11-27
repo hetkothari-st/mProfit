@@ -549,6 +549,7 @@ model Client {
   notes           ClientNote[]
   tasks           ClientTask[]
   documentRequests DocumentRequest[]
+  invoices         Invoice[]
 
   @@index([advisorId, status])
   @@index([userId, status])
@@ -646,6 +647,77 @@ enum DocumentRequestStatus {
   UPLOADED
   NOT_APPLICABLE
   ACCEPTED
+  CANCELLED
+}
+
+/// A CA's practice details, printed on their invoices. One per CA.
+model PracticeProfile {
+  userId        String   @id
+  firmName      String
+  address       String
+  /// GST state code of the firm's place of business ("27").
+  stateCode     String
+  /// Null when the firm is not registered for GST: its invoices carry no tax.
+  gstin         String?
+  /// Up to four characters: "INV" gives INV/25-26/0001.
+  invoicePrefix String   @default("INV")
+  /// Printed under the totals: how to pay, terms. Free text.
+  paymentNote   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+/// A CA's invoice to a client for fees. Seller and buyer are snapshots, so a
+/// later change to either does not rewrite an issued invoice. Never deleted:
+/// a mistake is cancelled and keeps its number, as GST requires.
+model Invoice {
+  id            String        @id @default(cuid())
+  advisorId     String
+  clientId      String
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  number        String
+  invoiceDate   DateTime      @db.Date
+  financialYear String
+  seller        Json
+  buyerName     String
+  buyerAddress  String?
+  buyerGstin    String?
+  /// GST state code of the place of supply.
+  placeOfSupply String
+  taxable       Decimal       @db.Decimal(14, 2)
+  cgst          Decimal       @db.Decimal(14, 2)
+  sgst          Decimal       @db.Decimal(14, 2)
+  igst          Decimal       @db.Decimal(14, 2)
+  total         Decimal       @db.Decimal(14, 2)
+  status        InvoiceStatus @default(ISSUED)
+  paidOn        DateTime?     @db.Date
+  paymentNote   String?
+  cancelledAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  lines         InvoiceLine[]
+
+  @@unique([advisorId, number])
+  @@index([advisorId, financialYear])
+  @@index([clientId])
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position    Int
+  description String
+  sac         String?
+  amount      Decimal @db.Decimal(14, 2)
+  gstRatePct  Decimal @db.Decimal(5, 2)
+
+  @@index([invoiceId])
+}
+
+enum InvoiceStatus {
+  ISSUED
+  PAID
   CANCELLED
 }
 

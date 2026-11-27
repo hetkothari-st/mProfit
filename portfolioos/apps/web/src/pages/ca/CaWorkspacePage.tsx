@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, Mail, ChevronDown } from 'lucide-react';
+import { Briefcase, Mail, ChevronDown, ReceiptText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -77,17 +77,24 @@ export function CaWorkspacePage() {
         title="Clients"
         description="The people whose books you keep. Each of them decides what you can see and do, and can withdraw it at any time."
         actions={
-          canInvite ? (
-            <Button size="sm" onClick={() => setInviteOpen(true)}>
-              <Mail className="h-4 w-4" /> Invite a client
-            </Button>
-          ) : (
+          <div className="flex gap-2">
             <Button asChild size="sm" variant="outline">
-              <Link to="/pricing">
-                <Mail className="h-4 w-4" /> Invite your own clients
+              <Link to="/ca/billing">
+                <ReceiptText className="h-4 w-4" /> Billing
               </Link>
             </Button>
-          )
+            {canInvite ? (
+              <Button size="sm" onClick={() => setInviteOpen(true)}>
+                <Mail className="h-4 w-4" /> Invite a client
+              </Button>
+            ) : (
+              <Button asChild size="sm" variant="outline">
+                <Link to="/pricing">
+                  <Mail className="h-4 w-4" /> Invite your own clients
+                </Link>
+              </Button>
+            )}
+          </div>
         }
       />
 

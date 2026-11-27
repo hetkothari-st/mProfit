@@ -95,6 +95,18 @@ import {
 } from '../controllers/caDocumentRequests.controller.js';
 import { uploadDocumentFile } from '../middleware/documentUpload.js';
 
+import {
+  getPracticeProfileHandler,
+  savePracticeProfileHandler,
+  listInvoicesHandler,
+  createInvoiceHandler,
+  getInvoiceHandler,
+  invoicePdfHandler,
+  markInvoicePaidHandler,
+  cancelInvoiceHandler,
+  billingDefaultsHandler,
+} from '../controllers/caInvoice.controller.js';
+
 export const caRouter = Router();
 caRouter.use(authenticate);
 // The client list comes before the gate: every signed-in user's sidebar asks
@@ -139,6 +151,17 @@ caRouter.delete('/clients/:clientId/tasks/:id', asyncHandler(deleteTaskHandler))
 caRouter.get('/clients/:clientId/document-requests', asyncHandler(listClientRequestsHandler));
 caRouter.post('/clients/:clientId/document-requests', asyncHandler(requestDocumentHandler));
 caRouter.post('/clients/:clientId/document-requests/:id/close', asyncHandler(closeRequestHandler));
+
+// Fees and invoices (practice-private).
+caRouter.get('/practice-profile', asyncHandler(getPracticeProfileHandler));
+caRouter.put('/practice-profile', asyncHandler(savePracticeProfileHandler));
+caRouter.get('/invoices', asyncHandler(listInvoicesHandler));
+caRouter.post('/invoices', asyncHandler(createInvoiceHandler));
+caRouter.get('/invoices/:id', asyncHandler(getInvoiceHandler));
+caRouter.get('/invoices/:id/pdf', asyncHandler(invoicePdfHandler));
+caRouter.post('/invoices/:id/paid', asyncHandler(markInvoicePaidHandler));
+caRouter.post('/invoices/:id/cancel', asyncHandler(cancelInvoiceHandler));
+caRouter.get('/clients/:clientId/billing-defaults', asyncHandler(billingDefaultsHandler));
 
 // Grants
 caRouter.post('/clients', requireAdvisorPlan, asyncHandler(createManagedClientHandler));

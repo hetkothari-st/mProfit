@@ -36,3 +36,4 @@ export * from './charges.js';
 export * from './support.js';
 export * from './priceFreshness.js';export * from './marketSession.js';
 export * from './creditCardLimit.js';
+export * from './gstInvoice.js';
