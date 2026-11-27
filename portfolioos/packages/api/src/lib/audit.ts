@@ -72,7 +72,8 @@ export type AuditAction =
   | 'ai_disclosure_acknowledged'
   | 'cpi_refresh_run'
   | 'consent.spending_analysis'
-  | 'consent.spending_analysis_withdrawn';
+  | 'consent.spending_analysis_withdrawn'
+  | 'corporate_action_manual_entry';
 
 export interface AuditInput {
   userId?: string | null;

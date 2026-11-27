@@ -10,6 +10,11 @@ import {
 } from '../services/corporateActions/corporateActionsReport.service.js';
 import { applyCorporateActionsForUser } from '../services/corporateActions/corporateActionApply.service.js';
 import { loadNseCorporateActions } from '../priceFeeds/corporateActions.service.js';
+import {
+  addManualCorporateAction,
+  listManualCorporateActions,
+} from '../services/corporateActions/manualCorporateAction.service.js';
+import { writeAuditLog } from '../lib/audit.js';
 
 const VALID_TYPES = new Set<CorporateActionType>([
   'DIVIDEND', 'BONUS', 'SPLIT', 'MERGER', 'DEMERGER', 'RIGHTS', 'BUYBACK',
@@ -49,4 +54,22 @@ export async function syncCorporateActions(_req: Request, res: Response): Promis
 export async function applyCorporateActions(req: Request, res: Response): Promise<void> {
   const applied = await applyCorporateActionsForUser(req.user!.id);
   ok(res, { applied });
+}
+
+/** GET /api/corporate-actions/manual — hand-entered actions (admin). */
+export async function listManualCorporateActionsHandler(_req: Request, res: Response): Promise<void> {
+  ok(res, await listManualCorporateActions());
+}
+
+/** POST /api/corporate-actions/manual — enter a split or bonus by hand and apply it (admin). */
+export async function addManualCorporateActionHandler(req: Request, res: Response): Promise<void> {
+  const result = await addManualCorporateAction(req.user!.id, req.body);
+  await writeAuditLog({
+    userId: req.user!.id,
+    action: 'corporate_action_manual_entry',
+    resource: `CorporateAction:${result.corporateActionId}`,
+    metadata: { ...result },
+    req,
+  });
+  ok(res, result);
 }

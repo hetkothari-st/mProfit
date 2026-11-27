@@ -215,6 +215,20 @@ export function SettingsPage() {
             </CardContent>
           </Card>
         )}
+
+        {user?.role === 'ADMIN' && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Corporate actions</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Enter a split or bonus the NSE and BSE feeds missed.{' '}
+              <Link to="/settings/corporate-actions" className="underline underline-offset-2 hover:text-foreground">
+                Open corporate actions
+              </Link>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="mt-6">
