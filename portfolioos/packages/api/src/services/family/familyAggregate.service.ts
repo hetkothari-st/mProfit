@@ -56,7 +56,7 @@ import {
 } from '../analytics/healthScoreMath.js';
 import { buildAmortizationSchedule, computeLoanSummary, missedEmiInWindow, OUTSTANDING_LOAN_STATUSES, type StoredLoan } from '../loans/loans.service.js';
 import { computeCardSummary } from '../banking/creditCards.service.js';
-import { activeMonthlyIncomeTotal } from '../income/income.service.js';
+import { activeEarnedMonthlyIncome } from '../income/income.service.js';
 import { isPriceStale } from '../holdings/priceStaleness.js';
 
 /**
@@ -686,7 +686,8 @@ export async function getFamilyProtection(
         const [policies, liabilities, monthlyIncome] = await Promise.all([
           loadPolicies(m, horizon),
           loadLiabilities(m),
-          activeMonthlyIncomeTotal(m.userId),
+          // Earned income only: the 10x rule sizes cover for income that stops at death.
+          activeEarnedMonthlyIncome(m.userId),
         ]);
         return { m, policies, liabilities, monthlyIncome };
       }),

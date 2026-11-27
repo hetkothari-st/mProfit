@@ -57,3 +57,49 @@ describe('health score cards say what to do, accurately', () => {
     expect(ins.action).not.toMatch(/^Add /);
   });
 });
+
+/**
+ * User decision 2026-11-27: the 10x life-cover base is earned income only.
+ * Life cover replaces income that stops at death; rent keeps coming and
+ * trading P&L is not a wage.
+ */
+describe('life cover is sized on earned income only', () => {
+  let scope: TestScope;
+  afterEach(async () => {
+    await scope.cleanup();
+  });
+
+  async function setup(incomes: Array<{ type: 'SALARY' | 'RENTAL' | 'TRADING'; monthly: string }>) {
+    scope = await createTestScope('health-earned');
+    await scope.runAs(async () => {
+      for (const i of incomes) {
+        await prisma.income.create({ data: { userId: scope.userId, type: i.type, sourceName: i.type, monthlyAmount: i.monthly } });
+      }
+      await prisma.insurancePolicy.create({
+        data: {
+          userId: scope.userId, insurer: 'Test Life', type: 'TERM', policyHolder: 'TEST USER',
+          sumAssured: '1000000', premiumAmount: '10000', premiumFrequency: 'ANNUAL', startDate: new Date('2024-01-01'),
+        },
+      });
+    });
+  }
+
+  it('ignores rent and trading income in the 10x base', async () => {
+    // Salary 1,00,000 + rent 50,000 + trading 40,000 a month. Base is salary only:
+    // 12,00,000 a year → 1,20,00,000 needed, 10,00,000 held → about 1,10,00,000 short.
+    await setup([
+      { type: 'SALARY', monthly: '100000' },
+      { type: 'RENTAL', monthly: '50000' },
+      { type: 'TRADING', monthly: '40000' },
+    ]);
+    const r = await scope.runAs(() => computeHealthScore(scope.userId, { force: true }));
+    expect(r.subScores.insurance.action).toMatch(/about ₹1,10,00,000(.00)? short/);
+  });
+
+  it('says so when the only income on file is rent or trading', async () => {
+    await setup([{ type: 'RENTAL', monthly: '50000' }, { type: 'TRADING', monthly: '40000' }]);
+    const r = await scope.runAs(() => computeHealthScore(scope.userId, { force: true }));
+    expect(r.subScores.insurance.score).toBeNull();
+    expect(r.subScores.insurance.insight).toMatch(/no earned income/);
+  });
+});

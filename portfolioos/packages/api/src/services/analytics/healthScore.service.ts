@@ -4,7 +4,7 @@ import { formatINR } from '@everypaisa/shared';
 import { prisma } from '../../lib/prisma.js';
 import { getDashboardNetWorth } from './dashboard.service.js';
 import { listGoals } from '../goals/goals.service.js';
-import { activeMonthlyIncomeTotal } from '../income/income.service.js';
+import { activeEarnedMonthlyIncome, activeMonthlyIncomeTotal } from '../income/income.service.js';
 import {
   emergencyFundScore, investmentRateScore, debtBurdenScore,
   diversificationScore, insuranceScore, goalProgressScore, weightedOverall,
@@ -244,7 +244,7 @@ export interface HealthSubScore {
 }
 
 /** Bumped when the stored sub-score shape changes; older snapshots are recomputed. */
-const SNAPSHOT_VERSION = 3;
+const SNAPSHOT_VERSION = 4;
 
 function stripVersion(stored: unknown): HealthScoreResult['subScores'] {
   const { _v: _ignored, ...rest } = stored as Record<string, unknown>;
@@ -266,11 +266,12 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
     }
   }
 
-  const [netWorth, goals, salaryIncome, estimatedIncome, monthlyExpenses, monthlyInvestment, liquidAssets, largestHoldingPct, ccMinimums, life, age] =
+  const [netWorth, goals, salaryIncome, earnedIncome, estimatedIncome, monthlyExpenses, monthlyInvestment, liquidAssets, largestHoldingPct, ccMinimums, life, age] =
     await Promise.all([
       getDashboardNetWorth(userId),
       listGoals(userId),
       activeMonthlyIncomeTotal(userId),
+      activeEarnedMonthlyIncome(userId),
       estimateMonthlyIncome(userId),
       estimateMonthlyExpenses(userId),
       estimateMonthlyInvestment(userId),
@@ -290,6 +291,11 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
   const monthlyDebtPayments = monthlyEmi.plus(ccMinimums);
   const equityPct = netWorth.allocationBreakdown.find((a) => a.key === 'EQUITY')?.percent ?? 0;
   const annualIncome = monthlyIncome.times(12);
+  // Life cover replaces income that stops at death, so its 10x base is earned
+  // income only — not rent, trading P&L or investment income. With no income
+  // entries the bank-credit estimate is all we have and cannot be split.
+  const lifeCoverAnnualIncome = (salaryIncome.greaterThan(0) ? earnedIncome : estimatedIncome).times(12);
+  const onlyUnearnedIncome = salaryIncome.greaterThan(0) && earnedIncome.lessThanOrEqualTo(0);
   const hasAnyHoldings = netWorth.allocationBreakdown.length > 0;
   // No active salary entries and no confirmed NEFT/UPI credit events in the
   // last 3 months. A real user always has *some* income, so this is a
@@ -316,7 +322,7 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
     equityPct,
     age,
   });
-  const ins = insuranceScore(life.sumAssured, annualIncome, life.hasPolicies);
+  const ins = insuranceScore(life.sumAssured, lifeCoverAnnualIncome, life.hasPolicies);
   const gp = goalProgressScore(activeGoals.map((g) => g.progressPct));
 
   const addIncome = 'Add your salary under Income, or connect Gmail, so we can see your income.';
@@ -410,7 +416,7 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
 
   // Insurance. With no life policy tracked we can't tell a gap from someone
   // with no dependents, so it isn't scored — but it is said.
-  const insuranceRequiredCover = requiredLifeCover(annualIncome);
+  const insuranceRequiredCover = requiredLifeCover(lifeCoverAnnualIncome);
   const insuranceGap = insuranceRequiredCover.minus(life.sumAssured);
   const insurance: HealthSubScore = !life.hasPolicies
     ? {
@@ -418,6 +424,14 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
       insight: 'No life insurance tracked.',
       action: 'If anyone depends on your income, add your term or life policy here (or take one).',
     }
+    : onlyUnearnedIncome
+      ? {
+        score: null,
+        insight:
+          `Your life cover is ${formatINR(life.sumAssured.toString())}. The income on file is rent, trading or investment income, ` +
+          'which carries on without you, so there is no earned income for the 10x rule to size cover against.',
+        action: 'If you also earn a salary or business income, add it under Income.',
+      }
     : !hasIncomeData
       ? {
         score: null,
@@ -426,7 +440,7 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
       }
       : {
         score: Math.round(ins.score),
-        insight: `Your life cover is ${formatINR(life.sumAssured.toString())}. A common rule of thumb is about 10x yearly income.`,
+        insight: `Your life cover is ${formatINR(life.sumAssured.toString())}. A common rule of thumb is about 10x yearly earned income (salary, business, freelance — not rent or trading).`,
         // A rule of thumb, not a quote: the real need depends on loans,
         // dependants and savings, so the gap is stated as an estimate with a
         // next step, not an order (launch review B10).

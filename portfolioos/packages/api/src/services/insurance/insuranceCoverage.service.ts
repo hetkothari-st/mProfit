@@ -3,7 +3,7 @@
  *
  * Every number comes from the service that already owns it, so this page can
  * never disagree with the health score, the dashboard or the goals page:
- *   income          income.service       activeMonthlyIncomeTotal
+ *   income          income.service       activeEarnedMonthlyIncome (life cover: earned income only)
  *   spending, cash  healthScore.service  getEmergencyFundInputs
  *   loans, holdings dashboard.service    getDashboardNetWorth
  *   goals           goals.service        listGoals
@@ -27,7 +27,7 @@ import {
   type PropertyFact,
   type VehicleFact,
 } from '@everypaisa/shared';
-import { activeMonthlyIncomeTotal } from '../income/income.service.js';
+import { activeEarnedMonthlyIncome } from '../income/income.service.js';
 import { getEmergencyFundInputs } from '../analytics/healthScore.service.js';
 import { getDashboardNetWorth } from '../analytics/dashboard.service.js';
 import { listGoals } from '../goals/goals.service.js';
@@ -67,7 +67,8 @@ function healthDetails(raw: unknown): Pick<HealthPolicyFact, 'members' | 'roomRe
 
 export async function getCoverage(userId: string): Promise<CoverageResponse> {
   const [monthlyIncome, emergency, netWorth, goals, policies, vehicles, owned, rentals] = await Promise.all([
-    activeMonthlyIncomeTotal(userId),
+    // Earned income only: life cover replaces what stops at death, not rent or trading P&L.
+    activeEarnedMonthlyIncome(userId),
     getEmergencyFundInputs(userId),
     getDashboardNetWorth(userId),
     listGoals(userId),
