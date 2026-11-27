@@ -212,6 +212,9 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   // client. Policies in 20261127140000_ca_notes_tasks.
   'ClientNote',
   'ClientTask',
+  // DocumentRequest: documents a CA asks a client for; both sides read.
+  // Policies in 20261127160000_ca_document_requests.
+  'DocumentRequest',
   // Owner policies in 20260910180000_property_photos_and_location and
   // 20260913100000_insurance_extras. Unregistered, property photos read as
   // empty and uploads failed 42501; dismissed premium suggestions never stuck.
