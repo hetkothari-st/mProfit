@@ -19,6 +19,7 @@ import {
   listClients,
   listMyProfessionals,
   listCaActivity,
+  listMyAccessActivity,
   getCaScope,
   inviteProfessional,
   acceptProfessionalInvitation,
@@ -120,6 +121,11 @@ export async function listCaActivityHandler(req: Request, res: Response) {
     await getCaScope(req.user!.id, clientId);
   }
   ok(res, await listCaActivity(req.user!.id, { clientId }));
+}
+
+/** The account holder's Account Access trail: their own books only. */
+export async function listMyAccessActivityHandler(req: Request, res: Response) {
+  ok(res, await listMyAccessActivity(req.user!.id));
 }
 
 // ─── The client's controls over a grant ──────────────────────────────
