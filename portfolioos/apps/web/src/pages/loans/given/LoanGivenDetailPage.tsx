@@ -27,6 +27,7 @@ import { Decimal, formatINR } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import {
@@ -148,10 +149,9 @@ function AddEntryDialog({
             </div>
             <div>
               <Label htmlFor="lge-date">Date</Label>
-              <Input
+              <DateInput
                 id="lge-date"
                 className="mt-1"
-                type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
@@ -719,10 +719,9 @@ export function LoanGivenDetailPage() {
           {action !== 'delete' && (
             <div>
               <Label htmlFor="lg-action-date">Date</Label>
-              <Input
+              <DateInput
                 id="lg-action-date"
                 className="mt-1"
-                type="date"
                 value={actionDate}
                 onChange={(e) => setActionDate(e.target.value)}
               />

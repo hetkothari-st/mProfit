@@ -21,6 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Figure } from '@/components/receipt/Receipt';
 import { apiErrorMessage } from '@/api/client';
@@ -126,7 +127,7 @@ function SurrenderValueBody({ policy, today }: { policy: InsurancePolicyDTO; tod
             </div>
             <div className="space-y-1.5">
               <Label htmlFor={`sv-on-${policy.id}`}>Quoted on</Label>
-              <Input id={`sv-on-${policy.id}`} type="date" max={today} value={asOf} onChange={(e) => setAsOf(e.target.value)} />
+              <DateInput id={`sv-on-${policy.id}`} max={today} value={asOf} onChange={(e) => setAsOf(e.target.value)} />
             </div>
             <div className="flex gap-2">
               <Button type="submit" size="sm" disabled={save.isPending}>

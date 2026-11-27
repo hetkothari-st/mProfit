@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -299,7 +300,7 @@ function CreateAlertDialog({ open, onOpenChange }: { open: boolean; onOpenChange
           </div>
           <div>
             <Label>Reminder date</Label>
-            <Input type="date" value={triggerDate} onChange={(e) => setTriggerDate(e.target.value)} />
+            <DateInput value={triggerDate} onChange={(e) => setTriggerDate(e.target.value)} />
           </div>
         </div>
         <DialogFooter>

@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { PortfolioSelect } from '@/components/common/PortfolioSelect';
@@ -420,28 +421,28 @@ export function VehicleFormDialog({ open, onOpenChange, initial }: Props) {
                       <div className="w-2 h-2 rounded-full bg-blue-500" />
                       <Label className="text-xs">Insurance</Label>
                     </div>
-                    <Input type="date" className="h-8 w-32 text-xs" {...register('insuranceExpiry')} />
+                    <DateInput className="h-8 w-32 text-xs" {...register('insuranceExpiry')} />
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-green-500" />
                       <Label className="text-xs">PUC / Emission</Label>
                     </div>
-                    <Input type="date" className="h-8 w-32 text-xs" {...register('pucExpiry')} />
+                    <DateInput className="h-8 w-32 text-xs" {...register('pucExpiry')} />
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-orange-500" />
                       <Label className="text-xs">Fitness Validity</Label>
                     </div>
-                    <Input type="date" className="h-8 w-32 text-xs" {...register('fitnessExpiry')} />
+                    <DateInput className="h-8 w-32 text-xs" {...register('fitnessExpiry')} />
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-purple-500" />
                       <Label className="text-xs">Road Tax</Label>
                     </div>
-                    <Input type="date" className="h-8 w-32 text-xs" {...register('roadTaxExpiry')} />
+                    <DateInput className="h-8 w-32 text-xs" {...register('roadTaxExpiry')} />
                   </div>
                 </div>
               </div>

@@ -4,6 +4,7 @@ import { Lock, Pin, PinOff, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/cn';
 import { fmtDate } from './accessModel';
@@ -74,8 +75,7 @@ function TasksSection({ clientId }: { clientId: string }) {
           onChange={(e) => setTitle(e.target.value)}
           className="min-w-[220px] flex-1"
         />
-        <Input
-          type="date"
+        <DateInput
           aria-label="Task due date"
           value={due}
           onChange={(e) => setDue(e.target.value)}

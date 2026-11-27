@@ -6,6 +6,7 @@ import { Decimal } from '@everypaisa/shared';
 import type { SplitGroupDto, SplitSettleMethodDto } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -100,7 +101,7 @@ export function SettleUpDialog({ open, onOpenChange, group, from, to, amount }: 
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="settle-date">Date</Label>
-              <Input id="settle-date" type="date" value={date} max={todayLocal()} onChange={(e) => setDate(e.target.value)} />
+              <DateInput id="settle-date" value={date} max={todayLocal()} onChange={(e) => setDate(e.target.value)} />
             </div>
           </div>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

@@ -7,6 +7,7 @@ import { GST_STATES, GST_STATE_LIST, formatINR, isValidGstin } from '@everypaisa
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
 import { fmtDate } from '@/components/ca/accessModel';
@@ -200,7 +201,7 @@ function InvoiceRow({ inv }: { inv: Invoice }) {
           {inv.status === 'ISSUED' &&
             (paying ? (
               <>
-                <Input type="date" aria-label={`Paid on, ${inv.number}`} value={paidOn} onChange={(e) => setPaidOn(e.target.value)} className="h-8 w-[150px]" />
+                <DateInput aria-label={`Paid on, ${inv.number}`} value={paidOn} onChange={(e) => setPaidOn(e.target.value)} className="h-8 w-[150px]" />
                 <Button size="sm" onClick={() => setPaid.mutate(true)} disabled={setPaid.isPending}>
                   Save
                 </Button>

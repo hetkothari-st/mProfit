@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { realEstateApi } from '@/api/realEstate/realEstate.api';
 import { apiErrorMessage } from '@/api/client';
@@ -62,7 +63,7 @@ export function MarkSoldDialog({ open, onOpenChange, propertyId, propertyName }:
         <div className="space-y-4">
           <div>
             <Label>Sale date *</Label>
-            <Input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} />
+            <DateInput value={saleDate} onChange={(e) => setSaleDate(e.target.value)} />
           </div>
           <div>
             <Label>Sale price (₹) *</Label>

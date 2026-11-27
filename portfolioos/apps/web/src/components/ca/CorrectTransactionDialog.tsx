@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
 import { caApi, type CaTransactionRow } from '@/api/ca.api';
@@ -114,7 +115,7 @@ export function CorrectTransactionDialog({
 
           <div>
             <Label>Trade date</Label>
-            <Input type="date" value={tradeDate} onChange={(e) => setTradeDate(e.target.value)} />
+            <DateInput value={tradeDate} onChange={(e) => setTradeDate(e.target.value)} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">

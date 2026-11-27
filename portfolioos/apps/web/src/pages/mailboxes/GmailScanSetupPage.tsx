@@ -6,7 +6,7 @@ import { Loader2, Calendar } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { gmailScanApi } from '@/api/gmail/gmailScan.api';
 import { apiErrorMessage } from '@/api/client';
@@ -53,9 +53,8 @@ export function GmailScanSetupPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="from" className="text-xs">Scan from</Label>
-              <Input
+              <DateInput
                 id="from"
-                type="date"
                 value={from}
                 max={to}
                 onChange={(e) => setFrom(e.target.value)}
@@ -63,9 +62,8 @@ export function GmailScanSetupPage() {
             </div>
             <div>
               <Label htmlFor="to" className="text-xs">Scan until</Label>
-              <Input
+              <DateInput
                 id="to"
-                type="date"
                 value={to}
                 min={from}
                 max={today}

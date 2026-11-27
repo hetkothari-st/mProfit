@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { bankAccountsApi } from '@/api/bankAccounts.api';
 import { BankAccountVisual } from '@/components/bankAccounts/BankAccountVisual';
@@ -83,7 +84,7 @@ function AddSnapshotDialog({
         <div className="space-y-4">
           <div>
             <Label>As of</Label>
-            <Input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} />
+            <DateInput value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} />
           </div>
           <div>
             <Label>Balance (₹)</Label>

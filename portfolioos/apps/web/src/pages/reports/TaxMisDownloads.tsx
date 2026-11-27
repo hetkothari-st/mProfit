@@ -14,7 +14,7 @@ import { Loader2, FileDown, FileText, Sparkles, ArrowRight } from 'lucide-react'
 import { meetsMinTier, type PlanTierValue } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { getApiBaseUrl } from '@/api/baseUrl';
@@ -618,15 +618,15 @@ export function TaxMisDownloads({
             </div>
             <div>
               <Label>As-of date</Label>
-              <Input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="mt-1 w-full sm:w-40" />
+              <DateInput value={asOf} onChange={(e) => setAsOf(e.target.value)} className="mt-1 w-full sm:w-40" />
             </div>
             <div>
               <Label>From</Label>
-              <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 w-full sm:w-40" />
+              <DateInput value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 w-full sm:w-40" />
             </div>
             <div>
               <Label>To</Label>
-              <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 w-full sm:w-40" />
+              <DateInput value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 w-full sm:w-40" />
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground sm:ml-auto sm:max-w-md">

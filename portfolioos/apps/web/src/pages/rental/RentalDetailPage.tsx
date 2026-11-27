@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import {
   rentalApi,
   type TenancyDTO,
@@ -152,8 +153,7 @@ function MarkReceivedDialog({
           </div>
           <div>
             <Label>Date received</Label>
-            <Input
-              type="date"
+            <DateInput
               value={form.receivedOn}
               onChange={(e) => setForm((f) => ({ ...f, receivedOn: e.target.value }))}
             />
@@ -724,8 +724,7 @@ function AddTenancyDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Start date *</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.startDate}
                 onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
                 className={errors.startDate ? 'border-negative' : ''}
@@ -733,8 +732,7 @@ function AddTenancyDialog({
             </div>
             <div>
               <Label>End date</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={(form.endDate ?? '') as string}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, endDate: e.target.value || undefined }))
@@ -877,8 +875,7 @@ function AddExpenseDialog({
           </div>
           <div>
             <Label>Date</Label>
-            <Input
-              type="date"
+            <DateInput
               value={form.paidOn}
               onChange={(e) => setForm((f) => ({ ...f, paidOn: e.target.value }))}
             />

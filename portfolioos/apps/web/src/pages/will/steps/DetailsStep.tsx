@@ -4,6 +4,7 @@ import {
 } from '@everypaisa/shared';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Field, FindingList, LAW_LABEL, MARITAL_LABEL, Notice } from '../parts';
@@ -51,7 +52,7 @@ export function DetailsStep({ payload, update, findings, today }: WillStepProps)
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field id="will-dob" label="Date of birth" required>
-            <Input id="will-dob" type="date" min="1900-01-01" max={today} value={d.dob ?? ''} onChange={(e) => set({ dob: e.target.value || null })} />
+            <DateInput id="will-dob" min="1900-01-01" max={today} value={d.dob ?? ''} onChange={(e) => set({ dob: e.target.value || null })} />
           </Field>
           <Field id="will-country" label="Country whose law applies" required>
             <Select id="will-country" value={d.jurisdiction} onChange={(e) => set({ jurisdiction: e.target.value === 'IN' ? 'IN' : 'OTHER' })}>

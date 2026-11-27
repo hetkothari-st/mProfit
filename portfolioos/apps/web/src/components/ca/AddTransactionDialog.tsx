@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { apiErrorMessage } from '@/api/client';
@@ -218,8 +219,7 @@ export function AddTransactionDialog({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <Label>Trade date</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.tradeDate}
                 onChange={(e) => set('tradeDate', e.target.value)}
               />

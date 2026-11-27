@@ -10,6 +10,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -243,9 +244,8 @@ export function GoalDialog({ open, existing, portfolios, onClose, onSaved }: Pro
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="targetDate">Target date</Label>
-              <Input
+              <DateInput
                 id="targetDate"
-                type="date"
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
                 className="mt-1"

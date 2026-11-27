@@ -4,6 +4,7 @@ import { FileDown, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/stores/auth.store';
 import { fmtDate } from './accessModel';
@@ -116,8 +117,7 @@ export function DocumentRequestsPanel({
                 </option>
               ))}
             </select>
-            <Input
-              type="date"
+            <DateInput
               aria-label="Needed by"
               value={due}
               onChange={(e) => setDue(e.target.value)}

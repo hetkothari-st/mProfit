@@ -4,6 +4,7 @@ import {
 } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { issueFields, issueMessage, type SignedCopyField } from './executeCopy';
 import type { WillSignedCopyInput } from '@/api/will.api';
@@ -108,7 +109,7 @@ export function SignedCopyForm({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="min-w-0 space-y-1 sm:col-span-2 sm:max-w-[240px]">
           <Label htmlFor={`${id}-date`}>Date you signed</Label>
-          <Input id={`${id}-date`} type="date" max={ctx.today} value={executedOn} onChange={(e) => { setExecutedOn(e.target.value); edited('date', current({ executedOn: e.target.value })); }} />
+          <DateInput id={`${id}-date`} max={ctx.today} value={executedOn} onChange={(e) => { setExecutedOn(e.target.value); edited('date', current({ executedOn: e.target.value })); }} />
         </div>
         <div className="min-w-0 space-y-1">
           <Label htmlFor={`${id}-w1`}>Witness 1 - full name</Label>

@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Select } from '@/components/ui/select';
 import { SuggestInput, type SuggestOption } from '@/components/common/SuggestInput';
 import { INDIAN_BANKS, bankForIfsc, findBankByName } from '@/data/indianBanks';
@@ -547,9 +548,8 @@ export function BankAccountDialog({ open, onOpenChange, initial }: Props) {
             </div>
             <div>
               <Label htmlFor={fid('asof')}>As of</Label>
-              <Input
+              <DateInput
                 id={fid('asof')}
-                type="date"
                 value={form.balanceAsOf ?? ''}
                 onChange={(e) => set('balanceAsOf', e.target.value || null)}
               />

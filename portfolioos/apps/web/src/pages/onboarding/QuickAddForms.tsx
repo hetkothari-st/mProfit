@@ -18,6 +18,7 @@ import {
 } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { AssetSearch } from '@/components/common/AssetSearch';
@@ -338,8 +339,7 @@ function FixedDepositForm({ portfolioId, onSaved }: QuickFormProps) {
           <AmountInput value={amount} onChange={setAmount} placeholder="e.g. 500000" />
         </Field>
         <Field label="Matures on">
-          <Input
-            type="date"
+          <DateInput
             value={maturity}
             min={todayIso()}
             onChange={(e) => setMaturity(e.target.value)}

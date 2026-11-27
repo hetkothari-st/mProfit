@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -420,7 +421,7 @@ export function PPFNpsFormDialog({ open, onOpenChange, initial, defaultPortfolio
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Date <span className="text-destructive">*</span></Label>
-              <Input type="date" {...register('tradeDate')} />
+              <DateInput {...register('tradeDate')} />
               {errors.tradeDate && <p className="text-xs text-destructive">{errors.tradeDate.message}</p>}
             </div>
             <div className="space-y-1">
@@ -445,7 +446,7 @@ export function PPFNpsFormDialog({ open, onOpenChange, initial, defaultPortfolio
           {cfg.showMaturityDate && isDeposit && (
             <div className="space-y-1">
               <Label>Account Maturity Date <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Input type="date" {...register('maturityDate')} />
+              <DateInput {...register('maturityDate')} />
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Info className="h-3 w-3" /> PPF matures 15 years from account opening
               </p>

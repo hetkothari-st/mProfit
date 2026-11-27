@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { authApi } from '@/api/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -124,7 +125,7 @@ export function SettingsPage() {
               </div>
               <div>
                 <Label htmlFor="dob">Date of birth</Label>
-                <Input id="dob" type="date" className="mt-1" {...register('dob')} />
+                <DateInput id="dob" className="mt-1" {...register('dob')} />
                 <p className="text-xs text-muted-foreground mt-1">
                   Used only as a password for encrypted CAS PDFs (CAMS sometimes uses PAN+DOB).
                 </p>

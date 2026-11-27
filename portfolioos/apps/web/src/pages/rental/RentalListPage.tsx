@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
@@ -255,8 +256,7 @@ function CreatePropertyDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Purchase date</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.purchaseDate ?? ''}
                 onChange={(e) => setForm((f) => ({ ...f, purchaseDate: e.target.value }))}
               />

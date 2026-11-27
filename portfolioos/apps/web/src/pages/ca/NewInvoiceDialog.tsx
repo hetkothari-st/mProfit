@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { Decimal, GST_STATE_LIST, formatINR, gstinStateCode, invoiceTotals, isValidGstin } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { caApi } from '@/api/ca.api';
@@ -130,7 +131,7 @@ export function NewInvoiceDialog({
           </div>
           <div>
             <Label htmlFor="inv-date">Invoice date</Label>
-            <Input id="inv-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
+            <DateInput id="inv-date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
           </div>
           <div>
             <Label htmlFor="inv-buyer">Billed to</Label>

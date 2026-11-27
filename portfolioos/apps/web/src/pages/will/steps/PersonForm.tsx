@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { WILL_RELATIONSHIPS, type WillPerson, type WillRelationship } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Select } from '@/components/ui/select';
 import { Field, RELATIONSHIP_LABEL } from '../parts';
 
@@ -51,7 +52,7 @@ export function PersonForm({ initial, others, today, onSave, onCancel }: {
         </Field>
         {!org && (
           <Field id={pid('dob')} label="Date of birth" hint="Tells us whether they are under 18.">
-            <Input id={pid('dob')} type="date" min="1900-01-01" max={today} value={p.dob ?? ''} onChange={(e) => setP({ ...p, dob: e.target.value || null })} />
+            <DateInput id={pid('dob')} min="1900-01-01" max={today} value={p.dob ?? ''} onChange={(e) => setP({ ...p, dob: e.target.value || null })} />
           </Field>
         )}
         <Field id={pid('contact')} label="Phone or email (optional)">

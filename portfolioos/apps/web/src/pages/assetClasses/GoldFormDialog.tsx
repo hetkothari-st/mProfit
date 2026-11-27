@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -391,7 +392,7 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
             </div>
             <div className="space-y-1">
               <Label>Date <span className="text-destructive">*</span></Label>
-              <Input type="date" {...register('tradeDate')} />
+              <DateInput {...register('tradeDate')} />
               {errors.tradeDate && <p className="text-xs text-destructive">{errors.tradeDate.message}</p>}
             </div>
           </div>
@@ -497,7 +498,7 @@ export function GoldFormDialog({ open, onOpenChange, initial, defaultPortfolioId
                 </div>
                 <div className="space-y-1">
                   <Label>Maturity Date</Label>
-                  <Input type="date" {...register('maturityDate')} />
+                  <DateInput {...register('maturityDate')} />
                   <p className="text-xs text-muted-foreground">8 years from issue date</p>
                 </div>
               </div>

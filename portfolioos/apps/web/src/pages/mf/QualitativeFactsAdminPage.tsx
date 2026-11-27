@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -304,9 +305,8 @@ export function QualitativeFactsAdminPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="validFrom">Valid from</Label>
-                <Input
+                <DateInput
                   id="validFrom"
-                  type="date"
                   required
                   value={validFrom}
                   onChange={(e) => setValidFrom(e.target.value)}
@@ -318,9 +318,8 @@ export function QualitativeFactsAdminPage() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="validTo">Valid to (optional)</Label>
-                <Input
+                <DateInput
                   id="validTo"
-                  type="date"
                   value={validTo}
                   onChange={(e) => setValidTo(e.target.value)}
                 />

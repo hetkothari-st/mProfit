@@ -6,6 +6,7 @@ import { canHaveCriticalIllness, defaultGraceDays } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { apiErrorMessage } from '@/api/client';
 import {
@@ -366,7 +367,7 @@ export function PolicyFormDialog({
             </div>
             <div>
               <Label htmlFor="policy-startDate">Start date</Label>
-              <Input type="date" {...field('startDate')} />
+              <DateInput {...field('startDate')} />
               {error('startDate')}
             </div>
           </div>
@@ -374,13 +375,13 @@ export function PolicyFormDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label htmlFor="policy-maturityDate">Maturity / end date</Label>
-              <Input type="date" {...field('maturityDate')} />
+              <DateInput {...field('maturityDate')} />
               {error('maturityDate')}
             </div>
             {form.premiumFrequency !== 'SINGLE' && (
               <div>
                 <Label htmlFor="policy-nextPremiumDue">Next premium due</Label>
-                <Input type="date" {...field('nextPremiumDue')} />
+                <DateInput {...field('nextPremiumDue')} />
                 <p className="mt-1 text-xs text-muted-foreground">
                   {isEdit
                     ? 'Change only if the insurer says otherwise — earlier premiums then count as paid.'

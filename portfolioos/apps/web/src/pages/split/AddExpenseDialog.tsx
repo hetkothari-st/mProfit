@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import type { SplitExpenseDto, SplitGroupDto, SplitModeDto } from '@everypaisa/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -116,7 +117,7 @@ export function AddExpenseDialog({ open, onOpenChange, group, expense }: {
           )}
           <div className="space-y-1.5">
             <Label htmlFor="exp-date">Date</Label>
-            <Input id="exp-date" type="date" value={form.date} max={todayLocal()} onChange={(e) => set('date', e.target.value)} />
+            <DateInput id="exp-date" value={form.date} max={todayLocal()} onChange={(e) => set('date', e.target.value)} />
           </div>
 
           <fieldset className="space-y-2">

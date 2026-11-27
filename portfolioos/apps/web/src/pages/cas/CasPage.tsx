@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { casApi, type CasProvider } from '@/api/imports/cas.api';
@@ -81,15 +82,14 @@ export function CasPage() {
               </div>
               <div>
                 <Label>From date</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
                 />
               </div>
               <div>
                 <Label>To date</Label>
-                <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+                <DateInput value={toDate} onChange={(e) => setToDate(e.target.value)} />
               </div>
             </div>
             <Button onClick={() => buildMut.mutate()} disabled={buildMut.isPending}>

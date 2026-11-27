@@ -8,6 +8,7 @@ import { formatINR, formatCurrency, Decimal, formatDateOnly } from '@everypaisa/
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -309,7 +310,7 @@ function LrsDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="remittanceDate">Date</Label>
-              <Input id="remittanceDate" type="date" {...register('remittanceDate')} />
+              <DateInput id="remittanceDate" {...register('remittanceDate')} />
               {errors.remittanceDate && (
                 <p className="text-xs text-destructive">{errors.remittanceDate.message}</p>
               )}

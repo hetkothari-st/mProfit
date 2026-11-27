@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/common/EmptyState';
 import { transactionsApi } from '@/api/transactions.api';
@@ -178,8 +179,7 @@ export function TransactionsPage() {
             <div className="flex flex-wrap items-center gap-2">
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 From
-                <Input
-                  type="date"
+                <DateInput
                   value={filters.from}
                   max={filters.to || undefined}
                   onChange={(e) => patchFilters({ from: e.target.value })}
@@ -189,8 +189,7 @@ export function TransactionsPage() {
               </label>
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 To
-                <Input
-                  type="date"
+                <DateInput
                   value={filters.to}
                   min={filters.from || undefined}
                   onChange={(e) => patchFilters({ to: e.target.value })}
