@@ -70,7 +70,20 @@ export async function applyCorporateActionsForPortfolio(portfolioId: string): Pr
         where: { portfolioId: h.portfolioId, assetKey: h.assetKey },
         orderBy: { tradeDate: 'asc' },
       });
-      const qty = quantityHeldBefore(txsForHolding, ca.exDate);
+      // A split and a bonus on the same ex-date (NSE files both on one day)
+      // compound: the second applies to the units the first already created.
+      // Those rows are dated on the ex-date itself, so "held before" alone
+      // missed them and 3 shares through a 1:2 split + 4:1 bonus became 18,
+      // not 30 (launch review B3). Order between the two does not matter.
+      const sameDayActionUnits = txsForHolding
+        .filter(
+          (t) =>
+            t.sourceAdapter === 'CORPORATE_ACTION' &&
+            (t.transactionType === 'SPLIT' || t.transactionType === 'BONUS') &&
+            t.tradeDate.getTime() === ca.exDate.getTime(),
+        )
+        .reduce((sum, t) => sum.plus(new Decimal(t.quantity.toString())), new Decimal(0));
+      const qty = quantityHeldBefore(txsForHolding, ca.exDate).plus(sameDayActionUnits);
       if (qty.lessThanOrEqualTo(0)) continue;
       const ratio = ca.ratio ? new Decimal(ca.ratio.toString()) : null;
       const amount = ca.amount ? new Decimal(ca.amount.toString()) : null;
