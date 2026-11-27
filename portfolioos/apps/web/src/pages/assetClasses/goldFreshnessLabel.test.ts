@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { goldFreshnessLabel } from './GoldSilverTopBar';
+import { goldFreshnessLabel } from './goldFreshness';
 
 // Launch review B9: the Gold page said "Live · updated 4241 min ago".
 const now = new Date('2026-11-27T10:00:00Z');
