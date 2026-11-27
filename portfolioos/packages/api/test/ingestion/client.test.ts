@@ -326,6 +326,58 @@ describe('LLM client', () => {
       }
     });
 
+    // Launch review B5: a long multi-segment contract note ran past the output
+    // limit; the half-written tool call then failed schema validation and the
+    // user saw "Tool output failed schema validation", which says nothing
+    // about what to do.
+    it('reports a cut-off answer as truncated, with what to do next', async () => {
+      mockCreate.mockResolvedValueOnce({
+        id: 'msg_cut',
+        stop_reason: 'max_tokens',
+        usage: { input_tokens: 9000, output_tokens: 4096 },
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tu_cut',
+            name: 'emit_events',
+            // What a cut-off tool call looks like: the last event is incomplete.
+            input: { events: [{ event_type: 'BUY', event_date: '2026-01-05', confidence: 0.9 }, { event_type: 'SELL' }] },
+          },
+        ],
+      });
+
+      const restore = withEnv({ ENABLE_LLM_PARSER: 'true', ANTHROPIC_API_KEY: 'sk-test' });
+      try {
+        const r = await scope.runAs(() =>
+          parseEmailWithLlm({ userId: scope.userId, emailBody: 'long note', sourceRef: 'cn-long', purpose: 'contract_note' }),
+        );
+        expect(r.ok).toBe(false);
+        if (!r.ok) {
+          expect(r.reason).toBe('truncated');
+          expect(r.message).toMatch(/too long/i);
+          expect(r.message).toMatch(/one (trading day|contract note)/i);
+        }
+      } finally {
+        restore();
+      }
+    });
+
+    it('passes a caller-chosen output limit to the model', async () => {
+      mockCreate.mockResolvedValueOnce({
+        id: 'msg_ok', stop_reason: 'tool_use', usage: { input_tokens: 10, output_tokens: 10 },
+        content: [{ type: 'tool_use', id: 'tu', name: 'emit_events', input: { events: [] } }],
+      });
+      const restore = withEnv({ ENABLE_LLM_PARSER: 'true', ANTHROPIC_API_KEY: 'sk-test' });
+      try {
+        await scope.runAs(() =>
+          parseEmailWithLlm({ userId: scope.userId, emailBody: 'x', sourceRef: 'cn-limit', purpose: 'contract_note', maxTokens: 16000 }),
+        );
+        expect(mockCreate.mock.calls[0]![0].max_tokens).toBe(16000);
+      } finally {
+        restore();
+      }
+    });
+
     it('returns no_tool_use when model replies with text only', async () => {
       mockCreate.mockResolvedValueOnce({
         id: 'msg_text',

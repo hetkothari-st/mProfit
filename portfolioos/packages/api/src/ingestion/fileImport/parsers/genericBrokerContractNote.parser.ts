@@ -13,6 +13,9 @@ import {
 } from '../../../data/brokers.js';
 import { parseEmailWithLlm, checkLlmGate } from '../../llm/client.js';
 import type { ParsedEvent } from '../../llm/schema.js';
+
+/** Output limit for one contract note: room for roughly 100 trades. */
+const CONTRACT_NOTE_MAX_OUTPUT_TOKENS = 16_000;
 import { bodyStructureHash } from '../../hash.js';
 import {
   findActiveContractNoteRecipe,
@@ -199,6 +202,9 @@ export const genericBrokerContractNoteParser: Parser = {
       emailBody: pdfText,
       sourceRef: `pdf:${ctx.fileName}`,
       purpose: `contract_note_parse:${broker.id}`,
+      // A multi-segment note can list dozens of trades; the email default
+      // (4096 tokens) cut those off mid-answer (launch review B5).
+      maxTokens: CONTRACT_NOTE_MAX_OUTPUT_TOKENS,
     });
 
     if (!llmResult.ok) {
