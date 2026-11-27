@@ -244,7 +244,7 @@ export interface HealthSubScore {
 }
 
 /** Bumped when the stored sub-score shape changes; older snapshots are recomputed. */
-const SNAPSHOT_VERSION = 2;
+const SNAPSHOT_VERSION = 3;
 
 function stripVersion(stored: unknown): HealthScoreResult['subScores'] {
   const { _v: _ignored, ...rest } = stored as Record<string, unknown>;
@@ -334,7 +334,12 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
       ? {
         score: null,
         insight: `You have ${formatINR(liquidAssets.toString())} in liquid assets, but we don't know your monthly expenses yet, so we can't tell how many months that covers.`,
-        action: 'Record your spending (Cash Activity), or connect Gmail, so we can work out your monthly expenses.',
+        // Spending is read only from confirmed bank and card debit alerts
+        // (estimateMonthlyExpenses) — entries in Cash Activity do not count,
+        // so the old "Record your spending (Cash Activity)" sent people to a
+        // page that could never fill this in (launch review B10).
+        action:
+          'Connect Gmail under Settings, then approve your bank and card debit alerts in the Inbox. We work out monthly spending from the last 3 months of those debits.',
       }
       : {
         score: Math.round(ef.score),
@@ -421,9 +426,13 @@ export async function computeHealthScore(userId: string, opts: { force?: boolean
       }
       : {
         score: Math.round(ins.score),
-        insight: `Your life cover is ${formatINR(life.sumAssured.toString())}. Target is 10x annual income.`,
+        insight: `Your life cover is ${formatINR(life.sumAssured.toString())}. A common rule of thumb is about 10x yearly income.`,
+        // A rule of thumb, not a quote: the real need depends on loans,
+        // dependants and savings, so the gap is stated as an estimate with a
+        // next step, not an order (launch review B10).
         action: insuranceGap.greaterThan(0)
-          ? `Add ${formatINR(insuranceGap.toString())} more life cover to reach the 10x-income target of ${formatINR(insuranceRequiredCover.toString())}.`
+          ? `By the 10x-income rule of thumb (${formatINR(insuranceRequiredCover.toString())}), you are about ${formatINR(insuranceGap.toString())} short. ` +
+            'Your own need depends on your loans, dependants and savings — review your cover on the Insurance page before buying more.'
           : null,
       };
 
