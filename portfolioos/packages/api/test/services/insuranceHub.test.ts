@@ -16,7 +16,7 @@ const db = vi.hoisted(() => ({
     findUnique: vi.fn(),
   },
   premiumPayment: { create: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
-  alert: { findFirst: vi.fn(), create: vi.fn() },
+  alert: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), findMany: vi.fn(async () => []), updateMany: vi.fn() },
   auditLog: { create: vi.fn() },
 }));
 vi.mock('../../src/lib/prisma.js', () => ({

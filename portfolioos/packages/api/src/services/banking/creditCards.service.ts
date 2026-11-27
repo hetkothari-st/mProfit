@@ -488,7 +488,9 @@ export async function generateCreditCardAlerts(userId?: string): Promise<number>
         ...(userId ? { userId } : {}),
         status: 'ACTIVE',
       },
-      status: { in: ['PENDING', 'PARTIAL'] },
+      // OVERDUE is scanned too: its reminder has to be reaffirmed each day or
+      // the stale-alert sweep below would close it while it is still unpaid.
+      status: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] },
     },
     include: {
       card: { select: { id: true, userId: true, issuerBank: true, cardName: true, last4: true } },
@@ -497,6 +499,9 @@ export async function generateCreditCardAlerts(userId?: string): Promise<number>
   });
 
   let created = 0;
+  // Keys of the reminders that describe each statement today; every other open
+  // card-due reminder (an earlier stage, a paid statement) is closed below.
+  const currentKeys = new Set<string>();
 
   for (const stmt of statements) {
     const dueDate = stmt.dueDate;
@@ -505,12 +510,18 @@ export async function generateCreditCardAlerts(userId?: string): Promise<number>
     );
 
     const isOverdue = daysLeft < 0;
-
-    if (!isOverdue && !(ALERT_THRESHOLDS as readonly number[]).includes(daysLeft)) continue;
     if (!isOverdue && dueDate > maxLookAhead) continue;
 
+    // The nearest stage at or above the days left — so a day the scan missed is
+    // caught up, and the stage reminder stays current until the next one.
+    const stage = isOverdue
+      ? null
+      : [...ALERT_THRESHOLDS].sort((a, b) => a - b).find((t) => daysLeft <= t);
+    if (!isOverdue && stage === undefined) continue;
+
     const daysLabel = Math.abs(daysLeft);
-    const metaKey = `credit_card_due:${stmt.id}:${isOverdue ? 'overdue' : `${daysLeft}d`}`;
+    const metaKey = `credit_card_due:${stmt.id}:${isOverdue ? 'overdue' : `${stage}d`}`;
+    currentKeys.add(metaKey);
 
     const existing = await prisma.alert.findFirst({
       where: {
@@ -518,8 +529,15 @@ export async function generateCreditCardAlerts(userId?: string): Promise<number>
         type: 'CREDIT_CARD_DUE',
         metadata: { path: ['key'], equals: metaKey },
       },
+      select: { id: true, triggerDate: true, isActive: true },
     });
-    if (existing) continue;
+    if (existing) {
+      // Rows written before alerts were dated by the due date carry the scan day.
+      if (existing.isActive && existing.triggerDate.getTime() !== dueDate.getTime()) {
+        await prisma.alert.update({ where: { id: existing.id }, data: { triggerDate: dueDate } });
+      }
+      continue;
+    }
 
     const cardLabel = `${stmt.card.issuerBank} ${stmt.card.cardName} ••••${stmt.card.last4}`;
     const amtDisplay = `₹${new Decimal(stmt.statementAmount.toString()).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
@@ -536,7 +554,8 @@ export async function generateCreditCardAlerts(userId?: string): Promise<number>
         type: 'CREDIT_CARD_DUE',
         title,
         description,
-        triggerDate: new Date(),
+        // Dated by the due date: the inbox measures "in N days" / "N days late" from it.
+        triggerDate: dueDate,
         metadata: {
           key: metaKey,
           cardId: stmt.card.id,
@@ -566,6 +585,22 @@ export async function generateCreditCardAlerts(userId?: string): Promise<number>
     }
 
     created++;
+  }
+
+  // Close every card-due reminder this scan did not reaffirm: earlier stages,
+  // statements since paid or waived, and cards no longer active.
+  const open = await prisma.alert.findMany({
+    where: { type: 'CREDIT_CARD_DUE', isActive: true, ...(userId ? { userId } : {}) },
+    select: { id: true, metadata: true },
+  });
+  const stale = open
+    .filter((a) => {
+      const key = (a.metadata as { key?: unknown } | null)?.key;
+      return typeof key === 'string' && key.startsWith('credit_card_due:') && !currentKeys.has(key);
+    })
+    .map((a) => a.id);
+  if (stale.length > 0) {
+    await prisma.alert.updateMany({ where: { id: { in: stale } }, data: { isActive: false } });
   }
 
   return created;

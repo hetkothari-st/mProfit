@@ -1206,9 +1206,17 @@ export async function generateRenewalAlerts(userId?: string): Promise<number> {
   });
 
   let created = 0;
+  // Keys of the reminders that describe each policy today. Every other open
+  // premium reminder is an earlier stage, a premium since paid, or one past
+  // the reminder window — all of them are closed below.
+  const currentKeys = new Set<string>();
   for (const policy of policies) {
     const reminder = reminderFor(policy, today);
     if (!reminder) continue;
+    currentKeys.add(reminder.key);
+    // Dated by the premium's due date, so the inbox measures "in N days" /
+    // "N days late" from the money, not from the day the reminder fired.
+    const dueDate = policy.nextPremiumDue!;
 
     const existing = await prisma.alert.findFirst({
       where: {
@@ -1216,8 +1224,15 @@ export async function generateRenewalAlerts(userId?: string): Promise<number> {
         type: 'INSURANCE_PREMIUM',
         metadata: { path: ['key'], equals: reminder.key },
       },
+      select: { id: true, triggerDate: true, isActive: true },
     });
-    if (existing) continue;
+    if (existing) {
+      // Rows written before alerts were dated by the due date carry the scan day.
+      if (existing.isActive && existing.triggerDate.getTime() !== dueDate.getTime()) {
+        await prisma.alert.update({ where: { id: existing.id }, data: { triggerDate: dueDate } });
+      }
+      continue;
+    }
 
     await prisma.alert.create({
       data: {
@@ -1225,7 +1240,7 @@ export async function generateRenewalAlerts(userId?: string): Promise<number> {
         type: 'INSURANCE_PREMIUM',
         title: reminder.title,
         description: reminder.description,
-        triggerDate: new Date(),
+        triggerDate: dueDate,
         metadata: {
           key: reminder.key,
           policyId: policy.id,
@@ -1237,7 +1252,29 @@ export async function generateRenewalAlerts(userId?: string): Promise<number> {
     created++;
   }
 
+  await retireStalePremiumReminders(currentKeys, userId);
   return created;
+}
+
+/**
+ * Close every open premium reminder this scan did not reaffirm. Only rows the
+ * renewal scan wrote (key prefix `insurance_premium:`) are touched, so other
+ * INSURANCE_PREMIUM alerts keep their own lifecycle.
+ */
+async function retireStalePremiumReminders(currentKeys: Set<string>, userId?: string): Promise<void> {
+  const open = await prisma.alert.findMany({
+    where: { type: 'INSURANCE_PREMIUM', isActive: true, ...(userId ? { userId } : {}) },
+    select: { id: true, metadata: true },
+  });
+  const stale = open
+    .filter((a) => {
+      const key = (a.metadata as { key?: unknown } | null)?.key;
+      return typeof key === 'string' && key.startsWith('insurance_premium:') && !currentKeys.has(key);
+    })
+    .map((a) => a.id);
+  if (stale.length > 0) {
+    await prisma.alert.updateMany({ where: { id: { in: stale } }, data: { isActive: false } });
+  }
 }
 
 // ── Claim follow-up reminders ─────────────────────────────────────────
