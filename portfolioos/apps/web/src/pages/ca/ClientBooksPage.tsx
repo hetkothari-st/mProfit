@@ -51,6 +51,7 @@ import { FmvFormDialog } from '@/components/ca/FmvFormDialog';
 import { ClientReportsTab } from '@/components/ca/ClientReportsTab';
 import { ClientDocumentsTab } from '@/components/ca/ClientDocumentsTab';
 import { ClientNotesTasksTab } from '@/components/ca/ClientNotesTasksTab';
+import { DocumentRequestsPanel } from '@/components/ca/DocumentRequestsPanel';
 import { Initials, ClientAccessStrip } from '@/components/ca/AccessParts';
 import { editModeOfClient, EDIT_MODE_LABEL, type EditMode } from '@/components/ca/accessModel';
 import { IMPORT_STATUS_LABELS, type ImportStatus } from '@everypaisa/shared';
@@ -708,7 +709,12 @@ export function ClientBooksPage() {
 
       {tab === 'reports' && <ClientReportsTab clientId={clientId} />}
 
-      {tab === 'documents' && <ClientDocumentsTab clientId={clientId} />}
+      {tab === 'documents' && (
+        <>
+          <DocumentRequestsPanel clientId={clientId} />
+          <ClientDocumentsTab clientId={clientId} />
+        </>
+      )}
 
       {tab === 'notes' && <ClientNotesTasksTab clientId={clientId} />}
 
