@@ -34,3 +34,4 @@ export * from './alertBands.js';
 export * from './policyHealthCheck.js';
 export * from './charges.js';
 export * from './support.js';
+export * from './priceFreshness.js';

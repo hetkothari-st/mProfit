@@ -15,7 +15,7 @@ import { getLatestNavForFund, syncAmfiNav } from '../priceFeeds/amfi.service.js'
 import { loadNseEquityUniverse, loadNseEtfUniverse } from '../priceFeeds/nseUniverse.service.js';
 import { loadBseEquityUniverse } from '../priceFeeds/bseUniverse.service.js';
 import { loadNseCorporateActions } from '../priceFeeds/corporateActions.service.js';
-import { syncAllCommodities, getLatestCommodityPrice, fetchLivePrices } from '../priceFeeds/commodity.service.js';
+import { syncAllCommodities, getLatestCommodityPrice, getLatestCommodityQuote, fetchLivePrices } from '../priceFeeds/commodity.service.js';
 import { syncCryptoPrices, searchCrypto, fetchLiveCryptoPrices } from '../priceFeeds/crypto.service.js';
 import { syncFxRates, getLatestFxRate } from '../priceFeeds/fx.service.js';
 import { runMasterSync, runPriceSync } from '../priceFeeds/router.service.js';
@@ -154,28 +154,31 @@ export async function listCommodityPrices(_req: Request, res: Response) {
 export async function liveCommodityPrices(_req: Request, res: Response) {
   const { GOLD: liveGold, SILVER: liveSilver, etfNavs, fetchedAt } = await fetchLivePrices();
 
-  // Fall back to DB-cached price when both live sources fail.
-  const [gold, silver] = await Promise.all([
-    liveGold ?? getLatestCommodityPrice('GOLD'),
-    liveSilver ?? getLatestCommodityPrice('SILVER'),
+  // Fall back to the stored daily price when the live sources fail — and say
+  // so, with that price's own date, instead of passing it off as live.
+  const [goldQuote, silverQuote] = await Promise.all([
+    liveGold ? null : getLatestCommodityQuote('GOLD'),
+    liveSilver ? null : getLatestCommodityQuote('SILVER'),
   ]);
+  const gold = liveGold ?? goldQuote?.price ?? null;
+  const silver = liveSilver ?? silverQuote?.price ?? null;
 
   const etfPayload: Record<string, string> = {};
   for (const [sym, price] of Object.entries(etfNavs)) {
     etfPayload[sym] = serializeMoney(price);
   }
 
-  // EMPTY_CACHE uses epoch 0 to signal "no live snapshot yet" — substitute the
-  // current time so the frontend's freshness indicator stays sensible while the
-  // DB fallback is in effect.
-  const fetchedAtIso =
-    fetchedAt.getTime() === 0 ? new Date().toISOString() : fetchedAt.toISOString();
+  // EMPTY_CACHE uses epoch 0 for "no live snapshot yet". The badge's age then
+  // comes from the stored price's date — never from "now", which made a
+  // days-old fallback read as fresh.
+  const liveAsOf = fetchedAt.getTime() === 0 ? null : fetchedAt;
+  const asOf = liveGold ? liveAsOf : goldQuote?.asOf ?? liveAsOf;
 
   ok(res, {
     GOLD: gold ? serializeMoney(gold) : null,
     SILVER: silver ? serializeMoney(silver) : null,
     etfNavs: etfPayload,
-    fetchedAt: fetchedAtIso,
+    fetchedAt: (asOf ?? new Date(0)).toISOString(),
     source: liveGold ? 'live' : 'cached',
   });
 }

@@ -11,7 +11,10 @@ export interface LiveCommodityPrices {
   SILVER: string | null;
   /** NSE gold/silver ETF NAVs keyed by ticker (e.g. `GOLDBEES`, `SILVERBEES`). */
   etfNavs: Record<string, string>;
+  /** When the gold price shown was taken (a stored fallback carries its own date). */
   fetchedAt: string;
+  /** 'live' for a fresh quote, 'cached' for the stored daily price fallback. */
+  source?: 'live' | 'cached';
 }
 
 export interface CryptoSearchHit {
