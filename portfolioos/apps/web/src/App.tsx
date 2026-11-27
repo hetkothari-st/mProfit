@@ -23,6 +23,7 @@ const ClaimProfilePage = lazy(() => import('./pages/family/ClaimProfilePage').th
 const FamilyPage = lazy(() => import('./pages/family/FamilyPage').then((m) => ({ default: m.FamilyPage })));
 const CaWorkspacePage = lazy(() => import('./pages/ca/CaWorkspacePage').then((m) => ({ default: m.CaWorkspacePage })));
 const ClientBooksPage = lazy(() => import('./pages/ca/ClientBooksPage').then((m) => ({ default: m.ClientBooksPage })));
+const BillingPage = lazy(() => import('./pages/ca/BillingPage').then((m) => ({ default: m.BillingPage })));
 const AcceptCaInvitationPage = lazy(() => import('./pages/ca/AcceptCaInvitationPage').then((m) => ({ default: m.AcceptCaInvitationPage })));
 const AcceptProfessionalInvitePage = lazy(() => import('./pages/ca/AcceptProfessionalInvitePage').then((m) => ({ default: m.AcceptProfessionalInvitePage })));
 const ProfessionalAccessPage = lazy(() => import('./pages/settings/ProfessionalAccessPage').then((m) => ({ default: m.ProfessionalAccessPage })));
@@ -197,6 +198,7 @@ export function App() {
             seeing and withdrawing access must not depend on a plan. */}
         <Route path="/ca" element={<ProfessionalTwoFactorGate><CaWorkspacePage /></ProfessionalTwoFactorGate>} />
         <Route path="/ca/clients/:clientId" element={<ProfessionalTwoFactorGate><ClientBooksPage /></ProfessionalTwoFactorGate>} />
+        <Route path="/ca/billing" element={<ProfessionalTwoFactorGate><BillingPage /></ProfessionalTwoFactorGate>} />
         <Route path="/ca/invitations/:token/accept" element={<AcceptCaInvitationPage />} />
         <Route path="/settings/professional-access" element={<ProfessionalAccessPage />} />
         <Route path="/settings/ai-connectors" element={<AiConnectorsPage />} />
