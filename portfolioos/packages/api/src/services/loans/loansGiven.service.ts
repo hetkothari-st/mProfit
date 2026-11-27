@@ -726,7 +726,8 @@ export async function generateLoanGivenAlerts(userId?: string): Promise<number> 
           ? `${loan.borrowerName}'s repayment is overdue by ${days} day${days !== 1 ? 's' : ''}`
           : `${loan.borrowerName}'s repayment is due in ${days} day${days !== 1 ? 's' : ''}`,
         description: `₹${amount} ${isOverdue ? 'was due on' : 'due on'} ${formatDateOnly(summary.nextDue.date)}`,
-        triggerDate: new Date(),
+        // Dated by the due date, so the inbox measures "late" from it.
+        triggerDate: new Date(`${summary.nextDue.date.slice(0, 10)}T00:00:00Z`),
         metadata: { key, loanGivenId: loan.id, dueDate: summary.nextDue.date, amount: summary.nextDue.amount },
       },
     });

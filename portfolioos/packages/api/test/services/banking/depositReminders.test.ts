@@ -112,6 +112,9 @@ describe('generateDepositReminderAlerts', () => {
       title: 'ICICI Bank RD installment overdue by 5 days',
       description: 'Installment of ₹5,000.00 was due on 05/09/2026',
     });
+    // Launch review B6: dated by the installment's due date, so "N days late"
+    // on the Alerts page counts from the money, not from the scan.
+    expect(created()[0]!.triggerDate.toISOString().slice(0, 10)).toBe('2026-09-05');
 
     // Next night's scan finds the alert it already raised.
     db.alert.create.mockClear();
