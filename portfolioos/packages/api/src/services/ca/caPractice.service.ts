@@ -1,6 +1,7 @@
 import type { ClientNote, ClientTask, ClientTaskStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
+import { actsForClient, clientsActedForWhere } from './caAccess.service.js';
 
 /**
  * The CA's own working notes and to-dos per client.
@@ -18,10 +19,10 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 async function assertAdvisor(callerId: string, clientId: string, write: boolean): Promise<void> {
   const client = await prisma.client.findUnique({
     where: { id: clientId },
-    select: { advisorId: true, status: true },
+    select: { id: true, advisorId: true, status: true },
   });
   if (!client) throw new NotFoundError('Client not found.');
-  if (client.advisorId !== callerId) throw new ForbiddenError('That client is not yours.');
+  if (!(await actsForClient(callerId, client))) throw new ForbiddenError('That client is not yours.');
   // Past engagements stay readable so the history is not lost; new work needs a live grant.
   if (write && client.status !== 'ACTIVE') throw new BadRequestError('This engagement is not active.');
 }
@@ -163,7 +164,7 @@ export interface OpenTaskRow {
 /** Every open to-do across the caller's active clients, soonest first. */
 export async function listMyOpenTasks(callerId: string, limit = 100): Promise<OpenTaskRow[]> {
   const rows = await prisma.clientTask.findMany({
-    where: { status: 'OPEN', client: { advisorId: callerId, status: 'ACTIVE' } },
+    where: { status: 'OPEN', client: { AND: [clientsActedForWhere(callerId), { status: 'ACTIVE' }] } },
     include: {
       client: {
         select: { name: true, initiatedBy: true, clientUser: { select: { name: true, email: true } } },

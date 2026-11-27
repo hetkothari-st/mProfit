@@ -26,7 +26,7 @@
 import { formatDateOnly } from '@everypaisa/shared';
 import crypto from 'node:crypto';
 import { inviteTokenHash, newInviteToken } from '../../lib/inviteToken.js';
-import type { AssetClass, Client } from '@prisma/client';
+import type { AssetClass, Client, Prisma } from '@prisma/client';
 import { prisma, runInTransaction } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
@@ -121,6 +121,38 @@ export function assertCaMayEdit(scope: CaScope, section: CaEditSection): void {
 }
 
 /**
+ * Whether the caller acts for this client, and as whom: the CA on the grant,
+ * or a staff member of that CA's firm with an ACTIVE seat assigned to this
+ * client. The same question the SQL side asks in app_acts_for_client(), so
+ * the service refuses in words what the policies would refuse in silence.
+ */
+export async function actsForClient(
+  callerId: string,
+  client: { id: string; advisorId: string | null },
+): Promise<'ADVISOR' | 'STAFF' | null> {
+  if (!client.advisorId) return null;
+  if (client.advisorId === callerId) return 'ADVISOR';
+  const seat = await prisma.firmSeatClient.findFirst({
+    where: {
+      clientId: client.id,
+      seat: { staffUserId: callerId, status: 'ACTIVE', firmOwnerId: client.advisorId },
+    },
+    select: { id: true },
+  });
+  return seat ? 'STAFF' : null;
+}
+
+/** Clients the caller works on: their own grants, and those their firm seat is assigned. */
+export function clientsActedForWhere(callerId: string): Prisma.ClientWhereInput {
+  return {
+    OR: [
+      { advisorId: callerId },
+      { staffAssignments: { some: { seat: { staffUserId: callerId, status: 'ACTIVE' } } } },
+    ],
+  };
+}
+
+/**
  * Resolve the caller's grant over one client, or refuse.
  *
  * RLS would already return zero rows for an unauthorised CA, but a bare empty
@@ -139,7 +171,7 @@ export async function getCaScope(callerId: string, clientId: string): Promise<Ca
     },
   });
 
-  if (!client || client.advisorId !== callerId) {
+  if (!client || !(await actsForClient(callerId, client))) {
     // Same message for "not yours" and "does not exist" — a distinct one would
     // let a CA probe which client ids are real.
     throw new ForbiddenError('That client is not yours.');
@@ -225,15 +257,22 @@ function subjectDisplay(client: {
  */
 export async function listClients(
   callerId: string,
-): Promise<Array<Client & { displayName: string; displayEmail: string | null }>> {
+): Promise<Array<Client & { displayName: string; displayEmail: string | null; actingAs: 'ADVISOR' | 'STAFF' }>> {
   const rows = await prisma.client.findMany({
-    where: { advisorId: callerId },
+    where: clientsActedForWhere(callerId),
     include: { clientUser: { select: { name: true, email: true } } },
     orderBy: [{ status: 'asc' }, { name: 'asc' }],
   });
   return rows.map(({ clientUser, ...row }) => {
     const shown = subjectDisplay({ ...row, clientUser });
-    return { ...row, displayName: shown.name, displayEmail: shown.email };
+    // A staff member's list holds only assigned, live grants: what they can
+    // open. The firm's pending and past engagements are the CA's business.
+    return {
+      ...row,
+      displayName: shown.name,
+      displayEmail: shown.email,
+      actingAs: row.advisorId === callerId ? ('ADVISOR' as const) : ('STAFF' as const),
+    };
   });
 }
 
@@ -1217,8 +1256,21 @@ export async function listMyProfessionalGrants(callerId: string) {
       )
     : [];
   const byId = new Map(advisors.map((a) => [a.id, a]));
+  // The firm's staff assigned to each grant: the account holder is told by
+  // name who, besides their CA, can open their books.
+  const seats = rows.length
+    ? await runAsSystem(() =>
+        prisma.firmSeatClient.findMany({
+          where: { clientId: { in: rows.map((r) => r.id) }, seat: { status: 'ACTIVE' } },
+          select: { clientId: true, seat: { select: { name: true, firmOwnerId: true } } },
+        }),
+      )
+    : [];
 
   return rows.map((r) => ({
+    staff: seats
+      .filter((x) => x.clientId === r.id && x.seat.firmOwnerId === r.advisorId)
+      .map((x) => x.seat.name),
     clientId: r.id,
     name: r.name,
     status: r.status,

@@ -220,6 +220,10 @@ export const USER_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'PracticeProfile',
   'Invoice',
   'InvoiceLine',
+  // FirmSeat / FirmSeatClient: a CA's staff and their client assignments.
+  // Policies in 20261127200000_ca_firm_seats.
+  'FirmSeat',
+  'FirmSeatClient',
   // Owner policies in 20260910180000_property_photos_and_location and
   // 20260913100000_insurance_extras. Unregistered, property photos read as
   // empty and uploads failed 42501; dismissed premium suggestions never stuck.
