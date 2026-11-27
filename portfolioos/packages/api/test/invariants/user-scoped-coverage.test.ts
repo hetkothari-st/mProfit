@@ -75,6 +75,8 @@ const MUST_BE_PROTECTED_BY_NAME = [
   'PolicyFinding',
   'PolicyVerdict',
   'ClientFiling',
+  'ClientNote',
+  'ClientTask',
 ] as const;
 
 describe('USER_SCOPED_MODELS covers every RLS-protected table', () => {

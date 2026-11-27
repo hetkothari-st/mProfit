@@ -546,6 +546,8 @@ model Client {
   portfolios      Portfolio[]
   portfolioScopes ClientPortfolioScope[]
   filings         ClientFiling[]
+  notes           ClientNote[]
+  tasks           ClientTask[]
 
   @@index([advisorId, status])
   @@index([userId, status])
@@ -571,6 +573,45 @@ model ClientFiling {
 
   @@unique([clientId, financialYear])
   @@index([financialYear, status])
+}
+
+/// The CA's own working note about a client. Practice-private: the client's
+/// books are theirs to see in full, but a firm's notes about a client are the
+/// firm's, as on paper. Only the CA on the grant reads or writes them.
+model ClientNote {
+  id           String   @id @default(cuid())
+  clientId     String
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  authorUserId String
+  body         String
+  pinned       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([clientId, createdAt])
+}
+
+/// A to-do for one client ("collect Form 16", "file by 31 July").
+/// Practice-private, like ClientNote.
+model ClientTask {
+  id              String         @id @default(cuid())
+  clientId        String
+  client          Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdByUserId String
+  title           String
+  dueDate         DateTime?      @db.Date
+  status          ClientTaskStatus @default(OPEN)
+  doneAt          DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([clientId, status])
+  @@index([status, dueDate])
+}
+
+enum ClientTaskStatus {
+  OPEN
+  DONE
 }
 
 enum ClientFilingStatus {

@@ -73,6 +73,18 @@ import {
   setClientFilingHandler,
 } from '../controllers/caClientList.controller.js';
 
+import {
+  listNotesHandler,
+  addNoteHandler,
+  updateNoteHandler,
+  deleteNoteHandler,
+  listTasksHandler,
+  addTaskHandler,
+  updateTaskHandler,
+  deleteTaskHandler,
+  listMyOpenTasksHandler,
+} from '../controllers/caPractice.controller.js';
+
 export const caRouter = Router();
 caRouter.use(authenticate);
 // The client list comes before the gate: every signed-in user's sidebar asks
@@ -101,6 +113,17 @@ const requireAdvisorPlan = requireFeature('CA_WORKSPACE');
 caRouter.get('/clients/overview', asyncHandler(clientOverviewHandler));
 caRouter.get('/clients/overview.csv', asyncHandler(clientOverviewCsvHandler));
 caRouter.put('/clients/:clientId/filings/:fy', asyncHandler(setClientFilingHandler));
+
+// The CA's own notes and to-dos per client (practice-private).
+caRouter.get('/tasks', asyncHandler(listMyOpenTasksHandler));
+caRouter.get('/clients/:clientId/notes', asyncHandler(listNotesHandler));
+caRouter.post('/clients/:clientId/notes', asyncHandler(addNoteHandler));
+caRouter.patch('/clients/:clientId/notes/:id', asyncHandler(updateNoteHandler));
+caRouter.delete('/clients/:clientId/notes/:id', asyncHandler(deleteNoteHandler));
+caRouter.get('/clients/:clientId/tasks', asyncHandler(listTasksHandler));
+caRouter.post('/clients/:clientId/tasks', asyncHandler(addTaskHandler));
+caRouter.patch('/clients/:clientId/tasks/:id', asyncHandler(updateTaskHandler));
+caRouter.delete('/clients/:clientId/tasks/:id', asyncHandler(deleteTaskHandler));
 
 // Grants
 caRouter.post('/clients', requireAdvisorPlan, asyncHandler(createManagedClientHandler));
