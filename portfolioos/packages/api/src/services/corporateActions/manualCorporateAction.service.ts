@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
 import { runAsSystem } from '../../lib/requestContext.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.js';
-import { applyCorporateActionsForPortfolio } from './corporateActionApply.service.js';
+import { applyCorporateActionsForPortfolio, NIGHTLY_DIVIDEND_LOOKBACK_DAYS } from './corporateActionApply.service.js';
 
 /**
  * Admin entry of a split or bonus the feeds missed (or before they carried
@@ -124,7 +124,8 @@ export async function addManualCorporateAction(
         distinct: ['portfolioId'],
       });
       for (const h of holders) {
-        transactionsBooked += await applyCorporateActionsForPortfolio(h.portfolioId);
+        // Same limits as the nightly run: this sweeps every holder's whole portfolio.
+        transactionsBooked += await applyCorporateActionsForPortfolio(h.portfolioId, { dividendLookbackDays: NIGHTLY_DIVIDEND_LOOKBACK_DAYS });
         portfoliosApplied += 1;
       }
     }

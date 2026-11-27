@@ -45,7 +45,62 @@ async function alreadyApplied(data: Prisma.TransactionUncheckedCreateInput): Pro
   return twin !== null;
 }
 
-export async function applyCorporateActionsForPortfolio(portfolioId: string): Promise<number> {
+/**
+ * How far back the nightly job books dividends. The NSE feed reaches about two
+ * years back; dividends older than this are left for the user to review
+ * (POST /corporate-actions/apply books them on request) rather than written
+ * into every portfolio in one unattended run.
+ */
+export const NIGHTLY_DIVIDEND_LOOKBACK_DAYS = 45;
+
+/**
+ * A dividend or split the user already has from another source (CAS, bank or
+ * AA feed, a hand-entered row) is rarely dated on the ex-date: dividends land
+ * on the pay date, weeks later. Exact-match dedupe misses those, so anything of
+ * the same kind this close to the ex-date counts as already on the books.
+ */
+const NEARBY_DIVIDEND_DAYS = 45;
+const NEARBY_SPLIT_BONUS_DAYS = 30;
+const DAY_MS = 86_400_000;
+
+async function bookedNearby(
+  portfolioId: string,
+  assetKey: string,
+  types: Array<'DIVIDEND_PAYOUT' | 'DIVIDEND_REINVEST' | 'SPLIT' | 'BONUS'>,
+  exDate: Date,
+  days: number,
+): Promise<boolean> {
+  const hit = await prisma.transaction.findFirst({
+    where: {
+      portfolioId,
+      assetKey,
+      transactionType: { in: types },
+      tradeDate: { gte: new Date(exDate.getTime() - days * DAY_MS), lte: new Date(exDate.getTime() + days * DAY_MS) },
+      OR: [{ sourceAdapter: null }, { sourceAdapter: { not: 'CORPORATE_ACTION' } }],
+    },
+    select: { id: true },
+  });
+  return hit !== null;
+}
+
+/** Rows from the BSE fallback, whose format and symbol matching are unverified, are stored but never auto-applied. */
+function fromUnverifiedSource(details: unknown): boolean {
+  return (details as { source?: unknown } | null)?.source === 'bse';
+}
+
+export interface ApplyCorporateActionsOptions {
+  now?: Date;
+  /** Book only dividends with an ex-date within this many days of `now`. Null/undefined: no limit. */
+  dividendLookbackDays?: number | null;
+}
+
+export async function applyCorporateActionsForPortfolio(
+  portfolioId: string,
+  opts: ApplyCorporateActionsOptions = {},
+): Promise<number> {
+  const now = opts.now ?? new Date();
+  const dividendFloor =
+    opts.dividendLookbackDays == null ? null : new Date(now.getTime() - opts.dividendLookbackDays * DAY_MS);
   const holdings = await prisma.holdingProjection.findMany({
     where: { portfolioId, stockId: { not: null } },
   });
@@ -55,11 +110,13 @@ export async function applyCorporateActionsForPortfolio(portfolioId: string): Pr
 
   for (const h of holdings) {
     const actions = await prisma.corporateAction.findMany({
-      where: { stockId: h.stockId!, exDate: { lte: new Date() } },
+      where: { stockId: h.stockId!, exDate: { lte: now } },
       orderBy: { exDate: 'asc' },
     });
 
     for (const ca of actions) {
+      if (fromUnverifiedSource(ca.details)) continue;
+      if (ca.type === 'DIVIDEND' && dividendFloor && ca.exDate < dividendFloor) continue;
       const sourceHash = `ca:${ca.id}:${h.id}`;
       const exists = await prisma.transaction.findFirst({ where: { sourceHash } });
       if (exists) continue;
@@ -91,6 +148,7 @@ export async function applyCorporateActionsForPortfolio(portfolioId: string): Pr
       // ── Cash dividend: a DIVIDEND_PAYOUT inflow, no quantity/cost change ──
       if (ca.type === 'DIVIDEND') {
         if (!amount || amount.lessThanOrEqualTo(0)) continue;
+        if (await bookedNearby(h.portfolioId, h.assetKey, ['DIVIDEND_PAYOUT', 'DIVIDEND_REINVEST'], ca.exDate, NEARBY_DIVIDEND_DAYS)) continue;
         const cash = amount.times(qty);
         const data: Prisma.TransactionUncheckedCreateInput = {
           portfolioId: h.portfolioId,
@@ -128,6 +186,7 @@ export async function applyCorporateActionsForPortfolio(portfolioId: string): Pr
       // MERGER / DEMERGER / RIGHTS / BUYBACK → not auto-applied (see header).
 
       if (!type || !deltaQty || deltaQty.lessThanOrEqualTo(0)) continue;
+      if (await bookedNearby(h.portfolioId, h.assetKey, [type], ca.exDate, NEARBY_SPLIT_BONUS_DAYS)) continue;
 
       const data: Prisma.TransactionUncheckedCreateInput = {
         portfolioId: h.portfolioId,
@@ -162,12 +221,12 @@ export async function applyCorporateActionsForPortfolio(portfolioId: string): Pr
 }
 
 /** Apply across every portfolio owned by a user (the /corporate-actions/apply endpoint). */
-export async function applyCorporateActionsForUser(userId: string): Promise<number> {
+export async function applyCorporateActionsForUser(userId: string, opts: ApplyCorporateActionsOptions = {}): Promise<number> {
   const portfolios = await prisma.portfolio.findMany({
     where: { userId },
     select: { id: true },
   });
   let applied = 0;
-  for (const p of portfolios) applied += await applyCorporateActionsForPortfolio(p.id);
+  for (const p of portfolios) applied += await applyCorporateActionsForPortfolio(p.id, opts);
   return applied;
 }
