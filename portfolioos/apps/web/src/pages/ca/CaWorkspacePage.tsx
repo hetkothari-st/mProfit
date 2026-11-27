@@ -24,6 +24,7 @@ import { LIVE_QUERY, LIVE_INTERVAL_MS } from '@/lib/liveQuery';
 import { Initials } from '@/components/ca/AccessParts';
 import { fmtDate, inviteLinkStatus } from '@/components/ca/accessModel';
 import { ClientListTable } from './ClientListTable';
+import { OpenTasksPanel } from './OpenTasksPanel';
 
 /**
  * A CA's client list.
@@ -114,6 +115,8 @@ export function CaWorkspacePage() {
         />
       ) : (
         <div className="space-y-8">
+          {active.length > 0 && <OpenTasksPanel />}
+
           {active.length > 0 && (
             <section>
               <div className="mb-3">
