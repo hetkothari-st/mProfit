@@ -47,6 +47,23 @@ async function grant(client: TestScope, ca: TestScope & { email: string }): Prom
 
 const PDF = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n');
 
+describe('document requests to a client with no login', () => {
+  it('refuses: a record the CA keeps has nobody to send a request to', async () => {
+    const ca = await person('cdr-shadow-ca');
+    const placeholder = await person('cdr-shadow-user');
+    const record = await runAsSystem(() =>
+      prisma.client.create({
+        data: { advisorId: ca.userId, userId: placeholder.userId, name: 'Kept record', kind: 'SHADOW', status: 'ACTIVE' },
+      }),
+    );
+    cleanups.push(() => runAsSystem(() => prisma.client.deleteMany({ where: { id: record.id } })).then(() => undefined));
+    await expect(
+      runAsUser(ca.userId, () => requestDocument(ca.userId, record.id, { title: 'Form 16' })),
+    ).rejects.toThrow(/no login|nobody to send/i);
+    expect(await runAsSystem(() => prisma.documentRequest.count({ where: { clientId: record.id } }))).toBe(0);
+  });
+});
+
 describe('document requests', () => {
   it('CA asks, client is told, uploads into their vault, CA accepts', async () => {
     const ca = await person('cdr-ca');

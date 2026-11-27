@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GST_STATES, gstinStateCode, invoiceTotals, isValidGstin, nextInvoiceNumber } from './gstInvoice';
+import { GST_STATES, GST_STATE_LIST, gstinStateCode, invoiceTotals, isValidGstin, nextInvoiceNumber } from './gstInvoice';
 
 describe('GSTIN', () => {
   it('accepts a well-formed GSTIN with a correct check character', () => {
@@ -14,6 +14,14 @@ describe('GSTIN', () => {
   it('knows the state codes', () => {
     expect(GST_STATES['27']).toBe('Maharashtra');
     expect(GST_STATES['29']).toBe('Karnataka');
+  });
+});
+
+describe('GST_STATE_LIST', () => {
+  it('lists every state in code order, 01 before 10 (object keys put 10-38 first)', () => {
+    expect(GST_STATE_LIST[0]).toEqual(['01', 'Jammu and Kashmir']);
+    expect(GST_STATE_LIST.map(([c]) => c)).toEqual([...GST_STATE_LIST.map(([c]) => c)].sort());
+    expect(GST_STATE_LIST).toHaveLength(Object.keys(GST_STATES).length);
   });
 });
 

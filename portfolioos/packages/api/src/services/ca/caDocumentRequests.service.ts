@@ -55,7 +55,7 @@ async function retireAlert(requestId: string): Promise<void> {
 async function advisorClient(callerId: string, clientId: string, write: boolean) {
   const client = await prisma.client.findUnique({
     where: { id: clientId },
-    select: { id: true, advisorId: true, userId: true, status: true },
+    select: { id: true, advisorId: true, userId: true, status: true, kind: true },
   });
   if (!client) throw new NotFoundError('Client not found.');
   if (!(await actsForClient(callerId, client))) throw new ForbiddenError('That client is not yours.');
@@ -70,7 +70,11 @@ export async function requestDocument(
   req?: Request,
 ): Promise<DocumentRequest> {
   const client = await advisorClient(callerId, clientId, true);
-  if (!client.userId) throw new BadRequestError('This client has no account to send a request to.');
+  // A record the CA keeps has a placeholder user nobody signs in as: a request
+  // to it would sit forever and alert no one.
+  if (!client.userId || client.kind === 'SHADOW') {
+    throw new BadRequestError('This client has no login, so there is nobody to send a request to. Add their documents to the books yourself, or invite them to the app.');
+  }
   const title = text(input.title, TITLE_MAX, 'A title', true)!;
   const note = text(input.note, NOTE_MAX, 'The note', false);
   const fy = text(input.financialYear, 7, 'Financial year', false);

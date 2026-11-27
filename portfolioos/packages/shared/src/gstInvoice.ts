@@ -47,6 +47,15 @@ export const GST_STATES: Readonly<Record<string, string>> = {
   '97': 'Other Territory',
 };
 
+/**
+ * The states in code order. `Object.entries(GST_STATES)` is not: JavaScript
+ * lists integer-like keys ("10"-"38") before string keys ("01"-"09"), which
+ * put Bihar first and Jammu and Kashmir last in every dropdown.
+ */
+export const GST_STATE_LIST: ReadonlyArray<readonly [string, string]> = Object.entries(GST_STATES).sort(([a], [b]) =>
+  a < b ? -1 : a > b ? 1 : 0,
+);
+
 const GSTIN_SHAPE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 const CHARSET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 

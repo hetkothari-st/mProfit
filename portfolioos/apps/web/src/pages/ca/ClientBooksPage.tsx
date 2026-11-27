@@ -711,7 +711,7 @@ export function ClientBooksPage() {
 
       {tab === 'documents' && (
         <>
-          <DocumentRequestsPanel clientId={clientId} />
+          <DocumentRequestsPanel clientId={clientId} canRequest={client?.kind !== 'SHADOW'} />
           <ClientDocumentsTab clientId={clientId} />
         </>
       )}
