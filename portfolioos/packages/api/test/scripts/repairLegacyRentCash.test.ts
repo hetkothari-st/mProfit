@@ -135,7 +135,83 @@ describe('repairLegacyRentCash', () => {
     expect(() => parseRepairArgs([])).toThrow(/--userId/);
     expect(() => parseRepairArgs(['--apply'])).toThrow(/--userId/);
     expect(() => parseRepairArgs(['--userId', '--apply'])).toThrow(/--userId/);
-    expect(parseRepairArgs(['--userId', 'u1', '--apply'])).toEqual({ userId: 'u1', apply: true });
+    expect(parseRepairArgs(['--userId', 'u1', '--apply'])).toEqual({ userId: 'u1', apply: true, partPayments: false });
     await expect(repairLegacyRentCash({ userId: '', apply: false })).rejects.toThrow(/never runs unscoped/);
+  });
+});
+
+// Owner decision 2026-11-27: link part-payments to their own month when asked.
+describe('repairLegacyRentCash part-payments', () => {
+  let scope: TestScope;
+  let tenancyId: string;
+  beforeEach(async () => {
+    scope = await createTestScope('rent-repair-part');
+    await runAsSystem(async () => {
+      const property = await prisma.rentalProperty.create({
+        data: { userId: scope.userId, name: 'Part Flat', propertyType: 'RESIDENTIAL', portfolioId: scope.portfolioId },
+      });
+      const tenancy = await prisma.tenancy.create({
+        data: { propertyId: property.id, tenantName: 'PART TENANT', startDate: day('2025-01-01'), monthlyRent: '20000' },
+      });
+      tenancyId = tenancy.id;
+      for (const m of ['2025-06', '2025-07']) {
+        await prisma.rentReceipt.create({ data: { tenancyId, forMonth: m, expectedAmount: '20000', dueDate: day(`${m}-01`), status: 'OVERDUE' } });
+      }
+      for (const [m, amt] of [['2025-06', '15000'], ['2025-07', '5000']] as const) {
+        await prisma.cashFlow.create({
+          data: {
+            portfolioId: scope.portfolioId, date: PRE_LEDGER, type: 'INFLOW', amount: amt,
+            description: `Rent received — Part Flat / PART TENANT (${m})`, createdAt: PRE_LEDGER,
+          },
+        });
+      }
+    });
+  });
+  afterEach(async () => {
+    await runAsSystem(async () => {
+      await prisma.cashFlow.deleteMany({ where: { portfolioId: scope.portfolioId } });
+      await prisma.rentalProperty.deleteMany({ where: { userId: scope.userId } });
+    });
+    await scope.cleanup();
+  });
+
+  it('skips part-payments by default', async () => {
+    const r = await repairLegacyRentCash({ userId: scope.userId, apply: false, today: TODAY });
+    expect(r.linked).toHaveLength(0);
+    expect(r.skipped).toHaveLength(2);
+  });
+
+  it('with partPayments, pins each to its own month as a part-payment', async () => {
+    const r = await repairLegacyRentCash({ userId: scope.userId, apply: true, today: TODAY, partPayments: true });
+    expect(r.linked.map((l) => [l.forMonth, l.amount, l.partPayment])).toEqual([
+      ['2025-06', '15000.00', true],
+      ['2025-07', '5000.00', true],
+    ]);
+    expect(r.statusChanges.map((s) => [s.forMonth, s.before, s.after])).toEqual([
+      ['2025-06', 'OVERDUE', 'PARTIAL'],
+      ['2025-07', 'OVERDUE', 'PARTIAL'],
+    ]);
+    const stored = await runAsSystem(() => prisma.rentReceipt.findMany({ where: { tenancyId }, orderBy: { forMonth: 'asc' } }));
+    expect(stored.map((s) => [s.forMonth, s.status, s.receivedAmount?.toString()])).toEqual([
+      ['2025-06', 'PARTIAL', '15000'],
+      ['2025-07', 'PARTIAL', '5000'],
+    ]);
+  });
+
+  it('never links more than the month’s rent, even with partPayments', async () => {
+    await runAsSystem(() =>
+      prisma.cashFlow.create({
+        data: {
+          portfolioId: scope.portfolioId, date: PRE_LEDGER, type: 'INFLOW', amount: '25000',
+          description: 'Rent received — Part Flat / PART TENANT (2025-06)', createdAt: PRE_LEDGER,
+        },
+      }),
+    );
+    const r = await repairLegacyRentCash({ userId: scope.userId, apply: false, today: TODAY, partPayments: true });
+    expect(r.skipped.map((s) => [s.forMonth, s.amount])).toContainEqual(['2025-06', '25000.00']);
+  });
+
+  it('the CLI flag turns it on', () => {
+    expect(parseRepairArgs(['--userId', 'u1', '--part-payments'])).toEqual({ userId: 'u1', apply: false, partPayments: true });
   });
 });

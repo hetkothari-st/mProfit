@@ -28,6 +28,7 @@
  *
  *   pnpm --filter @everypaisa/api exec tsx scripts/repairLegacyRentCash.ts --userId <id>
  *   pnpm --filter @everypaisa/api exec tsx scripts/repairLegacyRentCash.ts --userId <id> --apply
+ *   add --part-payments to also link rows for less than the month's rent to that month
  */
 
 import { createHash } from 'node:crypto';
@@ -53,7 +54,11 @@ export const repairSourceHash = (cashFlowId: string) =>
 
 export type MatchedBy = 'description' | 'amount+month';
 
-export interface RepairLink { cashFlowId: string; tenancyId: string; receiptId: string; forMonth: string; amount: string; date: string; matchedBy: MatchedBy }
+export interface RepairLink {
+  cashFlowId: string; tenancyId: string; receiptId: string; forMonth: string; amount: string; date: string; matchedBy: MatchedBy;
+  /** Less than the month's rent, linked because partPayments was set. */
+  partPayment: boolean;
+}
 export interface RepairDuplicate { cashFlowId: string; tenancyId: string; forMonth: string; amount: string; ledgerAmount: string; matchedBy: MatchedBy }
 export interface RepairSkip { cashFlowId: string; forMonth: string | null; amount: string; reason: string }
 export interface RepairStatusChange { receiptId: string; tenancyId: string; forMonth: string; before: string; after: string }
@@ -118,7 +123,11 @@ export interface RepairPlan {
 }
 
 /** Read-only: what the repair would do for this user. */
-export async function planLegacyRentCashRepair(userId: string, today: Date = new Date()): Promise<RepairPlan> {
+export async function planLegacyRentCashRepair(
+  userId: string,
+  today: Date = new Date(),
+  opts: { partPayments?: boolean } = {},
+): Promise<RepairPlan> {
   if (!userId) throw new Error('planLegacyRentCashRepair needs a userId');
   const portfolios = await prisma.portfolio.findMany({ where: { userId }, select: { id: true } });
   const properties = await prisma.rentalProperty.findMany({ where: { userId }, select: { id: true, name: true } });
@@ -205,7 +214,15 @@ export async function planLegacyRentCashRepair(userId: string, today: Date = new
       }
       continue;
     }
-    if (!amount.equals(receipt.expectedAmount)) { skip(`amount differs from that month's rent (${receipt.expectedAmount.toFixed(2)})`); continue; }
+    // A row for less than the month's rent is a part-payment. Linked only when
+    // asked (--part-payments) and only when the description names the tenancy;
+    // more than the month's rent is never linked.
+    const partPayment = amount.lessThan(receipt.expectedAmount);
+    const partAllowed = partPayment && opts.partPayments === true && matchedBy === 'description' && amount.greaterThan(0);
+    if (!amount.equals(receipt.expectedAmount) && !partAllowed) {
+      skip(`amount differs from that month's rent (${receipt.expectedAmount.toFixed(2)})`);
+      continue;
+    }
     const claimKey = `${tenancy.id}|${month}`;
     if (claimed.has(claimKey)) { skip('another orphan row already links this month'); continue; }
     if (allocatedFor(receipt.id, receipts.filter((r) => r.tenancyId === tenancy!.id), tEntries).greaterThanOrEqualTo(receipt.expectedAmount)) {
@@ -214,7 +231,7 @@ export async function planLegacyRentCashRepair(userId: string, today: Date = new
     }
 
     claimed.add(claimKey);
-    report.linked.push({ cashFlowId: c.id, tenancyId: tenancy.id, receiptId: receipt.id, forMonth: month, amount: amount.toFixed(2), date: c.date.toISOString().slice(0, 10), matchedBy });
+    report.linked.push({ cashFlowId: c.id, tenancyId: tenancy.id, receiptId: receipt.id, forMonth: month, amount: amount.toFixed(2), date: c.date.toISOString().slice(0, 10), matchedBy, partPayment });
     plannedEntries.push({ id: `planned:${c.id}`, tenancyId: tenancy.id, entryType: 'PAYMENT', amount, entryDate: c.date, createdAt: new Date(), forMonth: month });
   }
 
@@ -243,10 +260,12 @@ export async function repairLegacyRentCash(opts: {
   today?: Date;
   /** Delete duplicate orphan rows on --apply (default). The ledger backfill passes false: it only links. */
   deleteDuplicates?: boolean;
+  /** Link rows for less than the month's rent as part-payments (--part-payments). Off by default. */
+  partPayments?: boolean;
 }): Promise<RepairReport> {
   if (!opts.userId) throw new Error('repairLegacyRentCash needs a userId; it never runs unscoped');
   return runAsSystem(async () => {
-    const plan = await planLegacyRentCashRepair(opts.userId, opts.today);
+    const plan = await planLegacyRentCashRepair(opts.userId, opts.today, { partPayments: opts.partPayments });
     const report = { ...plan.report, dryRun: !opts.apply };
     if (!opts.apply) return report;
 
@@ -286,15 +305,15 @@ export async function repairLegacyRentCash(opts: {
   });
 }
 
-export function parseRepairArgs(argv: string[]): { userId: string; apply: boolean } {
+export function parseRepairArgs(argv: string[]): { userId: string; apply: boolean; partPayments: boolean } {
   const i = argv.findIndex((a) => a === '--userId' || a.startsWith('--userId='));
   const userId = i === -1 ? '' : argv[i]!.includes('=') ? argv[i]!.split('=')[1]! : argv[i + 1] ?? '';
   if (!userId || userId.startsWith('--')) throw new Error('--userId <id> is required: this repair never runs unscoped');
-  return { userId, apply: argv.includes('--apply') };
+  return { userId, apply: argv.includes('--apply'), partPayments: argv.includes('--part-payments') };
 }
 
 if (process.argv[1]?.endsWith('repairLegacyRentCash.ts')) {
-  let args: { userId: string; apply: boolean };
+  let args: { userId: string; apply: boolean; partPayments: boolean };
   try {
     args = parseRepairArgs(process.argv.slice(2));
   } catch (err) {
