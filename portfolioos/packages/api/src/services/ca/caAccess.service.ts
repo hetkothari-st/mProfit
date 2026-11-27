@@ -564,7 +564,9 @@ export async function revokeGrant(callerId: string, clientId: string, req?: Requ
         resourceId: clientId,
         summary: isSubject
           ? 'You revoked your CA’s access to your books.'
-          : `Your CA closed the engagement for ${client.name}.`,
+          : client.acceptedAt
+            ? `Your CA closed the engagement for ${client.name}.`
+            : `Withdrew the invitation to ${client.name}.`,
       },
     );
   });
@@ -580,6 +582,25 @@ export async function listCaActivity(callerId: string, opts: { clientId?: string
   return prisma.caAuditLog.findMany({
     where: {
       ...(opts.clientId ? { clientId: opts.clientId } : {}),
+      OR: [{ actorUserId: callerId }, { subjectUserId: callerId }],
+    },
+    orderBy: { createdAt: 'desc' },
+    take: Math.min(opts.limit ?? 100, 500),
+  });
+}
+
+/**
+ * The account holder's own trail: what happened to grants over THEIR books
+ * (the Account Access page). `listCaActivity` answers for both sides of every
+ * grant the caller is party to, which for someone who is also a CA mixed in
+ * their practice work — clients they invited, records they keep.
+ */
+export async function listMyAccessActivity(callerId: string, opts: { limit?: number } = {}) {
+  const grants = await prisma.client.findMany({ where: { userId: callerId }, select: { id: true } });
+  if (grants.length === 0) return [];
+  return prisma.caAuditLog.findMany({
+    where: {
+      clientId: { in: grants.map((g) => g.id) },
       OR: [{ actorUserId: callerId }, { subjectUserId: callerId }],
     },
     orderBy: { createdAt: 'desc' },
@@ -789,13 +810,10 @@ export async function updateGrantScope(
         resourceType: 'Client',
         resourceId: clientId,
         summary: describeScopeChange(patch),
-        before: {
-          scopeAllPortfolios: client.scopeAllPortfolios,
-          scopeAllAssetClasses: client.scopeAllAssetClasses,
-          scopeAllCategories: client.scopeAllCategories,
-          accessFrom: client.accessFrom?.toISOString() ?? null,
-          accessUntil: client.accessUntil?.toISOString() ?? null,
-        },
+        // In words, as the feed shows it ("Was …"). The raw flags used to be
+        // stored here, which left out the access level — so a switch from
+        // view-only to keeping the books showed only scope that never moved.
+        before: describeGrantState(client),
         after: {
           portfolioIds: portfolioIds ?? 'all',
           assetClasses: patch.assetClasses ?? 'all',
@@ -877,6 +895,38 @@ function parseScopeDate(value: string | null | undefined, field: string): Date |
 }
 
 /** One line a person would actually recognise on their own activity feed. */
+/** A grant's whole current scope as one phrase: what a scope change replaced. */
+export function describeGrantState(c: {
+  scopeAllPortfolios: boolean;
+  scopeAllAssetClasses: boolean;
+  visibleAssetClasses: unknown[];
+  scopeAllCategories: boolean;
+  visibleCategories: unknown[];
+  canEditBooks: boolean;
+  canEditTransactions: boolean;
+  canEditImports: boolean;
+  canEditFmv: boolean;
+  accessFrom: Date | null;
+  accessUntil: Date | null;
+}): string {
+  const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+  const edit = [
+    c.canEditBooks && 'books',
+    c.canEditTransactions && 'transactions',
+    c.canEditImports && 'imports',
+    c.canEditFmv && 'fmv',
+  ].filter(Boolean) as string[];
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  return [
+    c.scopeAllPortfolios ? 'all portfolios' : 'chosen portfolios',
+    c.scopeAllAssetClasses ? 'all asset classes' : n(c.visibleAssetClasses.length, 'asset class', 'asset classes'),
+    c.scopeAllCategories ? 'all categories' : n(c.visibleCategories.length, 'category', 'categories'),
+    edit.length === 0 ? 'view only' : `may change ${edit.join(', ')}`,
+    ...(c.accessFrom ? [`access from ${day(c.accessFrom)}`] : []),
+    c.accessUntil ? `access until ${day(c.accessUntil)}` : 'no end date',
+  ].join(', ');
+}
+
 function describeScopeChange(patch: GrantScopePatch): string {
   const parts: string[] = [];
   if (patch.portfolioIds !== undefined) {

@@ -33,7 +33,7 @@ import { GrantScopePanel } from '@/components/ca/GrantScopePanel';
 import { InviteEmailComposer } from '@/components/ca/InviteEmailComposer';
 import { accountHolderInviteSource } from '@/components/ca/inviteEmailSources';
 import { Initials, AccessStrip, AccessCell } from '@/components/ca/AccessParts';
-import { fmtDate } from '@/components/ca/accessModel';
+import { fmtDate, inviteLinkStatus } from '@/components/ca/accessModel';
 
 /**
  * Account Access — the account holder's page.
@@ -429,6 +429,7 @@ function InvitedGrant({
   onCancel: () => void;
   cancelling: boolean;
 }) {
+  const link = inviteLinkStatus(g.inviteExpiresAt);
   return (
     <li className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-dashed border-border px-5 py-4">
       <div className="flex min-w-0 items-center gap-3">
@@ -437,18 +438,23 @@ function InvitedGrant({
           <p className="truncate text-[15px] text-foreground">{g.name}</p>
           <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
             {g.invitedEmail}
-            {g.inviteExpiresAt && (
-              <span className="ml-2 text-warning">
-                Link expires {fmtDate(g.inviteExpiresAt)}
-              </span>
+            {link && (
+              <span className={cn('ml-2', link.expired ? 'text-negative' : 'text-warning')}>{link.text}</span>
             )}
           </p>
+          {link?.expired && (
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              This link no longer works. Cancel it and invite them again for a new one.
+            </p>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={onResend}>
-          <Mail className="h-3.5 w-3.5" /> Send again
-        </Button>
+        {!link?.expired && (
+          <Button variant="outline" size="sm" onClick={onResend}>
+            <Mail className="h-3.5 w-3.5" /> Send again
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"

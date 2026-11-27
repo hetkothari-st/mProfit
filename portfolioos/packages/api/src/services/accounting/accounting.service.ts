@@ -33,7 +33,7 @@ const defaultDb = prisma as unknown as Db;
 
 // ─── Default Chart of Accounts ───────────────────────────────────────────────
 
-const DEFAULT_COA: Array<{
+export const DEFAULT_COA: Array<{
   code: string;
   name: string;
   type: AccountType;

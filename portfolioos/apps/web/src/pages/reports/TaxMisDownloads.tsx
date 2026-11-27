@@ -94,7 +94,7 @@ export const REPORTS: ReportDef[] = [
     key: 'short-long-spec',
     title: 'Short Term / Long Term / Speculation',
     description:
-      'Combined capital gain report covering intraday speculation, short-term and long-term equity in one PDF — exactly as the legacy desktop layout.',
+      'Combined capital gain report covering intraday speculation, short-term and long-term equity in one PDF.',
     endpoint: 'short-long-spec',
     params: ['fy'],
     filename: 'short-long-speculation',
@@ -191,7 +191,7 @@ export const REPORTS: ReportDef[] = [
   },
   {
     key: 'tax-summary',
-    title: 'Tax Summary (Form 16 helper)',
+    title: 'Tax Summary (ITR helper)',
     description:
       'Annual rollup of intraday, STCG, LTCG, Sec 112A and IFOS income mapped to the cells of ITR-2 / ITR-3.',
     endpoint: 'tax-summary',
@@ -220,16 +220,16 @@ export const REPORTS: ReportDef[] = [
     key: 'family-wise-holdings',
     title: 'Family-wise Holdings',
     description:
-      'Portfolio (member) → asset class → script with average qty / rate / value. Subtotal per asset class and per member, grand total at the foot.',
+      'Portfolio (member) → asset class → scrip with average qty / rate / value. Subtotal per asset class and per member, grand total at the foot.',
     endpoint: 'family-wise-holdings',
     params: ['asOf'],
     filename: 'family-wise-holdings',
   },
   {
     key: 'scriptwise-qtywise',
-    title: 'Scriptwise — Qtywise',
+    title: 'Scrip-wise — Qty-wise',
     description:
-      'For a period: Opening + Purchase + Sale + Net Position per script. Average-method exit; net qty / amount reflects closing stock value.',
+      'For a period: Opening + Purchase + Sale + Net Position per scrip. Average-method exit; net qty / amount reflects closing stock value.',
     endpoint: 'scriptwise-qtywise',
     params: ['from', 'to'],
     filename: 'scriptwise-qtywise',
@@ -283,7 +283,7 @@ export const REPORTS: ReportDef[] = [
     key: 'sector-allocation',
     title: 'Sector Wise Allocation',
     description:
-      'Rollup of equity holdings by sector (from StockMaster.sector). Quantity, amount invested, % weightage, BSE/NSE values.',
+      'Rollup of equity holdings by sector. Quantity, amount invested, % weightage, BSE/NSE values.',
     endpoint: 'sector-allocation',
     params: [],
     filename: 'sector-allocation',
@@ -301,7 +301,7 @@ export const REPORTS: ReportDef[] = [
     key: 'brokerwise-capital-gain',
     title: 'Brokerwise Capital G/L',
     description:
-      'Per broker → script Opening + Purchase + Sale + Closing + Capital G/L + STCG/LTCG/Speculation breakdown.',
+      'Per broker → scrip Opening + Purchase + Sale + Closing + Capital G/L + STCG/LTCG/Speculation breakdown.',
     endpoint: 'brokerwise-capital-gain',
     params: ['from', 'to'],
     filename: 'brokerwise-capital-gain',
@@ -328,7 +328,7 @@ export const REPORTS: ReportDef[] = [
     key: 'capital-gains-fifo',
     title: 'Capital Gains — FIFO',
     description:
-      'Per-script FIFO realised G/L with ST / LT / Speculation breakdown plus Upto 22-Jul-24 and Onward 23-Jul-24 cuts (Budget 2024 LTCG rate change).',
+      'Per-scrip FIFO realised G/L with ST / LT / Speculation breakdown plus Upto 22-Jul-24 and Onward 23-Jul-24 cuts (Budget 2024 LTCG rate change).',
     endpoint: 'capital-gains-fifo',
     params: ['from', 'to'],
     filename: 'capital-gains-fifo',
@@ -337,7 +337,7 @@ export const REPORTS: ReportDef[] = [
     key: 'advance-tax-summary',
     title: 'Advance Tax Summary',
     description:
-      'Per-script + period-wise gain split by advance-tax instalment due dates (15-Jun / 15-Sep / 15-Dec / 15-Mar). Grandfathered cost where applicable.',
+      'Per-scrip + period-wise gain split by advance-tax instalment due dates (15-Jun / 15-Sep / 15-Dec / 15-Mar). Grandfathered cost where applicable.',
     endpoint: 'advance-tax-summary',
     params: ['fy'],
     filename: 'advance-tax-summary',
@@ -346,7 +346,7 @@ export const REPORTS: ReportDef[] = [
     key: 'opening-stock',
     title: 'Opening Stock Report',
     description:
-      'Per asset-class: first-acquisition date, ISIN, asset name, opening qty, weighted avg price, total invested. Mirrors the desktop Opening Stock screen.',
+      'Per asset-class: first-acquisition date, ISIN, asset name, opening qty, weighted avg price, total invested.',
     endpoint: 'opening-stock',
     params: ['asOf'],
     filename: 'opening-stock',
@@ -362,9 +362,9 @@ export const REPORTS: ReportDef[] = [
   },
   {
     key: 'script-ledger',
-    title: 'Script Account Ledger',
+    title: 'Scrip Account Ledger',
     description:
-      'Per-script ledger: opening, every Bought / Sold, closing values, LT / ST / Speculation G/L rows. Mirrors mProfit Script Ledger.',
+      'Per-scrip ledger: opening, every Bought / Sold, closing values, LT / ST / Speculation G/L rows.',
     endpoint: 'script-ledger',
     params: ['asOf'],
     filename: 'script-ledger',
@@ -391,7 +391,7 @@ export const REPORTS: ReportDef[] = [
     key: 'broker-bill-register-fmwise',
     title: 'Broker Bill Register — Family/Member-wise',
     description:
-      'Family → Member → Broker → Bill drill-down with per-script consultant, type, qty, holding type, brokerage, rate, net amount.',
+      'Family → Member → Broker → Bill drill-down with per-scrip consultant, type, qty, holding type, brokerage, rate, net amount.',
     endpoint: 'broker-bill-register-fmwise',
     params: ['from', 'to'],
     filename: 'broker-bill-register-fmwise',
@@ -418,7 +418,7 @@ export const REPORTS: ReportDef[] = [
     key: 'dividend-report',
     title: 'Dividend Report (Date-wise)',
     description:
-      'DIVIDEND_PAYOUT transactions grouped by ex-date with closing stock, per-share rate, narration. TOTAL per date and grand total.',
+      'Dividend payouts grouped by ex-date with closing stock, per-share rate, narration. TOTAL per date and grand total.',
     endpoint: 'dividend-report',
     params: ['fy', 'from', 'to'],
     filename: 'dividend-report',

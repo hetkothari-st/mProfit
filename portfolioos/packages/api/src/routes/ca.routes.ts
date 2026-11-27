@@ -25,6 +25,7 @@ import {
   previewMyInviteEmailHandler,
   sendMyInviteEmailHandler,
   listCaActivityHandler,
+  listMyAccessActivityHandler,
 } from '../controllers/ca.controller.js';
 import {
   caListAccountsTree,
@@ -185,7 +186,7 @@ professionalAccessRouter.get('/', asyncHandler(listMyProfessionalsHandler));
 // included — which is what `/` deliberately omits.
 professionalAccessRouter.get('/grants', asyncHandler(listMyGrantsHandler));
 professionalAccessRouter.post('/invite', asyncHandler(inviteProfessionalHandler));
-professionalAccessRouter.get('/activity', asyncHandler(listCaActivityHandler));
+professionalAccessRouter.get('/activity', asyncHandler(listMyAccessActivityHandler));
 // `/invitations/...` is declared before `/:clientId/...` so a token is never
 // mistaken for a client id.
 professionalAccessRouter.post('/invitations/:token/accept', asyncHandler(acceptInvitationHandler));

@@ -36,6 +36,7 @@ import { recordCaAudit } from '../services/ca/caAudit.service.js';
 import { projectBooks } from '../services/ca/caProjection.service.js';
 import {
   ensureDefaultAccounts,
+  DEFAULT_COA,
   listAccountsTree,
   listAccountsFlat,
   createAccount,
@@ -109,7 +110,12 @@ async function ensureChartAudited(scope: CaScope, req: Request): Promise<void> {
     recordCaAudit(tx, auditCtx(scope, req), {
       action: 'ACCOUNT_CREATED',
       resourceType: 'Account',
-      summary: `Created the default chart of accounts (${created.length} accounts).`,
+      // A later run only adds accounts introduced since the first: say "added",
+      // or the trail reads as if the whole chart were created twice.
+      summary:
+        created.length === DEFAULT_COA.length
+          ? `Created the default chart of accounts (${created.length} accounts).`
+          : `Added ${created.length} new standard account${created.length === 1 ? '' : 's'} to the chart.`,
       after: { codes: created },
     }),
   );

@@ -160,7 +160,7 @@ export function MFCasparserDialog({ open, onOpenChange, onSuccess }: Props) {
           <div className="space-y-4">
             <div className="rounded border bg-muted/30 p-3 text-xs">
               <strong>Why email, not OTP?</strong> No free public API allows PAN+OTP→MF data
-              without a paid B2B partnership (mProfit uses the paid MFCentral partner API).
+              without a paid B2B partnership (that needs the paid MFCentral partner API).
               KFintech mailback is the closest free PAN-only flow: identity is verified by sending
               the PDF to the email already registered on your folios. PAN-not-on-record will
               receive nothing — same security as OTP.
