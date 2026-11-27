@@ -152,7 +152,7 @@ describe('auto vouchers', () => {
     // at that cost; the bank is out the 124 the round trip actually cost.
     expect(await balanceOf(scope.userId, '1101')).toBe('0.0000'); // Equity Holdings
     expect(await balanceOf(scope.userId, '1001')).toBe('-124.0000'); // −1020 + 896
-    expect(await balanceOf(scope.userId, '5006')).toBe('124.0000'); // book loss: 896 − 1020
+    expect(await balanceOf(scope.userId, '5012')).toBe('124.0000'); // short-term loss: 896 − 1020
     expect(await balanceOf(scope.userId, '5002')).toBe('0.0000'); // STT sits in cost, not expensed
     const pnl = await runAsSystem(() => getPnL(scope.userId, '2024-04-01', '2025-03-31'));
     expect(pnl.netProfit).toBe('-124.0000');
